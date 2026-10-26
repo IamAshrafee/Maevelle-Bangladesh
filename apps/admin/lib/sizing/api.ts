@@ -1,5 +1,6 @@
 import type {
   AdminSizingWorkspaceDto,
+  CategoryGuideAssignmentPreviewDto,
   CategorySizeGuideDefaultListDto,
   CreateMeasurementDefinitionDto,
   CreateSizeDefinitionDto,
@@ -9,14 +10,20 @@ import type {
   CreateSizeSystemDto,
   CreateSizingDomainDto,
   ProductSizingDto,
+  ProductGuideAssignmentPreviewDto,
+  ProductSizeReconciliationDto,
   ReorderSizeGuideRowsDto,
   SetSizeGuideMeasurementDto,
   SetSizeGuideMeasurementsBulkDto,
+  SetSupplyPurchaseSizingDecisionDto,
   SizeGuideDetailDto,
+  SizeGuidePublishPreviewDto,
   SizeGuideListDto,
   SizeOptionValueMappingListDto,
   SizingMappingStatusDto,
+  SizingAttentionListDto,
   SizingQualityChecksDto,
+  SupplyPurchaseSizingReviewDto,
   UpdateMeasurementDefinitionDto,
   UpdateSizeDefinitionDto,
   UpdateSizeGuideDto,
@@ -38,9 +45,7 @@ type PaginatedApiEnvelope<T> = {
   };
 };
 
-function buildQuery(
-  values: Record<string, string | number | undefined>,
-): string {
+function buildQuery(values: Record<string, string | number | undefined>): string {
   const params = new URLSearchParams();
 
   for (const [key, value] of Object.entries(values)) {
@@ -65,21 +70,41 @@ export async function fetchSizingQualityChecks(): Promise<SizingQualityChecksDto
   return fetchApiData<SizingQualityChecksDto>('/admin/sizing/quality-checks');
 }
 
-export async function fetchSizeGuides(query: {
-  page?: number;
-  pageSize?: number;
-  status?: 'ACTIVE' | 'ARCHIVED' | 'ALL';
-  domainId?: string;
-  search?: string;
-} = {}): Promise<SizeGuideListDto> {
-  const response = await apiRequest<
-    PaginatedApiEnvelope<SizeGuideListDto['items'][number]>
-  >(
+export async function fetchSizingAttention(
+  query: { page?: number; pageSize?: number } = {},
+): Promise<SizingAttentionListDto> {
+  const response = await apiRequest<PaginatedApiEnvelope<SizingAttentionListDto['items'][number]>>(
+    `/admin/sizing/attention${buildQuery({ page: query.page, pageSize: query.pageSize })}`,
+  );
+  return { items: response.data, pagination: response.pagination };
+}
+
+export async function fetchSizeGuides(
+  query: {
+    page?: number;
+    pageSize?: number;
+    status?: 'ACTIVE' | 'ARCHIVED' | 'ALL';
+    domainId?: string;
+    kind?:
+      | 'APPAREL_SIZE_CHART'
+      | 'FOOTWEAR_SIZE_CHART'
+      | 'WEARABLE_FIT_GUIDE'
+      | 'CUSTOM_FIT_GUIDE'
+      | 'ALL';
+    publication?: 'PUBLISHED' | 'WORKING_CHANGES' | 'DRAFT_ONLY' | 'ALL';
+    sort?: 'UPDATED_DESC' | 'USAGE_DESC' | 'NAME_ASC';
+    search?: string;
+  } = {},
+): Promise<SizeGuideListDto> {
+  const response = await apiRequest<PaginatedApiEnvelope<SizeGuideListDto['items'][number]>>(
     `/admin/sizing/guides${buildQuery({
       page: query.page,
       pageSize: query.pageSize,
       status: query.status,
       domainId: query.domainId,
+      kind: query.kind,
+      publication: query.publication,
+      sort: query.sort,
       search: query.search?.trim(),
     })}`,
   );
@@ -97,17 +122,43 @@ export async function fetchSizeGuideDetail(guideId: string): Promise<SizeGuideDe
 export async function fetchProductSizingConfiguration(
   productId: string,
 ): Promise<ProductSizingDto> {
-  return fetchApiData<ProductSizingDto>(
-    `/admin/catalog/products/${productId}/size-configuration`,
+  return fetchApiData<ProductSizingDto>(`/admin/catalog/products/${productId}/size-configuration`);
+}
+
+export async function fetchProductSizeReconciliation(
+  productId: string,
+): Promise<ProductSizeReconciliationDto> {
+  return fetchApiData<ProductSizeReconciliationDto>(
+    `/admin/sizing/products/${productId}/reconciliation`,
   );
 }
 
-export async function fetchCategorySizeGuideDefaults(query: {
-  page?: number;
-  pageSize?: number;
-  search?: string;
-  mappingStatus?: SizingMappingStatusDto;
-} = {}): Promise<CategorySizeGuideDefaultListDto> {
+export async function fetchSupplyPurchaseSizingReview(
+  purchaseId: string,
+): Promise<SupplyPurchaseSizingReviewDto> {
+  return fetchApiData<SupplyPurchaseSizingReviewDto>(
+    `/admin/procurement/purchases/${purchaseId}/sizing`,
+  );
+}
+
+export async function setSupplyPurchaseSizingDecision(
+  purchaseId: string,
+  input: SetSupplyPurchaseSizingDecisionDto,
+): Promise<{ id: string; version: number }> {
+  return fetchApiData<{ id: string; version: number }>(
+    `/admin/procurement/purchases/${purchaseId}/sizing-decisions`,
+    { method: 'POST', body: JSON.stringify(input) },
+  );
+}
+
+export async function fetchCategorySizeGuideDefaults(
+  query: {
+    page?: number;
+    pageSize?: number;
+    search?: string;
+    mappingStatus?: SizingMappingStatusDto;
+  } = {},
+): Promise<CategorySizeGuideDefaultListDto> {
   const response = await apiRequest<
     PaginatedApiEnvelope<CategorySizeGuideDefaultListDto['items'][number]>
   >(
@@ -125,14 +176,16 @@ export async function fetchCategorySizeGuideDefaults(query: {
   };
 }
 
-export async function fetchSizeOptionValues(query: {
-  page?: number;
-  pageSize?: number;
-  search?: string;
-  mappingStatus?: SizingMappingStatusDto;
-  sizeSystemId?: string;
-  optionId?: string;
-} = {}): Promise<SizeOptionValueMappingListDto> {
+export async function fetchSizeOptionValues(
+  query: {
+    page?: number;
+    pageSize?: number;
+    search?: string;
+    mappingStatus?: SizingMappingStatusDto;
+    sizeSystemId?: string;
+    optionId?: string;
+  } = {},
+): Promise<SizeOptionValueMappingListDto> {
   const response = await apiRequest<
     PaginatedApiEnvelope<SizeOptionValueMappingListDto['items'][number]>
   >(
@@ -156,9 +209,7 @@ export async function fetchSizeOptionValues(query: {
 /*                              Sizing domains                                */
 /* -------------------------------------------------------------------------- */
 
-export async function createSizingDomain(
-  input: CreateSizingDomainDto,
-): Promise<{ id: string }> {
+export async function createSizingDomain(input: CreateSizingDomainDto): Promise<{ id: string }> {
   return fetchApiData<{ id: string }>('/admin/sizing/domains', {
     method: 'POST',
     body: JSON.stringify(input),
@@ -191,9 +242,7 @@ export async function restoreSizingDomain(domainId: string): Promise<void> {
 /*                                Size systems                                */
 /* -------------------------------------------------------------------------- */
 
-export async function createSizeSystem(
-  input: CreateSizeSystemDto,
-): Promise<{ id: string }> {
+export async function createSizeSystem(input: CreateSizeSystemDto): Promise<{ id: string }> {
   return fetchApiData<{ id: string }>('/admin/sizing/systems', {
     method: 'POST',
     body: JSON.stringify(input),
@@ -305,10 +354,7 @@ export async function createSizeGuide(
   });
 }
 
-export async function updateSizeGuide(
-  guideId: string,
-  input: UpdateSizeGuideDto,
-): Promise<void> {
+export async function updateSizeGuide(guideId: string, input: UpdateSizeGuideDto): Promise<void> {
   return apiRequest<void>(`/admin/sizing/guides/${guideId}`, {
     method: 'PUT',
     body: JSON.stringify(input),
@@ -372,12 +418,30 @@ export async function publishSizeGuideRevision(
   revisionId: string,
   expectedVersion: number,
 ): Promise<void> {
+  return apiRequest<void>(`/admin/sizing/guides/${guideId}/revisions/${revisionId}/publish`, {
+    method: 'POST',
+    body: JSON.stringify({ expectedVersion }),
+  });
+}
+
+export async function previewSizeGuidePublication(
+  guideId: string,
+  revisionId: string,
+): Promise<SizeGuidePublishPreviewDto> {
+  return fetchApiData<SizeGuidePublishPreviewDto>(
+    `/admin/sizing/guides/${guideId}/revisions/${revisionId}/publish-preview`,
+    { method: 'POST', body: '{}' },
+  );
+}
+
+export async function publishReviewedSizeGuideRevision(
+  guideId: string,
+  revisionId: string,
+  previewToken: string,
+): Promise<void> {
   return apiRequest<void>(
-    `/admin/sizing/guides/${guideId}/revisions/${revisionId}/publish`,
-    {
-      method: 'POST',
-      body: JSON.stringify({ expectedVersion }),
-    },
+    `/admin/sizing/guides/${guideId}/revisions/${revisionId}/publish-reviewed`,
+    { method: 'POST', body: JSON.stringify({ previewToken }) },
   );
 }
 
@@ -393,6 +457,38 @@ export async function createSizeGuideRow(
     method: 'POST',
     body: JSON.stringify(input),
   });
+}
+
+export async function addSizeGuideColumn(
+  revisionId: string,
+  input: { expectedVersion: number; measurementDefinitionId: string; displayName?: string },
+): Promise<void> {
+  return apiRequest<void>(`/admin/sizing/revisions/${revisionId}/columns`, {
+    method: 'POST',
+    body: JSON.stringify(input),
+  });
+}
+
+export async function renameSizeGuideColumn(
+  revisionId: string,
+  columnId: string,
+  input: { expectedVersion: number; displayName: string },
+): Promise<void> {
+  return apiRequest<void>(`/admin/sizing/revisions/${revisionId}/columns/${columnId}`, {
+    method: 'PUT',
+    body: JSON.stringify(input),
+  });
+}
+
+export async function removeSizeGuideColumn(
+  revisionId: string,
+  columnId: string,
+  expectedVersion: number,
+): Promise<void> {
+  return apiRequest<void>(
+    `/admin/sizing/revisions/${revisionId}/columns/${columnId}?expectedVersion=${expectedVersion}`,
+    { method: 'DELETE' },
+  );
 }
 
 export async function updateSizeGuideRow(
@@ -461,12 +557,7 @@ export async function updateSizeGuideMeasurement(
 ): Promise<void> {
   const { rowId, measurementDefinitionId, ...measurement } = input;
 
-  return setRowMeasurement(
-    revisionId,
-    rowId,
-    measurementDefinitionId,
-    measurement,
-  );
+  return setRowMeasurement(revisionId, rowId, measurementDefinitionId, measurement);
 }
 
 export async function deleteRowMeasurement(
@@ -502,6 +593,10 @@ export async function setProductSizingConfiguration(
   input: {
     readonly sizeSystemId: string;
     readonly sizeGuideId?: string;
+    readonly guideOutcome?: 'INHERIT' | 'DIRECT' | 'NONE';
+    readonly noGuideReason?: string;
+    readonly assignmentOrigin?: 'MANUAL' | 'SUPPLY_PURCHASE';
+    readonly sourcePurchaseId?: string;
     readonly expectedProductVersion?: number;
   },
 ): Promise<void> {
@@ -539,6 +634,47 @@ export async function setCategoryDefaultSizeGuide(
   });
 }
 
+export async function previewCategoryDefaultSizeGuide(
+  categoryId: string,
+  sizeGuideId: string | null,
+): Promise<CategoryGuideAssignmentPreviewDto> {
+  return fetchApiData<CategoryGuideAssignmentPreviewDto>(
+    '/admin/sizing/assignments/category-preview',
+    { method: 'POST', body: JSON.stringify({ categoryId, sizeGuideId }) },
+  );
+}
+
+export async function applyCategoryDefaultSizeGuide(previewToken: string): Promise<void> {
+  return apiRequest<void>('/admin/sizing/assignments/category-apply', {
+    method: 'POST',
+    body: JSON.stringify({ previewToken }),
+  });
+}
+
+export async function previewProductGuideAssignment(
+  productId: string,
+  input: {
+    outcome: 'INHERIT' | 'DIRECT' | 'NONE';
+    sizeGuideId?: string;
+    noGuideReason?: string;
+  },
+): Promise<ProductGuideAssignmentPreviewDto> {
+  return fetchApiData<ProductGuideAssignmentPreviewDto>(
+    `/admin/sizing/assignments/products/${productId}/preview`,
+    { method: 'POST', body: JSON.stringify(input) },
+  );
+}
+
+export async function applyProductGuideAssignment(
+  productId: string,
+  previewToken: string,
+): Promise<void> {
+  return apiRequest<void>(`/admin/sizing/assignments/products/${productId}/apply`, {
+    method: 'POST',
+    body: JSON.stringify({ previewToken }),
+  });
+}
+
 /* -------------------------------------------------------------------------- */
 /*                         Option-value mappings                              */
 /* -------------------------------------------------------------------------- */
@@ -547,13 +683,10 @@ export async function linkOptionValueToSizeDefinition(
   optionValueId: string,
   sizeDefinitionId: string | null,
 ): Promise<void> {
-  return apiRequest<void>(
-    `/admin/sizing/option-values/${optionValueId}/size-definition`,
-    {
-      method: 'PUT',
-      body: JSON.stringify({ sizeDefinitionId }),
-    },
-  );
+  return apiRequest<void>(`/admin/sizing/option-values/${optionValueId}/size-definition`, {
+    method: 'PUT',
+    body: JSON.stringify({ sizeDefinitionId }),
+  });
 }
 
 export async function linkOptionValuesToSizeDefinitionsBulk(

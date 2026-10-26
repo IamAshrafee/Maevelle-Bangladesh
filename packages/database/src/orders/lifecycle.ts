@@ -5,21 +5,16 @@ import {
   cancelOpenFulfillmentsForOrderInTransaction,
   FulfillmentDomainError,
 } from '../fulfillment.js';
-import {
-  releaseInventoryReservationInTransaction,
-} from '../inventory.js';
+import { releaseInventoryReservationInTransaction } from '../inventory.js';
 import {
   cancelPendingPaymentIntentsForOrder,
   createCancellationRefundObligationsInTransaction,
   PaymentDomainError,
   reviseOpenPaymentIntentForOrder,
 } from '../payments.js';
-import {
-  appendAuditEvent,
-  claimIdempotencyRecord,
-  IdempotencyKeyReuseError,
-} from '../platform.js';
+import { appendAuditEvent, claimIdempotencyRecord, IdempotencyKeyReuseError } from '../platform.js';
 import { normalizeCustomerPhone } from '../customer-identities.js';
+import { recalculateCustomerLifecycleInTransaction } from '../customers/crm-profile.js';
 import { ensureAddress } from './checkout.js';
 import { orderView } from './queries.js';
 import {
@@ -46,7 +41,8 @@ export async function updateOrderStatus(
     const order = await sql<{
       order_status: string;
       version: string;
-    }>`select order_status, version::text from orders.orders where id = ${input.orderId} and organization_id = ${input.organizationId} for update`.execute(
+      customer_id: string | null;
+    }>`select order_status, version::text,customer_id from orders.orders where id = ${input.orderId} and organization_id = ${input.organizationId} for update`.execute(
       transaction,
     );
     const row = order.rows[0];
@@ -520,7 +516,8 @@ export async function cancelOrder(
   const initiatedBy =
     input.actorType === 'SYSTEM'
       ? 'SYSTEM'
-      : (input.initiatedBy ?? (input.reasonCode.toUpperCase().startsWith('CUSTOMER') ? 'CUSTOMER' : 'MERCHANT'));
+      : (input.initiatedBy ??
+        (input.reasonCode.toUpperCase().startsWith('CUSTOMER') ? 'CUSTOMER' : 'MERCHANT'));
   return db.transaction().execute(async (transaction) => {
     let idempotencyRecordId: string;
     try {
@@ -567,7 +564,8 @@ export async function cancelOrder(
     const order = await sql<{
       order_status: string;
       version: string;
-    }>`select order_status, version::text from orders.orders where id = ${input.orderId} and organization_id = ${input.organizationId} for update`.execute(
+      customer_id: string | null;
+    }>`select order_status, version::text,customer_id from orders.orders where id = ${input.orderId} and organization_id = ${input.organizationId} for update`.execute(
       transaction,
     );
     const row = order.rows[0];
@@ -663,16 +661,21 @@ export async function cancelOrder(
     await sql`update orders.orders set order_status = 'CANCELLED', cancelled_at = now(), version = version + 1, updated_at = now() where id = ${input.orderId}`.execute(
       transaction,
     );
-    const cancellation = await sql<{ id: string }>`insert into orders.order_cancellations (organization_id, order_id, reason_code, reason_text, initiated_by, created_by_actor_id) values (${input.organizationId}, ${input.orderId}, ${input.reasonCode.trim()}, ${input.reasonText?.trim() ?? null}, ${initiatedBy}, ${input.actorType === 'SYSTEM' ? null : input.actorId}) returning id`.execute(
+    const cancellation = await sql<{
+      id: string;
+    }>`insert into orders.order_cancellations (organization_id, order_id, reason_code, reason_text, initiated_by, created_by_actor_id) values (${input.organizationId}, ${input.orderId}, ${input.reasonCode.trim()}, ${input.reasonText?.trim() ?? null}, ${initiatedBy}, ${input.actorType === 'SYSTEM' ? null : input.actorId}) returning id`.execute(
       transaction,
     );
-    const cancellationRefunds = await createCancellationRefundObligationsInTransaction(transaction, {
-      organizationId: input.organizationId,
-      actorId: input.actorId,
-      orderId: input.orderId,
-      cancellationId: cancellation.rows[0]!.id,
-      ...(input.reasonText ? { reasonText: input.reasonText } : {}),
-    });
+    const cancellationRefunds = await createCancellationRefundObligationsInTransaction(
+      transaction,
+      {
+        organizationId: input.organizationId,
+        actorId: input.actorId,
+        orderId: input.orderId,
+        cancellationId: cancellation.rows[0]!.id,
+        ...(input.reasonText ? { reasonText: input.reasonText } : {}),
+      },
+    );
     await appendAuditEvent(transaction, {
       organizationId: input.organizationId,
       actorType: input.actorType ?? 'USER',
@@ -691,6 +694,13 @@ export async function cancelOrder(
     await sql`insert into platform.outbox_events (organization_id, event_type, event_version, aggregate_type, aggregate_id, aggregate_version, payload, occurred_at) values (${input.organizationId}, 'orders.order.cancelled', 1, 'orders.order', ${input.orderId}, 1, ${JSON.stringify({ orderId: input.orderId, releasedReservations, cancelledFulfillments, refundObligationCount: cancellationRefunds.length })}::jsonb, now())`.execute(
       transaction,
     );
+    if (row.customer_id) {
+      await recalculateCustomerLifecycleInTransaction(transaction, {
+        organizationId: input.organizationId,
+        customerId: row.customer_id,
+        ...(input.actorType === 'SYSTEM' ? {} : { actorId: input.actorId }),
+      });
+    }
     const response = { releasedReservations, cancelledFulfillments };
     await sql`update platform.idempotency_records set status = 'SUCCEEDED', result_entity_type = 'orders.order', result_entity_id = ${input.orderId}::uuid, safe_response = ${JSON.stringify(response)}::jsonb, completed_at = now() where id = ${idempotencyRecordId}`.execute(
       transaction,
@@ -881,8 +891,13 @@ export async function completeOrder(
   input: CompleteOrderInput,
 ): Promise<OrderView> {
   return db.transaction().execute(async (transaction) => {
-    const order = await sql<{ order_status: string; version: string; organization_id: string }>`
-      select order_status, version::text, organization_id
+    const order = await sql<{
+      order_status: string;
+      version: string;
+      organization_id: string;
+      customer_id: string;
+    }>`
+      select order_status, version::text, organization_id, customer_id
       from orders.orders
       where id = ${input.orderId} and organization_id = ${input.organizationId}
       for update
@@ -983,6 +998,12 @@ export async function completeOrder(
         ${JSON.stringify({ orderId: input.orderId })}::jsonb, now())
     `.execute(transaction);
 
+    await recalculateCustomerLifecycleInTransaction(transaction, {
+      organizationId: input.organizationId,
+      customerId: row.customer_id,
+      ...(input.actorId ? { actorId: input.actorId } : {}),
+    });
+
     return orderView(transaction, input.orderId);
   });
 }
@@ -992,14 +1013,11 @@ export async function updateOrderCustomerContact(
   input: UpdateOrderCustomerContactInput,
 ): Promise<OrderView> {
   const reason = input.reason.trim();
-  if (!reason)
-    throw new OrderDomainError('VALIDATION_FAILED', 'A correction reason is required.');
+  if (!reason) throw new OrderDomainError('VALIDATION_FAILED', 'A correction reason is required.');
   const displayName = input.displayName.trim();
-  if (!displayName)
-    throw new OrderDomainError('VALIDATION_FAILED', 'Customer name is required.');
+  if (!displayName) throw new OrderDomainError('VALIDATION_FAILED', 'Customer name is required.');
   const phone = input.phone.trim();
-  if (!phone)
-    throw new OrderDomainError('VALIDATION_FAILED', 'Customer phone number is required.');
+  if (!phone) throw new OrderDomainError('VALIDATION_FAILED', 'Customer phone number is required.');
 
   let normalizedPhone: string;
   try {
@@ -1048,7 +1066,10 @@ export async function updateOrderCustomerContact(
     `.execute(transaction);
     if (!orderRow.rows[0]) throw new OrderDomainError('NOT_FOUND', 'Order was not found.');
     if (['CANCELLED'].includes(orderRow.rows[0].order_status)) {
-      throw new OrderDomainError('INVALID_TRANSITION', 'Cannot correct customer contact on a cancelled order.');
+      throw new OrderDomainError(
+        'INVALID_TRANSITION',
+        'Cannot correct customer contact on a cancelled order.',
+      );
     }
 
     const currentSnapshot = await sql<{

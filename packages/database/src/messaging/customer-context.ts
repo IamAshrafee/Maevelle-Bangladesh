@@ -1,9 +1,19 @@
 import { sql, type Kysely } from 'kysely';
 
 import type { DatabaseSchema } from '../index.js';
-import { getCustomerDetail, listCustomerOrders, listCustomerReturns } from '../customers.js';
+import {
+  CustomerDomainError,
+  getCustomerCrmProfile,
+  getCustomerDetail,
+  listCustomerIdentityLinks,
+  listCustomerOrders,
+  listCustomerReturns,
+} from '../customers.js';
+import {
+  createOrResolveCustomerIdentityLink,
+  revokeCustomerIdentityLink,
+} from '../customers/identities.js';
 import { listOrders } from '../orders.js';
-import { appendAuditEvent } from '../platform.js';
 import {
   getConversation,
   MessagingDomainError,
@@ -12,6 +22,16 @@ import {
 } from './index.js';
 
 type Db = Kysely<DatabaseSchema>;
+
+function maskedPhone(value: string | null): string | null {
+  if (!value) return null;
+  return `${'•'.repeat(Math.max(4, value.length - 4))}${value.slice(-4)}`;
+}
+
+function maskedEmail(value: string): string {
+  const [local = '', domain = ''] = value.split('@');
+  return `${local.slice(0, 1) || '•'}•••@${domain || '•••'}`;
+}
 
 export async function getConversationCustomerContext(
   db: Db,
@@ -34,26 +54,51 @@ export async function getConversationCustomerContext(
         pagination: { page: 1, pageSize: 20, totalItems: 0, totalPages: 0 },
       },
       returns: [],
+      crmProfile: null,
+      linkedIdentities: [],
       productContext: await getProductContext(db, input.actor.organizationId, conversation.id),
     };
-  const [customer, orders, commerceOrders, returns, productContext] = await Promise.all([
-    getCustomerDetail(db, input.actor.organizationId, conversation.contact.customerId),
-    listCustomerOrders(db, input.actor.organizationId, conversation.contact.customerId, 20),
-    listOrders(db, input.actor.organizationId, {
-      customerId: conversation.contact.customerId,
-      page: 1,
-      pageSize: 20,
-    }),
-    listCustomerReturns(db, input.actor.organizationId, conversation.contact.customerId, 10),
-    getProductContext(db, input.actor.organizationId, conversation.id),
-  ]);
+  const [customer, orders, commerceOrders, returns, productContext, crmProfile, identities] =
+    await Promise.all([
+      getCustomerDetail(db, input.actor.organizationId, conversation.contact.customerId),
+      listCustomerOrders(db, input.actor.organizationId, conversation.contact.customerId, 20),
+      listOrders(db, input.actor.organizationId, {
+        customerId: conversation.contact.customerId,
+        page: 1,
+        pageSize: 20,
+      }),
+      listCustomerReturns(db, input.actor.organizationId, conversation.contact.customerId, 10),
+      getProductContext(db, input.actor.organizationId, conversation.id),
+      getCustomerCrmProfile(db, input.actor.organizationId, conversation.contact.customerId),
+      listCustomerIdentityLinks(db, {
+        organizationId: input.actor.organizationId,
+        customerId: conversation.contact.customerId,
+        status: 'LINKED',
+        limit: 20,
+      }),
+    ]);
   return {
     conversationId: conversation.id,
     linkStatus: 'LINKED' as const,
-    customer,
+    customer: input.actor.capabilities.includes('customers.sensitive.view')
+      ? customer
+      : {
+          ...customer,
+          phones: customer.phones.map((phone) => ({
+            ...phone,
+            phone: maskedPhone(phone.phone) ?? '',
+          })),
+          emails: customer.emails.map((email) => ({ ...email, email: maskedEmail(email.email) })),
+          addresses: customer.addresses.map((address) => ({
+            ...address,
+            phone: maskedPhone(address.phone),
+          })),
+        },
     orders,
     commerceOrders,
     returns,
+    crmProfile,
+    linkedIdentities: identities.items,
     productContext,
   };
 }
@@ -90,80 +135,81 @@ export async function linkMessagingContactToCustomer(
     reason: string;
   },
 ) {
-  return db.transaction().execute(async (tx) => {
-    const valid =
-      await sql`select 1 from customers.customers where organization_id=${input.actor.organizationId} and id=${input.customerId} and status='ACTIVE'`.execute(
-        tx,
-      );
-    if (!valid.rows[0])
-      throw new MessagingDomainError(
-        'VALIDATION_FAILED',
-        'Customer is not active in this organization.',
-      );
-    const updated = await sql<{
-      id: string;
-    }>`update messaging.contacts set customer_id=${input.customerId},link_status='LINKED',linked_at=now(),linked_by_actor_id=${input.actor.actorId},updated_at=now(),version=version+1 where organization_id=${input.actor.organizationId} and id=${input.contactId} returning id`.execute(
-      tx,
+  const identity = await sql<{ id: string }>`select id from messaging.contact_identities
+    where organization_id=${input.actor.organizationId} and contact_id=${input.contactId}
+    order by last_seen_at desc,id limit 1`.execute(db);
+  if (!identity.rows[0])
+    throw new MessagingDomainError(
+      'CONVERSATION_NOT_FOUND',
+      'Messaging contact identity was not found.',
     );
-    if (!updated.rows[0])
-      throw new MessagingDomainError('CONVERSATION_NOT_FOUND', 'Messaging contact was not found.');
-    await sql`insert into messaging.contact_customer_link_events(organization_id,contact_id,customer_id,action,method,actor_type,actor_id,evidence_reference,reason) values(${input.actor.organizationId},${input.contactId},${input.customerId},'LINKED',${input.method},'USER',${input.actor.actorId},${input.evidenceReference ?? null},${input.reason.trim()})`.execute(
-      tx,
-    );
-    await appendAuditEvent(tx, {
+  try {
+    await createOrResolveCustomerIdentityLink(db, {
       organizationId: input.actor.organizationId,
-      actorType: 'USER',
       actorId: input.actor.actorId,
-      membershipId: input.actor.membershipId,
-      action: 'messaging.contact.customer_linked',
-      targetType: 'messaging.contact',
-      targetId: input.contactId,
+      customerId: input.customerId,
+      contactIdentityId: identity.rows[0].id,
+      targetStatus: 'LINKED',
+      assurance: input.method === 'STAFF_REVIEW' ? 'LOW' : 'HIGH',
+      evidenceMethod: input.method,
+      ...(input.evidenceReference ? { evidenceReference: input.evidenceReference } : {}),
+      evidenceSummary:
+        input.method === 'STAFF_REVIEW'
+          ? 'Authorized staff linked this scoped channel identity after reviewing the available evidence.'
+          : `The customer relationship was supported by ${input.method.toLowerCase().replaceAll('_', ' ')} evidence.`,
       reason: input.reason,
-      metadata: { customerId: input.customerId, method: input.method },
     });
     return {
       contactId: input.contactId,
       customerId: input.customerId,
       linkStatus: 'LINKED' as const,
     };
-  });
+  } catch (error) {
+    if (error instanceof CustomerDomainError)
+      throw new MessagingDomainError(
+        error.code === 'NOT_FOUND' ? 'CONVERSATION_NOT_FOUND' : 'VALIDATION_FAILED',
+        error.message,
+      );
+    throw error;
+  }
 }
 
 export async function unlinkMessagingContactFromCustomer(
   db: Db,
   input: { actor: MessagingActorContext; contactId: string; reason: string },
 ) {
-  return db.transaction().execute(async (tx) => {
-    const previous = await sql<{
-      customer_id: string | null;
-    }>`select customer_id from messaging.contacts where organization_id=${input.actor.organizationId} and id=${input.contactId} for update`.execute(
-      tx,
+  const link = await sql<{
+    id: string;
+    version: string;
+  }>`select id,version::text from customers.customer_identity_links
+    where organization_id=${input.actor.organizationId} and contact_id=${input.contactId} and status='LINKED'
+    order by updated_at desc,id limit 1`.execute(db);
+  if (!link.rows[0])
+    throw new MessagingDomainError(
+      'CONVERSATION_NOT_FOUND',
+      'Active customer identity link was not found.',
     );
-    if (!previous.rows[0])
-      throw new MessagingDomainError('CONVERSATION_NOT_FOUND', 'Messaging contact was not found.');
-    await sql`update messaging.contacts set customer_id=null,link_status='UNLINKED_BY_POLICY',linked_at=null,linked_by_actor_id=null,updated_at=now(),version=version+1 where organization_id=${input.actor.organizationId} and id=${input.contactId}`.execute(
-      tx,
-    );
-    await sql`insert into messaging.contact_customer_link_events(organization_id,contact_id,customer_id,action,method,actor_type,actor_id,reason) values(${input.actor.organizationId},${input.contactId},${previous.rows[0].customer_id},'UNLINKED','STAFF_REVIEW','USER',${input.actor.actorId},${input.reason.trim()})`.execute(
-      tx,
-    );
-    await appendAuditEvent(tx, {
+  try {
+    await revokeCustomerIdentityLink(db, {
       organizationId: input.actor.organizationId,
-      actorType: 'USER',
       actorId: input.actor.actorId,
-      membershipId: input.actor.membershipId,
-      action: 'messaging.contact.customer_unlinked',
-      targetType: 'messaging.contact',
-      targetId: input.contactId,
+      linkId: link.rows[0].id,
+      expectedVersion: Number(link.rows[0].version),
       reason: input.reason,
-      metadata: { previousCustomerId: previous.rows[0].customer_id },
     });
     return {
       contactId: input.contactId,
       customerId: null,
       linkStatus: 'UNLINKED_BY_POLICY' as const,
     };
-  });
+  } catch (error) {
+    if (error instanceof CustomerDomainError)
+      throw new MessagingDomainError(
+        error.code === 'NOT_FOUND' ? 'CONVERSATION_NOT_FOUND' : 'VALIDATION_FAILED',
+        error.message,
+      );
+    throw error;
+  }
 }
 
 export async function searchMessagingContacts(

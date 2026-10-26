@@ -6,9 +6,7 @@ import {
   CircleAlert,
   Copy,
   Download,
-  ExternalLink,
   Eye,
-  Filter,
   Phone,
   Plus,
   RefreshCw,
@@ -21,7 +19,7 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { useDeferredValue, useEffect, useState } from 'react';
+import { useDeferredValue, useEffect, useMemo, useState } from 'react';
 
 import type { CustomerSummaryDto, PaginatedEnvelope } from '@maevelle/contracts';
 
@@ -41,6 +39,9 @@ import {
 import { fetchApiData } from '@/lib/api';
 import { CustomerStatusBadge } from './customer-status-badge';
 import { CustomerRestrictionBadge } from './customer-restriction-badge';
+import { CrmNav } from './crm-nav';
+import { useAdminCapability } from '@/components/admin-capabilities';
+import { CustomerDirectoryActions } from './customer-directory-actions';
 
 type QueueTab = 'ALL' | 'REPEAT' | 'HIGH_SPEND' | 'RESTRICTED' | 'RECENT';
 
@@ -56,16 +57,60 @@ export function CustomersList() {
   const [state, setState] = useState<'loading' | 'ready' | 'error'>('loading');
   const [message, setMessage] = useState('');
   const [exporting, setExporting] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<ReadonlySet<string>>(new Set());
+  const canExport = useAdminCapability('customers.export');
 
   const page = Math.max(1, Number(searchParameters.get('page') ?? 1) || 1);
   const status = searchParameters.get('status') ?? 'ALL';
   const source = searchParameters.get('source') ?? 'ALL';
   const from = searchParameters.get('from') ?? '';
   const to = searchParameters.get('to') ?? '';
+  const lifecycleStage = searchParameters.get('lifecycleStage') ?? 'ALL';
+  const linkedChannel = searchParameters.get('linkedChannel') ?? 'ALL';
+  const minSpend = searchParameters.get('minSpend') ?? '';
+  const maxSpend = searchParameters.get('maxSpend') ?? '';
   const queue = (searchParameters.get('queue') as QueueTab) ?? 'ALL';
 
   const hasFilters = Boolean(
-    deferredQuery || status !== 'ALL' || source !== 'ALL' || from || to || queue !== 'ALL',
+    deferredQuery ||
+    status !== 'ALL' ||
+    source !== 'ALL' ||
+    lifecycleStage !== 'ALL' ||
+    linkedChannel !== 'ALL' ||
+    minSpend ||
+    maxSpend ||
+    from ||
+    to ||
+    queue !== 'ALL',
+  );
+  const savedViewFilters = useMemo(
+    () =>
+      Object.fromEntries(
+        Object.entries({
+          q: deferredQuery,
+          status,
+          source,
+          from,
+          to,
+          lifecycleStage,
+          linkedChannel,
+          minSpend,
+          maxSpend,
+          queue,
+        }).filter(([, value]) => Boolean(value) && value !== 'ALL'),
+      ),
+    [
+      deferredQuery,
+      status,
+      source,
+      from,
+      to,
+      lifecycleStage,
+      linkedChannel,
+      minSpend,
+      maxSpend,
+      queue,
+    ],
   );
 
   function copyText(id: string, text: string, event?: React.MouseEvent) {
@@ -97,6 +142,15 @@ export function CustomersList() {
     replaceQuery(changes);
   }
 
+  function toggleSelected(customerId: string) {
+    setSelectedIds((current) => {
+      const next = new Set(current);
+      if (next.has(customerId)) next.delete(customerId);
+      else next.add(customerId);
+      return next;
+    });
+  }
+
   useEffect(() => {
     const current = searchParameters.get('q') ?? '';
     if (current !== deferredQuery) replaceQuery({ q: deferredQuery || undefined, page: '1' });
@@ -114,6 +168,10 @@ export function CustomersList() {
     if (source !== 'ALL') parameters.set('source', source);
     if (from) parameters.set('from', new Date(`${from}T00:00:00`).toISOString());
     if (to) parameters.set('to', new Date(`${to}T23:59:59.999`).toISOString());
+    if (lifecycleStage !== 'ALL') parameters.set('lifecycleStage', lifecycleStage);
+    if (linkedChannel !== 'ALL') parameters.set('linkedChannel', linkedChannel);
+    if (minSpend) parameters.set('minSpend', minSpend);
+    if (maxSpend) parameters.set('maxSpend', maxSpend);
 
     // Queue-based server filters and sorts
     if (queue === 'REPEAT') {
@@ -144,59 +202,53 @@ export function CustomersList() {
     const controller = new AbortController();
     void load(controller.signal);
     return () => controller.abort();
-  }, [deferredQuery, page, status, source, from, to, queue]);
+  }, [
+    deferredQuery,
+    page,
+    status,
+    source,
+    lifecycleStage,
+    linkedChannel,
+    minSpend,
+    maxSpend,
+    from,
+    to,
+    queue,
+  ]);
 
   async function exportCsv() {
     if (exporting) return;
     setExporting(true);
     try {
-      const parameters = new URLSearchParams({
-        page: '1',
-        pageSize: '1000',
-      });
-      if (deferredQuery) parameters.set('q', deferredQuery);
-      if (status !== 'ALL') parameters.set('status', status);
-      if (source !== 'ALL') parameters.set('source', source);
-      if (from) parameters.set('from', new Date(`${from}T00:00:00`).toISOString());
-      if (to) parameters.set('to', new Date(`${to}T23:59:59.999`).toISOString());
-
-      const data = await fetchApiData<PaginatedEnvelope<CustomerSummaryDto>>(
-        `/admin/customers?${parameters.toString()}`,
+      const data = await fetchApiData<{ fileName: string; content: string }>(
+        '/admin/crm/customers/export',
+        {
+          method: 'POST',
+          body: JSON.stringify({
+            ...(deferredQuery ? { q: deferredQuery } : {}),
+            ...(status !== 'ALL' ? { status } : {}),
+            ...(source !== 'ALL' ? { source } : {}),
+            ...(from ? { from: new Date(`${from}T00:00:00`).toISOString() } : {}),
+            ...(to ? { to: new Date(`${to}T23:59:59.999`).toISOString() } : {}),
+            ...(lifecycleStage !== 'ALL' ? { lifecycleStage } : {}),
+            ...(linkedChannel !== 'ALL' ? { linkedChannel } : {}),
+            ...(minSpend ? { minSpend } : {}),
+            ...(maxSpend ? { maxSpend } : {}),
+            ...(queue === 'REPEAT' ? { minOrders: 2, sortBy: 'ORDERS_DESC' } : {}),
+            reason: 'Authorized CRM directory export requested by operator.',
+          }),
+        },
       );
-
-      const rows = [
-        [
-          'Customer Code',
-          'Customer Name',
-          'Phone',
-          'Email',
-          'Status',
-          'Source',
-          'Orders Count',
-          'Total Spend (BDT)',
-          'Created Date',
-        ],
-        ...data.items.map((item) => [
-          `"${item.customerNumber}"`,
-          `"${(item.displayName ?? '').replace(/"/g, '""')}"`,
-          `"${(item.primaryPhone ?? '').replace(/"/g, '""')}"`,
-          `"${(item.primaryEmail ?? '').replace(/"/g, '""')}"`,
-          item.status,
-          item.latestSource ?? '',
-          item.orderCount ?? 0,
-          item.totalSpend ?? '0',
-          item.createdAt,
-        ]),
-      ];
-
-      const csvContent = 'data:text/csv;charset=utf-8,' + rows.map((e) => e.join(',')).join('\n');
-      const encodedUri = encodeURI(csvContent);
+      const encodedUri = URL.createObjectURL(
+        new Blob([data.content], { type: 'text/csv;charset=utf-8' }),
+      );
       const link = document.createElement('a');
       link.setAttribute('href', encodedUri);
-      link.setAttribute('download', `maevelle-customers-${new Date().toISOString().slice(0, 10)}.csv`);
+      link.setAttribute('download', data.fileName);
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
+      URL.revokeObjectURL(encodedUri);
     } catch (err) {
       alert(err instanceof Error ? err.message : 'Failed to export CSV');
     } finally {
@@ -218,26 +270,54 @@ export function CustomersList() {
       <header className="flex flex-col gap-4 border-b pb-5 lg:flex-row lg:items-end lg:justify-between">
         <div className="min-w-0">
           <p className="text-sm font-medium text-primary">Commerce & Identity</p>
-          <h1 className="text-2xl font-bold tracking-tight text-foreground sm:text-3xl">Customers</h1>
+          <h1 className="text-2xl font-bold tracking-tight text-foreground sm:text-3xl">
+            Customers
+          </h1>
           <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
-            Manage your verified customer base, inspect purchase history and delivery risk, and resolve duplicate identities.
+            Manage your verified customer base, inspect purchase history and delivery risk, and
+            resolve duplicate identities.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <Button variant="outline" disabled={state === 'loading'} onClick={() => void load()}>
-            <RefreshCw className={`size-3.5 mr-1.5 ${state === 'loading' ? 'animate-spin' : ''}`} aria-hidden="true" />
+            <RefreshCw
+              className={`size-3.5 mr-1.5 ${state === 'loading' ? 'animate-spin' : ''}`}
+              aria-hidden="true"
+            />
             Refresh
           </Button>
-          <Button variant="outline" disabled={exporting} onClick={() => void exportCsv()}>
-            <Download className="size-3.5 mr-1.5" aria-hidden="true" />
-            {exporting ? 'Exporting…' : 'Export CSV'}
-          </Button>
+          {canExport ? (
+            <Button variant="outline" disabled={exporting} onClick={() => void exportCsv()}>
+              <Download className="size-3.5 mr-1.5" aria-hidden="true" />
+              {exporting ? 'Exporting…' : 'Export CSV'}
+            </Button>
+          ) : null}
           <Button render={<Link href="/customers/new" />} nativeButton={false}>
             <UserPlus className="size-3.5 mr-1.5" aria-hidden="true" />
             Create Customer
           </Button>
         </div>
       </header>
+
+      <CrmNav />
+      <CustomerDirectoryActions
+        filters={savedViewFilters}
+        selectedIds={[...selectedIds]}
+        onApplyView={(viewFilters) => {
+          const next = new URLSearchParams();
+          for (const [key, value] of Object.entries(viewFilters)) {
+            if (typeof value === 'string' && value) next.set(key, value);
+          }
+          setQuery(typeof viewFilters.q === 'string' ? viewFilters.q : '');
+          router.replace(next.size ? `/customers?${next.toString()}` : '/customers', {
+            scroll: false,
+          });
+        }}
+        onBulkComplete={() => {
+          setSelectedIds(new Set());
+          void load();
+        }}
+      />
 
       {message && (
         <div
@@ -351,7 +431,9 @@ export function CustomersList() {
 
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <div className="space-y-1.5">
-            <Label htmlFor="customer-status" className="text-xs">Status</Label>
+            <Label htmlFor="customer-status" className="text-xs">
+              Status
+            </Label>
             <NativeSelect
               id="customer-status"
               value={status}
@@ -366,7 +448,83 @@ export function CustomersList() {
           </div>
 
           <div className="space-y-1.5">
-            <Label htmlFor="customer-source" className="text-xs">First Source</Label>
+            <Label htmlFor="customer-lifecycle" className="text-xs">
+              Lifecycle
+            </Label>
+            <NativeSelect
+              id="customer-lifecycle"
+              value={lifecycleStage}
+              onChange={(event) => replaceQuery({ lifecycleStage: event.target.value, page: '1' })}
+            >
+              {[
+                'ALL',
+                'NEW_CONTACT',
+                'PROSPECT',
+                'ENGAGED_PROSPECT',
+                'FIRST_TIME_BUYER',
+                'REPEAT_CUSTOMER',
+                'LOYAL_CUSTOMER',
+                'INACTIVE_CUSTOMER',
+                'RE_ENGAGED_CUSTOMER',
+              ].map((value) => (
+                <NativeSelectOption key={value} value={value}>
+                  {value === 'ALL' ? 'All lifecycle stages' : value.replaceAll('_', ' ')}
+                </NativeSelectOption>
+              ))}
+            </NativeSelect>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="customer-channel" className="text-xs">
+              Linked channel
+            </Label>
+            <NativeSelect
+              id="customer-channel"
+              value={linkedChannel}
+              onChange={(event) => replaceQuery({ linkedChannel: event.target.value, page: '1' })}
+            >
+              {['ALL', 'WEBSITE', 'FACEBOOK', 'INSTAGRAM'].map((value) => (
+                <NativeSelectOption key={value} value={value}>
+                  {value === 'ALL' ? 'All channels' : value}
+                </NativeSelectOption>
+              ))}
+            </NativeSelect>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="customer-min-spend" className="text-xs">
+              Minimum spend (BDT)
+            </Label>
+            <Input
+              id="customer-min-spend"
+              inputMode="decimal"
+              value={minSpend}
+              onChange={(event) =>
+                replaceQuery({ minSpend: event.target.value || undefined, page: '1' })
+              }
+              placeholder="0"
+            />
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="customer-max-spend" className="text-xs">
+              Maximum spend (BDT)
+            </Label>
+            <Input
+              id="customer-max-spend"
+              inputMode="decimal"
+              value={maxSpend}
+              onChange={(event) =>
+                replaceQuery({ maxSpend: event.target.value || undefined, page: '1' })
+              }
+              placeholder="No limit"
+            />
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="customer-source" className="text-xs">
+              First Source
+            </Label>
             <NativeSelect
               id="customer-source"
               value={source}
@@ -392,7 +550,9 @@ export function CustomersList() {
           </div>
 
           <div className="space-y-1.5">
-            <Label htmlFor="customer-from" className="text-xs">Joined From</Label>
+            <Label htmlFor="customer-from" className="text-xs">
+              Joined From
+            </Label>
             <Input
               id="customer-from"
               type="date"
@@ -403,7 +563,9 @@ export function CustomersList() {
           </div>
 
           <div className="space-y-1.5">
-            <Label htmlFor="customer-to" className="text-xs">Joined Through</Label>
+            <Label htmlFor="customer-to" className="text-xs">
+              Joined Through
+            </Label>
             <Input
               id="customer-to"
               type="date"
@@ -420,6 +582,24 @@ export function CustomersList() {
         <Table>
           <TableHeader>
             <TableRow>
+              <TableHead className="w-10">
+                <input
+                  type="checkbox"
+                  className="size-4 accent-primary"
+                  aria-label="Select all customers on this page"
+                  checked={
+                    Boolean(customers?.items.length) &&
+                    customers!.items.every((customer) => selectedIds.has(customer.id))
+                  }
+                  onChange={(event) =>
+                    setSelectedIds(
+                      event.target.checked
+                        ? new Set(customers?.items.map((customer) => customer.id) ?? [])
+                        : new Set(),
+                    )
+                  }
+                />
+              </TableHead>
               <TableHead>Customer</TableHead>
               <TableHead>Contact Point</TableHead>
               <TableHead>Orders & Value</TableHead>
@@ -432,7 +612,7 @@ export function CustomersList() {
           <TableBody>
             {customers?.items.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={7} className="h-32 text-center text-muted-foreground">
+                <TableCell colSpan={8} className="h-32 text-center text-muted-foreground">
                   <Users className="mx-auto mb-2 size-8 opacity-20" aria-hidden="true" />
                   No customers found matching current filters.
                 </TableCell>
@@ -444,6 +624,15 @@ export function CustomersList() {
                   className="group cursor-pointer hover:bg-muted/40 transition-colors"
                   onClick={() => router.push(`/customers/${customer.id}`)}
                 >
+                  <TableCell onClick={(event) => event.stopPropagation()}>
+                    <input
+                      type="checkbox"
+                      className="size-4 accent-primary"
+                      aria-label={`Select ${customer.displayName}`}
+                      checked={selectedIds.has(customer.id)}
+                      onChange={() => toggleSelected(customer.id)}
+                    />
+                  </TableCell>
                   {/* Identity */}
                   <TableCell>
                     <div className="space-y-1">
@@ -464,7 +653,10 @@ export function CustomersList() {
                             <Copy className="size-3 opacity-60" />
                           )}
                         </button>
-                        <Badge variant="outline" className="text-[9px] py-0 px-1 uppercase font-sans">
+                        <Badge
+                          variant="outline"
+                          className="text-[9px] py-0 px-1 uppercase font-sans"
+                        >
                           {customer.firstSource?.replaceAll('_', ' ') ?? 'Direct'}
                         </Badge>
                       </div>
@@ -479,7 +671,9 @@ export function CustomersList() {
                           <span>{customer.primaryPhone}</span>
                           <button
                             type="button"
-                            onClick={(e) => copyText(`phone-${customer.id}`, customer.primaryPhone!, e)}
+                            onClick={(e) =>
+                              copyText(`phone-${customer.id}`, customer.primaryPhone!, e)
+                            }
                             className="p-0.5 text-muted-foreground hover:text-foreground"
                             title="Copy phone"
                           >
@@ -492,7 +686,9 @@ export function CustomersList() {
                         </div>
                       ) : null}
                       {customer.primaryEmail ? (
-                        <p className="text-muted-foreground truncate max-w-[180px]">{customer.primaryEmail}</p>
+                        <p className="text-muted-foreground truncate max-w-[180px]">
+                          {customer.primaryEmail}
+                        </p>
                       ) : null}
                       {!customer.primaryPhone && !customer.primaryEmail && (
                         <span className="text-xs italic text-muted-foreground">No contact</span>
@@ -503,12 +699,8 @@ export function CustomersList() {
                   {/* Orders & Value */}
                   <TableCell>
                     <div className="space-y-0.5 text-xs">
-                      <p className="font-bold text-foreground">
-                        {formatBdt(customer.totalSpend)}
-                      </p>
-                      <p className="text-muted-foreground">
-                        {customer.orderCount ?? 0} order(s)
-                      </p>
+                      <p className="font-bold text-foreground">{formatBdt(customer.totalSpend)}</p>
+                      <p className="text-muted-foreground">{customer.orderCount ?? 0} order(s)</p>
                     </div>
                   </TableCell>
 
@@ -527,16 +719,26 @@ export function CustomersList() {
                   <TableCell>
                     <div className="flex flex-col gap-1 items-start">
                       <CustomerStatusBadge status={customer.status} />
-                      {customer.activeRestrictions && customer.activeRestrictions.length > 0 ? (
-                        customer.activeRestrictions.map((r, i) => (
-                          <CustomerRestrictionBadge
-                            key={i}
-                            restrictionType={r}
-                            className="text-[9px] py-0 px-1"
-                            showIcon={false}
-                          />
-                        ))
+                      {customer.lifecycleStage ? (
+                        <Badge variant="outline" className="text-[9px] py-0 px-1">
+                          {customer.lifecycleStage.replaceAll('_', ' ')}
+                        </Badge>
                       ) : null}
+                      {customer.linkedChannels?.length ? (
+                        <span className="text-[10px] text-muted-foreground">
+                          {customer.linkedChannels.join(' · ')}
+                        </span>
+                      ) : null}
+                      {customer.activeRestrictions && customer.activeRestrictions.length > 0
+                        ? customer.activeRestrictions.map((r, i) => (
+                            <CustomerRestrictionBadge
+                              key={i}
+                              restrictionType={r}
+                              className="text-[9px] py-0 px-1"
+                              showIcon={false}
+                            />
+                          ))
+                        : null}
                     </div>
                   </TableCell>
 
@@ -594,9 +796,15 @@ export function CustomersList() {
             >
               <div className="flex items-start justify-between gap-2">
                 <div className="space-y-0.5">
-                  <h3 className="font-semibold text-foreground text-sm">
-                    {customer.displayName}
-                  </h3>
+                  <input
+                    type="checkbox"
+                    className="mb-2 size-4 accent-primary"
+                    aria-label={`Select ${customer.displayName}`}
+                    checked={selectedIds.has(customer.id)}
+                    onClick={(event) => event.stopPropagation()}
+                    onChange={() => toggleSelected(customer.id)}
+                  />
+                  <h3 className="font-semibold text-foreground text-sm">{customer.displayName}</h3>
                   <div className="flex items-center gap-1 font-mono text-xs text-muted-foreground">
                     <span>{customer.customerNumber}</span>
                   </div>

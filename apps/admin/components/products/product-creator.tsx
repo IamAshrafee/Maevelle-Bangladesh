@@ -355,6 +355,8 @@ export function ProductCreator({ productId }: ProductCreatorProps = {}) {
                 sizeGuides={state.references.sizeGuides}
                 sizeSystemId={state.sizeSystemId}
                 sizeGuideId={state.sizeGuideId}
+                sizingGuideSource={state.sizingGuideSource}
+                noGuideReason={state.noGuideReason}
                 publishImmediately={state.publishImmediately}
                 readinessChecklist={state.readinessChecklist}
                 onToggleCategory={state.handleToggleCategory}
@@ -380,10 +382,29 @@ export function ProductCreator({ productId }: ProductCreatorProps = {}) {
                 onSizeSystemChange={(sysId) => {
                   state.setSizeSystemId(sysId);
                   state.setSizeGuideId('');
+                  state.setSizingGuideSource('CATEGORY');
                   state.setIsDirty(true);
                 }}
                 onSizeGuideChange={(guideId) => {
+                  const guide = state.references.sizeGuides.find((item) => item.id === guideId);
+                  const compatibleSystem =
+                    guide?.sizeSystemId ??
+                    state.references.sizingData.systems.find(
+                      (system) => system.sizingDomainId === guide?.sizingDomainId,
+                    )?.id;
+                  if (compatibleSystem) state.setSizeSystemId(compatibleSystem);
                   state.setSizeGuideId(guideId);
+                  state.setSizingGuideSource('DIRECT');
+                  state.setIsDirty(true);
+                }}
+                onSizingGuideSourceChange={(source) => {
+                  state.setSizingGuideSource(source);
+                  if (source !== 'DIRECT') state.setSizeGuideId('');
+                  if (source !== 'NONE') state.setNoGuideReason('');
+                  state.setIsDirty(true);
+                }}
+                onNoGuideReasonChange={(reason) => {
+                  state.setNoGuideReason(reason);
                   state.setIsDirty(true);
                 }}
                 onPublishImmediatelyChange={(val) => {

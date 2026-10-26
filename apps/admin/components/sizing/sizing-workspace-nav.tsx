@@ -2,51 +2,43 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import {
-  ChevronDown,
-  GitCompareArrows,
-  LayoutDashboard,
-  SlidersHorizontal,
-  TableProperties,
-} from 'lucide-react';
+import { AlertTriangle, ChevronDown, Link2, Settings2, TableProperties } from 'lucide-react';
 
 import { cn } from '@/lib/utils';
 
 export const sizingDestinations = [
   {
-    href: '/sizing',
-    label: 'Overview & Quality',
-    shortLabel: 'Overview',
-    icon: LayoutDashboard,
-    description: 'Health metrics, quality checks & remediation',
-  },
-  {
     href: '/sizing/guides',
-    label: 'Size Guides',
+    label: 'Guides',
     shortLabel: 'Guides',
     icon: TableProperties,
-    description: 'Customer-facing measurement charts & revisions',
+    description: 'Create, publish, and reuse customer fit guides',
   },
   {
-    href: '/sizing/standards',
-    label: 'Standards & Systems',
-    shortLabel: 'Standards',
-    icon: SlidersHorizontal,
-    description: 'Domains, regional systems, sizes & dimensions',
+    href: '/sizing/assignments',
+    label: 'Assignments',
+    shortLabel: 'Assignments',
+    icon: Link2,
+    description: 'Choose Category defaults and Product overrides',
   },
   {
-    href: '/sizing/mappings',
-    label: 'Option Mapping',
-    shortLabel: 'Mapping',
-    icon: GitCompareArrows,
-    description: 'Link catalog product variant options to canonical sizes',
+    href: '/sizing/attention',
+    label: 'Needs Attention',
+    shortLabel: 'Attention',
+    icon: AlertTriangle,
+    description: 'Resolve customer-facing sizing problems',
+  },
+  {
+    href: '/sizing/settings',
+    label: 'Settings',
+    shortLabel: 'Settings',
+    icon: Settings2,
+    description: 'Advanced sizing systems, definitions, and mappings',
   },
 ] as const;
 
 function isActiveDestination(pathname: string, href: string) {
-  if (href === '/sizing') {
-    return pathname === '/sizing';
-  }
+  if (href === '/sizing/guides') return pathname === '/sizing' || pathname.startsWith(href);
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
@@ -54,13 +46,18 @@ export function SizingWorkspaceNav({ className }: { readonly className?: string 
   const pathname = usePathname();
   const current =
     sizingDestinations.find(({ href }) => isActiveDestination(pathname, href)) ??
-    sizingDestinations[0];
+    (pathname.startsWith('/sizing/standards') || pathname.startsWith('/sizing/mappings')
+      ? sizingDestinations[3]
+      : sizingDestinations[0]);
   const CurrentIcon = current.icon;
 
   return (
     <nav
       aria-label="Sizing workspace navigation"
-      className={cn('-mx-4 sm:-mx-6 lg:-mx-8 border-b border-border bg-card/60 backdrop-blur-xs', className)}
+      className={cn(
+        '-mx-4 sm:-mx-6 lg:-mx-8 border-b border-border bg-card/60 backdrop-blur-xs',
+        className,
+      )}
     >
       {/* Mobile Accordion Drawer (< sm) */}
       <details className="group sm:hidden">

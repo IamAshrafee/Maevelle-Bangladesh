@@ -8,7 +8,7 @@ means meaningful current implementation exists; it does not mean acceptance.
 | Admin Product Management Workspace | `VERIFICATION_PENDING` | Four implementation substages are complete; responsive/owner verification remains pending in `areas/admin-product-management-workspace` |
 | Catalog and classification | `CODE_SUBSTANTIAL` | `catalog.*`, `catalog-classification.*`, public catalog routes |
 | Media | `CODE_SUBSTANTIAL` | `media.*`, Admin Media, product-media forms |
-| Sizing | `CODE_SUBSTANTIAL` | `sizing.*`, Admin sizing routes, PDP size guide |
+| Sizing | `IMPLEMENTED / OWNER_REVIEW_PENDING` | Complete local vertical in `sizing.*`, reviewed assignment/publication APIs, Admin Guides/Assignments/Attention/Settings, Product and Supply workflows, dynamic Storefront guide, focused integration tests, and clean-baseline evidence; responsive/accessibility owner acceptance remains |
 | Pricing and promotions | `CODE_SUBSTANTIAL` | `pricing.*`, `promotions.*`, Admin pages |
 | Warehouse and inventory | `ACTIVE_ASSESSMENT_COMPLETE` | Current-head report and roadmap in `areas/admin-inventory-operations`; `warehouse.*`, `inventory.*`, Admin Inventory, Orders, Supply, Fulfillment, Returns, Costing, Search and Analytics traces |
 | Customers and geography | `IMPLEMENTATION_COMPLETE / VERIFICATION_PENDING` | Completion evidence in `areas/admin-commerce-orders-customers`; `customers.*`, `geography.*`, Admin customer routes |

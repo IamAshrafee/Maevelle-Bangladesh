@@ -487,7 +487,11 @@ export async function up(db: Kysely<DatabaseSchema>): Promise<void> {
       ('media.view', 'media', 'View media administration data.', 'INTERNAL'),
       ('media.manage', 'media', 'Upload and attach media assets.', 'HIGH'),
       ('sizing.view', 'sizing', 'View sizing administration data.', 'INTERNAL'),
-      ('sizing.manage', 'sizing', 'Create and manage size guides.', 'HIGH')
+      ('sizing.manage', 'sizing', 'Legacy broad sizing management capability.', 'HIGH'),
+      ('sizing.guides.manage', 'sizing', 'Create and edit Fit and Size Guides.', 'HIGH'),
+      ('sizing.guides.publish', 'sizing', 'Publish customer-facing Fit and Size Guides.', 'CRITICAL'),
+      ('sizing.assignments.manage', 'sizing', 'Manage Category and Product guide assignments.', 'HIGH'),
+      ('sizing.settings.manage', 'sizing', 'Manage sizing domains, systems, definitions, and mappings.', 'HIGH')
     on conflict (capability_code) do nothing;
 
     insert into iam.membership_capability_grants (membership_id, capability_code)
@@ -495,7 +499,9 @@ export async function up(db: Kysely<DatabaseSchema>): Promise<void> {
     from iam.organization_memberships membership
     cross join (values
       ('catalog.view'), ('catalog.manage'), ('catalog.publish'),
-      ('media.view'), ('media.manage'), ('sizing.view'), ('sizing.manage')
+      ('media.view'), ('media.manage'), ('sizing.view'), ('sizing.manage'),
+      ('sizing.guides.manage'), ('sizing.guides.publish'),
+      ('sizing.assignments.manage'), ('sizing.settings.manage')
     ) as capability(capability_code)
     where membership.membership_type = 'OWNER' and membership.status = 'ACTIVE'
     on conflict do nothing;

@@ -118,6 +118,15 @@ export async function up(db: Kysely<DatabaseSchema>): Promise<void> {
       organization_id uuid not null references platform.organizations(id),
       name text not null,
       description text,
+      kind text not null default 'CUSTOM_FIT_GUIDE'
+        check (kind in (
+          'APPAREL_SIZE_CHART',
+          'FOOTWEAR_SIZE_CHART',
+          'WEARABLE_FIT_GUIDE',
+          'CUSTOM_FIT_GUIDE'
+        )),
+      measurement_basis text not null
+        check (measurement_basis in ('BODY', 'GARMENT', 'PRODUCT')),
       sizing_domain_id uuid not null,
 
       -- Optional because a guide may begin as a custom-label chart. Once
@@ -194,6 +203,29 @@ export async function up(db: Kysely<DatabaseSchema>): Promise<void> {
     create unique index size_guide_revisions_one_draft_per_guide
       on sizing.size_guide_revisions (size_guide_id)
       where status = 'DRAFT';
+
+    create table sizing.size_guide_revision_columns (
+      id uuid primary key default uuidv7(),
+      organization_id uuid not null references platform.organizations(id),
+      revision_id uuid not null,
+      measurement_definition_id uuid not null,
+      display_name text not null,
+      position integer not null default 0,
+
+      unique (id, organization_id),
+      unique (revision_id, measurement_definition_id),
+      unique (revision_id, position),
+
+      constraint size_guide_revision_columns_revision_fk
+        foreign key (revision_id, organization_id)
+        references sizing.size_guide_revisions (id, organization_id)
+        on delete restrict,
+
+      constraint size_guide_revision_columns_definition_fk
+        foreign key (measurement_definition_id, organization_id)
+        references sizing.measurement_definitions (id, organization_id)
+        on delete restrict
+    );
 
     -- -----------------------------------------------------------------------
     -- Revision rows
@@ -290,9 +322,40 @@ export async function up(db: Kysely<DatabaseSchema>): Promise<void> {
       product_id uuid not null references catalog.products(id) on delete restrict,
       size_system_id uuid not null,
       size_guide_id uuid,
+      guide_outcome text not null default 'INHERIT'
+        check (guide_outcome in ('INHERIT', 'DIRECT', 'NONE')),
+      no_guide_reason text,
+      assignment_origin text check (assignment_origin in ('MANUAL', 'SUPPLY_PURCHASE')),
+      source_purchase_id uuid,
+      assigned_by_actor_id uuid references iam.users(id),
+      assigned_at timestamptz,
       status text not null default 'ACTIVE' check (status in ('ACTIVE', 'ARCHIVED')),
+      version bigint not null default 1 check (version >= 1),
+      updated_at timestamptz not null default now(),
 
       unique (product_id),
+      unique (organization_id, product_id),
+
+      constraint product_size_configurations_assignment_provenance_check
+        check (
+          (
+            guide_outcome in ('INHERIT', 'NONE')
+            and size_guide_id is null
+            and assignment_origin is null
+            and source_purchase_id is null
+          )
+          or (
+            guide_outcome = 'DIRECT'
+            and size_guide_id is not null
+            and assignment_origin is not null
+            and (assignment_origin = 'SUPPLY_PURCHASE') = (source_purchase_id is not null)
+          )
+        ),
+      constraint product_size_configurations_no_guide_reason_check
+        check (
+          (guide_outcome = 'NONE' and length(trim(no_guide_reason)) > 0)
+          or (guide_outcome <> 'NONE' and no_guide_reason is null)
+        ),
 
       constraint product_size_configurations_system_fk
         foreign key (size_system_id, organization_id)

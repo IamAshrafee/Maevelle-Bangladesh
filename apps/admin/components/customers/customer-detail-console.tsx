@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { AlertTriangle, GitMerge, RefreshCw, XCircle } from 'lucide-react';
+import { AlertTriangle, RefreshCw, XCircle } from 'lucide-react';
 import type { CustomerDetailDto, CustomerDuplicateCandidateDto } from '@maevelle/contracts';
 
 import { Button } from '@/components/ui/button';
@@ -13,12 +13,16 @@ import { CustomerTimelineSection } from './customer-timeline-section';
 import { CustomerCommunicationSection } from './customer-communication-section';
 import { CustomerContactSection } from './customer-contact-section';
 import { CustomerAddressesSection } from './customer-addresses-section';
-import { CustomerDeliveryRiskCard, type CustomerDeliveryHistoryData } from './customer-delivery-risk-card';
+import {
+  CustomerDeliveryRiskCard,
+  type CustomerDeliveryHistoryData,
+} from './customer-delivery-risk-card';
 import { CustomerRestrictionsCard } from './customer-restrictions-card';
 import { CustomerAccountCard } from './customer-account-card';
 import { CustomerTagsCard } from './customer-tags-card';
 import { CustomerNotesCard } from './customer-notes-card';
 import { CustomerDuplicateMergeDialog } from './customer-duplicate-merge-dialog';
+import { CustomerCrmCard } from './customer-crm-card';
 
 interface CustomerDetailConsoleProps {
   readonly customerId: string;
@@ -27,7 +31,9 @@ interface CustomerDetailConsoleProps {
 export function CustomerDetailConsole({ customerId }: CustomerDetailConsoleProps) {
   const [customer, setCustomer] = useState<CustomerDetailDto | null>(null);
   const [deliveryHistory, setDeliveryHistory] = useState<CustomerDeliveryHistoryData | null>(null);
-  const [duplicateCandidates, setDuplicateCandidates] = useState<readonly CustomerDuplicateCandidateDto[]>([]);
+  const [duplicateCandidates, setDuplicateCandidates] = useState<
+    readonly CustomerDuplicateCandidateDto[]
+  >([]);
   const [state, setState] = useState<'loading' | 'ready' | 'error'>('loading');
   const [message, setMessage] = useState('');
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -41,9 +47,9 @@ export function CustomerDetailConsole({ customerId }: CustomerDetailConsoleProps
       try {
         const [customerData, historyData, duplicatesData] = await Promise.all([
           fetchApiData<CustomerDetailDto>(`/admin/customers/${customerId}`),
-          fetchApiData<CustomerDeliveryHistoryData>(`/admin/customers/${customerId}/delivery-history`).catch(
-            () => null,
-          ),
+          fetchApiData<CustomerDeliveryHistoryData>(
+            `/admin/customers/${customerId}/delivery-history`,
+          ).catch(() => null),
           fetchApiData<readonly CustomerDuplicateCandidateDto[]>(
             `/admin/customers/${customerId}/duplicate-candidates`,
           ).catch(() => []),
@@ -70,7 +76,8 @@ export function CustomerDetailConsole({ customerId }: CustomerDetailConsoleProps
   if (state === 'loading') {
     return (
       <main className="px-4 py-16 sm:px-6 lg:px-8 text-center text-sm text-muted-foreground">
-        <RefreshCw className="mr-2 inline size-5 animate-spin text-primary" /> Loading customer workspace...
+        <RefreshCw className="mr-2 inline size-5 animate-spin text-primary" /> Loading customer
+        workspace...
       </main>
     );
   }
@@ -81,7 +88,9 @@ export function CustomerDetailConsole({ customerId }: CustomerDetailConsoleProps
         <div className="rounded-xl border border-rose-200 bg-rose-50/60 p-6 text-rose-900">
           <XCircle className="mx-auto size-8 text-rose-600 mb-2" />
           <h2 className="text-base font-semibold">Failed to Load Customer</h2>
-          <p className="mt-1 text-xs text-rose-700">{message || 'Customer profile was not found.'}</p>
+          <p className="mt-1 text-xs text-rose-700">
+            {message || 'Customer profile was not found.'}
+          </p>
           <Button
             variant="outline"
             size="sm"
@@ -97,7 +106,9 @@ export function CustomerDetailConsole({ customerId }: CustomerDetailConsoleProps
 
   const isReadOnly = customer.status === 'MERGED' || customer.status === 'ANONYMIZED';
   const primarySearchPhone =
-    customer.phones.find((p) => p.isPrimary)?.phone ?? customer.phones[0]?.phone ?? customer.displayName;
+    customer.phones.find((p) => p.isPrimary)?.phone ??
+    customer.phones[0]?.phone ??
+    customer.displayName;
 
   return (
     <main className="min-w-0 space-y-6 px-4 py-5 sm:px-6 lg:px-8">
@@ -137,10 +148,7 @@ export function CustomerDetailConsole({ customerId }: CustomerDetailConsoleProps
         {/* Main Operational Column (Orders, Timeline, Communications) */}
         <div className="space-y-6 lg:col-span-7">
           {/* Order & Return History */}
-          <CustomerOrdersSection
-            customerId={customer.id}
-            isReadOnly={isReadOnly}
-          />
+          <CustomerOrdersSection customerId={customer.id} isReadOnly={isReadOnly} />
 
           {/* Unified Customer Activity Timeline */}
           <CustomerTimelineSection customerId={customer.id} />
@@ -151,6 +159,13 @@ export function CustomerDetailConsole({ customerId }: CustomerDetailConsoleProps
 
         {/* Supporting Column (Delivery Risk, Restrictions, Contacts, Addresses, Account, Tags, Notes) */}
         <div className="space-y-6 lg:col-span-5">
+          <CustomerCrmCard
+            customerId={customer.id}
+            customerVersion={customer.version}
+            isReadOnly={isReadOnly}
+            onUpdated={() => void load(true)}
+          />
+
           {/* Delivery & RTO Intelligence */}
           <CustomerDeliveryRiskCard
             history={deliveryHistory}

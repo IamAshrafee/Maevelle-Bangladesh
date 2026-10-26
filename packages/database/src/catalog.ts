@@ -57,6 +57,8 @@ function withCatalogTransaction<T>(
 export interface CatalogProductWorkspace extends ProductSummary {
   readonly sizeSystemId: string | null;
   readonly sizeGuideId: string | null;
+  readonly sizingGuideSource: 'CATEGORY' | 'DIRECT' | 'NONE' | null;
+  readonly noGuideReason: string | null;
   readonly description: string | null;
   readonly productTypeId: string;
   readonly inventoryPolicy?: 'DENY' | 'CONTINUE';
@@ -1377,6 +1379,8 @@ export async function createCatalogProduct(
     collectionIds?: readonly string[];
     sizeSystemId?: string | null;
     sizeGuideId?: string | null;
+    sizingGuideSource?: 'CATEGORY' | 'DIRECT' | 'NONE';
+    noGuideReason?: string | null;
     attributes?: readonly { attributeDefinitionId: string; value: string | boolean | null }[];
     shipping?: {
       weight?: { value: string; unit: 'G' | 'KG' | 'OZ' | 'LB' } | null;
@@ -1573,21 +1577,54 @@ export async function createCatalogProduct(
         values (${input.organizationId},${product.id},${collectionId})`.execute(transaction);
 
     if (input.sizeSystemId) {
+      const sizingGuideSource = input.sizeGuideId
+        ? 'DIRECT'
+        : (input.sizingGuideSource ?? 'CATEGORY');
+      if (sizingGuideSource === 'NONE' && !input.noGuideReason?.trim()) {
+        throw new CatalogDomainError(
+          'VALIDATION_FAILED',
+          'Explain why this sized Product intentionally has no customer guide.',
+        );
+      }
       if (input.sizeGuideId) {
-        const guide = await sql<{ size_system_id: string }>`
-          select size_system_id::text from sizing.size_guides
-          where organization_id=${input.organizationId} and id=${input.sizeGuideId}::uuid and status='ACTIVE'
+        const guide = await sql<{ size_system_id: string | null; sizing_domain_id: string }>`
+          select size_system_id::text, sizing_domain_id::text from sizing.size_guides
+          where organization_id=${input.organizationId} and id=${input.sizeGuideId}::uuid
+            and status='ACTIVE' and current_published_revision_id is not null
         `.execute(transaction);
-        if (!guide.rows[0] || guide.rows[0].size_system_id !== input.sizeSystemId) {
+        const guideRow = guide.rows[0];
+        const selectedSystem = await sql<{ sizing_domain_id: string }>`
+          select sizing_domain_id::text from sizing.size_systems
+          where organization_id=${input.organizationId} and id=${input.sizeSystemId}::uuid and status='ACTIVE'
+        `.execute(transaction);
+        if (
+          !guideRow ||
+          !selectedSystem.rows[0] ||
+          (guideRow.size_system_id !== null && guideRow.size_system_id !== input.sizeSystemId) ||
+          guideRow.sizing_domain_id !== selectedSystem.rows[0].sizing_domain_id
+        ) {
           throw new CatalogDomainError(
             'VALIDATION_FAILED',
-            'Selected size guide does not match size system.',
+            'Selected published size guide is not compatible with the Product size system.',
           );
         }
       }
       await sql`
-        insert into sizing.product_size_configurations (organization_id, product_id, size_system_id, size_guide_id, status)
-        values (${input.organizationId}, ${product.id}::uuid, ${input.sizeSystemId}::uuid, ${input.sizeGuideId ?? null}::uuid, 'ACTIVE')
+        insert into sizing.product_size_configurations (
+          organization_id, product_id, size_system_id, size_guide_id,
+          guide_outcome, no_guide_reason, assignment_origin,
+          assigned_by_actor_id, assigned_at, status
+        )
+        values (
+          ${input.organizationId}, ${product.id}::uuid, ${input.sizeSystemId}::uuid,
+          ${input.sizeGuideId ?? null}::uuid,
+          ${sizingGuideSource === 'DIRECT' ? 'DIRECT' : sizingGuideSource === 'NONE' ? 'NONE' : 'INHERIT'},
+          ${sizingGuideSource === 'NONE' ? input.noGuideReason!.trim() : null},
+          ${sizingGuideSource === 'DIRECT' ? 'MANUAL' : null},
+          ${sizingGuideSource === 'DIRECT' ? input.actorId : null}::uuid,
+          ${sizingGuideSource === 'DIRECT' ? sql`now()` : null},
+          'ACTIVE'
+        )
       `.execute(transaction);
     }
 
@@ -1767,28 +1804,28 @@ export async function createCatalogProduct(
             matchedValues.push({ axisId: match.axisId, valueId: match.id });
           }
         } else if (v.optionSelections) {
-            for (const sel of v.optionSelections) {
-              const key = `${sel.axisName.toLowerCase().trim()}:::${sel.valueDisplay.toLowerCase().trim()}`;
-              const match = createdValuesByKey.get(key);
-              if (match) {
-                matchedValues.push({ axisId: match.axisId, valueId: match.id });
-              }
+          for (const sel of v.optionSelections) {
+            const key = `${sel.axisName.toLowerCase().trim()}:::${sel.valueDisplay.toLowerCase().trim()}`;
+            const match = createdValuesByKey.get(key);
+            if (match) {
+              matchedValues.push({ axisId: match.axisId, valueId: match.id });
             }
           }
+        }
 
-          const optIds = matchedValues.map((m) => m.valueId);
-          const signature = optIds.length > 0 ? [...optIds].sort().join(':') : 'default';
+        const optIds = matchedValues.map((m) => m.valueId);
+        const signature = optIds.length > 0 ? [...optIds].sort().join(':') : 'default';
 
-          const weightVal = v.weight?.value ? Number(v.weight.value) : null;
-          const weightUnit = weightVal && v.weight?.unit ? v.weight.unit : null;
-          const lenVal = v.dimensions?.length ? Number(v.dimensions.length) : null;
-          const widthVal = v.dimensions?.width ? Number(v.dimensions.width) : null;
-          const heightVal = v.dimensions?.height ? Number(v.dimensions.height) : null;
-          const dimUnit =
-            lenVal && widthVal && heightVal && v.dimensions?.unit ? v.dimensions.unit : null;
-          const estimatedCost = v.estimatedCostAmount ? Number(v.estimatedCostAmount) : null;
+        const weightVal = v.weight?.value ? Number(v.weight.value) : null;
+        const weightUnit = weightVal && v.weight?.unit ? v.weight.unit : null;
+        const lenVal = v.dimensions?.length ? Number(v.dimensions.length) : null;
+        const widthVal = v.dimensions?.width ? Number(v.dimensions.width) : null;
+        const heightVal = v.dimensions?.height ? Number(v.dimensions.height) : null;
+        const dimUnit =
+          lenVal && widthVal && heightVal && v.dimensions?.unit ? v.dimensions.unit : null;
+        const estimatedCost = v.estimatedCostAmount ? Number(v.estimatedCostAmount) : null;
 
-          const variantResult = await sql<{ id: string }>`
+        const variantResult = await sql<{ id: string }>`
             insert into catalog.product_variants (
               organization_id, product_id, title, sku, sku_normalized, barcode, option_signature,
               weight_value, weight_unit, length_value, width_value, height_value, dimension_unit,
@@ -1801,61 +1838,61 @@ export async function createCatalogProduct(
               ${estimatedCost}, 'ACTIVE'
             ) returning id::text
           `.execute(transaction);
-          const variantId = variantResult.rows[0]?.id;
-          if (!variantId) continue;
+        const variantId = variantResult.rows[0]?.id;
+        if (!variantId) continue;
 
-          if (v.clientRef) {
-            createdVariantsByRef.set(v.clientRef, variantId);
-          }
+        if (v.clientRef) {
+          createdVariantsByRef.set(v.clientRef, variantId);
+        }
 
-          for (const item of matchedValues) {
-            await sql`
+        for (const item of matchedValues) {
+          await sql`
               insert into catalog.variant_option_values (organization_id, variant_id, option_axis_id, option_value_id)
               values (${input.organizationId}, ${variantId}::uuid, ${item.axisId}::uuid, ${item.valueId}::uuid)
             `.execute(transaction);
-          }
+        }
 
-          if (v.primaryColorId) {
-            await sql`
+        if (v.primaryColorId) {
+          await sql`
               insert into catalog.variant_colors (organization_id, variant_id, color_id, role, position)
               values (${input.organizationId}, ${variantId}::uuid, ${v.primaryColorId}::uuid, 'PRIMARY', 0)
             `.execute(transaction);
-          }
+        }
 
-          for (const [pos, colorId] of (v.associatedColorIds ?? []).entries()) {
-            await sql`
+        for (const [pos, colorId] of (v.associatedColorIds ?? []).entries()) {
+          await sql`
               insert into catalog.variant_colors (organization_id, variant_id, color_id, role, position)
               values (${input.organizationId}, ${variantId}::uuid, ${colorId}::uuid, 'ASSOCIATED', ${pos})
             `.execute(transaction);
-          }
+        }
 
-          if (v.initialStock && v.initialStock.length > 0) {
-            for (const stock of v.initialStock) {
-              if (stock.quantity > 0) {
-                await adjustInventory(transaction, {
-                  organizationId: input.organizationId,
-                  actorId: input.actorId,
-                  variantId,
-                  locationId: stock.locationId,
-                  condition: 'SELLABLE',
-                  quantityDelta: String(stock.quantity),
-                  reasonCode: 'OPENING_BALANCE',
-                  note: 'Opening inventory recorded during product creation',
-                  idempotencyKey: `init-stock-${variantId}-${stock.locationId}-${Date.now()}`,
-                });
-              }
+        if (v.initialStock && v.initialStock.length > 0) {
+          for (const stock of v.initialStock) {
+            if (stock.quantity > 0) {
+              await adjustInventory(transaction, {
+                organizationId: input.organizationId,
+                actorId: input.actorId,
+                variantId,
+                locationId: stock.locationId,
+                condition: 'SELLABLE',
+                quantityDelta: String(stock.quantity),
+                reasonCode: 'OPENING_BALANCE',
+                note: 'Opening inventory recorded during product creation',
+                idempotencyKey: `init-stock-${variantId}-${stock.locationId}-${Date.now()}`,
+              });
             }
-          } else {
-            await sql`
+          }
+        } else {
+          await sql`
               insert into inventory.inventory_items (organization_id, variant_id)
               values (${input.organizationId}, ${variantId}::uuid)
               on conflict (variant_id) do nothing
             `.execute(transaction);
-          }
+        }
 
-          if (v.priceAmount) {
-            const currency = v.currency || 'BDT';
-            await sql`
+        if (v.priceAmount) {
+          const currency = v.currency || 'BDT';
+          await sql`
               insert into pricing.price_definitions (
                 organization_id, variant_id, currency_code, amount, compare_at_amount, status
               ) values (
@@ -1863,12 +1900,12 @@ export async function createCatalogProduct(
                 ${v.compareAtAmount ? sql`${v.compareAtAmount}::numeric` : null}, 'ACTIVE'
               )
             `.execute(transaction);
-          }
         }
       }
+    }
 
-      if (
-        (!input.variants || input.variants.length === 0) &&
+    if (
+      (!input.variants || input.variants.length === 0) &&
       input.initialVariant &&
       input.initialVariant.sku
     ) {
@@ -3839,6 +3876,8 @@ export async function getCatalogProductWorkspace(
     updated_at: string;
     size_system_id: string | null;
     size_guide_id: string | null;
+    guide_outcome: 'INHERIT' | 'DIRECT' | 'NONE' | null;
+    no_guide_reason: string | null;
   }>`
     select product.id::text,product.handle,product.title,product.description,product.status,
       product.publication_status,product.version::text,product.product_type_id::text,
@@ -3849,7 +3888,8 @@ export async function getCatalogProductWorkspace(
       product.length_value::text as length_value,product.width_value::text as width_value,
       product.height_value::text as height_value,product.dimension_unit,
       product.updated_at::text,
-      sc.size_system_id::text as size_system_id, sc.size_guide_id::text as size_guide_id
+      sc.size_system_id::text as size_system_id, sc.size_guide_id::text as size_guide_id,
+      sc.guide_outcome, sc.no_guide_reason
     from catalog.products product
     join catalog.product_types product_type
       on product_type.id=product.product_type_id and product_type.organization_id=product.organization_id
@@ -4155,6 +4195,15 @@ export async function getCatalogProductWorkspace(
     shippingProfile: (row.shipping_profile as 'STANDARD' | 'FRAGILE' | 'HEAVY') ?? 'STANDARD',
     sizeSystemId: row.size_system_id,
     sizeGuideId: row.size_guide_id,
+    sizingGuideSource:
+      row.guide_outcome === 'DIRECT'
+        ? 'DIRECT'
+        : row.guide_outcome === 'NONE'
+          ? 'NONE'
+          : row.guide_outcome === 'INHERIT'
+            ? 'CATEGORY'
+            : null,
+    noGuideReason: row.no_guide_reason,
     shipping:
       row.weight_value && row.weight_unit
         ? {
@@ -5078,6 +5127,8 @@ export interface CatalogProductWorkspaceWrite {
   readonly collectionIds?: readonly string[];
   readonly sizeSystemId?: string | null;
   readonly sizeGuideId?: string | null;
+  readonly sizingGuideSource?: 'CATEGORY' | 'DIRECT' | 'NONE';
+  readonly noGuideReason?: string | null;
   readonly inventoryPolicy?: 'DENY' | 'CONTINUE';
   readonly shippingProfile?: 'STANDARD' | 'FRAGILE' | 'HEAVY';
   readonly shipping?: {
@@ -5200,6 +5251,10 @@ export async function saveCatalogProductWorkspace(
         ...(input.collectionIds ? { collectionIds: input.collectionIds } : {}),
         ...(input.sizeSystemId !== undefined ? { sizeSystemId: input.sizeSystemId } : {}),
         ...(input.sizeGuideId !== undefined ? { sizeGuideId: input.sizeGuideId } : {}),
+        ...(input.sizingGuideSource !== undefined
+          ? { sizingGuideSource: input.sizingGuideSource }
+          : {}),
+        ...(input.noGuideReason !== undefined ? { noGuideReason: input.noGuideReason } : {}),
         ...(input.attributes ? { attributes: input.attributes } : {}),
         ...(input.shipping ? { shipping: input.shipping } : {}),
         ...(input.options ? { options: input.options } : {}),
@@ -5233,7 +5288,11 @@ export async function saveCatalogProductWorkspace(
         });
       }
 
-      const workspace = await getCatalogProductWorkspace(transaction, input.organizationId, targetProductId);
+      const workspace = await getCatalogProductWorkspace(
+        transaction,
+        input.organizationId,
+        targetProductId,
+      );
       if (!workspace) throw new Error('Failed to load created product workspace.');
       return workspace;
     }
@@ -5264,14 +5323,26 @@ export async function saveCatalogProductWorkspace(
       where id = ${input.productTypeId}::uuid and organization_id = ${input.organizationId} and status = 'ACTIVE'
     `.execute(transaction);
     if (!ptRow.rows[0]) {
-      throw new CatalogDomainError('VALIDATION_FAILED', 'Choose an active Product Type from this organization.');
+      throw new CatalogDomainError(
+        'VALIDATION_FAILED',
+        'Choose an active Product Type from this organization.',
+      );
     }
 
-    const baseWeightVal = input.shipping?.weight?.value ? Number(input.shipping.weight.value) : null;
-    const baseWeightUnit = baseWeightVal && input.shipping?.weight?.unit ? input.shipping.weight.unit : null;
-    const baseLenVal = input.shipping?.dimensions?.length ? Number(input.shipping.dimensions.length) : null;
-    const baseWidthVal = input.shipping?.dimensions?.width ? Number(input.shipping.dimensions.width) : null;
-    const baseHeightVal = input.shipping?.dimensions?.height ? Number(input.shipping.dimensions.height) : null;
+    const baseWeightVal = input.shipping?.weight?.value
+      ? Number(input.shipping.weight.value)
+      : null;
+    const baseWeightUnit =
+      baseWeightVal && input.shipping?.weight?.unit ? input.shipping.weight.unit : null;
+    const baseLenVal = input.shipping?.dimensions?.length
+      ? Number(input.shipping.dimensions.length)
+      : null;
+    const baseWidthVal = input.shipping?.dimensions?.width
+      ? Number(input.shipping.dimensions.width)
+      : null;
+    const baseHeightVal = input.shipping?.dimensions?.height
+      ? Number(input.shipping.dimensions.height)
+      : null;
     const baseDimUnit =
       baseLenVal && baseWidthVal && baseHeightVal && input.shipping?.dimensions?.unit
         ? input.shipping.dimensions.unit
@@ -5343,9 +5414,13 @@ export async function saveCatalogProductWorkspace(
         );
       }
     }
-    await sql`delete from catalog.product_categories where organization_id=${input.organizationId} and product_id=${targetProductId}::uuid`.execute(transaction);
+    await sql`delete from catalog.product_categories where organization_id=${input.organizationId} and product_id=${targetProductId}::uuid`.execute(
+      transaction,
+    );
     for (const catId of categoryIds) {
-      await sql`insert into catalog.product_categories (organization_id, product_id, category_id) values (${input.organizationId}, ${targetProductId}::uuid, ${catId}::uuid)`.execute(transaction);
+      await sql`insert into catalog.product_categories (organization_id, product_id, category_id) values (${input.organizationId}, ${targetProductId}::uuid, ${catId}::uuid)`.execute(
+        transaction,
+      );
     }
 
     const tagIds = [...new Set(input.tagIds ?? [])];
@@ -5364,39 +5439,101 @@ export async function saveCatalogProductWorkspace(
             ? sql`catalog.occasions`
             : sql`catalog.collections`;
       const available = await sql<{ id: string }>`select id::text from ${source}
-        where organization_id=${input.organizationId} and status='ACTIVE' and id=any(${ids}::uuid[])`.execute(transaction);
+        where organization_id=${input.organizationId} and status='ACTIVE' and id=any(${ids}::uuid[])`.execute(
+        transaction,
+      );
       if (available.rows.length !== ids.length) {
-        throw new CatalogDomainError('VALIDATION_FAILED', `Every selected ${table.slice(0, -1)} must be active.`);
+        throw new CatalogDomainError(
+          'VALIDATION_FAILED',
+          `Every selected ${table.slice(0, -1)} must be active.`,
+        );
       }
     }
-    await sql`delete from catalog.product_tags where organization_id=${input.organizationId} and product_id=${targetProductId}::uuid`.execute(transaction);
+    await sql`delete from catalog.product_tags where organization_id=${input.organizationId} and product_id=${targetProductId}::uuid`.execute(
+      transaction,
+    );
     for (const tId of tagIds) {
-      await sql`insert into catalog.product_tags (organization_id, product_id, tag_id) values (${input.organizationId}, ${targetProductId}::uuid, ${tId}::uuid)`.execute(transaction);
+      await sql`insert into catalog.product_tags (organization_id, product_id, tag_id) values (${input.organizationId}, ${targetProductId}::uuid, ${tId}::uuid)`.execute(
+        transaction,
+      );
     }
-    await sql`delete from catalog.product_occasions where organization_id=${input.organizationId} and product_id=${targetProductId}::uuid`.execute(transaction);
+    await sql`delete from catalog.product_occasions where organization_id=${input.organizationId} and product_id=${targetProductId}::uuid`.execute(
+      transaction,
+    );
     for (const oId of occasionIds) {
-      await sql`insert into catalog.product_occasions (organization_id, product_id, occasion_id) values (${input.organizationId}, ${targetProductId}::uuid, ${oId}::uuid)`.execute(transaction);
+      await sql`insert into catalog.product_occasions (organization_id, product_id, occasion_id) values (${input.organizationId}, ${targetProductId}::uuid, ${oId}::uuid)`.execute(
+        transaction,
+      );
     }
-    await sql`delete from catalog.product_collections where organization_id=${input.organizationId} and product_id=${targetProductId}::uuid`.execute(transaction);
+    await sql`delete from catalog.product_collections where organization_id=${input.organizationId} and product_id=${targetProductId}::uuid`.execute(
+      transaction,
+    );
     for (const [idx, colId] of collectionIds.entries()) {
-      await sql`insert into catalog.product_collections (organization_id, product_id, collection_id, position) values (${input.organizationId}, ${targetProductId}::uuid, ${colId}::uuid, ${idx})`.execute(transaction);
+      await sql`insert into catalog.product_collections (organization_id, product_id, collection_id, position) values (${input.organizationId}, ${targetProductId}::uuid, ${colId}::uuid, ${idx})`.execute(
+        transaction,
+      );
     }
 
     if (input.sizeSystemId) {
+      const sizingGuideSource = input.sizeGuideId
+        ? 'DIRECT'
+        : (input.sizingGuideSource ?? 'CATEGORY');
+      if (sizingGuideSource === 'NONE' && !input.noGuideReason?.trim()) {
+        throw new CatalogDomainError(
+          'VALIDATION_FAILED',
+          'Explain why this sized Product intentionally has no customer guide.',
+        );
+      }
       if (input.sizeGuideId) {
-        const guide = await sql<{ size_system_id: string }>`
-          select size_system_id::text from sizing.size_guides
-          where organization_id=${input.organizationId} and id=${input.sizeGuideId}::uuid and status='ACTIVE'
+        const guide = await sql<{ size_system_id: string | null; sizing_domain_id: string }>`
+          select size_system_id::text, sizing_domain_id::text from sizing.size_guides
+          where organization_id=${input.organizationId} and id=${input.sizeGuideId}::uuid
+            and status='ACTIVE' and current_published_revision_id is not null
         `.execute(transaction);
-        if (!guide.rows[0] || guide.rows[0].size_system_id !== input.sizeSystemId) {
-          throw new CatalogDomainError('VALIDATION_FAILED', 'Selected size guide does not match size system.');
+        const guideRow = guide.rows[0];
+        const selectedSystem = await sql<{ sizing_domain_id: string }>`
+          select sizing_domain_id::text from sizing.size_systems
+          where organization_id=${input.organizationId} and id=${input.sizeSystemId}::uuid and status='ACTIVE'
+        `.execute(transaction);
+        if (
+          !guideRow ||
+          !selectedSystem.rows[0] ||
+          (guideRow.size_system_id !== null && guideRow.size_system_id !== input.sizeSystemId) ||
+          guideRow.sizing_domain_id !== selectedSystem.rows[0].sizing_domain_id
+        ) {
+          throw new CatalogDomainError(
+            'VALIDATION_FAILED',
+            'Selected published size guide is not compatible with the Product size system.',
+          );
         }
       }
       await sql`
-        insert into sizing.product_size_configurations (organization_id, product_id, size_system_id, size_guide_id, status)
-        values (${input.organizationId}, ${targetProductId}::uuid, ${input.sizeSystemId}::uuid, ${input.sizeGuideId ?? null}::uuid, 'ACTIVE')
+        insert into sizing.product_size_configurations (
+          organization_id, product_id, size_system_id, size_guide_id,
+          guide_outcome, no_guide_reason, assignment_origin,
+          assigned_by_actor_id, assigned_at, status
+        )
+        values (
+          ${input.organizationId}, ${targetProductId}::uuid, ${input.sizeSystemId}::uuid,
+          ${input.sizeGuideId ?? null}::uuid,
+          ${sizingGuideSource === 'DIRECT' ? 'DIRECT' : sizingGuideSource === 'NONE' ? 'NONE' : 'INHERIT'},
+          ${sizingGuideSource === 'NONE' ? input.noGuideReason!.trim() : null},
+          ${sizingGuideSource === 'DIRECT' ? 'MANUAL' : null},
+          ${sizingGuideSource === 'DIRECT' ? input.actorId : null}::uuid,
+          ${sizingGuideSource === 'DIRECT' ? sql`now()` : null},
+          'ACTIVE'
+        )
         on conflict (organization_id, product_id) do update
-        set size_system_id = excluded.size_system_id, size_guide_id = excluded.size_guide_id, status = 'ACTIVE', updated_at = now()
+        set size_system_id = excluded.size_system_id,
+            size_guide_id = excluded.size_guide_id,
+            guide_outcome = excluded.guide_outcome,
+            no_guide_reason = excluded.no_guide_reason,
+            assignment_origin = excluded.assignment_origin,
+            source_purchase_id = null,
+            assigned_by_actor_id = excluded.assigned_by_actor_id,
+            assigned_at = excluded.assigned_at,
+            status = 'ACTIVE', version = sizing.product_size_configurations.version + 1,
+            updated_at = now()
       `.execute(transaction);
     } else {
       await sql`
@@ -5406,7 +5543,9 @@ export async function saveCatalogProductWorkspace(
     }
 
     if (input.attributes) {
-      await sql`delete from catalog.product_attribute_values where organization_id=${input.organizationId} and product_id=${targetProductId}::uuid`.execute(transaction);
+      await sql`delete from catalog.product_attribute_values where organization_id=${input.organizationId} and product_id=${targetProductId}::uuid`.execute(
+        transaction,
+      );
       const definitions = await sql<{
         id: string;
         name: string;
@@ -5454,7 +5593,10 @@ export async function saveCatalogProductWorkspace(
     if (input.options && input.options.length > 0) {
       const visualAxesCount = input.options.filter((axis) => axis.isVisual).length;
       if (visualAxesCount > 1) {
-        throw new CatalogDomainError('VALIDATION_FAILED', 'At most one option axis may be designated as visual.');
+        throw new CatalogDomainError(
+          'VALIDATION_FAILED',
+          'At most one option axis may be designated as visual.',
+        );
       }
 
       for (const [axisIdx, axis] of input.options.entries()) {
@@ -5582,7 +5724,8 @@ export async function saveCatalogProductWorkspace(
         const lenVal = v.dimensions?.length ? Number(v.dimensions.length) : null;
         const widthVal = v.dimensions?.width ? Number(v.dimensions.width) : null;
         const heightVal = v.dimensions?.height ? Number(v.dimensions.height) : null;
-        const dimUnit = lenVal && widthVal && heightVal && v.dimensions?.unit ? v.dimensions.unit : null;
+        const dimUnit =
+          lenVal && widthVal && heightVal && v.dimensions?.unit ? v.dimensions.unit : null;
         const estimatedCost = v.estimatedCostAmount ? Number(v.estimatedCostAmount) : null;
 
         let variantId = v.id;
@@ -5644,7 +5787,9 @@ export async function saveCatalogProductWorkspace(
         }
 
         if (matchedValues.length > 0) {
-          await sql`delete from catalog.variant_option_values where variant_id = ${variantId}::uuid and organization_id = ${input.organizationId}`.execute(transaction);
+          await sql`delete from catalog.variant_option_values where variant_id = ${variantId}::uuid and organization_id = ${input.organizationId}`.execute(
+            transaction,
+          );
           for (const item of matchedValues) {
             await sql`
               insert into catalog.variant_option_values (organization_id, variant_id, option_axis_id, option_value_id)
@@ -5653,7 +5798,9 @@ export async function saveCatalogProductWorkspace(
           }
         }
 
-        await sql`delete from catalog.variant_colors where variant_id = ${variantId}::uuid and organization_id = ${input.organizationId}`.execute(transaction);
+        await sql`delete from catalog.variant_colors where variant_id = ${variantId}::uuid and organization_id = ${input.organizationId}`.execute(
+          transaction,
+        );
         if (v.primaryColorId) {
           await sql`
             insert into catalog.variant_colors (organization_id, variant_id, color_id, role, position)
@@ -5755,9 +5902,15 @@ export async function saveCatalogProductWorkspace(
     }
 
     if (input.content) {
-      const validFaqs = (input.content.faqs ?? []).filter((f) => f.question.trim() && f.answer.trim());
+      const validFaqs = (input.content.faqs ?? []).filter(
+        (f) => f.question.trim() && f.answer.trim(),
+      );
       const validGroups = input.content.informationGroups ?? [];
-      const latestProd = await lockCatalogProduct(transaction, input.organizationId, targetProductId);
+      const latestProd = await lockCatalogProduct(
+        transaction,
+        input.organizationId,
+        targetProductId,
+      );
       await replaceCatalogProductContent(transaction, {
         organizationId: input.organizationId,
         actorId: input.actorId,
@@ -5771,7 +5924,11 @@ export async function saveCatalogProductWorkspace(
     }
 
     if (input.targetStatus === 'ACTIVE') {
-      const latestProd = await lockCatalogProduct(transaction, input.organizationId, targetProductId);
+      const latestProd = await lockCatalogProduct(
+        transaction,
+        input.organizationId,
+        targetProductId,
+      );
       await publishCatalogProduct(transaction, {
         organizationId: input.organizationId,
         productId: targetProductId,
@@ -5789,9 +5946,12 @@ export async function saveCatalogProductWorkspace(
       metadata: { title: input.title, variantCount: input.variants?.length ?? 0 },
     });
 
-    const workspace = await getCatalogProductWorkspace(transaction, input.organizationId, targetProductId);
+    const workspace = await getCatalogProductWorkspace(
+      transaction,
+      input.organizationId,
+      targetProductId,
+    );
     if (!workspace) throw new Error('Failed to load updated product workspace.');
     return workspace;
   });
 }
-

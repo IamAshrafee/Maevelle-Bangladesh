@@ -1,13 +1,12 @@
-import type {
-  FastifyInstance,
-  FastifyReply,
-  FastifySchema,
-} from 'fastify';
+import type { FastifyInstance, FastifyReply, FastifySchema } from 'fastify';
 import { Type } from 'typebox';
 
 import type { DatabaseClient } from '@maevelle/database';
 import {
   addSizeGuideRow,
+  addSizeGuideColumn,
+  applyCategoryDefaultSizeGuide,
+  applyProductGuideAssignment,
   archiveMeasurementDefinition,
   archiveSizeDefinition,
   archiveSizeGuide,
@@ -22,19 +21,28 @@ import {
   createSizingDomain,
   duplicateSizeGuide,
   getAdminSizingWorkspace,
+  getProductSizeReconciliation,
   getProductSizingConfiguration,
   getSizeGuideDetail,
   getSizingQualityChecks,
+  getSupplyPurchaseSizingReview,
   linkOptionValueToSizeDefinition,
   linkOptionValuesToSizeDefinitionsBulk,
   listCategorySizeGuideDefaults,
+  listSizingAttention,
   listSizeGuides,
   listSizeOptionValuesWithMapping,
+  previewSizeGuidePublication,
+  publishReviewedSizeGuideRevision,
   publishSizeGuideRevision,
+  previewCategoryDefaultSizeGuide,
+  previewProductGuideAssignment,
   removeProductSizingConfiguration,
+  removeSizeGuideColumn,
   removeSizeGuideMeasurement,
   removeSizeGuideRow,
   reorderSizeGuideRows,
+  renameSizeGuideColumn,
   restoreMeasurementDefinition,
   restoreSizeDefinition,
   restoreSizeGuide,
@@ -43,6 +51,7 @@ import {
   setCategoryDefaultSizeGuide,
   setSizeGuideMeasurement,
   setSizeGuideMeasurementsBulk,
+  setSupplyPurchaseSizingDecision,
   SizingDomainError,
   updateMeasurementDefinition,
   updateSizeDefinition,
@@ -58,7 +67,14 @@ import type { createAuth } from '../auth/auth.js';
 
 type Auth = ReturnType<typeof createAuth>;
 
-type SizingCapability = 'sizing.view' | 'sizing.manage';
+type SizingCapability =
+  | 'sizing.view'
+  | 'sizing.manage'
+  | 'sizing.guides.manage'
+  | 'sizing.guides.publish'
+  | 'sizing.assignments.manage'
+  | 'sizing.settings.manage'
+  | 'sizing.supply_review';
 
 type SizingContext = {
   organizationId: string;
@@ -67,15 +83,15 @@ type SizingContext = {
 
 type AuthorizationResult =
   | {
-    ok: true;
-    context: SizingContext;
-  }
+      ok: true;
+      context: SizingContext;
+    }
   | {
-    ok: false;
-    statusCode: 401 | 403;
-    code: 'UNAUTHORIZED' | 'FORBIDDEN';
-    message: string;
-  };
+      ok: false;
+      statusCode: 401 | 403;
+      code: 'UNAUTHORIZED' | 'FORBIDDEN';
+      message: string;
+    };
 
 type SecuredHandler = (
   body: Record<string, unknown>,
@@ -121,10 +137,14 @@ const subjectType = Type.Union([
   Type.Literal('PRODUCT'),
 ]);
 
-const measurementUnit = Type.Union([
-  Type.Literal('cm'),
-  Type.Literal('inch'),
+const guideKind = Type.Union([
+  Type.Literal('APPAREL_SIZE_CHART'),
+  Type.Literal('FOOTWEAR_SIZE_CHART'),
+  Type.Literal('WEARABLE_FIT_GUIDE'),
+  Type.Literal('CUSTOM_FIT_GUIDE'),
 ]);
+
+const measurementUnit = Type.Union([Type.Literal('cm'), Type.Literal('inch')]);
 
 /**
  * Decimal values intentionally remain strings.
@@ -222,6 +242,8 @@ const productIdParams = Type.Object(
   },
 );
 
+const purchaseIdParams = Type.Object({ purchaseId: uuid }, { additionalProperties: false });
+
 const categoryIdParams = Type.Object(
   {
     categoryId: uuid,
@@ -289,9 +311,7 @@ const expectedVersionQuery = Type.Object(
 /*                              Authentication                                */
 /* -------------------------------------------------------------------------- */
 
-function requestHeaders(
-  headers: Record<string, string | string[] | undefined>,
-): Headers {
+function requestHeaders(headers: Record<string, string | string[] | undefined>): Headers {
   const result = new Headers();
 
   for (const [headerName, value] of Object.entries(headers)) {
@@ -329,16 +349,12 @@ async function requireSizing(
     };
   }
 
-  const context = await findActiveAdminContext(
-    database.db,
-    session.user.id,
-    {
-      requiredCapability: capability,
-      ...(typeof headers['x-organization-id'] === 'string'
-        ? { organizationId: headers['x-organization-id'] }
-        : {}),
-    },
-  );
+  const context = await findActiveAdminContext(database.db, session.user.id, {
+    requiredCapability: capability,
+    ...(typeof headers['x-organization-id'] === 'string'
+      ? { organizationId: headers['x-organization-id'] }
+      : {}),
+  });
 
   if (!context) {
     return {
@@ -419,17 +435,12 @@ function sizingError(reply: FastifyReply, error: unknown) {
 /*                                  Helpers                                   */
 /* -------------------------------------------------------------------------- */
 
-function pagination(
-  page: number,
-  pageSize: number,
-  totalItems: number,
-) {
+function pagination(page: number, pageSize: number, totalItems: number) {
   return {
     page,
     pageSize,
     totalItems,
-    totalPages:
-      totalItems === 0 ? 0 : Math.ceil(totalItems / pageSize),
+    totalPages: totalItems === 0 ? 0 : Math.ceil(totalItems / pageSize),
   };
 }
 
@@ -447,12 +458,7 @@ export function registerSizingRoutes(
   /* ------------------------------------------------------------------------ */
 
   app.get('/admin/sizing', async (request, reply) => {
-    const authorization = await requireSizing(
-      database,
-      auth,
-      request.headers,
-      'sizing.view',
-    );
+    const authorization = await requireSizing(database, auth, request.headers, 'sizing.view');
 
     if (!authorization.ok) {
       return sendAuthorizationError(reply, authorization);
@@ -460,10 +466,7 @@ export function registerSizingRoutes(
 
     try {
       return {
-        data: await getAdminSizingWorkspace(
-          database.db,
-          authorization.context.organizationId,
-        ),
+        data: await getAdminSizingWorkspace(database.db, authorization.context.organizationId),
       };
     } catch (error) {
       return sizingError(reply, error);
@@ -471,31 +474,49 @@ export function registerSizingRoutes(
   });
 
   app.get(
-    '/admin/sizing/quality-checks',
+    '/admin/sizing/attention',
+    {
+      schema: {
+        querystring: Type.Object(paginationQuery, { additionalProperties: false }),
+      },
+    },
     async (request, reply) => {
-      const authorization = await requireSizing(
-        database,
-        auth,
-        request.headers,
-        'sizing.view',
-      );
-
-      if (!authorization.ok) {
-        return sendAuthorizationError(reply, authorization);
-      }
-
+      const authorization = await requireSizing(database, auth, request.headers, 'sizing.view');
+      if (!authorization.ok) return sendAuthorizationError(reply, authorization);
+      const query = request.query as { page?: number; pageSize?: number };
+      const page = query.page ?? 1;
+      const pageSize = query.pageSize ?? 20;
       try {
+        const result = await listSizingAttention(database.db, {
+          organizationId: authorization.context.organizationId,
+          page,
+          pageSize,
+        });
         return {
-          data: await getSizingQualityChecks(
-            database.db,
-            authorization.context.organizationId,
-          ),
+          data: result.items,
+          pagination: pagination(page, pageSize, result.totalItems),
         };
       } catch (error) {
         return sizingError(reply, error);
       }
     },
   );
+
+  app.get('/admin/sizing/quality-checks', async (request, reply) => {
+    const authorization = await requireSizing(database, auth, request.headers, 'sizing.view');
+
+    if (!authorization.ok) {
+      return sendAuthorizationError(reply, authorization);
+    }
+
+    try {
+      return {
+        data: await getSizingQualityChecks(database.db, authorization.context.organizationId),
+      };
+    } catch (error) {
+      return sizingError(reply, error);
+    }
+  });
 
   app.get(
     '/admin/sizing/guides',
@@ -508,6 +529,25 @@ export function registerSizingRoutes(
             status: Type.Optional(lifecycleStatus),
 
             domainId: Type.Optional(uuid),
+
+            kind: Type.Optional(Type.Union([guideKind, Type.Literal('ALL')])),
+
+            publication: Type.Optional(
+              Type.Union([
+                Type.Literal('PUBLISHED'),
+                Type.Literal('WORKING_CHANGES'),
+                Type.Literal('DRAFT_ONLY'),
+                Type.Literal('ALL'),
+              ]),
+            ),
+
+            sort: Type.Optional(
+              Type.Union([
+                Type.Literal('UPDATED_DESC'),
+                Type.Literal('USAGE_DESC'),
+                Type.Literal('NAME_ASC'),
+              ]),
+            ),
 
             search: Type.Optional(
               Type.String({
@@ -523,12 +563,7 @@ export function registerSizingRoutes(
       },
     },
     async (request, reply) => {
-      const authorization = await requireSizing(
-        database,
-        auth,
-        request.headers,
-        'sizing.view',
-      );
+      const authorization = await requireSizing(database, auth, request.headers, 'sizing.view');
 
       if (!authorization.ok) {
         return sendAuthorizationError(reply, authorization);
@@ -539,6 +574,14 @@ export function registerSizingRoutes(
         pageSize?: number;
         status?: 'ACTIVE' | 'ARCHIVED' | 'ALL';
         domainId?: string;
+        kind?:
+          | 'APPAREL_SIZE_CHART'
+          | 'FOOTWEAR_SIZE_CHART'
+          | 'WEARABLE_FIT_GUIDE'
+          | 'CUSTOM_FIT_GUIDE'
+          | 'ALL';
+        publication?: 'PUBLISHED' | 'WORKING_CHANGES' | 'DRAFT_ONLY' | 'ALL';
+        sort?: 'UPDATED_DESC' | 'USAGE_DESC' | 'NAME_ASC';
         search?: string;
       };
 
@@ -547,8 +590,7 @@ export function registerSizingRoutes(
 
       try {
         const result = await listSizeGuides(database.db, {
-          organizationId:
-            authorization.context.organizationId,
+          organizationId: authorization.context.organizationId,
 
           page,
           pageSize,
@@ -557,16 +599,18 @@ export function registerSizingRoutes(
 
           ...(query.domainId ? { domainId: query.domainId } : {}),
 
+          ...(query.kind ? { kind: query.kind } : {}),
+
+          ...(query.publication ? { publication: query.publication } : {}),
+
+          ...(query.sort ? { sort: query.sort } : {}),
+
           ...(query.search?.trim() ? { search: query.search.trim() } : {}),
         });
 
         return {
           data: result.items,
-          pagination: pagination(
-            page,
-            pageSize,
-            result.totalItems,
-          ),
+          pagination: pagination(page, pageSize, result.totalItems),
         };
       } catch (error) {
         return sizingError(reply, error);
@@ -582,12 +626,7 @@ export function registerSizingRoutes(
       },
     },
     async (request, reply) => {
-      const authorization = await requireSizing(
-        database,
-        auth,
-        request.headers,
-        'sizing.view',
-      );
+      const authorization = await requireSizing(database, auth, request.headers, 'sizing.view');
 
       if (!authorization.ok) {
         return sendAuthorizationError(reply, authorization);
@@ -630,12 +669,7 @@ export function registerSizingRoutes(
       },
     },
     async (request, reply) => {
-      const authorization = await requireSizing(
-        database,
-        auth,
-        request.headers,
-        'sizing.view',
-      );
+      const authorization = await requireSizing(database, auth, request.headers, 'sizing.view');
 
       if (!authorization.ok) {
         return sendAuthorizationError(reply, authorization);
@@ -660,6 +694,130 @@ export function registerSizingRoutes(
   );
 
   app.get(
+    '/admin/sizing/products/:productId/effective-guide',
+    { schema: { params: productIdParams } },
+    async (request, reply) => {
+      const authorization = await requireSizing(database, auth, request.headers, 'sizing.view');
+      if (!authorization.ok) return sendAuthorizationError(reply, authorization);
+      try {
+        return {
+          data: await getProductSizingConfiguration(
+            database.db,
+            authorization.context.organizationId,
+            (request.params as { productId: string }).productId,
+          ),
+        };
+      } catch (error) {
+        return sizingError(reply, error);
+      }
+    },
+  );
+
+  app.get(
+    '/admin/sizing/products/:productId/reconciliation',
+    { schema: { params: productIdParams } },
+    async (request, reply) => {
+      const authorization = await requireSizing(database, auth, request.headers, 'sizing.view');
+      if (!authorization.ok) return sendAuthorizationError(reply, authorization);
+      try {
+        return {
+          data: await getProductSizeReconciliation(
+            database.db,
+            authorization.context.organizationId,
+            (request.params as { productId: string }).productId,
+          ),
+        };
+      } catch (error) {
+        return sizingError(reply, error);
+      }
+    },
+  );
+
+  app.get(
+    '/admin/procurement/purchases/:purchaseId/sizing',
+    { schema: { params: purchaseIdParams } },
+    async (request, reply) => {
+      const authorization = await requireSizing(
+        database,
+        auth,
+        request.headers,
+        'sizing.supply_review',
+      );
+      if (!authorization.ok) return sendAuthorizationError(reply, authorization);
+      try {
+        return {
+          data: await getSupplyPurchaseSizingReview(
+            database.db,
+            authorization.context.organizationId,
+            (request.params as { purchaseId: string }).purchaseId,
+          ),
+        };
+      } catch (error) {
+        return sizingError(reply, error);
+      }
+    },
+  );
+
+  app.post(
+    '/admin/procurement/purchases/:purchaseId/sizing-decisions',
+    {
+      schema: {
+        params: purchaseIdParams,
+        body: Type.Object(
+          {
+            productId: uuid,
+            decision: Type.Union([
+              Type.Literal('KEEP_CURRENT'),
+              Type.Literal('EVIDENCE_ONLY'),
+              Type.Literal('APPLIED_TO_PRODUCT'),
+            ]),
+            sizeGuideId: Type.Optional(uuid),
+            notes: Type.Optional(Type.Union([longText, Type.Null()])),
+            expectedVersion: Type.Optional(expectedVersion),
+            expectedProductVersion: Type.Optional(expectedVersion),
+          },
+          { additionalProperties: false },
+        ),
+      },
+    },
+    async (request, reply) => {
+      const authorization = await requireSizing(
+        database,
+        auth,
+        request.headers,
+        'sizing.supply_review',
+      );
+      if (!authorization.ok) return sendAuthorizationError(reply, authorization);
+      const body = request.body as {
+        productId: string;
+        decision: 'KEEP_CURRENT' | 'EVIDENCE_ONLY' | 'APPLIED_TO_PRODUCT';
+        sizeGuideId?: string;
+        notes?: string | null;
+        expectedVersion?: number;
+        expectedProductVersion?: number;
+      };
+      try {
+        const result = await setSupplyPurchaseSizingDecision(database.db, {
+          organizationId: authorization.context.organizationId,
+          purchaseId: (request.params as { purchaseId: string }).purchaseId,
+          productId: body.productId,
+          decision: body.decision,
+          ...(body.sizeGuideId === undefined ? {} : { sizeGuideId: body.sizeGuideId }),
+          ...(body.notes === undefined ? {} : { notes: body.notes }),
+          ...(body.expectedVersion === undefined ? {} : { expectedVersion: body.expectedVersion }),
+          ...(body.expectedProductVersion === undefined
+            ? {}
+            : { expectedProductVersion: body.expectedProductVersion }),
+          actorId: authorization.context.actorId,
+        });
+        return reply.code(200).send({ data: result });
+      } catch (error) {
+        return sizingError(reply, error);
+      }
+    },
+  );
+
+  app.get(
     '/admin/sizing/category-defaults',
     {
       schema: {
@@ -675,11 +833,7 @@ export function registerSizingRoutes(
             ),
 
             mappingStatus: Type.Optional(
-              Type.Union([
-                Type.Literal('MAPPED'),
-                Type.Literal('UNMAPPED'),
-                Type.Literal('ALL'),
-              ]),
+              Type.Union([Type.Literal('MAPPED'), Type.Literal('UNMAPPED'), Type.Literal('ALL')]),
             ),
           },
           {
@@ -689,12 +843,7 @@ export function registerSizingRoutes(
       },
     },
     async (request, reply) => {
-      const authorization = await requireSizing(
-        database,
-        auth,
-        request.headers,
-        'sizing.view',
-      );
+      const authorization = await requireSizing(database, auth, request.headers, 'sizing.view');
 
       if (!authorization.ok) {
         return sendAuthorizationError(reply, authorization);
@@ -711,29 +860,21 @@ export function registerSizingRoutes(
       const pageSize = query.pageSize ?? 20;
 
       try {
-        const result = await listCategorySizeGuideDefaults(
-          database.db,
-          {
-            organizationId:
-              authorization.context.organizationId,
+        const result = await listCategorySizeGuideDefaults(database.db, {
+          organizationId: authorization.context.organizationId,
 
-            page,
-            pageSize,
+          page,
+          pageSize,
 
-            ...(query.search?.trim() ? { search: query.search.trim() } : {}),
+          ...(query.search?.trim() ? { search: query.search.trim() } : {}),
 
-            ...(query.mappingStatus ? { mappingStatus: query.mappingStatus } : {}),
-          },
-        );
+          ...(query.mappingStatus ? { mappingStatus: query.mappingStatus } : {}),
+        });
 
         return {
           data: result.items,
 
-          pagination: pagination(
-            page,
-            pageSize,
-            result.totalItems,
-          ),
+          pagination: pagination(page, pageSize, result.totalItems),
         };
       } catch (error) {
         return sizingError(reply, error);
@@ -757,11 +898,7 @@ export function registerSizingRoutes(
             ),
 
             mappingStatus: Type.Optional(
-              Type.Union([
-                Type.Literal('MAPPED'),
-                Type.Literal('UNMAPPED'),
-                Type.Literal('ALL'),
-              ]),
+              Type.Union([Type.Literal('MAPPED'), Type.Literal('UNMAPPED'), Type.Literal('ALL')]),
             ),
 
             sizeSystemId: Type.Optional(uuid),
@@ -775,12 +912,7 @@ export function registerSizingRoutes(
       },
     },
     async (request, reply) => {
-      const authorization = await requireSizing(
-        database,
-        auth,
-        request.headers,
-        'sizing.view',
-      );
+      const authorization = await requireSizing(database, auth, request.headers, 'sizing.view');
 
       if (!authorization.ok) {
         return sendAuthorizationError(reply, authorization);
@@ -792,10 +924,7 @@ export function registerSizingRoutes(
 
         search?: string;
 
-        mappingStatus?:
-        | 'MAPPED'
-        | 'UNMAPPED'
-        | 'ALL';
+        mappingStatus?: 'MAPPED' | 'UNMAPPED' | 'ALL';
 
         sizeSystemId?: string;
         optionId?: string;
@@ -805,34 +934,25 @@ export function registerSizingRoutes(
       const pageSize = query.pageSize ?? 20;
 
       try {
-        const result =
-          await listSizeOptionValuesWithMapping(
-            database.db,
-            {
-              organizationId:
-                authorization.context.organizationId,
+        const result = await listSizeOptionValuesWithMapping(database.db, {
+          organizationId: authorization.context.organizationId,
 
-              page,
-              pageSize,
+          page,
+          pageSize,
 
-              ...(query.search?.trim() ? { search: query.search.trim() } : {}),
+          ...(query.search?.trim() ? { search: query.search.trim() } : {}),
 
-              ...(query.mappingStatus ? { mappingStatus: query.mappingStatus } : {}),
+          ...(query.mappingStatus ? { mappingStatus: query.mappingStatus } : {}),
 
-              ...(query.sizeSystemId ? { sizeSystemId: query.sizeSystemId } : {}),
+          ...(query.sizeSystemId ? { sizeSystemId: query.sizeSystemId } : {}),
 
-              ...(query.optionId ? { optionId: query.optionId } : {}),
-            },
-          );
+          ...(query.optionId ? { optionId: query.optionId } : {}),
+        });
 
         return {
           data: result.items,
 
-          pagination: pagination(
-            page,
-            pageSize,
-            result.totalItems,
-          ),
+          pagination: pagination(page, pageSize, result.totalItems),
         };
       } catch (error) {
         return sizingError(reply, error);
@@ -845,55 +965,46 @@ export function registerSizingRoutes(
   /* ------------------------------------------------------------------------ */
 
   const secured = (
-    method:
-      | 'post'
-      | 'put'
-      | 'patch'
-      | 'delete',
+    method: 'post' | 'put' | 'patch' | 'delete',
     path: string,
     schema: FastifySchema,
     handler: SecuredHandler,
   ) => {
+    const capability: SizingCapability = path.includes('/publish')
+      ? 'sizing.guides.publish'
+      : path.includes('/assignments') ||
+          path.includes('/size-configuration') ||
+          (path.includes('/size-guide') && path.includes('/catalog/'))
+        ? 'sizing.assignments.manage'
+        : path.includes('/domains') ||
+            path.includes('/systems') ||
+            path.includes('/definitions') ||
+            path.includes('/option-values')
+          ? 'sizing.settings.manage'
+          : 'sizing.guides.manage';
     app[method](
       path,
       {
         schema,
       },
       async (request, reply) => {
-        const authorization = await requireSizing(
-          database,
-          auth,
-          request.headers,
-          'sizing.manage',
-        );
+        const authorization = await requireSizing(database, auth, request.headers, capability);
 
         if (!authorization.ok) {
-          return sendAuthorizationError(
-            reply,
-            authorization,
-          );
+          return sendAuthorizationError(reply, authorization);
         }
 
         try {
           return await handler(
-            (request.body as Record<
-              string,
-              unknown
-            >) ?? {},
+            (request.body as Record<string, unknown>) ?? {},
 
             authorization.context,
 
             reply,
 
-            (request.params as Record<
-              string,
-              string
-            >) ?? {},
+            (request.params as Record<string, string>) ?? {},
 
-            (request.query as Record<
-              string,
-              unknown
-            >) ?? {},
+            (request.query as Record<string, unknown>) ?? {},
           );
         } catch (error) {
           return sizingError(reply, error);
@@ -924,28 +1035,107 @@ export function registerSizingRoutes(
       ),
     },
     async (body, context, reply) => {
-      const result = await createSizingDomain(
-        database.db,
-        {
-          organizationId: context.organizationId,
+      const result = await createSizingDomain(database.db, {
+        organizationId: context.organizationId,
 
-          code: body.code as string,
+        code: body.code as string,
 
-          name: body.name as string,
+        name: body.name as string,
 
-          subjectType:
-            body.subjectType as
-            | 'BODY'
-            | 'GARMENT'
-            | 'PRODUCT',
+        subjectType: body.subjectType as 'BODY' | 'GARMENT' | 'PRODUCT',
 
-          actorId: context.actorId,
-        },
-      );
+        actorId: context.actorId,
+      });
 
       return reply.code(201).send({
         data: result,
       });
+    },
+  );
+
+  secured(
+    'post',
+    '/admin/sizing/assignments/category-preview',
+    {
+      body: Type.Object(
+        { categoryId: uuid, sizeGuideId: Type.Union([uuid, Type.Null()]) },
+        { additionalProperties: false },
+      ),
+    },
+    async (body, context) => ({
+      data: await previewCategoryDefaultSizeGuide(database.db, {
+        organizationId: context.organizationId,
+        categoryId: body.categoryId as string,
+        sizeGuideId: body.sizeGuideId as string | null,
+      }),
+    }),
+  );
+
+  secured(
+    'post',
+    '/admin/sizing/assignments/category-apply',
+    {
+      body: Type.Object(
+        { previewToken: Type.String({ minLength: 1, maxLength: 4000 }) },
+        { additionalProperties: false },
+      ),
+    },
+    async (body, context, reply) => {
+      await applyCategoryDefaultSizeGuide(database.db, {
+        organizationId: context.organizationId,
+        actorId: context.actorId,
+        previewToken: body.previewToken as string,
+      });
+      return reply.code(204).send();
+    },
+  );
+
+  secured(
+    'post',
+    '/admin/sizing/assignments/products/:productId/preview',
+    {
+      params: productIdParams,
+      body: Type.Object(
+        {
+          outcome: Type.Union([
+            Type.Literal('INHERIT'),
+            Type.Literal('DIRECT'),
+            Type.Literal('NONE'),
+          ]),
+          sizeGuideId: Type.Optional(uuid),
+          noGuideReason: Type.Optional(shortText),
+        },
+        { additionalProperties: false },
+      ),
+    },
+    async (body, context, _reply, params) => ({
+      data: await previewProductGuideAssignment(database.db, {
+        organizationId: context.organizationId,
+        productId: params.productId!,
+        outcome: body.outcome as 'INHERIT' | 'DIRECT' | 'NONE',
+        ...(body.sizeGuideId ? { sizeGuideId: body.sizeGuideId as string } : {}),
+        ...(body.noGuideReason ? { noGuideReason: body.noGuideReason as string } : {}),
+      }),
+    }),
+  );
+
+  secured(
+    'post',
+    '/admin/sizing/assignments/products/:productId/apply',
+    {
+      params: productIdParams,
+      body: Type.Object(
+        { previewToken: Type.String({ minLength: 1, maxLength: 4000 }) },
+        { additionalProperties: false },
+      ),
+    },
+    async (body, context, reply) => {
+      await applyProductGuideAssignment(database.db, {
+        organizationId: context.organizationId,
+        actorId: context.actorId,
+        previewToken: body.previewToken as string,
+      });
+      return reply.code(204).send();
     },
   );
 
@@ -973,8 +1163,8 @@ export function registerSizingRoutes(
 
         ...(body.name !== undefined
           ? {
-            name: body.name as string,
-          }
+              name: body.name as string,
+            }
           : {}),
 
         actorId: context.actorId,
@@ -1051,28 +1241,23 @@ export function registerSizingRoutes(
       ),
     },
     async (body, context, reply) => {
-      const result = await createSizeSystem(
-        database.db,
-        {
-          organizationId: context.organizationId,
+      const result = await createSizeSystem(database.db, {
+        organizationId: context.organizationId,
 
-          sizingDomainId:
-            body.sizingDomainId as string,
+        sizingDomainId: body.sizingDomainId as string,
 
-          code: body.code as string,
+        code: body.code as string,
 
-          name: body.name as string,
+        name: body.name as string,
 
-          ...(body.regionCode !== undefined
-            ? {
-              regionCode:
-                body.regionCode as string,
+        ...(body.regionCode !== undefined
+          ? {
+              regionCode: body.regionCode as string,
             }
-            : {}),
+          : {}),
 
-          actorId: context.actorId,
-        },
-      );
+        actorId: context.actorId,
+      });
 
       return reply.code(201).send({
         data: result,
@@ -1090,8 +1275,7 @@ export function registerSizingRoutes(
         {
           name: Type.Optional(name),
 
-          regionCode:
-            Type.Optional(nullableShortText),
+          regionCode: Type.Optional(nullableShortText),
         },
         {
           additionalProperties: false,
@@ -1107,15 +1291,14 @@ export function registerSizingRoutes(
 
         ...(body.name !== undefined
           ? {
-            name: body.name as string,
-          }
+              name: body.name as string,
+            }
           : {}),
 
         ...(body.regionCode !== undefined
           ? {
-            regionCode:
-              body.regionCode as string | null,
-          }
+              regionCode: body.regionCode as string | null,
+            }
           : {}),
 
         actorId: context.actorId,
@@ -1194,28 +1377,23 @@ export function registerSizingRoutes(
       ),
     },
     async (body, context, reply) => {
-      const result = await createSizeDefinition(
-        database.db,
-        {
-          organizationId: context.organizationId,
+      const result = await createSizeDefinition(database.db, {
+        organizationId: context.organizationId,
 
-          sizeSystemId:
-            body.sizeSystemId as string,
+        sizeSystemId: body.sizeSystemId as string,
 
-          code: body.code as string,
+        code: body.code as string,
 
-          label: body.label as string,
+        label: body.label as string,
 
-          ...(body.sortOrder !== undefined
-            ? {
-              sortOrder:
-                body.sortOrder as number,
+        ...(body.sortOrder !== undefined
+          ? {
+              sortOrder: body.sortOrder as number,
             }
-            : {}),
+          : {}),
 
-          actorId: context.actorId,
-        },
-      );
+        actorId: context.actorId,
+      });
 
       return reply.code(201).send({
         data: result,
@@ -1258,15 +1436,14 @@ export function registerSizingRoutes(
 
         ...(body.label !== undefined
           ? {
-            label: body.label as string,
-          }
+              label: body.label as string,
+            }
           : {}),
 
         ...(body.sortOrder !== undefined
           ? {
-            sortOrder:
-              body.sortOrder as number,
-          }
+              sortOrder: body.sortOrder as number,
+            }
           : {}),
 
         actorId: context.actorId,
@@ -1330,11 +1507,9 @@ export function registerSizingRoutes(
 
           name,
 
-          description:
-            Type.Optional(shortText),
+          description: Type.Optional(shortText),
 
-          instructions:
-            Type.Optional(longText),
+          instructions: Type.Optional(longText),
 
           sortOrder: Type.Optional(
             Type.Integer({
@@ -1352,55 +1527,39 @@ export function registerSizingRoutes(
       ),
     },
     async (body, context, reply) => {
-      const result =
-        await createMeasurementDefinition(
-          database.db,
-          {
-            organizationId:
-              context.organizationId,
+      const result = await createMeasurementDefinition(database.db, {
+        organizationId: context.organizationId,
 
-            sizingDomainId:
-              body.sizingDomainId as string,
+        sizingDomainId: body.sizingDomainId as string,
 
-            code: body.code as string,
+        code: body.code as string,
 
-            name: body.name as string,
+        name: body.name as string,
 
-            ...(body.description !== undefined
-              ? {
-                description:
-                  body.description as string,
-              }
-              : {}),
+        ...(body.description !== undefined
+          ? {
+              description: body.description as string,
+            }
+          : {}),
 
-            ...(body.instructions !== undefined
-              ? {
-                instructions:
-                  body.instructions as string,
-              }
-              : {}),
+        ...(body.instructions !== undefined
+          ? {
+              instructions: body.instructions as string,
+            }
+          : {}),
 
-            ...(body.sortOrder !== undefined
-              ? {
-                sortOrder:
-                  body.sortOrder as number,
-              }
-              : {}),
+        ...(body.sortOrder !== undefined
+          ? {
+              sortOrder: body.sortOrder as number,
+            }
+          : {}),
 
-            subjectType:
-              body.subjectType as
-              | 'BODY'
-              | 'GARMENT'
-              | 'PRODUCT',
+        subjectType: body.subjectType as 'BODY' | 'GARMENT' | 'PRODUCT',
 
-            defaultUnit:
-              body.defaultUnit as
-              | 'cm'
-              | 'inch',
+        defaultUnit: body.defaultUnit as 'cm' | 'inch',
 
-            actorId: context.actorId,
-          },
-        );
+        actorId: context.actorId,
+      });
 
       return reply.code(201).send({
         data: result,
@@ -1418,11 +1577,9 @@ export function registerSizingRoutes(
         {
           name: Type.Optional(name),
 
-          description:
-            Type.Optional(nullableShortText),
+          description: Type.Optional(nullableShortText),
 
-          instructions:
-            Type.Optional(nullableLongText),
+          instructions: Type.Optional(nullableLongText),
 
           sortOrder: Type.Optional(
             Type.Integer({
@@ -1430,8 +1587,7 @@ export function registerSizingRoutes(
             }),
           ),
 
-          defaultUnit:
-            Type.Optional(measurementUnit),
+          defaultUnit: Type.Optional(measurementUnit),
         },
         {
           additionalProperties: false,
@@ -1440,57 +1596,43 @@ export function registerSizingRoutes(
       ),
     },
     async (body, context, reply, params) => {
-      await updateMeasurementDefinition(
-        database.db,
-        {
-          organizationId:
-            context.organizationId,
+      await updateMeasurementDefinition(database.db, {
+        organizationId: context.organizationId,
 
-          id: params.measurementId!,
+        id: params.measurementId!,
 
-          ...(body.name !== undefined
-            ? {
+        ...(body.name !== undefined
+          ? {
               name: body.name as string,
             }
-            : {}),
+          : {}),
 
-          ...(body.description !== undefined
-            ? {
-              description:
-                body.description as
-                | string
-                | null,
+        ...(body.description !== undefined
+          ? {
+              description: body.description as string | null,
             }
-            : {}),
+          : {}),
 
-          ...(body.instructions !== undefined
-            ? {
-              instructions:
-                body.instructions as
-                | string
-                | null,
+        ...(body.instructions !== undefined
+          ? {
+              instructions: body.instructions as string | null,
             }
-            : {}),
+          : {}),
 
-          ...(body.sortOrder !== undefined
-            ? {
-              sortOrder:
-                body.sortOrder as number,
+        ...(body.sortOrder !== undefined
+          ? {
+              sortOrder: body.sortOrder as number,
             }
-            : {}),
+          : {}),
 
-          ...(body.defaultUnit !== undefined
-            ? {
-              defaultUnit:
-                body.defaultUnit as
-                | 'cm'
-                | 'inch',
+        ...(body.defaultUnit !== undefined
+          ? {
+              defaultUnit: body.defaultUnit as 'cm' | 'inch',
             }
-            : {}),
+          : {}),
 
-          actorId: context.actorId,
-        },
-      );
+        actorId: context.actorId,
+      });
 
       return reply.code(204).send();
     },
@@ -1503,17 +1645,13 @@ export function registerSizingRoutes(
       params: measurementIdParams,
     },
     async (_body, context, reply, params) => {
-      await archiveMeasurementDefinition(
-        database.db,
-        {
-          organizationId:
-            context.organizationId,
+      await archiveMeasurementDefinition(database.db, {
+        organizationId: context.organizationId,
 
-          id: params.measurementId!,
+        id: params.measurementId!,
 
-          actorId: context.actorId,
-        },
-      );
+        actorId: context.actorId,
+      });
 
       return reply.code(204).send();
     },
@@ -1526,17 +1664,13 @@ export function registerSizingRoutes(
       params: measurementIdParams,
     },
     async (_body, context, reply, params) => {
-      await restoreMeasurementDefinition(
-        database.db,
-        {
-          organizationId:
-            context.organizationId,
+      await restoreMeasurementDefinition(database.db, {
+        organizationId: context.organizationId,
 
-          id: params.measurementId!,
+        id: params.measurementId!,
 
-          actorId: context.actorId,
-        },
-      );
+        actorId: context.actorId,
+      });
 
       return reply.code(204).send();
     },
@@ -1554,8 +1688,18 @@ export function registerSizingRoutes(
         {
           name,
 
-          description:
-            Type.Optional(shortText),
+          description: Type.Optional(shortText),
+
+          kind: Type.Optional(
+            Type.Union([
+              Type.Literal('APPAREL_SIZE_CHART'),
+              Type.Literal('FOOTWEAR_SIZE_CHART'),
+              Type.Literal('WEARABLE_FIT_GUIDE'),
+              Type.Literal('CUSTOM_FIT_GUIDE'),
+            ]),
+          ),
+
+          measurementBasis: Type.Optional(subjectType),
 
           sizingDomainId: uuid,
 
@@ -1573,33 +1717,41 @@ export function registerSizingRoutes(
       ),
     },
     async (body, context, reply) => {
-      const result = await createSizeGuide(
-        database.db,
-        {
-          organizationId: context.organizationId,
+      const result = await createSizeGuide(database.db, {
+        organizationId: context.organizationId,
 
-          actorId: context.actorId,
+        actorId: context.actorId,
 
-          name: body.name as string,
+        name: body.name as string,
 
-          ...(body.description !== undefined
-            ? {
-              description:
-                body.description as string,
+        ...(body.kind !== undefined
+          ? {
+              kind: body.kind as
+                | 'APPAREL_SIZE_CHART'
+                | 'FOOTWEAR_SIZE_CHART'
+                | 'WEARABLE_FIT_GUIDE'
+                | 'CUSTOM_FIT_GUIDE',
             }
-            : {}),
+          : {}),
 
-          sizingDomainId:
-            body.sizingDomainId as string,
+        ...(body.measurementBasis !== undefined
+          ? { measurementBasis: body.measurementBasis as 'BODY' | 'GARMENT' | 'PRODUCT' }
+          : {}),
 
-          ...(body.sizeSystemId !== undefined
-            ? {
-              sizeSystemId:
-                body.sizeSystemId as string,
+        ...(body.description !== undefined
+          ? {
+              description: body.description as string,
             }
-            : {}),
-        },
-      );
+          : {}),
+
+        sizingDomainId: body.sizingDomainId as string,
+
+        ...(body.sizeSystemId !== undefined
+          ? {
+              sizeSystemId: body.sizeSystemId as string,
+            }
+          : {}),
+      });
 
       return reply.code(201).send({
         data: result,
@@ -1619,15 +1771,9 @@ export function registerSizingRoutes(
 
           name: Type.Optional(name),
 
-          description:
-            Type.Optional(nullableShortText),
+          description: Type.Optional(nullableShortText),
 
-          sizeSystemId: Type.Optional(
-            Type.Union([
-              uuid,
-              Type.Null(),
-            ]),
-          ),
+          sizeSystemId: Type.Optional(Type.Union([uuid, Type.Null()])),
         },
         {
           additionalProperties: false,
@@ -1641,31 +1787,24 @@ export function registerSizingRoutes(
 
         id: params.guideId!,
 
-        expectedVersion:
-          body.expectedVersion as number,
+        expectedVersion: body.expectedVersion as number,
 
         ...(body.name !== undefined
           ? {
-            name: body.name as string,
-          }
+              name: body.name as string,
+            }
           : {}),
 
         ...(body.description !== undefined
           ? {
-            description:
-              body.description as
-              | string
-              | null,
-          }
+              description: body.description as string | null,
+            }
           : {}),
 
         ...(body.sizeSystemId !== undefined
           ? {
-            sizeSystemId:
-              body.sizeSystemId as
-              | string
-              | null,
-          }
+              sizeSystemId: body.sizeSystemId as string | null,
+            }
           : {}),
 
         actorId: context.actorId,
@@ -1729,23 +1868,19 @@ export function registerSizingRoutes(
       ),
     },
     async (body, context, reply, params) => {
-      const result = await duplicateSizeGuide(
-        database.db,
-        {
-          organizationId:
-            context.organizationId,
+      const result = await duplicateSizeGuide(database.db, {
+        organizationId: context.organizationId,
 
-          actorId: context.actorId,
+        actorId: context.actorId,
 
-          id: params.guideId!,
+        id: params.guideId!,
 
-          ...(body.name !== undefined
-            ? {
+        ...(body.name !== undefined
+          ? {
               name: body.name as string,
             }
-            : {}),
-        },
-      );
+          : {}),
+      });
 
       return reply.code(201).send({
         data: result,
@@ -1772,14 +1907,11 @@ export function registerSizingRoutes(
            * If omitted, the database/service layer should normally
            * clone the current published revision when one exists.
            */
-          sourceRevisionId:
-            Type.Optional(uuid),
+          sourceRevisionId: Type.Optional(uuid),
 
-          instructions:
-            Type.Optional(longText),
+          instructions: Type.Optional(longText),
 
-          fitNotes:
-            Type.Optional(longText),
+          fitNotes: Type.Optional(longText),
         },
         {
           additionalProperties: false,
@@ -1787,40 +1919,31 @@ export function registerSizingRoutes(
       ),
     },
     async (body, context, reply, params) => {
-      const result =
-        await createSizeGuideRevision(
-          database.db,
-          {
-            organizationId:
-              context.organizationId,
+      const result = await createSizeGuideRevision(database.db, {
+        organizationId: context.organizationId,
 
-            sizeGuideId: params.guideId!,
+        sizeGuideId: params.guideId!,
 
-            actorId: context.actorId,
+        actorId: context.actorId,
 
-            ...(body.sourceRevisionId !==
-              undefined
-              ? {
-                sourceRevisionId:
-                  body.sourceRevisionId as string,
-              }
-              : {}),
+        ...(body.sourceRevisionId !== undefined
+          ? {
+              sourceRevisionId: body.sourceRevisionId as string,
+            }
+          : {}),
 
-            ...(body.instructions !== undefined
-              ? {
-                instructions:
-                  body.instructions as string,
-              }
-              : {}),
+        ...(body.instructions !== undefined
+          ? {
+              instructions: body.instructions as string,
+            }
+          : {}),
 
-            ...(body.fitNotes !== undefined
-              ? {
-                fitNotes:
-                  body.fitNotes as string,
-              }
-              : {}),
-          },
-        );
+        ...(body.fitNotes !== undefined
+          ? {
+              fitNotes: body.fitNotes as string,
+            }
+          : {}),
+      });
 
       return reply.code(201).send({
         data: result,
@@ -1832,11 +1955,9 @@ export function registerSizingRoutes(
     {
       expectedVersion,
 
-      instructions:
-        Type.Optional(nullableLongText),
+      instructions: Type.Optional(nullableLongText),
 
-      fitNotes:
-        Type.Optional(nullableLongText),
+      fitNotes: Type.Optional(nullableLongText),
     },
     {
       additionalProperties: false,
@@ -1844,48 +1965,31 @@ export function registerSizingRoutes(
     },
   );
 
-  const updateRevisionMeta: SecuredHandler =
-    async (
-      body,
-      context,
-      reply,
-      params,
-    ) => {
-      await updateSizeGuideRevisionMeta(
-        database.db,
-        {
-          organizationId:
-            context.organizationId,
+  const updateRevisionMeta: SecuredHandler = async (body, context, reply, params) => {
+    await updateSizeGuideRevisionMeta(database.db, {
+      organizationId: context.organizationId,
 
-          revisionId: params.revisionId!,
+      revisionId: params.revisionId!,
 
-          expectedVersion:
-            body.expectedVersion as number,
+      expectedVersion: body.expectedVersion as number,
 
-          ...(body.instructions !== undefined
-            ? {
-              instructions:
-                body.instructions as
-                | string
-                | null,
-            }
-            : {}),
+      ...(body.instructions !== undefined
+        ? {
+            instructions: body.instructions as string | null,
+          }
+        : {}),
 
-          ...(body.fitNotes !== undefined
-            ? {
-              fitNotes:
-                body.fitNotes as
-                | string
-                | null,
-            }
-            : {}),
+      ...(body.fitNotes !== undefined
+        ? {
+            fitNotes: body.fitNotes as string | null,
+          }
+        : {}),
 
-          actorId: context.actorId,
-        },
-      );
+      actorId: context.actorId,
+    });
 
-      return reply.code(204).send();
-    };
+    return reply.code(204).send();
+  };
 
   secured(
     'put',
@@ -1909,6 +2013,44 @@ export function registerSizingRoutes(
 
   secured(
     'post',
+    '/admin/sizing/guides/:guideId/revisions/:revisionId/publish-preview',
+    {
+      params: guideRevisionParams,
+      body: Type.Object({}, { additionalProperties: false }),
+    },
+    async (_body, context, reply, params) => {
+      return reply.send({
+        data: await previewSizeGuidePublication(database.db, {
+          organizationId: context.organizationId,
+          sizeGuideId: params.guideId!,
+          revisionId: params.revisionId!,
+        }),
+      });
+    },
+  );
+
+  secured(
+    'post',
+    '/admin/sizing/guides/:guideId/revisions/:revisionId/publish-reviewed',
+    {
+      params: guideRevisionParams,
+      body: Type.Object(
+        { previewToken: Type.String({ minLength: 1, maxLength: 4000 }) },
+        { additionalProperties: false },
+      ),
+    },
+    async (body, context, reply) => {
+      await publishReviewedSizeGuideRevision(database.db, {
+        organizationId: context.organizationId,
+        actorId: context.actorId,
+        previewToken: body.previewToken as string,
+      });
+      return reply.code(204).send();
+    },
+  );
+
+  secured(
+    'post',
     '/admin/sizing/guides/:guideId/revisions/:revisionId/publish',
     {
       params: guideRevisionParams,
@@ -1922,28 +2064,18 @@ export function registerSizingRoutes(
         },
       ),
     },
-    async (
-      body,
-      context,
-      reply,
-      params,
-    ) => {
-      await publishSizeGuideRevision(
-        database.db,
-        {
-          organizationId:
-            context.organizationId,
+    async (body, context, reply, params) => {
+      await publishSizeGuideRevision(database.db, {
+        organizationId: context.organizationId,
 
-          sizeGuideId: params.guideId!,
+        sizeGuideId: params.guideId!,
 
-          revisionId: params.revisionId!,
+        revisionId: params.revisionId!,
 
-          expectedVersion:
-            body.expectedVersion as number,
+        expectedVersion: body.expectedVersion as number,
 
-          actorId: context.actorId,
-        },
-      );
+        actorId: context.actorId,
+      });
 
       return reply.code(204).send();
     },
@@ -1952,6 +2084,72 @@ export function registerSizingRoutes(
   /* ------------------------------------------------------------------------ */
   /*                              Revision rows                               */
   /* ------------------------------------------------------------------------ */
+
+  secured(
+    'post',
+    '/admin/sizing/revisions/:revisionId/columns',
+    {
+      params: revisionIdParams,
+      body: Type.Object(
+        {
+          expectedVersion,
+          measurementDefinitionId: uuid,
+          displayName: Type.Optional(name),
+        },
+        { additionalProperties: false },
+      ),
+    },
+    async (body, context, reply, params) => {
+      await addSizeGuideColumn(database.db, {
+        organizationId: context.organizationId,
+        revisionId: params.revisionId!,
+        measurementDefinitionId: body.measurementDefinitionId as string,
+        ...(body.displayName ? { displayName: body.displayName as string } : {}),
+        expectedVersion: body.expectedVersion as number,
+        actorId: context.actorId,
+      });
+      return reply.code(204).send();
+    },
+  );
+
+  secured(
+    'put',
+    '/admin/sizing/revisions/:revisionId/columns/:columnId',
+    {
+      params: Type.Object({ revisionId: uuid, columnId: uuid }),
+      body: Type.Object({ expectedVersion, displayName: name }, { additionalProperties: false }),
+    },
+    async (body, context, reply, params) => {
+      await renameSizeGuideColumn(database.db, {
+        organizationId: context.organizationId,
+        revisionId: params.revisionId!,
+        columnId: params.columnId!,
+        displayName: body.displayName as string,
+        expectedVersion: body.expectedVersion as number,
+        actorId: context.actorId,
+      });
+      return reply.code(204).send();
+    },
+  );
+
+  secured(
+    'delete',
+    '/admin/sizing/revisions/:revisionId/columns/:columnId',
+    {
+      params: Type.Object({ revisionId: uuid, columnId: uuid }),
+      querystring: Type.Object({ expectedVersion }, { additionalProperties: false }),
+    },
+    async (_body, context, reply, params, query) => {
+      await removeSizeGuideColumn(database.db, {
+        organizationId: context.organizationId,
+        revisionId: params.revisionId!,
+        columnId: params.columnId!,
+        expectedVersion: query.expectedVersion as number,
+        actorId: context.actorId,
+      });
+      return reply.code(204).send();
+    },
+  );
 
   secured(
     'post',
@@ -1972,48 +2170,33 @@ export function registerSizingRoutes(
             minimum: 0,
           }),
 
-          sizeDefinitionId:
-            Type.Optional(uuid),
+          sizeDefinitionId: Type.Optional(uuid),
         },
         {
           additionalProperties: false,
         },
       ),
     },
-    async (
-      body,
-      context,
-      reply,
-      params,
-    ) => {
-      const result = await addSizeGuideRow(
-        database.db,
-        {
-          organizationId:
-            context.organizationId,
+    async (body, context, reply, params) => {
+      const result = await addSizeGuideRow(database.db, {
+        organizationId: context.organizationId,
 
-          revisionId: params.revisionId!,
+        revisionId: params.revisionId!,
 
-          expectedVersion:
-            body.expectedVersion as number,
+        expectedVersion: body.expectedVersion as number,
 
-          displayLabel:
-            body.displayLabel as string,
+        displayLabel: body.displayLabel as string,
 
-          position:
-            body.position as number,
+        position: body.position as number,
 
-          ...(body.sizeDefinitionId !==
-            undefined
-            ? {
-              sizeDefinitionId:
-                body.sizeDefinitionId as string,
+        ...(body.sizeDefinitionId !== undefined
+          ? {
+              sizeDefinitionId: body.sizeDefinitionId as string,
             }
-            : {}),
+          : {}),
 
-          actorId: context.actorId,
-        },
-      );
+        actorId: context.actorId,
+      });
 
       return reply.code(201).send({
         data: result,
@@ -2044,13 +2227,7 @@ export function registerSizingRoutes(
             }),
           ),
 
-          sizeDefinitionId:
-            Type.Optional(
-              Type.Union([
-                uuid,
-                Type.Null(),
-              ]),
-            ),
+          sizeDefinitionId: Type.Optional(Type.Union([uuid, Type.Null()])),
         },
         {
           additionalProperties: false,
@@ -2058,45 +2235,32 @@ export function registerSizingRoutes(
         },
       ),
     },
-    async (
-      body,
-      context,
-      reply,
-      params,
-    ) => {
+    async (body, context, reply, params) => {
       await updateSizeGuideRow(database.db, {
-        organizationId:
-          context.organizationId,
+        organizationId: context.organizationId,
 
         revisionId: params.revisionId!,
 
         rowId: params.rowId!,
 
-        expectedVersion:
-          body.expectedVersion as number,
+        expectedVersion: body.expectedVersion as number,
 
         ...(body.displayLabel !== undefined
           ? {
-            displayLabel:
-              body.displayLabel as string,
-          }
+              displayLabel: body.displayLabel as string,
+            }
           : {}),
 
         ...(body.position !== undefined
           ? {
-            position:
-              body.position as number,
-          }
+              position: body.position as number,
+            }
           : {}),
 
-        ...(body.sizeDefinitionId !==
-          undefined
+        ...(body.sizeDefinitionId !== undefined
           ? {
-            sizeDefinitionId:
-              body.sizeDefinitionId as
-              | string
-              | null,
-          }
+              sizeDefinitionId: body.sizeDefinitionId as string | null,
+            }
           : {}),
 
         actorId: context.actorId,
@@ -2114,23 +2278,15 @@ export function registerSizingRoutes(
 
       querystring: expectedVersionQuery,
     },
-    async (
-      _body,
-      context,
-      reply,
-      params,
-      query,
-    ) => {
+    async (_body, context, reply, params, query) => {
       await removeSizeGuideRow(database.db, {
-        organizationId:
-          context.organizationId,
+        organizationId: context.organizationId,
 
         revisionId: params.revisionId!,
 
         rowId: params.rowId!,
 
-        expectedVersion:
-          query.expectedVersion as number,
+        expectedVersion: query.expectedVersion as number,
 
         actorId: context.actorId,
       });
@@ -2158,10 +2314,9 @@ export function registerSizingRoutes(
               {
                 rowId: uuid,
 
-                position:
-                  Type.Integer({
-                    minimum: 0,
-                  }),
+                position: Type.Integer({
+                  minimum: 0,
+                }),
               },
               {
                 additionalProperties: false,
@@ -2178,31 +2333,21 @@ export function registerSizingRoutes(
         },
       ),
     },
-    async (
-      body,
-      context,
-      reply,
-      params,
-    ) => {
-      await reorderSizeGuideRows(
-        database.db,
-        {
-          organizationId:
-            context.organizationId,
+    async (body, context, reply, params) => {
+      await reorderSizeGuideRows(database.db, {
+        organizationId: context.organizationId,
 
-          revisionId: params.revisionId!,
+        revisionId: params.revisionId!,
 
-          expectedVersion:
-            body.expectedVersion as number,
+        expectedVersion: body.expectedVersion as number,
 
-          rows: body.rows as Array<{
-            rowId: string;
-            position: number;
-          }>,
+        rows: body.rows as Array<{
+          rowId: string;
+          position: number;
+        }>,
 
-          actorId: context.actorId,
-        },
-      );
+        actorId: context.actorId,
+      });
 
       return reply.code(204).send();
     },
@@ -2220,8 +2365,7 @@ export function registerSizingRoutes(
 
       exact: measurementValue,
 
-      isApproximate:
-        Type.Optional(Type.Boolean()),
+      isApproximate: Type.Optional(Type.Boolean()),
     },
     {
       additionalProperties: false,
@@ -2238,8 +2382,7 @@ export function registerSizingRoutes(
 
       max: measurementValue,
 
-      isApproximate:
-        Type.Optional(Type.Boolean()),
+      isApproximate: Type.Optional(Type.Boolean()),
     },
     {
       additionalProperties: false,
@@ -2252,67 +2395,48 @@ export function registerSizingRoutes(
     {
       params: measurementCellParams,
 
-      body: Type.Union([
-        exactMeasurementBody,
-        rangeMeasurementBody,
-      ]),
+      body: Type.Union([exactMeasurementBody, rangeMeasurementBody]),
     },
-    async (
-      body,
-      context,
-      reply,
-      params,
-    ) => {
-      await setSizeGuideMeasurement(
-        database.db,
-        {
-          organizationId:
-            context.organizationId,
+    async (body, context, reply, params) => {
+      await setSizeGuideMeasurement(database.db, {
+        organizationId: context.organizationId,
 
-          revisionId: params.revisionId!,
+        revisionId: params.revisionId!,
 
-          rowId: params.rowId!,
+        rowId: params.rowId!,
 
-          measurementDefinitionId:
-            params.measurementDefinitionId!,
+        measurementDefinitionId: params.measurementDefinitionId!,
 
-          expectedVersion:
-            body.expectedVersion as number,
+        expectedVersion: body.expectedVersion as number,
 
-          unitCode:
-            body.unitCode as
-            | 'cm'
-            | 'inch',
+        unitCode: body.unitCode as 'cm' | 'inch',
 
-          ...(body.exact !== undefined
-            ? {
+        ...(body.exact !== undefined
+          ? {
               exact: body.exact as string,
             }
-            : {}),
+          : {}),
 
-          ...(body.min !== undefined
-            ? {
+        ...(body.min !== undefined
+          ? {
               min: body.min as string,
             }
-            : {}),
+          : {}),
 
-          ...(body.max !== undefined
-            ? {
+        ...(body.max !== undefined
+          ? {
               max: body.max as string,
             }
-            : {}),
+          : {}),
 
-          ...(body.isApproximate !==
-            undefined
-            ? {
-              isApproximate:
-                body.isApproximate as boolean,
+        ...(body.isApproximate !== undefined
+          ? {
+              isApproximate: body.isApproximate as boolean,
             }
-            : {}),
+          : {}),
 
-          actorId: context.actorId,
-        },
-      );
+        actorId: context.actorId,
+      });
 
       return reply.code(204).send();
     },
@@ -2326,32 +2450,20 @@ export function registerSizingRoutes(
 
       querystring: expectedVersionQuery,
     },
-    async (
-      _body,
-      context,
-      reply,
-      params,
-      query,
-    ) => {
-      await removeSizeGuideMeasurement(
-        database.db,
-        {
-          organizationId:
-            context.organizationId,
+    async (_body, context, reply, params, query) => {
+      await removeSizeGuideMeasurement(database.db, {
+        organizationId: context.organizationId,
 
-          revisionId: params.revisionId!,
+        revisionId: params.revisionId!,
 
-          rowId: params.rowId!,
+        rowId: params.rowId!,
 
-          measurementDefinitionId:
-            params.measurementDefinitionId!,
+        measurementDefinitionId: params.measurementDefinitionId!,
 
-          expectedVersion:
-            query.expectedVersion as number,
+        expectedVersion: query.expectedVersion as number,
 
-          actorId: context.actorId,
-        },
-      );
+        actorId: context.actorId,
+      });
 
       return reply.code(204).send();
     },
@@ -2361,63 +2473,58 @@ export function registerSizingRoutes(
   /*                           Bulk matrix editing                            */
   /* ------------------------------------------------------------------------ */
 
-  const bulkExactMeasurement =
-    Type.Object(
-      {
-        operation: Type.Literal('SET'),
+  const bulkExactMeasurement = Type.Object(
+    {
+      operation: Type.Literal('SET'),
 
-        rowId: uuid,
+      rowId: uuid,
 
-        measurementDefinitionId: uuid,
+      measurementDefinitionId: uuid,
 
-        unitCode: measurementUnit,
+      unitCode: measurementUnit,
 
-        exact: measurementValue,
+      exact: measurementValue,
 
-        isApproximate:
-          Type.Optional(Type.Boolean()),
-      },
-      {
-        additionalProperties: false,
-      },
-    );
+      isApproximate: Type.Optional(Type.Boolean()),
+    },
+    {
+      additionalProperties: false,
+    },
+  );
 
-  const bulkRangeMeasurement =
-    Type.Object(
-      {
-        operation: Type.Literal('SET'),
+  const bulkRangeMeasurement = Type.Object(
+    {
+      operation: Type.Literal('SET'),
 
-        rowId: uuid,
+      rowId: uuid,
 
-        measurementDefinitionId: uuid,
+      measurementDefinitionId: uuid,
 
-        unitCode: measurementUnit,
+      unitCode: measurementUnit,
 
-        min: measurementValue,
+      min: measurementValue,
 
-        max: measurementValue,
+      max: measurementValue,
 
-        isApproximate:
-          Type.Optional(Type.Boolean()),
-      },
-      {
-        additionalProperties: false,
-      },
-    );
+      isApproximate: Type.Optional(Type.Boolean()),
+    },
+    {
+      additionalProperties: false,
+    },
+  );
 
-  const bulkClearMeasurement =
-    Type.Object(
-      {
-        operation: Type.Literal('CLEAR'),
+  const bulkClearMeasurement = Type.Object(
+    {
+      operation: Type.Literal('CLEAR'),
 
-        rowId: uuid,
+      rowId: uuid,
 
-        measurementDefinitionId: uuid,
-      },
-      {
-        additionalProperties: false,
-      },
-    );
+      measurementDefinitionId: uuid,
+    },
+    {
+      additionalProperties: false,
+    },
+  );
 
   secured(
     'put',
@@ -2430,11 +2537,7 @@ export function registerSizingRoutes(
           expectedVersion,
 
           changes: Type.Array(
-            Type.Union([
-              bulkExactMeasurement,
-              bulkRangeMeasurement,
-              bulkClearMeasurement,
-            ]),
+            Type.Union([bulkExactMeasurement, bulkRangeMeasurement, bulkClearMeasurement]),
             {
               minItems: 1,
               maxItems: 2_000,
@@ -2446,72 +2549,54 @@ export function registerSizingRoutes(
         },
       ),
     },
-    async (
-      body,
-      context,
-      reply,
-      params,
-    ) => {
-      await setSizeGuideMeasurementsBulk(
-        database.db,
-        {
-          organizationId:
-            context.organizationId,
+    async (body, context, reply, params) => {
+      await setSizeGuideMeasurementsBulk(database.db, {
+        organizationId: context.organizationId,
 
-          revisionId: params.revisionId!,
+        revisionId: params.revisionId!,
 
-          expectedVersion:
-            body.expectedVersion as number,
+        expectedVersion: body.expectedVersion as number,
 
-          changes:
-            body.changes as Array<
-              | {
-                operation: 'SET';
+        changes: body.changes as Array<
+          | {
+              operation: 'SET';
 
-                rowId: string;
+              rowId: string;
 
-                measurementDefinitionId:
-                string;
+              measurementDefinitionId: string;
 
-                unitCode:
-                | 'cm'
-                | 'inch';
+              unitCode: 'cm' | 'inch';
 
-                exact: string;
+              exact: string;
 
-                isApproximate?: boolean;
-              }
-              | {
-                operation: 'SET';
+              isApproximate?: boolean;
+            }
+          | {
+              operation: 'SET';
 
-                rowId: string;
+              rowId: string;
 
-                measurementDefinitionId:
-                string;
+              measurementDefinitionId: string;
 
-                unitCode:
-                | 'cm'
-                | 'inch';
+              unitCode: 'cm' | 'inch';
 
-                min: string;
+              min: string;
 
-                max: string;
+              max: string;
 
-                isApproximate?: boolean;
-              }
-              | {
-                operation: 'CLEAR';
+              isApproximate?: boolean;
+            }
+          | {
+              operation: 'CLEAR';
 
-                rowId: string;
+              rowId: string;
 
-                measurementDefinitionId:
-                string;
-              }
-            >,
+              measurementDefinitionId: string;
+            }
+        >,
 
-          actorId: context.actorId,
-        },
-      );
+        actorId: context.actorId,
+      });
 
       return reply.code(204).send();
     },
@@ -2531,8 +2616,19 @@ export function registerSizingRoutes(
         {
           sizeSystemId: uuid,
 
-          sizeGuideId:
-            Type.Optional(uuid),
+          sizeGuideId: Type.Optional(uuid),
+
+          guideOutcome: Type.Optional(
+            Type.Union([Type.Literal('INHERIT'), Type.Literal('DIRECT'), Type.Literal('NONE')]),
+          ),
+
+          noGuideReason: Type.Optional(shortText),
+
+          assignmentOrigin: Type.Optional(
+            Type.Union([Type.Literal('MANUAL'), Type.Literal('SUPPLY_PURCHASE')]),
+          ),
+
+          sourcePurchaseId: Type.Optional(uuid),
 
           /**
            * Optional catalog optimistic version.
@@ -2541,49 +2637,59 @@ export function registerSizingRoutes(
            * the operation when the product has changed since
            * the admin loaded it.
            */
-          expectedProductVersion:
-            Type.Optional(expectedVersion),
+          expectedProductVersion: Type.Optional(expectedVersion),
         },
         {
           additionalProperties: false,
         },
       ),
     },
-    async (
-      body,
-      context,
-      reply,
-      params,
-    ) => {
-      await attachSizeGuideToProduct(
-        database.db,
-        {
-          organizationId:
-            context.organizationId,
+    async (body, context, reply, params) => {
+      await attachSizeGuideToProduct(database.db, {
+        organizationId: context.organizationId,
 
-          productId: params.productId!,
+        productId: params.productId!,
 
-          sizeSystemId:
-            body.sizeSystemId as string,
+        sizeSystemId: body.sizeSystemId as string,
 
-          ...(body.sizeGuideId !== undefined
-            ? {
-              sizeGuideId:
-                body.sizeGuideId as string,
+        ...(body.sizeGuideId !== undefined
+          ? {
+              sizeGuideId: body.sizeGuideId as string,
             }
-            : {}),
+          : {}),
 
-          ...(body.expectedProductVersion !==
-            undefined
-            ? {
-              expectedProductVersion:
-                body.expectedProductVersion as number,
+        ...(body.guideOutcome !== undefined
+          ? {
+              guideOutcome: body.guideOutcome as 'INHERIT' | 'DIRECT' | 'NONE',
             }
-            : {}),
+          : {}),
 
-          actorId: context.actorId,
-        },
-      );
+        ...(body.noGuideReason !== undefined
+          ? {
+              noGuideReason: body.noGuideReason as string,
+            }
+          : {}),
+
+        ...(body.assignmentOrigin !== undefined
+          ? {
+              assignmentOrigin: body.assignmentOrigin as 'MANUAL' | 'SUPPLY_PURCHASE',
+            }
+          : {}),
+
+        ...(body.sourcePurchaseId !== undefined
+          ? {
+              sourcePurchaseId: body.sourcePurchaseId as string,
+            }
+          : {}),
+
+        ...(body.expectedProductVersion !== undefined
+          ? {
+              expectedProductVersion: body.expectedProductVersion as number,
+            }
+          : {}),
+
+        actorId: context.actorId,
+      });
 
       return reply.code(204).send();
     },
@@ -2597,40 +2703,27 @@ export function registerSizingRoutes(
 
       querystring: Type.Object(
         {
-          expectedProductVersion:
-            Type.Optional(expectedVersion),
+          expectedProductVersion: Type.Optional(expectedVersion),
         },
         {
           additionalProperties: false,
         },
       ),
     },
-    async (
-      _body,
-      context,
-      reply,
-      params,
-      query,
-    ) => {
-      await removeProductSizingConfiguration(
-        database.db,
-        {
-          organizationId:
-            context.organizationId,
+    async (_body, context, reply, params, query) => {
+      await removeProductSizingConfiguration(database.db, {
+        organizationId: context.organizationId,
 
-          productId: params.productId!,
+        productId: params.productId!,
 
-          ...(query.expectedProductVersion !==
-            undefined
-            ? {
-              expectedProductVersion:
-                query.expectedProductVersion as number,
+        ...(query.expectedProductVersion !== undefined
+          ? {
+              expectedProductVersion: query.expectedProductVersion as number,
             }
-            : {}),
+          : {}),
 
-          actorId: context.actorId,
-        },
-      );
+        actorId: context.actorId,
+      });
 
       return reply.code(204).send();
     },
@@ -2648,38 +2741,23 @@ export function registerSizingRoutes(
 
       body: Type.Object(
         {
-          sizeGuideId: Type.Union([
-            uuid,
-            Type.Null(),
-          ]),
+          sizeGuideId: Type.Union([uuid, Type.Null()]),
         },
         {
           additionalProperties: false,
         },
       ),
     },
-    async (
-      body,
-      context,
-      reply,
-      params,
-    ) => {
-      await setCategoryDefaultSizeGuide(
-        database.db,
-        {
-          organizationId:
-            context.organizationId,
+    async (body, context, reply, params) => {
+      await setCategoryDefaultSizeGuide(database.db, {
+        organizationId: context.organizationId,
 
-          categoryId: params.categoryId!,
+        categoryId: params.categoryId!,
 
-          sizeGuideId:
-            body.sizeGuideId as
-            | string
-            | null,
+        sizeGuideId: body.sizeGuideId as string | null,
 
-          actorId: context.actorId,
-        },
-      );
+        actorId: context.actorId,
+      });
 
       return reply.code(204).send();
     },
@@ -2697,40 +2775,23 @@ export function registerSizingRoutes(
 
       body: Type.Object(
         {
-          sizeDefinitionId:
-            Type.Union([
-              uuid,
-              Type.Null(),
-            ]),
+          sizeDefinitionId: Type.Union([uuid, Type.Null()]),
         },
         {
           additionalProperties: false,
         },
       ),
     },
-    async (
-      body,
-      context,
-      reply,
-      params,
-    ) => {
-      await linkOptionValueToSizeDefinition(
-        database.db,
-        {
-          organizationId:
-            context.organizationId,
+    async (body, context, reply, params) => {
+      await linkOptionValueToSizeDefinition(database.db, {
+        organizationId: context.organizationId,
 
-          optionValueId:
-            params.optionValueId!,
+        optionValueId: params.optionValueId!,
 
-          sizeDefinitionId:
-            body.sizeDefinitionId as
-            | string
-            | null,
+        sizeDefinitionId: body.sizeDefinitionId as string | null,
 
-          actorId: context.actorId,
-        },
-      );
+        actorId: context.actorId,
+      });
 
       return reply.code(204).send();
     },
@@ -2747,11 +2808,7 @@ export function registerSizingRoutes(
               {
                 optionValueId: uuid,
 
-                sizeDefinitionId:
-                  Type.Union([
-                    uuid,
-                    Type.Null(),
-                  ]),
+                sizeDefinitionId: Type.Union([uuid, Type.Null()]),
               },
               {
                 additionalProperties: false,
@@ -2768,29 +2825,18 @@ export function registerSizingRoutes(
         },
       ),
     },
-    async (
-      body,
-      context,
-      reply,
-    ) => {
-      await linkOptionValuesToSizeDefinitionsBulk(
-        database.db,
-        {
-          organizationId:
-            context.organizationId,
+    async (body, context, reply) => {
+      await linkOptionValuesToSizeDefinitionsBulk(database.db, {
+        organizationId: context.organizationId,
 
-          mappings:
-            body.mappings as Array<{
-              optionValueId: string;
+        mappings: body.mappings as Array<{
+          optionValueId: string;
 
-              sizeDefinitionId:
-              | string
-              | null;
-            }>,
+          sizeDefinitionId: string | null;
+        }>,
 
-          actorId: context.actorId,
-        },
-      );
+        actorId: context.actorId,
+      });
 
       return reply.code(204).send();
     },

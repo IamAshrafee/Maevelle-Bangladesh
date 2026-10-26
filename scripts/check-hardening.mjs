@@ -1,10 +1,14 @@
 import { readFileSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 
-const tracked = spawnSync('git', ['ls-files', '*.ts', '*.tsx', '*.mjs'], {
-  encoding: 'utf8',
-  shell: false,
-});
+const tracked = spawnSync(
+  'git',
+  ['ls-files', '--cached', '--others', '--exclude-standard', '*.ts', '*.tsx', '*.mjs'],
+  {
+    encoding: 'utf8',
+    shell: false,
+  },
+);
 if (tracked.status !== 0) process.exit(tracked.status ?? 1);
 const files = tracked.stdout.trim().split(/\r?\n/u).filter(Boolean);
 const failures = [];
@@ -38,13 +42,21 @@ for (const requirement of [
 }
 
 const routeFiles = files.filter(
-  (file) => file.startsWith('apps/api/src/routes/') && file.endsWith('.ts'),
+  (file) =>
+    file.startsWith('apps/api/src/routes/') &&
+    file.endsWith('.ts') &&
+    !file.endsWith('.test.ts') &&
+    !file.endsWith('.spec.ts'),
 );
+
+const serverAuthBoundaryPattern =
+  /(findActiveAdminContext|require(?:Catalog|Messaging|Sizing)?Capability|authenticateMessagingAdmin|require(?:Admin|UserSession|Context|Sizing)|customerRouteContext|context\(|admin\(|authorize\(|sessionContext\(|capability\()/u;
+
 for (const file of routeFiles) {
   const source = readFileSync(file, 'utf8');
   if (
-    source.includes("'/admin/") &&
-    !/(requireCapability|findActiveAdminContext|context\(|admin\()/u.test(source)
+    /[\x27\x22`]\/admin\//u.test(source) &&
+    !serverAuthBoundaryPattern.test(source)
   )
     failures.push(`${file}: Admin route lacks a recognizable server authorization boundary`);
 }
@@ -54,5 +66,5 @@ if (failures.length > 0) {
   process.exit(1);
 }
 console.log(
-  `Hardening check passed across ${files.length} tracked TypeScript/JavaScript sources and ${routeFiles.length} API route modules.`,
+  `Hardening check passed across ${files.length} TypeScript/JavaScript sources and ${routeFiles.length} API route modules.`,
 );

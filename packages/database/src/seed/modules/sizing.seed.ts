@@ -15,11 +15,7 @@ import {
   updateSizingDomain,
   type MeasurementUnit,
 } from '../../sizing.js';
-import {
-  sizingSeedData,
-  type SizingDomainSeedItem,
-  type SizingSeedData,
-} from '../data/sizing.js';
+import { sizingSeedData, type SizingDomainSeedItem, type SizingSeedData } from '../data/sizing.js';
 import type { SeedContext, SeedModule, SeedModuleResult } from '../types.js';
 
 interface ExistingDomainRow {
@@ -148,7 +144,9 @@ export function createSizingSeedModule(data: SizingSeedData = sizingSeedData): S
       for (const system of data.systems) {
         const domainId = domainIdByCode.get(system.domainCode);
         if (!domainId) {
-          throw new Error(`Domain code "${system.domainCode}" not found for system "${system.code}"`);
+          throw new Error(
+            `Domain code "${system.domainCode}" not found for system "${system.code}"`,
+          );
         }
 
         const existing = systemByCode.get(system.code);
@@ -285,7 +283,13 @@ export function createSizingSeedModule(data: SizingSeedData = sizingSeedData): S
           const descriptionChanged = (existing.description ?? null) !== (m.description ?? null);
           const sortOrderChanged = Number(existing.sort_order) !== (m.sortOrder ?? 0);
 
-          if (nameChanged || unitChanged || instructionsChanged || descriptionChanged || sortOrderChanged) {
+          if (
+            nameChanged ||
+            unitChanged ||
+            instructionsChanged ||
+            descriptionChanged ||
+            sortOrderChanged
+          ) {
             await updateMeasurementDefinition(context.db, {
               organizationId: context.organizationId,
               id: existing.id,
@@ -330,7 +334,7 @@ export function createSizingSeedModule(data: SizingSeedData = sizingSeedData): S
         if (!domainId) {
           throw new Error(`Domain code "${guide.domainCode}" not found for guide "${guide.name}"`);
         }
-        const systemId = guide.systemCode ? systemIdByCode.get(guide.systemCode) ?? null : null;
+        const systemId = guide.systemCode ? (systemIdByCode.get(guide.systemCode) ?? null) : null;
 
         const existing = guideByName.get(guide.name);
 
@@ -340,6 +344,8 @@ export function createSizingSeedModule(data: SizingSeedData = sizingSeedData): S
             organizationId: context.organizationId,
             name: guide.name,
             sizingDomainId: domainId,
+            kind: guide.kind,
+            measurementBasis: guide.measurementBasis,
             ...(systemId ? { sizeSystemId: systemId } : {}),
             ...(guide.description ? { description: guide.description } : {}),
             actorId: context.actorId,

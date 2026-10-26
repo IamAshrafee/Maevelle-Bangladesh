@@ -1,20 +1,23 @@
 {
   "program": "Maevelle Product Completion V2",
   "version": 2,
-  "active_area": "omnichannel-messaging",
-  "active_substage": "PHASE_10_LOCAL_ASSURANCE_COMPLETE",
-  "active_status": "PHASE_10_PRODUCTION_NO_GO",
+  "active_area": "fit-and-sizing",
+  "active_substage": "LOCAL_IMPLEMENTATION_VERIFIED",
+  "active_status": "OWNER_REVIEW_PENDING",
   "baseline_commit": "d2cce2c",
   "last_checkpoint_commit": "16f648a",
   "last_verified_commit": "16f648a",
-  "last_completed_action": "Completed the Phase 10 local audit and remediation pass: focused tests, builds, fresh and Phase 9 upgrade migration proof, dependency/security checks, stale-lease fencing, Storefront uncertain-send handling, and inbox query indexing are verified at commit 16f648a.",
-  "next_action": "Close the target-schema/backup rehearsal, hardening and lint baselines, authenticated browser/accessibility acceptance, and live Meta acceptance gates listed in docs/architecture/messaging/phase-10/audit.md before reconsidering production release.",
+  "last_completed_action": "Implemented and locally verified the Fit & Sizing vertical: reusable guide authoring with guide-owned columns and authentic manual measurements, reviewed publication and assignment impact, Product and Category resolution, Supply provenance, Product reconciliation, Needs Attention, and dynamic Storefront rendering.",
+  "next_action": "Complete owner-led responsive and accessibility acceptance for Fit & Sizing, then resume the recorded Customer 360 CRM production blockers.",
   "interrupted": false,
   "blocked_by": [
-    "PRODUCTION_TARGET_SCHEMA_AND_BACKUP_RESTORE_UNVERIFIED",
-    "REPOSITORY_HARDENING_AND_LINT_GATES_NOT_GREEN",
+    "SIZING_OWNER_RESPONSIVE_AND_ACCESSIBILITY_ACCEPTANCE_PENDING",
+    "CUSTOMER_CONTROLLED_IDENTITY_CHALLENGE_NOT_IMPLEMENTED",
     "AUTHENTICATED_UI_AND_ACCESSIBILITY_ACCEPTANCE_UNVERIFIED",
-    "LIVE_META_ACTIVATION_AND_ACCEPTANCE_UNVERIFIED"
+    "LIVE_META_ACTIVATION_AND_ACCEPTANCE_UNVERIFIED",
+    "PERSISTENT_SCHEMA_BACKUP_AND_RESTORE_UNVERIFIED",
+    "PRIVACY_LEGAL_AND_SECURE_DELIVERY_APPROVAL_PENDING",
+    "REPRESENTATIVE_VOLUME_PERFORMANCE_UNVERIFIED"
   ],
   "owner_review_status": "PENDING",
   "verified_complete_areas": [

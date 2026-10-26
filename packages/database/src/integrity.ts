@@ -197,6 +197,52 @@ async function scanCommerceRelationships(db: Kysely<DatabaseSchema>, organizatio
   };
 }
 
+async function scanCustomerIdentityIntegrity(db: Kysely<DatabaseSchema>, organizationId: string) {
+  const rows = await sql<{
+    code: string;
+    entity_id: string;
+    summary: string;
+    severity: IntegritySeverity;
+  }>`
+    select 'CUSTOMER_IDENTITY_PROJECTION_MISMATCH' code,link.id::text entity_id,
+      'An active identity link disagrees with the messaging contact customer projection.' summary,'CRITICAL' severity
+    from customers.customer_identity_links link
+    join messaging.contacts contact on contact.organization_id=link.organization_id and contact.id=link.contact_id
+    where link.organization_id=${organizationId} and link.status='LINKED'
+      and contact.customer_id is distinct from link.customer_id
+    union all
+    select 'CUSTOMER_IDENTITY_POINTS_TO_READ_ONLY_PROFILE',link.id::text,
+      'An active channel identity points to a merged or anonymized customer.','ERROR'
+    from customers.customer_identity_links link
+    join customers.customers customer on customer.organization_id=link.organization_id and customer.id=link.customer_id
+    where link.organization_id=${organizationId} and link.status='LINKED' and customer.status in ('MERGED','ANONYMIZED')
+    union all
+    select 'CUSTOMER_OWNER_NOT_ACTIVE',customer.id::text,
+      'The assigned relationship owner is not an active organization member.','ERROR'
+    from customers.customers customer
+    join iam.organization_memberships membership on membership.organization_id=customer.organization_id and membership.id=customer.relationship_owner_membership_id
+    where customer.organization_id=${organizationId} and membership.status<>'ACTIVE'
+    union all
+    select 'CUSTOMER_CUSTOM_FIELD_SCHEMA_DRIFT',value.customer_id::text || ':' || value.field_definition_id::text,
+      'A customer custom-field value uses a different schema version than its active definition.','WARNING'
+    from customers.customer_custom_field_values value
+    join customers.customer_custom_field_definitions definition on definition.organization_id=value.organization_id and definition.id=value.field_definition_id
+    where value.organization_id=${organizationId} and definition.status='ACTIVE' and value.schema_version<>definition.schema_version
+  `.execute(db);
+  return {
+    recordsInspected: rows.rows.length,
+    findings: rows.rows.map((row) => ({
+      code: row.code,
+      summary: row.summary,
+      entityType: row.code.startsWith('CUSTOMER_IDENTITY')
+        ? 'customers.identity_link'
+        : 'customers.customer',
+      entityId: row.entity_id,
+      severity: row.severity,
+    })),
+  };
+}
+
 async function scanSupplyAndAssets(db: Kysely<DatabaseSchema>, organizationId: string) {
   const rows = await sql<{
     code: string;
@@ -396,6 +442,24 @@ export const integrityCheckRegistry: readonly IntegrityCheckDefinition[] = [
     repairKeys: [],
     requiredCapability: 'admin.integrity.view',
     run: scanCommerceRelationships,
+  },
+  {
+    id: 'customers.identity',
+    version: 1,
+    name: 'Customer identity and CRM consistency',
+    module: 'Customers',
+    category: 'DATA',
+    description:
+      'Checks identity-link projections, read-only customer targets, relationship ownership, and custom-field schema versions.',
+    invariant:
+      'Canonical customer identity links and CRM metadata remain tenant-safe, internally consistent, and assigned only to active owners.',
+    defaultSeverity: 'ERROR',
+    cost: 'LIGHT',
+    supportedScopes: ['ORGANIZATION', 'MODULE'],
+    schedule: 'FREQUENT',
+    repairKeys: [],
+    requiredCapability: 'admin.integrity.view',
+    run: scanCustomerIdentityIntegrity,
   },
   {
     id: 'reviews.projection',
@@ -838,14 +902,15 @@ export async function cancelIntegrityRun(
     set status='INTERRUPTED',completed_at=now(),error_summary='Scan was cancelled by operator.'
     where organization_id=${organizationId} and id=${runId}::uuid and status='QUEUED'
     returning id::text,status`.execute(db);
-  if (!row.rows[0]) throw new IntegrityDomainError('NOT_FOUND', 'Queued run was not found or is already executing.');
+  if (!row.rows[0])
+    throw new IntegrityDomainError(
+      'NOT_FOUND',
+      'Queued run was not found or is already executing.',
+    );
   return row.rows[0];
 }
 
-export async function getIntegrityOverview(
-  db: Kysely<DatabaseSchema>,
-  organizationId: string,
-) {
+export async function getIntegrityOverview(db: Kysely<DatabaseSchema>, organizationId: string) {
   const [countsResult, latestRunResult, activeRunResult, moduleRows, recentRows, queueRows] =
     await Promise.all([
       sql<{
@@ -867,12 +932,16 @@ export async function getIntegrityOverview(
       from platform.integrity_issues
       where organization_id = ${organizationId}`.execute(db),
 
-      sql`select id::text,trigger_type,scope_type,scope_module,selected_check_ids,status,started_at::text,completed_at::text,checks_total,checks_completed,checks_failed,records_inspected::text,findings_detected,error_summary,created_at::text
+      sql<
+        Record<string, unknown> & { status: string }
+      >`select id::text,trigger_type,scope_type,scope_module,selected_check_ids,status,started_at::text,completed_at::text,checks_total,checks_completed,checks_failed,records_inspected::text,findings_detected,error_summary,created_at::text
         from platform.integrity_runs
         where organization_id=${organizationId} and status in ('SUCCEEDED', 'PARTIAL', 'FAILED', 'INTERRUPTED')
         order by created_at desc, id desc limit 1`.execute(db),
 
-      sql`select id::text,trigger_type,scope_type,scope_module,selected_check_ids,status,started_at::text,completed_at::text,checks_total,checks_completed,checks_failed,records_inspected::text,findings_detected,error_summary,lease_expires_at::text,created_at::text
+      sql<
+        Record<string, unknown> & { status: string }
+      >`select id::text,trigger_type,scope_type,scope_module,selected_check_ids,status,started_at::text,completed_at::text,checks_total,checks_completed,checks_failed,records_inspected::text,findings_detected,error_summary,lease_expires_at::text,created_at::text
         from platform.integrity_runs
         where organization_id=${organizationId} and status in ('QUEUED', 'RUNNING')
         order by created_at desc, id desc limit 1`.execute(db),
@@ -890,7 +959,9 @@ export async function getIntegrityOverview(
       where organization_id = ${organizationId}
       group by domain`.execute(db),
 
-      sql`select id::text,check_id,check_version,domain,category,issue_type code,severity,confidence,entity_type,entity_id::text,status,summary,summary description,details,first_detected_at::text,first_detected_at::text detected_at,last_detected_at::text,occurrence_count,repair_reference,case when check_id='analytics.projection' or (check_id='reviews.projection' and issue_type='RATING_SUMMARY_DRIFT' and entity_id is not null) then 'REBUILDABLE_PROJECTION' else 'DIAGNOSIS_ONLY' end repairability,version::text
+      sql<
+        Record<string, unknown>
+      >`select id::text,check_id,check_version,domain,category,issue_type code,severity,confidence,entity_type,entity_id::text,status,summary,summary description,details,first_detected_at::text,first_detected_at::text detected_at,last_detected_at::text,occurrence_count,repair_reference,case when check_id='analytics.projection' or (check_id='reviews.projection' and issue_type='RATING_SUMMARY_DRIFT' and entity_id is not null) then 'REBUILDABLE_PROJECTION' else 'DIAGNOSIS_ONLY' end repairability,version::text
         from platform.integrity_issues
         where organization_id=${organizationId} and status in ('OPEN','INVESTIGATING','REPAIR_PENDING','REPAIRING')
         order by case severity when 'CRITICAL' then 0 when 'ERROR' then 1 when 'WARNING' then 2 else 3 end, last_detected_at desc, id desc
@@ -917,8 +988,8 @@ export async function getIntegrityOverview(
   const resolved = Number(counts?.resolved_count ?? 0);
   const accepted = Number(counts?.accepted_count ?? 0);
 
-  const latestRun = (latestRunResult.rows[0] as any) ?? null;
-  const activeRun = (activeRunResult.rows[0] as any) ?? null;
+  const latestRun = latestRunResult.rows[0] ?? null;
+  const activeRun = activeRunResult.rows[0] ?? null;
 
   let overallStatus:
     | 'HEALTHY_IN_COMPLETED_CHECKS'
@@ -948,7 +1019,12 @@ export async function getIntegrityOverview(
 
   const moduleMap = new Map<
     string,
-    { checkCount: number; openFindingsCount: number; criticalCount: number; lastDetectedAt: string | null }
+    {
+      checkCount: number;
+      openFindingsCount: number;
+      criticalCount: number;
+      lastDetectedAt: string | null;
+    }
   >();
   for (const check of integrityCheckRegistry) {
     const existing = moduleMap.get(check.module) ?? {
@@ -1016,7 +1092,7 @@ export async function getIntegrityOverview(
       accepted,
     },
     modules,
-    recentFindings: recentRows.rows as any[],
+    recentFindings: recentRows.rows,
     queueHealth,
   };
 }

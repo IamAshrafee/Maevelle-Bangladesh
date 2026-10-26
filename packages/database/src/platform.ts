@@ -84,7 +84,8 @@ export async function createOrganization(
         values
           ('Catalog & Merchandising', 'Product, pricing, promotion, media, sizing, and inventory visibility.', array[
             'catalog.view','catalog.manage','catalog.publish','pricing.view','pricing.manage',
-            'promotions.view','promotions.manage','media.view','media.manage','sizing.view','sizing.manage','inventory.view'
+            'promotions.view','promotions.manage','media.view','media.manage','sizing.view',
+            'sizing.guides.manage','sizing.guides.publish','sizing.assignments.manage','sizing.settings.manage','inventory.view'
           ]::text[]),
           ('Commerce Operations', 'Order, fulfillment, delivery, customer, payment, and inventory operations.', array[
             'orders.view','orders.create','orders.manage','fulfillment.view','fulfillment.manage','fulfillment.dispatch',
@@ -597,4 +598,3 @@ export async function createStandardMembership(
     }
   });
 }
-

@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
-import { ArrowLeft, DollarSign, FileText, Package, Ship } from 'lucide-react';
+import { ArrowLeft, DollarSign, FileText, Package, Ruler, Ship } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import type {
   ApiEnvelope,
@@ -27,6 +27,7 @@ import type { PagedEnvelope } from '@/lib/supply/types';
 import { PurchaseDetailFinanceTab } from './purchase-detail/purchase-detail-finance-tab';
 import { PurchaseDetailHeader } from './purchase-detail/purchase-detail-header';
 import { PurchaseDetailItemsTable } from './purchase-detail/purchase-detail-items-table';
+import { PurchaseSizingReview } from './purchase-detail/purchase-sizing-review';
 import { PurchaseDetailOverviewTab } from './purchase-detail/purchase-detail-overview-tab';
 import { PurchaseDetailShipmentsTab } from './purchase-detail/purchase-detail-shipments-tab';
 import { PurchaseDetailStats } from './purchase-detail/purchase-detail-stats';
@@ -61,6 +62,7 @@ export function PurchaseDetail({ purchaseId }: { purchaseId: string }) {
   const canPayInvoice = useAdminCapability('finance.expenses.pay');
   const canViewAccounts = useAdminCapability('finance.accounts.view');
   const canManageCapital = useAdminCapability('finance.capital.manage');
+  const canReviewSizing = useAdminCapability('sizing.supply_review');
 
   const [purchase, setPurchase] = useState<PurchaseDto>();
   const [shipments, setShipments] = useState<readonly InboundShipmentDto[]>([]);
@@ -92,7 +94,9 @@ export function PurchaseDetail({ purchaseId }: { purchaseId: string }) {
   const canCreateInvoice = canCreateInvoiceCapability && purchase?.status === 'PLACED';
   const requestedTab = searchParams.get('tab');
   const activeTab =
-    requestedTab === 'shipments' || requestedTab === 'overview'
+    requestedTab === 'shipments' ||
+    requestedTab === 'overview' ||
+    (requestedTab === 'sizing' && canReviewSizing)
       ? requestedTab
       : requestedTab === 'finance' && canViewFinance
         ? 'finance'
@@ -505,6 +509,13 @@ export function PurchaseDetail({ purchaseId }: { purchaseId: string }) {
               ) : null}
             </TabsTrigger>
 
+            {canReviewSizing ? (
+              <TabsTrigger value="sizing" className="gap-2">
+                <Ruler className="size-4" />
+                <span>Fit evidence</span>
+              </TabsTrigger>
+            ) : null}
+
             {canViewFinance ? (
               <TabsTrigger value="finance" className="gap-2">
                 <DollarSign className="size-4" />
@@ -545,6 +556,12 @@ export function PurchaseDetail({ purchaseId }: { purchaseId: string }) {
               onPlanShipmentClick={() => setPlanShipmentOpen(true)}
             />
           </TabsContent>
+
+          {canReviewSizing ? (
+            <TabsContent value="sizing" className="space-y-4 pt-1">
+              <PurchaseSizingReview purchaseId={purchase.id} canReview />
+            </TabsContent>
+          ) : null}
 
           {/* Tab 3: Finance & Invoices */}
           {canViewFinance ? (

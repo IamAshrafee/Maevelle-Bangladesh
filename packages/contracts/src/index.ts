@@ -1,4 +1,6 @@
 /** Explicit transport DTOs shared by API clients; domain entities stay private to their owners. */
+import type { CustomerLifecycleStageDto } from './crm.js';
+
 export * from './messaging/index.js';
 export interface ApiEnvelope<T> {
   readonly data: T;
@@ -229,6 +231,8 @@ export interface CatalogProductCreateDto {
   readonly collectionIds?: readonly string[];
   readonly sizeSystemId?: string | null;
   readonly sizeGuideId?: string | null;
+  readonly sizingGuideSource?: 'CATEGORY' | 'DIRECT' | 'NONE';
+  readonly noGuideReason?: string | null;
   readonly attributes?: readonly {
     readonly attributeDefinitionId: string;
     readonly value: string | boolean | null;
@@ -612,6 +616,8 @@ export interface CatalogProductWorkspaceDto extends CatalogProductSummaryDto {
   readonly productTypeId: string;
   readonly sizeSystemId: string | null;
   readonly sizeGuideId: string | null;
+  readonly sizingGuideSource: 'CATEGORY' | 'DIRECT' | 'NONE' | null;
+  readonly noGuideReason: string | null;
   readonly inventoryPolicy?: 'DENY' | 'CONTINUE';
   readonly shippingProfile?: 'STANDARD' | 'FRAGILE' | 'HEAVY';
   readonly shipping: {
@@ -721,6 +727,8 @@ export interface SaveCatalogProductWorkspaceDto {
   readonly collectionIds?: readonly string[];
   readonly sizeSystemId?: string | null;
   readonly sizeGuideId?: string | null;
+  readonly sizingGuideSource?: 'CATEGORY' | 'DIRECT' | 'NONE';
+  readonly noGuideReason?: string | null;
   readonly inventoryPolicy?: 'DENY' | 'CONTINUE';
   readonly shippingProfile?: 'STANDARD' | 'FRAGILE' | 'HEAVY';
   readonly shipping?: {
@@ -1154,21 +1162,34 @@ export type SizingRevisionStatusDto = 'DRAFT' | 'PUBLISHED' | 'ARCHIVED';
 export type SizingSubjectTypeDto = 'BODY' | 'GARMENT' | 'PRODUCT';
 export type SizingMeasurementUnitDto = 'cm' | 'inch' | 'kg';
 export type SizingMappingStatusDto = 'MAPPED' | 'UNMAPPED' | 'ALL';
+export type FitGuideKindDto =
+  'APPAREL_SIZE_CHART' | 'FOOTWEAR_SIZE_CHART' | 'WEARABLE_FIT_GUIDE' | 'CUSTOM_FIT_GUIDE';
+export type GuideAssignmentOriginDto = 'MANUAL' | 'SUPPLY_PURCHASE';
 
 export interface PublicSizeGuideDto {
   readonly name: string;
+  readonly kind: FitGuideKindDto;
+  readonly measurementBasis: SizingSubjectTypeDto;
   readonly instructions: string | null;
   readonly fitNotes: string | null;
+  readonly columns: readonly {
+    readonly id: string;
+    readonly name: string;
+    readonly instructions: string | null;
+    readonly defaultUnit: SizingMeasurementUnitDto;
+  }[];
   readonly rows: readonly {
+    readonly id: string;
     readonly label: string;
-    readonly measurements: readonly {
-      readonly name: string;
-      readonly instructions: string | null;
+    readonly productOptionValueId: string | null;
+    readonly isSelectable: boolean;
+    readonly values: readonly {
+      readonly columnId: string;
       readonly exact?: string;
       readonly min?: string;
       readonly max?: string;
-      readonly unit: string;
-      readonly approximate: boolean;
+      readonly unit: SizingMeasurementUnitDto;
+      readonly isApproximate: boolean;
     }[];
   }[];
 }
@@ -1215,6 +1236,8 @@ export interface MeasurementDefinitionDto {
 export interface SizeGuideSummaryDto {
   readonly id: string;
   readonly name: string;
+  readonly kind: FitGuideKindDto;
+  readonly measurementBasis: SizingSubjectTypeDto;
   readonly description: string | null;
   readonly sizingDomainId: string;
   readonly sizingDomainName: string;
@@ -1222,6 +1245,7 @@ export interface SizeGuideSummaryDto {
   readonly sizeSystemName: string | null;
   readonly status: SizingLifecycleStatusDto;
   readonly hasPublishedRevision: boolean;
+  readonly hasWorkingRevision: boolean;
   readonly version: number;
   readonly productCount: number;
   readonly categoryCount: number;
@@ -1261,6 +1285,12 @@ export interface SizeGuideRevisionDetailDto {
   readonly fitNotes: string | null;
   readonly createdAt: string;
   readonly publishedAt: string | null;
+  readonly columns: readonly {
+    readonly id: string;
+    readonly measurementDefinitionId: string;
+    readonly displayName: string;
+    readonly position: number;
+  }[];
   readonly rows: readonly SizeGuideRowDto[];
 }
 
@@ -1268,6 +1298,8 @@ export interface SizeGuideDetailDto {
   readonly id: string;
   readonly name: string;
   readonly description: string | null;
+  readonly kind: FitGuideKindDto;
+  readonly measurementBasis: SizingSubjectTypeDto;
   readonly sizingDomainId: string;
   readonly sizingDomainName: string;
   readonly sizeSystemId: string | null;
@@ -1286,6 +1318,30 @@ export interface SizeGuideDetailDto {
     readonly name: string;
     readonly handle: string;
   }[];
+}
+
+export interface SizeGuidePublishPreviewDto {
+  readonly previewToken: string;
+  readonly guide: {
+    readonly id: string;
+    readonly name: string;
+    readonly version: number;
+  };
+  readonly workingRevision: {
+    readonly id: string;
+    readonly revisionNumber: number;
+    readonly version: number;
+  };
+  readonly publishedRevisionNumber: number | null;
+  readonly affectedProducts: number;
+  readonly affectedCategories: number;
+  readonly reconciliationConflicts: number;
+  readonly changes: {
+    readonly addedRows: number;
+    readonly removedRows: number;
+    readonly changedRows: number;
+    readonly guidanceChanged: boolean;
+  };
 }
 
 export interface ProductSizingDto {
@@ -1307,6 +1363,91 @@ export interface ProductSizingDto {
   readonly effectiveGuideId?: string | null;
   readonly effectiveGuideName?: string | null;
   readonly effectiveSource?: 'PRODUCT' | 'CATEGORY' | 'NONE';
+  readonly guideOutcome?: 'INHERIT' | 'DIRECT' | 'NONE' | null;
+  readonly noGuideReason?: string | null;
+  readonly directAssignmentOrigin?: GuideAssignmentOriginDto | null;
+  readonly sourcePurchaseId?: string | null;
+  readonly assignedAt?: string | null;
+}
+
+export interface ProductSizeReconciliationDto {
+  readonly productId: string;
+  readonly effectiveGuideId: string | null;
+  readonly effectiveGuideName: string | null;
+  readonly effectiveSource: 'PRODUCT' | 'CATEGORY' | 'NONE';
+  readonly productSizeCount: number;
+  readonly guideRowCount: number;
+  readonly matchedCount: number;
+  readonly conflictCount: number;
+  readonly productSizes: readonly {
+    readonly optionValueId: string;
+    readonly label: string;
+    readonly sizeDefinitionId: string | null;
+    readonly guideRowId: string | null;
+    readonly guideRowLabel: string | null;
+    readonly match: 'DEFINITION' | 'NORMALIZED_LABEL' | 'UNMATCHED' | 'AMBIGUOUS';
+  }[];
+  readonly guideOnlyRows: readonly {
+    readonly guideRowId: string;
+    readonly label: string;
+  }[];
+}
+
+export type SupplyPurchaseSizingDecisionDto =
+  'PENDING' | 'KEEP_CURRENT' | 'EVIDENCE_ONLY' | 'APPLIED_TO_PRODUCT';
+
+export interface SupplyPurchaseSizingReviewDto {
+  readonly purchaseId: string;
+  readonly purchaseNumber: string;
+  readonly products: readonly {
+    readonly productId: string;
+    readonly productTitle: string;
+    readonly variantLineCount: number;
+    readonly currentGuideId: string | null;
+    readonly currentGuideName: string | null;
+    readonly effectiveSource: 'PRODUCT' | 'CATEGORY' | 'NONE';
+    readonly evidenceId: string | null;
+    readonly proposedGuideId: string | null;
+    readonly proposedGuideName: string | null;
+    readonly decision: SupplyPurchaseSizingDecisionDto;
+    readonly notes: string | null;
+    readonly version: number | null;
+    readonly reviewedAt: string | null;
+    readonly conflict: boolean;
+  }[];
+}
+
+export interface SetSupplyPurchaseSizingDecisionDto {
+  readonly productId: string;
+  readonly decision: 'KEEP_CURRENT' | 'EVIDENCE_ONLY' | 'APPLIED_TO_PRODUCT';
+  readonly sizeGuideId?: string;
+  readonly notes?: string | null;
+  readonly expectedVersion?: number;
+  readonly expectedProductVersion?: number;
+}
+
+export type SizingAttentionIssueTypeDto =
+  | 'PRODUCT_WITHOUT_GUIDE'
+  | 'CATEGORY_GUIDE_UNAVAILABLE'
+  | 'PUBLISHED_GUIDE_HAS_CHANGES'
+  | 'SUPPLY_GUIDE_CONFLICT';
+
+export interface SizingAttentionItemDto {
+  readonly id: string;
+  readonly issueType: SizingAttentionIssueTypeDto;
+  readonly severity: 'BLOCKING' | 'WARNING';
+  readonly resourceType: 'PRODUCT' | 'CATEGORY' | 'GUIDE' | 'PURCHASE';
+  readonly resourceId: string;
+  readonly resourceLabel: string;
+  readonly consequence: string;
+  readonly actionHref: string;
+  readonly actionLabel: string;
+  readonly updatedAt: string;
+}
+
+export interface SizingAttentionListDto {
+  readonly items: readonly SizingAttentionItemDto[];
+  readonly pagination: PaginationDto;
 }
 
 export interface SizingTemplatePresetDto {
@@ -1425,6 +1566,58 @@ export interface CategorySizeGuideDefaultListDto {
   readonly pagination: PaginationDto;
 }
 
+export interface CategoryGuideAssignmentPreviewDto {
+  readonly previewToken: string;
+  readonly category: {
+    readonly id: string;
+    readonly name: string;
+    readonly version: number;
+    readonly currentGuideId: string | null;
+    readonly currentGuideName: string | null;
+  };
+  readonly nextGuide: {
+    readonly id: string;
+    readonly name: string;
+    readonly version: number;
+    readonly publishedRevisionId: string;
+  } | null;
+  readonly totalProducts: number;
+  readonly inheritingProducts: number;
+  readonly directAssignmentsUnaffected: number;
+  readonly explicitNoGuideUnaffected: number;
+  readonly compatibilityConflicts: number;
+  readonly sampleProducts: readonly {
+    readonly productId: string;
+    readonly productTitle: string;
+    readonly outcome: 'INHERIT' | 'DIRECT' | 'NONE';
+    readonly compatible: boolean;
+  }[];
+}
+
+export interface ProductGuideAssignmentPreviewDto {
+  readonly previewToken: string;
+  readonly product: {
+    readonly id: string;
+    readonly title: string;
+    readonly version: number;
+  };
+  readonly current: {
+    readonly outcome: 'INHERIT' | 'DIRECT' | 'NONE';
+    readonly effectiveSource: 'PRODUCT' | 'CATEGORY' | 'NONE';
+    readonly guideId: string | null;
+    readonly guideName: string | null;
+  };
+  readonly next: {
+    readonly outcome: 'INHERIT' | 'DIRECT' | 'NONE';
+    readonly guideId: string | null;
+    readonly guideName: string | null;
+    readonly noGuideReason: string | null;
+  };
+  readonly productSizeCount: number;
+  readonly matchedSizeCount: number;
+  readonly conflictCount: number;
+}
+
 export interface SizeOptionValueMappingDto {
   readonly optionValueId: string;
   readonly optionValueLabel: string;
@@ -1503,6 +1696,8 @@ export interface UpdateMeasurementDefinitionDto {
 export interface CreateSizeGuideDto {
   readonly name: string;
   readonly description?: string;
+  readonly kind?: FitGuideKindDto;
+  readonly measurementBasis?: SizingSubjectTypeDto;
   readonly sizingDomainId: string;
   readonly sizeSystemId?: string;
 }
@@ -1644,10 +1839,7 @@ export interface InventoryPositionDto {
   readonly costState: 'PROVISIONAL' | 'FINALIZED' | 'ADJUSTED' | null;
   readonly replenishmentThreshold: number;
   readonly replenishmentThresholdSource:
-    | 'LOCATION_POLICY'
-    | 'ITEM_POLICY'
-    | 'VARIANT'
-    | 'ORGANIZATION_DEFAULT';
+    'LOCATION_POLICY' | 'ITEM_POLICY' | 'VARIANT' | 'ORGANIZATION_DEFAULT';
 }
 
 /** Catalog-backed inventory identity used by stock operations before a SKU has any movement. */
@@ -2992,6 +3184,11 @@ export interface CustomerSummaryDto {
   readonly lastOrderAt?: string | null;
   readonly createdAt: string;
   readonly activeRestrictions?: readonly CustomerRestrictionTypeDto[];
+  readonly lifecycleStage?: CustomerLifecycleStageDto;
+  readonly relationshipOwnerMembershipId?: string | null;
+  readonly relationshipOwnerName?: string | null;
+  readonly lastActivityAt?: string | null;
+  readonly linkedChannels?: readonly string[];
 }
 
 export interface CustomerDuplicateCandidateDto {
@@ -3016,6 +3213,16 @@ export interface CustomerListFiltersDto {
   readonly q?: string;
   readonly sortBy?: 'CREATED_DESC' | 'CREATED_ASC' | 'ORDERS_DESC' | 'SPEND_DESC' | 'RECENT_ORDER';
   readonly minOrders?: number;
+  readonly maxOrders?: number;
+  readonly minSpend?: string;
+  readonly maxSpend?: string;
+  readonly lifecycleStage?: CustomerLifecycleStageDto;
+  readonly relationshipOwnerMembershipId?: string;
+  readonly tagId?: string;
+  readonly segmentId?: string;
+  readonly linkedChannel?: 'WEBSITE' | 'FACEBOOK' | 'INSTAGRAM';
+  readonly lastActivityFrom?: string;
+  readonly lastActivityTo?: string;
 }
 
 export type CustomerSourceDto =
@@ -3132,6 +3339,10 @@ export type CustomerTimelineEventTypeDto =
   | 'RETURN_REQUESTED'
   | 'RETURN_COMPLETED'
   | 'REFUND_COMPLETED'
+  | 'PAYMENT_CONFIRMED'
+  | 'FULFILLMENT_UPDATED'
+  | 'DELIVERY_UPDATED'
+  | 'REVIEW_SUBMITTED'
   | 'RESTRICTION_APPLIED'
   | 'RESTRICTION_LIFTED'
   | 'NOTE_ADDED'
@@ -3139,7 +3350,14 @@ export type CustomerTimelineEventTypeDto =
   | 'ACCOUNT_LINKED'
   | 'ACCOUNT_UNLINKED'
   | 'CUSTOMER_MERGED'
-  | 'COMMUNICATION_SENT';
+  | 'COMMUNICATION_SENT'
+  | 'IDENTITY_LINKED'
+  | 'IDENTITY_REVOKED'
+  | 'LIFECYCLE_CHANGED'
+  | 'OWNER_CHANGED'
+  | 'FOLLOW_UP_CREATED'
+  | 'FOLLOW_UP_COMPLETED'
+  | 'CONVERSATION_STARTED';
 
 export interface CustomerTimelineEventDto {
   readonly id: string;
@@ -3264,6 +3482,9 @@ export interface CustomerTagDto {
 export interface CustomerNoteDto {
   readonly id: string;
   readonly body: string;
+  readonly isPinned: boolean;
+  readonly version: number;
+  readonly updatedAt: string;
   readonly createdAt: string;
   readonly authorActorId: string;
 }
@@ -5719,11 +5940,7 @@ export interface AnalyticsOverviewDto {
 // INDIVIDUAL UNIT TRACEABILITY & QUALITY CONTROL CONTRACTS
 // ============================================================================
 
-export type UnitConditionDto =
-  | 'GRADE_A'
-  | 'GRADE_B'
-  | 'REPAIR_REQUIRED'
-  | 'DAMAGED_UNSELLABLE';
+export type UnitConditionDto = 'GRADE_A' | 'GRADE_B' | 'REPAIR_REQUIRED' | 'DAMAGED_UNSELLABLE';
 
 /** Aggregate inventory-ledger condition occupied by a serialized unit. */
 export type InventoryConditionDto = 'SELLABLE' | 'DAMAGED' | 'QUARANTINE' | 'INSPECTION';
@@ -5740,36 +5957,18 @@ export type UnitStatusDto =
   | 'WRITTEN_OFF';
 
 export type UnitSourceTypeDto =
-  | 'INBOUND_RECEIPT'
-  | 'STOCK_CONVERSION'
-  | 'RETURN_RECEIPT'
-  | 'MANUAL_INTAKE';
+  'INBOUND_RECEIPT' | 'STOCK_CONVERSION' | 'RETURN_RECEIPT' | 'MANUAL_INTAKE';
 
 export type InspectionStageDto =
-  | 'INBOUND_INTAKE'
-  | 'REINSPECTION'
-  | 'RETURN_INSPECTION'
-  | 'ROUTINE_AUDIT';
+  'INBOUND_INTAKE' | 'REINSPECTION' | 'RETURN_INSPECTION' | 'ROUTINE_AUDIT';
 
 export type InspectionOutcomeDto =
-  | 'PASSED'
-  | 'PASSED_WITH_DEFECT'
-  | 'HOLD_FOR_REPAIR'
-  | 'QUARANTINE_DAMAGED';
+  'PASSED' | 'PASSED_WITH_DEFECT' | 'HOLD_FOR_REPAIR' | 'QUARANTINE_DAMAGED';
 
 export type InspectionDispositionDto =
-  | 'RELEASE_SELLABLE'
-  | 'RESTRICTED_SALE'
-  | 'MOVE_TO_REPAIR'
-  | 'WRITE_OFF'
-  | 'HOLD';
+  'RELEASE_SELLABLE' | 'RESTRICTED_SALE' | 'MOVE_TO_REPAIR' | 'WRITE_OFF' | 'HOLD';
 
-export type RepairStatusDto =
-  | 'REQUESTED'
-  | 'IN_PROGRESS'
-  | 'COMPLETED'
-  | 'FAILED'
-  | 'CANCELLED';
+export type RepairStatusDto = 'REQUESTED' | 'IN_PROGRESS' | 'COMPLETED' | 'FAILED' | 'CANCELLED';
 
 export type UnitEventTypeDto =
   | 'REGISTERED'
@@ -5932,3 +6131,4 @@ export type {
   ReplenishmentRecommendationDto,
   ReplenishmentRecommendationListDto,
 } from './inventory/replenishment.js';
+export * from './crm.js';

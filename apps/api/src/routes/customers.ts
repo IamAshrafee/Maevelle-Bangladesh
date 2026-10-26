@@ -20,6 +20,7 @@ import {
   setPrimaryCustomerEmail,
   setDefaultCustomerAddress,
   addCustomerNote,
+  updateCustomerNote,
   listCustomerOrders,
   listCustomerReturns,
   listCustomerRefunds,
@@ -58,7 +59,7 @@ function headers(input: Record<string, string | string[] | undefined>): Headers 
   );
 }
 
-async function context(
+export async function customerRouteContext(
   database: DatabaseClient,
   auth: Auth,
   requestHeaders: Record<string, string | string[] | undefined>,
@@ -75,7 +76,7 @@ async function context(
   return active ? { ...active, actorId: session.user.id } : undefined;
 }
 
-function sendError(
+export function sendCustomerError(
   reply: { code(status: number): { send(value: unknown): unknown } },
   error: unknown,
 ) {
@@ -84,11 +85,43 @@ function sendError(
     .code(
       error.code === 'NOT_FOUND'
         ? 404
-        : ['CONFLICT', 'STALE_VERSION', 'IDEMPOTENCY_CONFLICT'].includes(error.code)
-          ? 409
-          : 422,
+        : error.code === 'FORBIDDEN'
+          ? 403
+          : ['CONFLICT', 'STALE_VERSION', 'IDEMPOTENCY_CONFLICT'].includes(error.code)
+            ? 409
+            : 422,
     )
     .send({ error: { code: error.code, message: error.message } });
+}
+
+const context = customerRouteContext;
+const sendError = sendCustomerError;
+
+function maskPhone(value: string | null | undefined): string | null {
+  if (!value) return null;
+  const visible = value.slice(-4);
+  return `${'•'.repeat(Math.max(4, value.length - visible.length))}${visible}`;
+}
+
+function maskEmail(value: string | null | undefined): string | null {
+  if (!value) return null;
+  const [local = '', domain = ''] = value.split('@');
+  return `${local.slice(0, 1) || '•'}•••@${domain || '•••'}`;
+}
+
+function maskCustomerDetail<
+  T extends {
+    phones: readonly { phone: string }[];
+    emails: readonly { email: string }[];
+    addresses: readonly { phone: string | null }[];
+  },
+>(detail: T): T {
+  return {
+    ...detail,
+    phones: detail.phones.map((phone) => ({ ...phone, phone: maskPhone(phone.phone) ?? '' })),
+    emails: detail.emails.map((email) => ({ ...email, email: maskEmail(email.email) ?? '' })),
+    addresses: detail.addresses.map((address) => ({ ...address, phone: maskPhone(address.phone) })),
+  };
 }
 
 export function registerCustomerRoutes(
@@ -100,7 +133,7 @@ export function registerCustomerRoutes(
     '/admin/geography/search',
     { schema: { querystring: Type.Object({ q: Type.String({ minLength: 1 }) }) } },
     async (request, reply) => {
-      if (!(await context(database, auth, request.headers, 'customers.view')))
+      if (!(await customerRouteContext(database, auth, request.headers, 'customers.view')))
         return reply.code(403).send({ error: 'FORBIDDEN' });
       return { data: await searchGeography(database.db, (request.query as { q: string }).q) };
     },
@@ -148,6 +181,35 @@ export function registerCustomerRoutes(
             ]),
           ),
           minOrders: Type.Optional(Type.Integer({ minimum: 0 })),
+          maxOrders: Type.Optional(Type.Integer({ minimum: 0 })),
+          minSpend: Type.Optional(Type.String({ pattern: '^\\d+(?:\\.\\d{1,4})?$' })),
+          maxSpend: Type.Optional(Type.String({ pattern: '^\\d+(?:\\.\\d{1,4})?$' })),
+          lifecycleStage: Type.Optional(
+            Type.Union(
+              [
+                'NEW_CONTACT',
+                'PROSPECT',
+                'ENGAGED_PROSPECT',
+                'FIRST_TIME_BUYER',
+                'REPEAT_CUSTOMER',
+                'LOYAL_CUSTOMER',
+                'INACTIVE_CUSTOMER',
+                'RE_ENGAGED_CUSTOMER',
+              ].map((value) => Type.Literal(value)),
+            ),
+          ),
+          relationshipOwnerMembershipId: Type.Optional(Type.String({ format: 'uuid' })),
+          tagId: Type.Optional(Type.String({ format: 'uuid' })),
+          segmentId: Type.Optional(Type.String({ format: 'uuid' })),
+          linkedChannel: Type.Optional(
+            Type.Union([
+              Type.Literal('WEBSITE'),
+              Type.Literal('FACEBOOK'),
+              Type.Literal('INSTAGRAM'),
+            ]),
+          ),
+          lastActivityFrom: Type.Optional(Type.String({ format: 'date-time' })),
+          lastActivityTo: Type.Optional(Type.String({ format: 'date-time' })),
         }),
       },
     },
@@ -155,10 +217,20 @@ export function registerCustomerRoutes(
       const active = await context(database, auth, request.headers, 'customers.view');
       if (!active) return reply.code(403).send({ error: 'FORBIDDEN' });
       const query = request.query as NonNullable<Parameters<typeof listCustomers>[2]>;
-      const result = await listCustomers(database.db, active.organizationId, query);
+      const canViewSensitive = active.capabilities.includes('customers.sensitive.view');
+      const result = await listCustomers(database.db, active.organizationId, {
+        ...query,
+        searchSensitive: canViewSensitive,
+      });
       return {
         data: {
-          items: result.data,
+          items: canViewSensitive
+            ? result.data
+            : result.data.map((customer) => ({
+                ...customer,
+                primaryPhone: maskPhone(customer.primaryPhone),
+                primaryEmail: maskEmail(customer.primaryEmail),
+              })),
           totalCount: result.pagination.totalItems,
           pagination: result.pagination,
         },
@@ -202,6 +274,37 @@ export function registerCustomerRoutes(
             >),
           }),
         });
+      } catch (error) {
+        return sendError(reply, error);
+      }
+    },
+  );
+
+  app.patch(
+    '/admin/customers/:customerId/notes/:noteId',
+    {
+      schema: {
+        params: Type.Object({
+          customerId: Type.String({ format: 'uuid' }),
+          noteId: Type.String({ format: 'uuid' }),
+        }),
+        body: Type.Object({
+          body: Type.String({ minLength: 1 }),
+          isPinned: Type.Boolean(),
+          expectedVersion: Type.Integer({ minimum: 1 }),
+        }),
+      },
+    },
+    async (request, reply) => {
+      const active = await context(database, auth, request.headers, 'customers.manage');
+      if (!active) return reply.code(403).send({ error: 'FORBIDDEN' });
+      try {
+        await updateCustomerNote(database.db, {
+          ...active,
+          ...(request.params as { customerId: string; noteId: string }),
+          ...(request.body as { body: string; isPinned: boolean; expectedVersion: number }),
+        });
+        return reply.code(204).send();
       } catch (error) {
         return sendError(reply, error);
       }
@@ -317,12 +420,15 @@ export function registerCustomerRoutes(
     const active = await context(database, auth, request.headers, 'customers.view');
     if (!active) return reply.code(403).send({ error: 'FORBIDDEN' });
     try {
+      const detail = await getCustomerDetail(
+        database.db,
+        active.organizationId,
+        (request.params as { customerId: string }).customerId,
+      );
       return {
-        data: await getCustomerDetail(
-          database.db,
-          active.organizationId,
-          (request.params as { customerId: string }).customerId,
-        ),
+        data: active.capabilities.includes('customers.sensitive.view')
+          ? detail
+          : maskCustomerDetail(detail),
       };
     } catch (error) {
       return sendError(reply, error);
@@ -947,6 +1053,18 @@ export function registerCustomerRoutes(
         querystring: Type.Object({
           page: Type.Optional(Type.Integer({ minimum: 1 })),
           pageSize: Type.Optional(Type.Integer({ minimum: 1, maximum: 100 })),
+          cursor: Type.Optional(Type.String({ minLength: 1, maxLength: 1000 })),
+          eventTypes: Type.Optional(Type.String({ maxLength: 1000 })),
+          channel: Type.Optional(
+            Type.Union(
+              ['FACEBOOK', 'INSTAGRAM', 'WEBSITE', 'EMAIL', 'SMS'].map((value) =>
+                Type.Literal(value),
+              ),
+            ),
+          ),
+          from: Type.Optional(Type.String({ format: 'date-time' })),
+          to: Type.Optional(Type.String({ format: 'date-time' })),
+          search: Type.Optional(Type.String({ maxLength: 200 })),
         }),
       },
     },
@@ -957,20 +1075,72 @@ export function registerCustomerRoutes(
       const query = request.query as {
         page?: number;
         pageSize?: number;
+        cursor?: string;
+        eventTypes?: string;
+        channel?: 'FACEBOOK' | 'INSTAGRAM' | 'WEBSITE' | 'EMAIL' | 'SMS';
+        from?: string;
+        to?: string;
+        search?: string;
       };
       const pageSize = query.pageSize ?? 30;
       const offset = ((query.page ?? 1) - 1) * pageSize;
-      return {
-        data: await getCustomerTimeline(
+      const allowedEventTypes = new Set([
+        'CUSTOMER_CREATED',
+        'CUSTOMER_UPDATED',
+        'ORDER_PLACED',
+        'ORDER_CONFIRMED',
+        'ORDER_DELIVERED',
+        'ORDER_CANCELLED',
+        'RETURN_REQUESTED',
+        'RETURN_COMPLETED',
+        'REFUND_COMPLETED',
+        'RESTRICTION_APPLIED',
+        'RESTRICTION_LIFTED',
+        'NOTE_ADDED',
+        'TAG_ASSIGNED',
+        'ACCOUNT_LINKED',
+        'ACCOUNT_UNLINKED',
+        'CUSTOMER_MERGED',
+        'COMMUNICATION_SENT',
+        'IDENTITY_LINKED',
+        'IDENTITY_REVOKED',
+        'LIFECYCLE_CHANGED',
+        'OWNER_CHANGED',
+        'FOLLOW_UP_CREATED',
+        'FOLLOW_UP_COMPLETED',
+        'CONVERSATION_STARTED',
+      ] as const);
+      const eventTypes = query.eventTypes
+        ?.split(',')
+        .filter((value): value is typeof allowedEventTypes extends Set<infer T> ? T : never =>
+          allowedEventTypes.has(value as never),
+        );
+      if (query.eventTypes && eventTypes?.length !== query.eventTypes.split(',').length) {
+        return reply.code(400).send({ error: 'INVALID_TIMELINE_EVENT_TYPE' });
+      }
+      try {
+        const data = await getCustomerTimeline(
           database.db,
           active.organizationId,
           params.customerId,
           {
             limit: pageSize,
             offset,
+            ...(query.cursor ? { cursor: query.cursor } : {}),
+            ...(eventTypes?.length ? { eventTypes } : {}),
+            ...(query.channel ? { channel: query.channel } : {}),
+            ...(query.from ? { from: new Date(query.from) } : {}),
+            ...(query.to ? { to: new Date(query.to) } : {}),
+            ...(query.search ? { search: query.search } : {}),
           },
-        ),
-      };
+        );
+        return { data };
+      } catch (error) {
+        if (error instanceof Error && error.message === 'INVALID_TIMELINE_CURSOR') {
+          return reply.code(400).send({ error: 'INVALID_TIMELINE_CURSOR' });
+        }
+        throw error;
+      }
     },
   );
 
@@ -1009,7 +1179,8 @@ export function registerCustomerRoutes(
       const params = request.params as { customerId: string };
       const body = request.body as {
         userId: string;
-        linkType?: 'VERIFIED_PHONE' | 'VERIFIED_EMAIL' | 'MANUAL_CLAIM' | 'INVITATION' | 'GUEST_CONVERSION';
+        linkType?:
+          'VERIFIED_PHONE' | 'VERIFIED_EMAIL' | 'MANUAL_CLAIM' | 'INVITATION' | 'GUEST_CONVERSION';
         verifiedAt?: string;
       };
       try {
@@ -1065,7 +1236,13 @@ export function registerCustomerRoutes(
       schema: {
         body: Type.Optional(
           Type.Object({
-            verificationSource: Type.Optional(Type.String()),
+            verificationSource: Type.Optional(
+              Type.Union(
+                ['OTP_SMS', 'MANUAL_STAFF', 'CALL_VERIFIED', 'IMPORT', 'ORDER_DELIVERED'].map(
+                  (value) => Type.Literal(value),
+                ),
+              ),
+            ),
           }),
         ),
       },
@@ -1097,7 +1274,13 @@ export function registerCustomerRoutes(
       schema: {
         body: Type.Optional(
           Type.Object({
-            verificationSource: Type.Optional(Type.String()),
+            verificationSource: Type.Optional(
+              Type.Union(
+                ['MAGIC_LINK', 'OTP_EMAIL', 'MANUAL_STAFF', 'IMPORT'].map((value) =>
+                  Type.Literal(value),
+                ),
+              ),
+            ),
           }),
         ),
       },

@@ -165,6 +165,8 @@ export interface ProductCreatorDraft {
   readonly selectedCollectionIds: readonly string[];
   readonly sizeSystemId: string;
   readonly sizeGuideId: string;
+  readonly sizingGuideSource: 'CATEGORY' | 'DIRECT' | 'NONE';
+  readonly noGuideReason: string;
   readonly attributeValues: Record<string, string | boolean | null>;
   readonly variantMode: 'simple' | 'variants';
   readonly priceAmount: string;

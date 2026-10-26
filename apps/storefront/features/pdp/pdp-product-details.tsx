@@ -79,7 +79,8 @@ export function PdpProductDetails({
           <div className="flex flex-col gap-6">
             {groups.map((group) => (
               <div key={group.title} className="flex flex-col gap-2">
-                {groups.length > 1 || group.title.trim().toLocaleLowerCase('en') !== 'key attributes' ? (
+                {groups.length > 1 ||
+                group.title.trim().toLocaleLowerCase('en') !== 'key attributes' ? (
                   <h4 className="text-[13px] sm:text-[14px] font-semibold text-on-surface flex items-center gap-2">
                     <span className="w-1.5 h-1.5 rounded-full bg-primary shrink-0" />
                     {group.title}
@@ -121,7 +122,7 @@ export function PdpProductDetails({
               Need help with sizing?
             </span>
             <span className="text-[12px] text-on-surface-variant">
-              Compare garment measurements against your exact fit before ordering.
+              Check this Product&apos;s published measurements and measuring instructions.
             </span>
           </div>
           <button
@@ -129,7 +130,7 @@ export function PdpProductDetails({
             onClick={onFittingGuide}
             className="shrink-0 inline-flex items-center gap-1.5 px-4 py-1.5 rounded-full border border-primary text-primary hover:bg-primary hover:text-white transition-colors duration-150 text-[12px] font-semibold cursor-pointer"
           >
-            Size Guide &rarr;
+            Size &amp; Fit Guide &rarr;
           </button>
         </div>
       )}

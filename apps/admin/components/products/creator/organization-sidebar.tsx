@@ -12,6 +12,7 @@ import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select';
+import { Textarea } from '@/components/ui/textarea';
 import { Separator } from '@/components/ui/separator';
 import { Switch } from '@/components/ui/switch';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
@@ -34,6 +35,8 @@ interface OrganizationSidebarProps {
   readonly sizeGuides: readonly SizeGuideSummaryDto[];
   readonly sizeSystemId: string;
   readonly sizeGuideId: string;
+  readonly sizingGuideSource: 'CATEGORY' | 'DIRECT' | 'NONE';
+  readonly noGuideReason: string;
   readonly publishImmediately: boolean;
   readonly readinessChecklist: {
     readonly items: readonly ReadinessChecklistItem[];
@@ -47,6 +50,8 @@ interface OrganizationSidebarProps {
   readonly onToggleCollection: (collId: string) => void;
   readonly onSizeSystemChange: (sysId: string) => void;
   readonly onSizeGuideChange: (guideId: string) => void;
+  readonly onSizingGuideSourceChange: (source: 'CATEGORY' | 'DIRECT' | 'NONE') => void;
+  readonly onNoGuideReasonChange: (reason: string) => void;
   readonly onPublishImmediatelyChange: (val: boolean) => void;
 }
 
@@ -65,6 +70,8 @@ export function OrganizationSidebar({
   sizeGuides,
   sizeSystemId,
   sizeGuideId,
+  sizingGuideSource,
+  noGuideReason,
   publishImmediately,
   readinessChecklist,
   onToggleCategory,
@@ -74,6 +81,8 @@ export function OrganizationSidebar({
   onToggleCollection,
   onSizeSystemChange,
   onSizeGuideChange,
+  onSizingGuideSourceChange,
+  onNoGuideReasonChange,
   onPublishImmediatelyChange,
 }: OrganizationSidebarProps) {
   return (
@@ -167,140 +176,124 @@ export function OrganizationSidebar({
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="rounded-lg border border-border bg-muted/30 p-3 text-[11px] text-muted-foreground">
-            Choose a size system to keep variant sizes consistent. Then attach the exact chart
-            customers will see before choosing a size.
-          </div>
-
-          {/* Size System */}
           <div className="space-y-1.5">
-            <Label htmlFor="size-system-select" className="text-xs font-medium">
-              Size System
-            </Label>
+            <div className="flex items-center justify-between gap-2">
+              <Label htmlFor="size-guide-source-select" className="text-xs font-medium">
+                Customer guide source
+              </Label>
+              <Link
+                href="/sizing/guides"
+                target="_blank"
+                className="inline-flex items-center gap-1 text-[11px] font-medium text-primary hover:underline"
+              >
+                Manage guides <ExternalLink className="size-2.5" />
+              </Link>
+            </div>
             <NativeSelect
-              id="size-system-select"
-              value={sizeSystemId}
-              onChange={(e) => onSizeSystemChange(e.target.value)}
+              id="size-guide-source-select"
+              value={sizingGuideSource === 'DIRECT' ? sizeGuideId : sizingGuideSource}
+              onChange={(event) => {
+                if (event.target.value === 'CATEGORY' || event.target.value === 'NONE') {
+                  onSizingGuideSourceChange(event.target.value);
+                  return;
+                }
+                onSizingGuideSourceChange('DIRECT');
+                onSizeGuideChange(event.target.value);
+              }}
               className="text-xs"
             >
-              <NativeSelectOption value="">None (Non-sized product)</NativeSelectOption>
-              {sizingData.systems.map((s) => (
-                <NativeSelectOption key={s.id} value={s.id}>
-                  {s.name}
-                </NativeSelectOption>
-              ))}
+              <NativeSelectOption value="CATEGORY">Use primary Category guide</NativeSelectOption>
+              {sizeGuides
+                .filter((guide) => guide.status === 'ACTIVE' && guide.hasPublishedRevision)
+                .map((guide) => (
+                  <NativeSelectOption key={guide.id} value={guide.id}>
+                    Use {guide.name}
+                  </NativeSelectOption>
+                ))}
+              <NativeSelectOption value="NONE">No customer guide</NativeSelectOption>
             </NativeSelect>
+            <p className="text-[11px] leading-5 text-muted-foreground">
+              {sizingGuideSource === 'DIRECT'
+                ? 'This Product directly uses the selected published guide instead of its Category default.'
+                : sizingGuideSource === 'NONE'
+                  ? 'The Storefront will intentionally show no Size & Fit Guide for this Product.'
+                  : 'The current published guide from the primary Category becomes effective automatically.'}
+            </p>
           </div>
 
-          {/* Size Guide */}
-          {sizeSystemId && (
+          {sizingGuideSource === 'NONE' ? (
             <div className="space-y-1.5">
-              <div className="flex items-center justify-between">
-                <Label htmlFor="size-guide-select" className="text-xs font-medium">
-                  Storefront Size Guide
-                </Label>
+              <Label htmlFor="no-guide-reason" className="text-xs font-medium">
+                Reason <span className="text-destructive">*</span>
+              </Label>
+              <Textarea
+                id="no-guide-reason"
+                value={noGuideReason}
+                onChange={(event) => onNoGuideReasonChange(event.target.value)}
+                placeholder="Why is a customer guide not appropriate for this Product?"
+                className="min-h-20 text-xs"
+              />
+            </div>
+          ) : null}
+
+          {sizeGuideId && sizingGuideSource === 'DIRECT' ? (
+            <div className="rounded-lg border border-border bg-muted/30 p-3">
+              <div className="flex items-center justify-between gap-2">
+                <div>
+                  <p className="text-xs font-semibold text-foreground">
+                    {sizeGuides.find((guide) => guide.id === sizeGuideId)?.name}
+                  </p>
+                  <p className="mt-0.5 text-[11px] text-muted-foreground">
+                    Published · Assigned directly
+                  </p>
+                </div>
                 <Link
-                  href="/sizing/guides"
-                  target="_blank"
-                  className="text-[11px] font-medium text-primary hover:underline inline-flex items-center gap-1"
+                  href={`/sizing/guides/${sizeGuideId}`}
+                  className="text-[11px] font-medium text-primary hover:underline"
                 >
-                  Manage Guides <ExternalLink className="size-2.5" />
+                  Preview
                 </Link>
               </div>
+            </div>
+          ) : null}
+
+          <details className="rounded-lg border border-border">
+            <summary className="min-h-10 cursor-pointer px-3 py-2 text-xs font-medium text-muted-foreground">
+              Advanced size standard
+            </summary>
+            <div className="space-y-3 border-t border-border p-3">
               <NativeSelect
-                id="size-guide-select"
-                value={sizeGuideId}
-                onChange={(e) => onSizeGuideChange(e.target.value)}
+                id="size-system-select"
+                aria-label="Technical size system"
+                value={sizeSystemId}
+                onChange={(event) => onSizeSystemChange(event.target.value)}
                 className="text-xs"
               >
-                <NativeSelectOption value="">
-                  None (Use Category Default if available)
-                </NativeSelectOption>
-                {/* System-bound guides */}
-                {sizeGuides
-                  .filter((g) => g.sizeSystemId === sizeSystemId && g.status === 'ACTIVE')
-                  .map((g) => (
-                    <NativeSelectOption key={g.id} value={g.id}>
-                      {g.name} (v{g.version})
-                    </NativeSelectOption>
-                  ))}
-                {/* Unbound guides belonging to the active domain */}
-                {(() => {
-                  const currentSys = sizingData.systems.find((s) => s.id === sizeSystemId);
-                  if (!currentSys) return null;
-                  return sizeGuides
-                    .filter(
-                      (g) =>
-                        !g.sizeSystemId &&
-                        g.sizingDomainId === currentSys.sizingDomainId &&
-                        g.status === 'ACTIVE',
-                    )
-                    .map((g) => (
-                      <NativeSelectOption key={g.id} value={g.id}>
-                        {g.name} (v{g.version}) [Domain Unbound]
-                      </NativeSelectOption>
-                    ));
-                })()}
+                <NativeSelectOption value="">Not a selectable-size Product</NativeSelectOption>
+                {sizingData.systems.map((system) => (
+                  <NativeSelectOption key={system.id} value={system.id}>
+                    {system.name}
+                  </NativeSelectOption>
+                ))}
               </NativeSelect>
-              {(() => {
-                const currentSys = sizingData.systems.find((s) => s.id === sizeSystemId);
-                const matchingCount = sizeGuides.filter(
-                  (g) =>
-                    g.status === 'ACTIVE' &&
-                    (g.sizeSystemId === sizeSystemId ||
-                      (!g.sizeSystemId && currentSys && g.sizingDomainId === currentSys.sizingDomainId)),
-                ).length;
-                if (matchingCount === 0) {
-                  return (
-                    <p className="rounded-md border border-warning/30 bg-warning/5 p-2 text-[11px] text-warning">
-                      No active guide matches this size system or domain. Create or activate one before
-                      publishing a size chart.
-                    </p>
-                  );
-                }
-                return null;
-              })()}
+              {sizeSystemId ? (
+                <div className="flex flex-wrap gap-1.5">
+                  {sizingData.sizeDefinitions
+                    .filter((size) => size.sizeSystemId === sizeSystemId)
+                    .sort((a, b) => a.sortOrder - b.sortOrder)
+                    .map((size) => (
+                      <Badge
+                        key={size.id}
+                        variant="outline"
+                        className="font-mono text-[10px] tabular-nums"
+                      >
+                        {size.label}
+                      </Badge>
+                    ))}
+                </div>
+              ) : null}
             </div>
-          )}
-
-          {sizeSystemId ? (
-            <div className="space-y-2 rounded-lg border border-border p-3">
-              <div className="flex items-center justify-between gap-2">
-                <span className="text-xs font-semibold text-foreground">Customer preview</span>
-                {sizeGuideId ? (
-                  <Link
-                    href={`/sizing/guides/${sizeGuideId}`}
-                    className="inline-flex items-center gap-1 text-[11px] font-medium text-primary hover:text-primary-hover"
-                  >
-                    Open guide <ExternalLink className="size-3" />
-                  </Link>
-                ) : null}
-              </div>
-              <div className="flex flex-wrap gap-1.5">
-                {sizingData.sizeDefinitions
-                  .filter((size) => size.sizeSystemId === sizeSystemId)
-                  .sort((a, b) => a.sortOrder - b.sortOrder)
-                  .map((size) => (
-                    <Badge
-                      key={size.id}
-                      variant="outline"
-                      className="font-mono text-[10px] tabular-nums"
-                    >
-                      {size.label}
-                    </Badge>
-                  ))}
-              </div>
-              <p className="text-[11px] text-muted-foreground">
-                {sizeGuideId
-                  ? `${sizeGuides.find((guide) => guide.id === sizeGuideId)?.name ?? 'Selected guide'} will be available from the product page.`
-                  : 'Sizes can be configured now, but customers will not see a measurement table until a guide is attached.'}
-              </p>
-            </div>
-          ) : (
-            <p className="text-[11px] text-muted-foreground">
-              Use “None” only when customers do not choose a size for this product.
-            </p>
-          )}
+          </details>
         </CardContent>
       </Card>
 

@@ -30,7 +30,7 @@ export function createAuth(
   database: DatabaseClient,
   allowBootstrapSignUp = false,
 ): MaevelleAuth {
-  return betterAuth({
+  const auth = betterAuth({
     appName: 'Maevelle Admin',
     baseURL: config.authBaseUrl,
     basePath: '/auth',
@@ -132,4 +132,19 @@ export function createAuth(
       }),
     ],
   });
+
+  const originalGetSession = auth.api.getSession.bind(auth.api);
+  return {
+    ...auth,
+    api: {
+      ...auth.api,
+      getSession: async (input: { headers: Headers }) => {
+        try {
+          return await originalGetSession(input);
+        } catch {
+          return null;
+        }
+      },
+    },
+  };
 }

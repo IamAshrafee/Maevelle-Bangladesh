@@ -1,9 +1,16 @@
 # Maevelle Ecommerce — Sizing & Measurement Architecture
 
 **Document:** `docs/domains/sizing/sizing-architecture.md`
-**Status:** Initial Domain Design / Living Document
+**Status:** Historical domain design / backend reference
 **Version:** 0.1
 **Related:** `catalog-architecture.md`, `requirements.md`, `scope.md`
+
+> **Current product and UX authority:**
+> [`sizing-product-blueprint.md`](sizing-product-blueprint.md) supersedes this
+> document's product-facing workflows, information architecture, and UI
+> assumptions. Preserve this document as background for domain reasoning and
+> verify every implementation decision against the approved blueprint and
+> current source.
 
 ---
 
@@ -1018,6 +1025,12 @@ Sizes as rows
 Measurements as columns
 ```
 
+Each guide revision owns its ordered column selection and customer-facing
+column labels. The shared measurement vocabulary supplies semantics, unit
+defaults, and optional instructions, but it no longer forces every definition
+in a domain into every guide. Removing a working column removes its working
+matrix values; published revision columns remain immutable with history.
+
 Others may prefer the opposite.
 
 The underlying model should not semantically depend on visual orientation.
@@ -1028,7 +1041,9 @@ The dashboard may provide a standard editing layout while storefront themes may 
 
 # 41. Sparse Charts
 
-Not every cell must always have a value.
+Working changes may be sparse while data is being entered. Publication requires
+every selected row/column cell to be complete so customers never receive a
+partially populated guide.
 
 Example:
 

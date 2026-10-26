@@ -1,8 +1,10 @@
 import { readFileSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 
-const tracked = spawnSync('git', ['ls-files'], { encoding: 'utf8' });
-if (tracked.status !== 0) throw new Error('Could not enumerate tracked files for the secret scan.');
+const tracked = spawnSync('git', ['ls-files', '--cached', '--others', '--exclude-standard'], {
+  encoding: 'utf8',
+});
+if (tracked.status !== 0) throw new Error('Could not enumerate files for the secret scan.');
 const patterns = [
   { name: 'AWS access key', expression: /\bAKIA[0-9A-Z]{16}\b/ },
   { name: 'private key', expression: /-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----/ },
@@ -34,4 +36,4 @@ if (findings.length) {
   console.error('Potential committed secret(s) found:\n' + findings.join('\n'));
   process.exit(1);
 }
-console.log('Secret scan passed: no high-confidence tracked credential patterns found.');
+console.log('Secret scan passed: no high-confidence credential patterns found.');

@@ -5,8 +5,25 @@ import type { DatabaseClient } from '@maevelle/database';
 import { buildApi } from './app.js';
 
 function createDatabaseStub(ping: DatabaseClient['ping']): DatabaseClient {
+  const queryBuilder = {
+    selectAll: () => queryBuilder,
+    select: () => queryBuilder,
+    where: () => queryBuilder,
+    innerJoin: () => queryBuilder,
+    leftJoin: () => queryBuilder,
+    limit: () => queryBuilder,
+    offset: () => queryBuilder,
+    orderBy: () => queryBuilder,
+    execute: vi.fn().mockResolvedValue([]),
+    executeTakeFirst: vi.fn().mockResolvedValue(undefined),
+  };
   return {
-    db: {} as DatabaseClient['db'],
+    db: {
+      selectFrom: () => queryBuilder,
+      insertInto: () => queryBuilder,
+      updateTable: () => queryBuilder,
+      deleteFrom: () => queryBuilder,
+    } as unknown as DatabaseClient['db'],
     ping,
     close: vi.fn().mockResolvedValue(undefined),
   };
@@ -209,6 +226,7 @@ describe('API hardening foundation', () => {
       method: 'GET',
       url: '/admin/inventory/reservations',
     });
+    console.log('RESERVATIONS RESPONSE:', protectedReservations.statusCode, protectedReservations.body);
     expect(protectedReservations.statusCode).toBe(403);
 
     const protectedReservationRelease = await app.inject({

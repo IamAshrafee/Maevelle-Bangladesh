@@ -11,11 +11,7 @@ import type {
 } from '@maevelle/contracts';
 import { ProductReviews } from '@/components/product-reviews';
 import { SizeGuideDialog } from '@/components/size-guide-dialog';
-import {
-  ShoppingBagIcon,
-  StarIcon,
-  TruckIcon,
-} from '@/components/ui/icons';
+import { ShoppingBagIcon, StarIcon, TruckIcon } from '@/components/ui/icons';
 import { Breadcrumb, type BreadcrumbItemDef } from '@/components/ui/breadcrumb';
 import { cx } from '@/components/ui/classnames';
 import { ChatProductContext } from '@/features/chat/page-context';
@@ -62,9 +58,7 @@ export function PdpView({
   cartMessage,
 }: PdpViewProps) {
   const fallbackBreadcrumbs = useMemo((): readonly BreadcrumbItemDef[] => {
-    const items: BreadcrumbItemDef[] = [
-      { label: 'Shop', href: '/categories' },
-    ];
+    const items: BreadcrumbItemDef[] = [{ label: 'Shop', href: '/categories' }];
     if (product.primaryCategory) {
       items.push({
         label: product.primaryCategory.name,
@@ -141,10 +135,7 @@ export function PdpView({
 
   const [hasInteractedWithVisual, setHasInteractedWithVisual] = useState(false);
 
-  const visualAxis = useMemo(
-    () => product.options.find((opt) => opt.isVisual),
-    [product.options],
-  );
+  const visualAxis = useMemo(() => product.options.find((opt) => opt.isVisual), [product.options]);
 
   const sharedCoverMedia = useMemo(
     () =>
@@ -462,7 +453,9 @@ export function PdpView({
               <p className="text-[11px] font-semibold uppercase tracking-widest text-[#9e2a4b] mb-0.5">
                 Verified Customer Feedback
               </p>
-              <h2 className="text-[20px] font-serif font-semibold text-[#1e1b19]">Customer Reviews</h2>
+              <h2 className="text-[20px] font-serif font-semibold text-[#1e1b19]">
+                Customer Reviews
+              </h2>
               {ratingCount > 0 && (
                 <p className="text-[12px] text-[#574144] mt-0.5">
                   {avg} stars from {ratingCount} verified orders
@@ -481,7 +474,11 @@ export function PdpView({
 
         {/* Cross-sells (Mobile) */}
         <div className="px-4 pt-10 pb-6 border-t border-border/40">
-          <PdpCrossSells products={crossSells} title="Complete Your Look" subtitle="Curated Recommendations" />
+          <PdpCrossSells
+            products={crossSells}
+            title="Complete Your Look"
+            subtitle="Curated Recommendations"
+          />
         </div>
 
         {/* Sticky bottom bar */}
@@ -580,7 +577,8 @@ export function PdpView({
                           <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-secondary-fixed text-on-secondary-fixed">
                             SAVE{' '}
                             {Math.round(
-                              ((Number(priceDisplay.compareAtAmount) - Number(priceDisplay.amount)) /
+                              ((Number(priceDisplay.compareAtAmount) -
+                                Number(priceDisplay.amount)) /
                                 Number(priceDisplay.compareAtAmount)) *
                                 100,
                             )}
@@ -608,7 +606,9 @@ export function PdpView({
                       <TruckIcon size={15} />
                     </div>
                     <div className="flex flex-col">
-                      <p className="text-[13px] font-semibold text-[#1e1b19] leading-tight">Nationwide Express Delivery</p>
+                      <p className="text-[13px] font-semibold text-[#1e1b19] leading-tight">
+                        Nationwide Express Delivery
+                      </p>
                       <p className="text-[12px] text-[#574144] mt-0.5 leading-relaxed">
                         Inside Dhaka ৳60 (Next Day) · Outside Dhaka ৳120 (2–3 Days)
                       </p>
@@ -626,7 +626,8 @@ export function PdpView({
                         Cash on Delivery &amp; Mobile Banking
                       </p>
                       <p className="text-[12px] text-[#574144] mt-0.5 leading-relaxed">
-                        Cash on Delivery across all 64 districts · bKash, Nagad &amp; Cards accepted.
+                        Cash on Delivery across all 64 districts · bKash, Nagad &amp; Cards
+                        accepted.
                       </p>
                     </div>
                   </div>
@@ -726,7 +727,10 @@ export function PdpView({
           {/* Here the two column layout ends! */}
 
           {/* ─── CENTER CONTENT LAYOUT: REVIEWS SECTION ─── */}
-          <section id="reviews" className="w-full max-w-4xl mx-auto pt-20 pb-16 border-t border-border/40 mt-16">
+          <section
+            id="reviews"
+            className="w-full max-w-4xl mx-auto pt-20 pb-16 border-t border-border/40 mt-16"
+          >
             <div className="text-center mb-10">
               <p className="text-[11px] font-semibold uppercase tracking-widest text-primary mb-1.5">
                 Verified Customer Feedback
@@ -751,7 +755,11 @@ export function PdpView({
 
           {/* ─── RECOMMENDATIONS SECTION (Full Width Multi-Column) ─── */}
           <div className="w-full pt-16 pb-16 border-t border-border/40 mt-14">
-            <PdpCrossSells products={crossSells} title="Complete Your Look" subtitle="Curated Recommendations" />
+            <PdpCrossSells
+              products={crossSells}
+              title="Complete Your Look"
+              subtitle="Curated Recommendations"
+            />
           </div>
         </div>
       </div>
@@ -766,13 +774,9 @@ export function PdpView({
         selectedSizeLabel={
           sizeAxis?.values.find((v) => v.id === selected[sizeAxis?.id ?? ''])?.label
         }
-        onSelectSize={(label) => {
+        onSelectSize={(_label, productOptionValueId) => {
           if (!sizeAxis) return;
-          const match = sizeAxis.values.find(
-            (v) =>
-              v.label.trim().toLowerCase() === label.trim().toLowerCase() ||
-              v.code.trim().toLowerCase() === label.trim().toLowerCase(),
-          );
+          const match = sizeAxis.values.find((value) => value.id === productOptionValueId);
           if (match) setSelected((prev) => ({ ...prev, [sizeAxis.id]: match.id }));
         }}
       />

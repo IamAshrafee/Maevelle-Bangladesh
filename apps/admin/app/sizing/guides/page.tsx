@@ -2,28 +2,27 @@
 
 import {
   Archive,
-  ArrowRight,
   BookTemplate,
   ChevronLeft,
   ChevronRight,
-  FolderTree,
   Loader2,
   Plus,
   RotateCcw,
   Search,
   Sparkles,
   TableProperties,
-  X,
 } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { type FormEvent, Suspense, useCallback, useEffect, useMemo, useState } from 'react';
 
 import type {
+  FitGuideKindDto,
   PaginationDto,
   SizeGuideSummaryDto,
   SizeSystemDto,
   SizingDomainDto,
+  SizingSubjectTypeDto,
 } from '@maevelle/contracts';
 
 import {
@@ -33,23 +32,20 @@ import {
   fetchSizeGuides,
   fetchSizingWorkspace,
   restoreSizeGuide,
-  updateSizeGuideMatrix,
 } from '@/lib/sizing/api';
 import { SIZING_TEMPLATE_PRESETS } from '@/lib/sizing/presets';
 
 import {
   AdminPage,
   EmptyState,
-  ErrorState,
   LoadingState,
-  PageActions,
-  PageDescription,
   PageHeader,
   PagePanel,
 } from '@/components/ui/page-shell';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { StatusBadge } from '@/components/status-badge';
+import { useAdminCapability } from '@/components/admin-capabilities';
 import { Input } from '@/components/ui/input';
 import { NativeSelect } from '@/components/ui/native-select';
 import {
@@ -65,6 +61,9 @@ type Feedback = { message: string; tone: 'success' | 'warning' | 'destructive' }
 const EMPTY_PAGINATION: PaginationDto = { page: 1, pageSize: 25, totalItems: 0, totalPages: 0 };
 
 function SizeGuidesListContent() {
+  const canManageGuidesCapability = useAdminCapability('sizing.guides.manage');
+  const canManageLegacy = useAdminCapability('sizing.manage');
+  const canManageGuides = canManageGuidesCapability || canManageLegacy;
   const router = useRouter();
   const searchParams = useSearchParams();
   const shouldOpenCreate = searchParams.get('create') === 'true';
@@ -81,6 +80,11 @@ function SizeGuidesListContent() {
   const [search, setSearch] = useState('');
   const [status, setStatus] = useState<'ACTIVE' | 'ARCHIVED' | 'ALL'>('ACTIVE');
   const [domainId, setDomainId] = useState('ALL');
+  const [kind, setKind] = useState<FitGuideKindDto | 'ALL'>('ALL');
+  const [publication, setPublication] = useState<
+    'PUBLISHED' | 'WORKING_CHANGES' | 'DRAFT_ONLY' | 'ALL'
+  >('ALL');
+  const [sort, setSort] = useState<'UPDATED_DESC' | 'USAGE_DESC' | 'NAME_ASC'>('UPDATED_DESC');
   const [page, setPage] = useState(1);
 
   // Create Modals
@@ -92,6 +96,9 @@ function SizeGuidesListContent() {
   const [createDescription, setCreateDescription] = useState('');
   const [createDomainId, setCreateDomainId] = useState('');
   const [createSystemId, setCreateSystemId] = useState('');
+  const [createKind, setCreateKind] = useState<FitGuideKindDto>('CUSTOM_FIT_GUIDE');
+  const [createMeasurementBasis, setCreateMeasurementBasis] =
+    useState<SizingSubjectTypeDto>('PRODUCT');
   const [createBusy, setCreateBusy] = useState(false);
   const [createError, setCreateError] = useState('');
 
@@ -104,6 +111,9 @@ function SizeGuidesListContent() {
           pageSize: 25,
           status,
           ...(domainId !== 'ALL' ? { domainId } : {}),
+          kind,
+          publication,
+          sort,
           ...(search ? { search } : {}),
         }),
         fetchSizingWorkspace(),
@@ -120,7 +130,7 @@ function SizeGuidesListContent() {
     } finally {
       setLoading(false);
     }
-  }, [domainId, page, search, status]);
+  }, [domainId, kind, page, publication, search, sort, status]);
 
   useEffect(() => {
     void load();
@@ -144,6 +154,10 @@ function SizeGuidesListContent() {
     setCreateDescription('');
     setCreateDomainId(firstDomain);
     setCreateSystemId('');
+    setCreateKind('CUSTOM_FIT_GUIDE');
+    setCreateMeasurementBasis(
+      activeDomains.find((domain) => domain.id === firstDomain)?.subjectType ?? 'PRODUCT',
+    );
     setCreateError('');
     setShowCreateModal(true);
   }
@@ -162,6 +176,8 @@ function SizeGuidesListContent() {
       const created = await createSizeGuide({
         name: createName.trim(),
         sizingDomainId: createDomainId,
+        kind: createKind,
+        measurementBasis: createMeasurementBasis,
         ...(description ? { description } : {}),
         ...(createSystemId ? { sizeSystemId: createSystemId } : {}),
       });
@@ -184,11 +200,16 @@ function SizeGuidesListContent() {
     try {
       // Find matching domain or use first active
       const matchedDomain =
-        domains.find((d) => d.code === preset.domainCode || d.name.toLowerCase().includes(preset.domainName.toLowerCase())) ??
-        activeDomains[0];
+        domains.find(
+          (d) =>
+            d.code === preset.domainCode ||
+            d.name.toLowerCase().includes(preset.domainName.toLowerCase()),
+        ) ?? activeDomains[0];
 
       if (!matchedDomain) {
-        throw new Error('Please create at least one active sizing domain before generating guides.');
+        throw new Error(
+          'Please create at least one active sizing domain before generating guides.',
+        );
       }
 
       // Check if a matching system exists
@@ -198,7 +219,13 @@ function SizeGuidesListContent() {
 
       const created = await createSizeGuide({
         name: preset.name,
-        description: `Standard commercial fit chart for ${preset.name}.`,
+        description: `Starting structure for ${preset.name}. Enter the supplier or Product measurements manually before publishing.`,
+        kind: preset.category.toLowerCase().includes('footwear')
+          ? 'FOOTWEAR_SIZE_CHART'
+          : preset.subjectType === 'GARMENT'
+            ? 'APPAREL_SIZE_CHART'
+            : 'WEARABLE_FIT_GUIDE',
+        measurementBasis: preset.subjectType,
         sizingDomainId: matchedDomain.id,
         ...(matchedSystem ? { sizeSystemId: matchedSystem.id } : {}),
       });
@@ -231,14 +258,23 @@ function SizeGuidesListContent() {
 
   async function toggleGuide(guide: SizeGuideSummaryDto) {
     const isRestoring = guide.status === 'ARCHIVED';
-    if (!isRestoring && !window.confirm(`Archive "${guide.name}"? Attached products will lose their direct guide link.`)) return;
+    if (
+      !isRestoring &&
+      !window.confirm(
+        `Archive "${guide.name}"? Attached products will lose their direct guide link.`,
+      )
+    )
+      return;
 
     setBusyId(guide.id);
     setFeedback(null);
     try {
       if (isRestoring) await restoreSizeGuide(guide.id);
       else await archiveSizeGuide(guide.id);
-      setFeedback({ message: `Size guide ${isRestoring ? 'restored' : 'archived'} successfully.`, tone: 'success' });
+      setFeedback({
+        message: `Size guide ${isRestoring ? 'restored' : 'archived'} successfully.`,
+        tone: 'success',
+      });
       await load();
     } catch (err) {
       setFeedback({
@@ -253,15 +289,16 @@ function SizeGuidesListContent() {
   return (
     <AdminPage>
       <PageHeader
-        eyebrow="Measurement Charts"
-        title="Size Guides Studio"
-        description="Create version-controlled measurement guides, attach regional sizing systems, publish immutable customer-facing charts, and monitor catalog usage."
+        eyebrow="Fit & Sizing"
+        title="Fit & Size Guides"
+        description="Create reusable customer guides, enter authentic measurements, preview the experience, publish safely, and see where each guide is used."
         actions={
           <div className="flex flex-wrap items-center gap-2">
             <Button
               variant="outline"
               size="sm"
               onClick={() => setShowTemplateModal(true)}
+              disabled={!canManageGuides}
               className="min-h-10 sm:min-h-9 touch-manipulation gap-1.5"
             >
               <BookTemplate className="size-3.5" />
@@ -270,7 +307,7 @@ function SizeGuidesListContent() {
             <Button
               size="sm"
               onClick={openCreate}
-              disabled={activeDomains.length === 0}
+              disabled={!canManageGuides || activeDomains.length === 0}
               className="min-h-10 sm:min-h-9 touch-manipulation gap-1.5"
             >
               <Plus className="size-4" />
@@ -294,9 +331,9 @@ function SizeGuidesListContent() {
       ) : null}
 
       {/* Filter and Search Bar */}
-      <PagePanel className="p-4 border-border space-y-3">
-        <div className="flex flex-col sm:flex-row sm:items-center gap-3">
-          <form onSubmit={submitSearch} className="flex flex-1 gap-2">
+      <PagePanel className="space-y-3 border-border p-4">
+        <div className="space-y-3">
+          <form onSubmit={submitSearch} className="flex w-full gap-2">
             <div className="relative flex-1">
               <Search className="absolute left-2.5 top-2.5 size-4 text-muted-foreground" />
               <Input
@@ -311,7 +348,7 @@ function SizeGuidesListContent() {
             </Button>
           </form>
 
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-5">
             <NativeSelect
               value={status}
               onChange={(e) => {
@@ -323,6 +360,51 @@ function SizeGuidesListContent() {
               <option value="ACTIVE">Active Guides</option>
               <option value="ARCHIVED">Archived Guides</option>
               <option value="ALL">All Statuses</option>
+            </NativeSelect>
+
+            <NativeSelect
+              value={kind}
+              onChange={(event) => {
+                setPage(1);
+                setKind(event.target.value as FitGuideKindDto | 'ALL');
+              }}
+              className="h-9 min-w-40 bg-card text-xs"
+              aria-label="Guide kind"
+            >
+              <option value="ALL">All guide types</option>
+              <option value="APPAREL_SIZE_CHART">Apparel charts</option>
+              <option value="FOOTWEAR_SIZE_CHART">Footwear charts</option>
+              <option value="WEARABLE_FIT_GUIDE">Wearable fit guides</option>
+              <option value="CUSTOM_FIT_GUIDE">Custom guides</option>
+            </NativeSelect>
+
+            <NativeSelect
+              value={publication}
+              onChange={(event) => {
+                setPage(1);
+                setPublication(event.target.value as typeof publication);
+              }}
+              className="h-9 min-w-40 bg-card text-xs"
+              aria-label="Publication state"
+            >
+              <option value="ALL">All publication states</option>
+              <option value="PUBLISHED">Published</option>
+              <option value="WORKING_CHANGES">Working changes</option>
+              <option value="DRAFT_ONLY">Draft only</option>
+            </NativeSelect>
+
+            <NativeSelect
+              value={sort}
+              onChange={(event) => {
+                setPage(1);
+                setSort(event.target.value as typeof sort);
+              }}
+              className="h-9 min-w-40 bg-card text-xs"
+              aria-label="Sort guides"
+            >
+              <option value="UPDATED_DESC">Recently updated</option>
+              <option value="USAGE_DESC">Most used</option>
+              <option value="NAME_ASC">Name</option>
             </NativeSelect>
 
             <NativeSelect
@@ -351,13 +433,26 @@ function SizeGuidesListContent() {
         <EmptyState
           icon={TableProperties}
           title="No size guides found"
-          description={search ? `No guides matched "${search}".` : 'Create your first measurement guide or start from a standard apparel template.'}
+          description={
+            search
+              ? `No guides matched "${search}".`
+              : 'Create your first measurement guide or start from a standard apparel template.'
+          }
           action={
             <div className="flex items-center gap-2">
-              <Button size="sm" variant="outline" onClick={() => setShowTemplateModal(true)}>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => setShowTemplateModal(true)}
+                disabled={!canManageGuides}
+              >
                 Choose Template
               </Button>
-              <Button size="sm" onClick={openCreate} disabled={activeDomains.length === 0}>
+              <Button
+                size="sm"
+                onClick={openCreate}
+                disabled={!canManageGuides || activeDomains.length === 0}
+              >
                 Create Custom Guide
               </Button>
             </div>
@@ -366,7 +461,7 @@ function SizeGuidesListContent() {
       ) : (
         <div className="space-y-4">
           {/* Desktop Table */}
-          <div className="hidden sm:block">
+          <div className="hidden xl:block">
             <PagePanel className="p-0 border-border overflow-hidden">
               <div className="overflow-x-auto">
                 <table className="w-full text-left text-xs">
@@ -400,8 +495,13 @@ function SizeGuidesListContent() {
                             ) : null}
                           </td>
                           <td className="px-4 py-3">
-                            <div className="font-medium text-foreground">{guide.sizingDomainName}</div>
+                            <div className="font-medium text-foreground">
+                              {guide.sizingDomainName}
+                            </div>
                             <div className="text-[11px] text-muted-foreground">
+                              <span>{guide.kind.replaceAll('_', ' ').toLowerCase()}</span>
+                              <span> · {guide.measurementBasis.toLowerCase()}</span>
+                              <span> · </span>
                               {guide.sizeSystemName ? (
                                 <span className="font-mono">{guide.sizeSystemName}</span>
                               ) : (
@@ -412,11 +512,19 @@ function SizeGuidesListContent() {
                           <td className="px-4 py-3">
                             <div className="flex items-center gap-1.5">
                               {guide.hasPublishedRevision ? (
-                                <Badge variant="secondary" className="bg-success-subtle text-success text-[10px] font-medium">
-                                  Published (v{guide.version})
+                                <Badge
+                                  variant="secondary"
+                                  className="bg-success-subtle text-success text-[10px] font-medium"
+                                >
+                                  {guide.hasWorkingRevision
+                                    ? 'Published · Working changes'
+                                    : 'Published'}
                                 </Badge>
                               ) : (
-                                <Badge variant="secondary" className="bg-warning-subtle text-warning text-[10px] font-medium">
+                                <Badge
+                                  variant="secondary"
+                                  className="bg-warning-subtle text-warning text-[10px] font-medium"
+                                >
                                   Draft Only
                                 </Badge>
                               )}
@@ -424,8 +532,12 @@ function SizeGuidesListContent() {
                             </div>
                           </td>
                           <td className="px-4 py-3 font-mono text-muted-foreground tabular-nums">
-                            <div>{guide.productCount} product{guide.productCount === 1 ? '' : 's'}</div>
-                            <div className="text-[10px]">{guide.categoryCount} categor{guide.categoryCount === 1 ? 'y' : 'ies'}</div>
+                            <div>
+                              {guide.productCount} product{guide.productCount === 1 ? '' : 's'}
+                            </div>
+                            <div className="text-[10px]">
+                              {guide.categoryCount} categor{guide.categoryCount === 1 ? 'y' : 'ies'}
+                            </div>
                           </td>
                           <td className="px-4 py-3 font-mono text-[11px] text-muted-foreground tabular-nums">
                             {new Date(guide.updatedAt).toLocaleDateString()}
@@ -438,13 +550,13 @@ function SizeGuidesListContent() {
                                 render={<Link href={`/sizing/guides/${guide.id}`} />}
                                 className="h-8 text-xs px-2.5"
                               >
-                                Open Studio
+                                Open Guide
                               </Button>
                               {guide.status === 'ACTIVE' ? (
                                 <Button
                                   variant="ghost"
                                   size="sm"
-                                  disabled={isBusy}
+                                  disabled={!canManageGuides || isBusy}
                                   onClick={() => void toggleGuide(guide)}
                                   className="size-8 p-0 text-muted-foreground hover:text-destructive"
                                   title="Archive guide"
@@ -455,7 +567,7 @@ function SizeGuidesListContent() {
                                 <Button
                                   variant="ghost"
                                   size="sm"
-                                  disabled={isBusy}
+                                  disabled={!canManageGuides || isBusy}
                                   onClick={() => void toggleGuide(guide)}
                                   className="size-8 p-0 text-success"
                                   title="Restore guide"
@@ -475,7 +587,7 @@ function SizeGuidesListContent() {
           </div>
 
           {/* Mobile Card Stack (< sm) */}
-          <div className="space-y-3 sm:hidden">
+          <div className="space-y-3 xl:hidden">
             {guides.map((guide) => (
               <PagePanel key={guide.id} className="p-4 border-border flex flex-col gap-3">
                 <div className="flex items-start justify-between gap-2">
@@ -496,11 +608,17 @@ function SizeGuidesListContent() {
                 <div className="flex items-center justify-between text-xs text-muted-foreground border-t border-border/40 pt-2.5">
                   <div className="flex items-center gap-2">
                     {guide.hasPublishedRevision ? (
-                      <Badge variant="secondary" className="bg-success-subtle text-success text-[10px]">
-                        Published v{guide.version}
+                      <Badge
+                        variant="secondary"
+                        className="bg-success-subtle text-success text-[10px]"
+                      >
+                        {guide.hasWorkingRevision ? 'Published · Changes' : 'Published'}
                       </Badge>
                     ) : (
-                      <Badge variant="secondary" className="bg-warning-subtle text-warning text-[10px]">
+                      <Badge
+                        variant="secondary"
+                        className="bg-warning-subtle text-warning text-[10px]"
+                      >
                         Draft
                       </Badge>
                     )}
@@ -514,7 +632,7 @@ function SizeGuidesListContent() {
                     render={<Link href={`/sizing/guides/${guide.id}`} />}
                     className="min-h-9 text-xs px-3"
                   >
-                    Open Studio
+                    Open Guide
                   </Button>
                 </div>
               </PagePanel>
@@ -524,7 +642,8 @@ function SizeGuidesListContent() {
           {/* Pagination */}
           <div className="flex items-center justify-between border-t border-border pt-4 text-xs text-muted-foreground">
             <span>
-              Page {pagination.page} of {Math.max(pagination.totalPages, 1)} · {pagination.totalItems} total guides
+              Page {pagination.page} of {Math.max(pagination.totalPages, 1)} ·{' '}
+              {pagination.totalItems} total guides
             </span>
             <div className="flex items-center gap-2">
               <Button
@@ -540,7 +659,9 @@ function SizeGuidesListContent() {
               <Button
                 variant="outline"
                 size="sm"
-                disabled={pagination.totalPages === 0 || pagination.page >= pagination.totalPages || loading}
+                disabled={
+                  pagination.totalPages === 0 || pagination.page >= pagination.totalPages || loading
+                }
                 onClick={() => setPage((p) => p + 1)}
                 className="min-h-9 sm:min-h-8 text-xs gap-1"
               >
@@ -558,7 +679,8 @@ function SizeGuidesListContent() {
           <DialogHeader>
             <DialogTitle>Create Size Guide</DialogTitle>
             <DialogDescription className="text-xs">
-              A blank chart draft will be created. You can define size rows and measurements in the studio.
+              A blank chart draft will be created. You can define size rows and measurements in the
+              studio.
             </DialogDescription>
           </DialogHeader>
           <form onSubmit={handleCreateGuide} className="space-y-4 pt-2">
@@ -580,17 +702,37 @@ function SizeGuidesListContent() {
             </label>
 
             <label className="block text-xs font-medium text-foreground">
+              Guide type
+              <NativeSelect
+                value={createKind}
+                onChange={(event) => setCreateKind(event.target.value as FitGuideKindDto)}
+                className="mt-1 h-9 bg-card text-xs"
+              >
+                <option value="APPAREL_SIZE_CHART">Apparel size chart</option>
+                <option value="FOOTWEAR_SIZE_CHART">Footwear size chart</option>
+                <option value="WEARABLE_FIT_GUIDE">Wearable fit guide</option>
+                <option value="CUSTOM_FIT_GUIDE">Custom fit guide</option>
+              </NativeSelect>
+            </label>
+
+            <label className="block text-xs font-medium text-foreground">
               Sizing Domain
               <NativeSelect
                 value={createDomainId}
                 onChange={(e) => {
                   setCreateDomainId(e.target.value);
                   setCreateSystemId('');
+                  setCreateMeasurementBasis(
+                    activeDomains.find((domain) => domain.id === e.target.value)?.subjectType ??
+                      'PRODUCT',
+                  );
                 }}
                 required
                 className="mt-1 h-9 text-xs bg-card"
               >
-                <option value="" disabled>Choose a sizing domain</option>
+                <option value="" disabled>
+                  Choose a sizing domain
+                </option>
                 {activeDomains.map((d) => (
                   <option key={d.id} value={d.id}>
                     {d.name} ({d.subjectType})
@@ -600,7 +742,26 @@ function SizeGuidesListContent() {
             </label>
 
             <label className="block text-xs font-medium text-foreground">
-              Canonical Size System <span className="text-muted-foreground font-normal">(optional)</span>
+              Measurements describe
+              <NativeSelect
+                value={createMeasurementBasis}
+                onChange={(event) =>
+                  setCreateMeasurementBasis(event.target.value as SizingSubjectTypeDto)
+                }
+                className="mt-1 h-9 bg-card text-xs"
+              >
+                <option value="BODY">The customer&apos;s body</option>
+                <option value="GARMENT">The physical garment</option>
+                <option value="PRODUCT">The wearable Product</option>
+              </NativeSelect>
+              <span className="mt-1 block text-[11px] text-muted-foreground">
+                This wording is shown to customers and is independent from the technical domain.
+              </span>
+            </label>
+
+            <label className="block text-xs font-medium text-foreground">
+              Canonical Size System{' '}
+              <span className="text-muted-foreground font-normal">(optional)</span>
               <NativeSelect
                 value={createSystemId}
                 onChange={(e) => setCreateSystemId(e.target.value)}
@@ -630,12 +791,25 @@ function SizeGuidesListContent() {
             </label>
 
             <div className="flex justify-end gap-2 pt-2 border-t border-border">
-              <Button type="button" variant="outline" size="sm" onClick={() => setShowCreateModal(false)}>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setShowCreateModal(false)}
+              >
                 Cancel
               </Button>
-              <Button type="submit" size="sm" disabled={createBusy || !createName.trim() || !createDomainId}>
-                {createBusy ? <Loader2 className="size-3.5 animate-spin" /> : <Plus className="size-3.5" />}
-                <span>Create & Open Studio</span>
+              <Button
+                type="submit"
+                size="sm"
+                disabled={createBusy || !createName.trim() || !createDomainId}
+              >
+                {createBusy ? (
+                  <Loader2 className="size-3.5 animate-spin" />
+                ) : (
+                  <Plus className="size-3.5" />
+                )}
+                <span>Create & Open Guide</span>
               </Button>
             </div>
           </form>
@@ -651,7 +825,8 @@ function SizeGuidesListContent() {
               <span>Standard Apparel Sizing Presets</span>
             </DialogTitle>
             <DialogDescription className="text-xs">
-              Instantly create a complete size chart pre-populated with standard sizes and measurement dimensions.
+              Start from useful row and column suggestions. Presets never invent Product or supplier
+              measurements.
             </DialogDescription>
           </DialogHeader>
 
@@ -672,7 +847,8 @@ function SizeGuidesListContent() {
                   </div>
                   <h4 className="mt-2 text-sm font-semibold text-foreground">{preset.name}</h4>
                   <p className="mt-1 text-xs text-muted-foreground">
-                    Includes {preset.standardSizes.length} standard sizes ({preset.standardSizes.map((s) => s.label).join(', ')})
+                    Includes {preset.standardSizes.length} standard sizes (
+                    {preset.standardSizes.map((s) => s.label).join(', ')})
                   </p>
                   <div className="mt-2 flex flex-wrap gap-1">
                     {preset.standardMeasurements.map((m) => (
@@ -692,7 +868,11 @@ function SizeGuidesListContent() {
                   onClick={() => void handleCreateFromPreset(preset.id)}
                   className="w-full text-xs min-h-9 gap-1"
                 >
-                  {templateBusy ? <Loader2 className="size-3.5 animate-spin" /> : <Plus className="size-3.5" />}
+                  {templateBusy ? (
+                    <Loader2 className="size-3.5 animate-spin" />
+                  ) : (
+                    <Plus className="size-3.5" />
+                  )}
                   <span>Generate from Preset</span>
                 </Button>
               </div>

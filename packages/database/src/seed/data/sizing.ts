@@ -1,4 +1,4 @@
-import type { MeasurementUnit } from '../../sizing.js';
+import type { FitGuideKind, MeasurementUnit } from '../../sizing.js';
 
 export interface SizingDomainSeedItem {
   readonly code: string;
@@ -52,6 +52,8 @@ export interface SizeGuideSeedItem {
   readonly description?: string;
   readonly domainCode: string;
   readonly systemCode?: string;
+  readonly kind: FitGuideKind;
+  readonly measurementBasis: 'BODY' | 'GARMENT' | 'PRODUCT';
   readonly publishIfValid?: boolean;
   readonly rows?: readonly SizeGuideRowSeedItem[];
 }
@@ -346,6 +348,8 @@ export const sizingSeedData: SizingSeedData = {
       description: "Size guide for women's tops, shirts, and tunics",
       domainCode: 'apparel',
       systemCode: 'womens-apparel-alpha',
+      kind: 'APPAREL_SIZE_CHART',
+      measurementBasis: 'GARMENT',
       publishIfValid: false,
       rows: [{ sizeCode: 'one-size', displayLabel: 'One Size', position: 0 }],
     },
@@ -354,6 +358,8 @@ export const sizingSeedData: SizingSeedData = {
       description: "Size guide for women's skirts, pants, and shorts",
       domainCode: 'apparel',
       systemCode: 'womens-apparel-alpha',
+      kind: 'APPAREL_SIZE_CHART',
+      measurementBasis: 'GARMENT',
       publishIfValid: false,
       rows: [{ sizeCode: 'm', displayLabel: 'M', position: 0 }],
     },
@@ -362,6 +368,8 @@ export const sizingSeedData: SizingSeedData = {
       description: "Size guide for women's dresses and multi-piece matching sets",
       domainCode: 'apparel',
       systemCode: 'womens-apparel-alpha',
+      kind: 'APPAREL_SIZE_CHART',
+      measurementBasis: 'GARMENT',
       publishIfValid: false,
       rows: [
         { sizeCode: 'm', displayLabel: 'M', position: 0 },
@@ -373,6 +381,8 @@ export const sizingSeedData: SizingSeedData = {
       description: 'Size guide for stretchwear, leggings, and tights',
       domainCode: 'apparel',
       systemCode: 'womens-stretchwear',
+      kind: 'APPAREL_SIZE_CHART',
+      measurementBasis: 'GARMENT',
       publishIfValid: false,
       rows: [{ sizeCode: 'm-l', displayLabel: 'M/L', position: 0 }],
     },
@@ -381,6 +391,8 @@ export const sizingSeedData: SizingSeedData = {
       description: "Size guide for women's sun hats, straw hats, and headwear",
       domainCode: 'headwear',
       systemCode: 'womens-headwear',
+      kind: 'WEARABLE_FIT_GUIDE',
+      measurementBasis: 'BODY',
       publishIfValid: true,
       rows: [
         {
@@ -403,6 +415,8 @@ export const sizingSeedData: SizingSeedData = {
       description: 'Size and length guide for waist chains, belts, and body jewelry',
       domainCode: 'accessories',
       systemCode: 'length-based-accessories',
+      kind: 'WEARABLE_FIT_GUIDE',
+      measurementBasis: 'PRODUCT',
       publishIfValid: true,
       rows: [
         {

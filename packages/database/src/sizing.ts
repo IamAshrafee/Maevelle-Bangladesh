@@ -1,3 +1,5 @@
+import { createHash } from 'node:crypto';
+
 import { sql, type Kysely } from 'kysely';
 
 import type { DatabaseSchema } from './index.js';
@@ -26,8 +28,19 @@ export class SizingDomainError extends Error {
   }
 }
 
+function isUniqueViolation(error: unknown): boolean {
+  return (
+    typeof error === 'object' &&
+    error !== null &&
+    'code' in error &&
+    (error as { code: unknown }).code === '23505'
+  );
+}
+
 type SubjectType = 'BODY' | 'GARMENT' | 'PRODUCT';
 export type MeasurementUnit = 'cm' | 'inch' | 'kg';
+export type FitGuideKind =
+  'APPAREL_SIZE_CHART' | 'FOOTWEAR_SIZE_CHART' | 'WEARABLE_FIT_GUIDE' | 'CUSTOM_FIT_GUIDE';
 
 function withSizingTransaction<T>(
   db: Kysely<DatabaseSchema>,
@@ -255,10 +268,7 @@ async function lockDraftRevision(
   }
 
   if (row.guide_status !== 'ACTIVE') {
-    throw new SizingDomainError(
-      'ARCHIVED',
-      'The size guide is archived and cannot be edited.',
-    );
+    throw new SizingDomainError('ARCHIVED', 'The size guide is archived and cannot be edited.');
   }
 
   if (row.revision_status !== 'DRAFT') {
@@ -356,10 +366,7 @@ async function assertSizeDefinitionAvailableForGuide(
 
   const row = definition.rows[0];
   if (!row) {
-    throw new SizingDomainError(
-      'NOT_FOUND',
-      'Size definition was not found or is archived.',
-    );
+    throw new SizingDomainError('NOT_FOUND', 'Size definition was not found or is archived.');
   }
 
   if (row.sizing_domain_id !== input.guideDomainId) {
@@ -426,10 +433,7 @@ async function assertRowBelongsToRevision(
   `.execute(db);
 
   if (!row.rows[0]) {
-    throw new SizingDomainError(
-      'NOT_FOUND',
-      'Size guide row was not found in this revision.',
-    );
+    throw new SizingDomainError('NOT_FOUND', 'Size guide row was not found in this revision.');
   }
 }
 
@@ -461,6 +465,31 @@ async function setMeasurementInternal(
   });
 
   const valueType = validateMeasurementPayload(input);
+
+  await sql`
+    insert into sizing.size_guide_revision_columns (
+      organization_id,
+      revision_id,
+      measurement_definition_id,
+      display_name,
+      position
+    )
+    select
+      ${input.organizationId},
+      ${input.revisionId},
+      definition.id,
+      definition.name,
+      coalesce((
+        select max(existing.position) + 1
+        from sizing.size_guide_revision_columns existing
+        where existing.revision_id = ${input.revisionId}
+          and existing.organization_id = ${input.organizationId}
+      ), 0)
+    from sizing.measurement_definitions definition
+    where definition.id = ${input.measurementDefinitionId}
+      and definition.organization_id = ${input.organizationId}
+    on conflict (revision_id, measurement_definition_id) do nothing
+  `.execute(db);
 
   await sql`
     insert into sizing.size_guide_measurements (
@@ -799,12 +828,14 @@ export async function createSizeGuide(
     sizingDomainId: string;
     sizeSystemId?: string;
     description?: string;
+    kind?: FitGuideKind;
+    measurementBasis?: SubjectType;
     actorId: string;
   },
 ): Promise<{ id: string; revisionId: string }> {
   return withSizingTransaction(db, async (transaction) => {
-    const domain = await sql<{ id: string }>`
-      select id::text
+    const domain = await sql<{ id: string; subject_type: SubjectType }>`
+      select id::text, subject_type
       from sizing.sizing_domains
       where id = ${input.sizingDomainId}
         and organization_id = ${input.organizationId}
@@ -829,6 +860,8 @@ export async function createSizeGuide(
         organization_id,
         name,
         description,
+        kind,
+        measurement_basis,
         sizing_domain_id,
         size_system_id
       )
@@ -836,6 +869,8 @@ export async function createSizeGuide(
         ${input.organizationId},
         ${input.name},
         ${input.description ?? null},
+        ${input.kind ?? 'CUSTOM_FIT_GUIDE'},
+        ${input.measurementBasis ?? domain.rows[0].subject_type},
         ${input.sizingDomainId},
         ${input.sizeSystemId ?? null}
       )
@@ -880,6 +915,8 @@ export async function createSizeGuide(
       targetId: id,
       metadata: {
         name: input.name,
+        kind: input.kind ?? 'CUSTOM_FIT_GUIDE',
+        measurementBasis: input.measurementBasis ?? domain.rows[0].subject_type,
         sizingDomainId: input.sizingDomainId,
         sizeSystemId: input.sizeSystemId ?? null,
         initialRevisionId: revisionId,
@@ -995,6 +1032,17 @@ export async function createSizeGuideRevision(
     }
 
     if (source) {
+      await sql`
+        insert into sizing.size_guide_revision_columns (
+          organization_id, revision_id, measurement_definition_id, display_name, position
+        )
+        select
+          ${input.organizationId}, ${revisionId}, measurement_definition_id, display_name, position
+        from sizing.size_guide_revision_columns
+        where revision_id = ${source.id}
+          and organization_id = ${input.organizationId}
+      `.execute(transaction);
+
       const sourceRows = await sql<{
         id: string;
         display_label: string;
@@ -1088,6 +1136,153 @@ export async function createSizeGuideRevision(
 
 // ─── Revision rows + measurement matrix ───────────────────────────────────────
 
+export async function addSizeGuideColumn(
+  db: Kysely<DatabaseSchema>,
+  input: {
+    organizationId: string;
+    revisionId: string;
+    measurementDefinitionId: string;
+    displayName?: string | undefined;
+    expectedVersion: number;
+    actorId: string;
+  },
+): Promise<void> {
+  await withSizingTransaction(db, async (transaction) => {
+    const revision = await lockDraftRevision(
+      transaction,
+      input.organizationId,
+      input.revisionId,
+      input.expectedVersion,
+    );
+    await assertMeasurementDefinitionAvailableForGuide(transaction, {
+      organizationId: input.organizationId,
+      measurementDefinitionId: input.measurementDefinitionId,
+      guideDomainId: revision.guideDomainId,
+    });
+    const definition = await sql<{ name: string }>`
+      select name
+      from sizing.measurement_definitions
+      where organization_id = ${input.organizationId}
+        and id = ${input.measurementDefinitionId}::uuid
+    `.execute(transaction);
+    try {
+      await sql`
+        insert into sizing.size_guide_revision_columns (
+          organization_id, revision_id, measurement_definition_id, display_name, position
+        )
+        values (
+          ${input.organizationId}, ${input.revisionId}, ${input.measurementDefinitionId},
+          ${input.displayName?.trim() || definition.rows[0]!.name},
+          (select coalesce(max(position) + 1, 0)
+           from sizing.size_guide_revision_columns
+           where organization_id = ${input.organizationId} and revision_id = ${input.revisionId})
+        )
+      `.execute(transaction);
+    } catch (error) {
+      if (isUniqueViolation(error)) {
+        throw new SizingDomainError('CONFLICT', 'This measurement column is already in the guide.');
+      }
+      throw error;
+    }
+    await bumpRevisionVersion(transaction, input.organizationId, input.revisionId);
+    await recordSizingAudit(transaction, {
+      organizationId: input.organizationId,
+      actorId: input.actorId,
+      action: 'COLUMN_ADDED',
+      targetType: 'SIZE_GUIDE_REVISION',
+      targetId: input.revisionId,
+      metadata: { measurementDefinitionId: input.measurementDefinitionId },
+    });
+  });
+}
+
+export async function renameSizeGuideColumn(
+  db: Kysely<DatabaseSchema>,
+  input: {
+    organizationId: string;
+    revisionId: string;
+    columnId: string;
+    displayName: string;
+    expectedVersion: number;
+    actorId: string;
+  },
+): Promise<void> {
+  await withSizingTransaction(db, async (transaction) => {
+    await lockDraftRevision(
+      transaction,
+      input.organizationId,
+      input.revisionId,
+      input.expectedVersion,
+    );
+    const changed = await sql`
+      update sizing.size_guide_revision_columns
+      set display_name = ${input.displayName.trim()}
+      where organization_id = ${input.organizationId}
+        and revision_id = ${input.revisionId}
+        and id = ${input.columnId}::uuid
+    `.execute(transaction);
+    if (Number(changed.numAffectedRows) !== 1) {
+      throw new SizingDomainError('NOT_FOUND', 'Guide measurement column was not found.');
+    }
+    await bumpRevisionVersion(transaction, input.organizationId, input.revisionId);
+  });
+}
+
+export async function removeSizeGuideColumn(
+  db: Kysely<DatabaseSchema>,
+  input: {
+    organizationId: string;
+    revisionId: string;
+    columnId: string;
+    expectedVersion: number;
+    actorId: string;
+  },
+): Promise<void> {
+  await withSizingTransaction(db, async (transaction) => {
+    await lockDraftRevision(
+      transaction,
+      input.organizationId,
+      input.revisionId,
+      input.expectedVersion,
+    );
+    const column = await sql<{ measurement_definition_id: string }>`
+      select measurement_definition_id::text
+      from sizing.size_guide_revision_columns
+      where organization_id = ${input.organizationId}
+        and revision_id = ${input.revisionId}
+        and id = ${input.columnId}::uuid
+      for update
+    `.execute(transaction);
+    if (!column.rows[0]) {
+      throw new SizingDomainError('NOT_FOUND', 'Guide measurement column was not found.');
+    }
+    await sql`
+      delete from sizing.size_guide_measurements measurement
+      using sizing.size_guide_rows row
+      where measurement.organization_id = ${input.organizationId}
+        and row.organization_id = measurement.organization_id
+        and row.id = measurement.row_id
+        and row.revision_id = ${input.revisionId}
+        and measurement.measurement_definition_id = ${column.rows[0].measurement_definition_id}::uuid
+    `.execute(transaction);
+    await sql`
+      delete from sizing.size_guide_revision_columns
+      where organization_id = ${input.organizationId}
+        and revision_id = ${input.revisionId}
+        and id = ${input.columnId}::uuid
+    `.execute(transaction);
+    await bumpRevisionVersion(transaction, input.organizationId, input.revisionId);
+    await recordSizingAudit(transaction, {
+      organizationId: input.organizationId,
+      actorId: input.actorId,
+      action: 'COLUMN_REMOVED',
+      targetType: 'SIZE_GUIDE_REVISION',
+      targetId: input.revisionId,
+      metadata: { columnId: input.columnId },
+    });
+  });
+}
+
 export async function addSizeGuideRow(
   db: Kysely<DatabaseSchema>,
   input: {
@@ -1174,11 +1369,7 @@ export async function addSizeGuideRow(
       throw new Error('Size guide row creation did not return an id.');
     }
 
-    const version = await bumpRevisionVersion(
-      transaction,
-      input.organizationId,
-      input.revisionId,
-    );
+    const version = await bumpRevisionVersion(transaction, input.organizationId, input.revisionId);
 
     await recordSizingAudit(transaction, {
       organizationId: input.organizationId,
@@ -1298,11 +1489,7 @@ export async function updateSizeGuideRow(
       throw new SizingDomainError('NOT_FOUND', 'Size guide row was not found.');
     }
 
-    const version = await bumpRevisionVersion(
-      transaction,
-      input.organizationId,
-      input.revisionId,
-    );
+    const version = await bumpRevisionVersion(transaction, input.organizationId, input.revisionId);
 
     await recordSizingAudit(transaction, {
       organizationId: input.organizationId,
@@ -1388,11 +1575,7 @@ export async function reorderSizeGuideRows(
       `.execute(transaction);
     }
 
-    const version = await bumpRevisionVersion(
-      transaction,
-      input.organizationId,
-      input.revisionId,
-    );
+    const version = await bumpRevisionVersion(transaction, input.organizationId, input.revisionId);
 
     await recordSizingAudit(transaction, {
       organizationId: input.organizationId,
@@ -1434,17 +1617,10 @@ export async function removeSizeGuideRow(
     `.execute(transaction);
 
     if (Number(deleted.numAffectedRows) !== 1) {
-      throw new SizingDomainError(
-        'NOT_FOUND',
-        'Size guide row was not found in this revision.',
-      );
+      throw new SizingDomainError('NOT_FOUND', 'Size guide row was not found in this revision.');
     }
 
-    const version = await bumpRevisionVersion(
-      transaction,
-      input.organizationId,
-      input.revisionId,
-    );
+    const version = await bumpRevisionVersion(transaction, input.organizationId, input.revisionId);
 
     await recordSizingAudit(transaction, {
       organizationId: input.organizationId,
@@ -1497,11 +1673,7 @@ export async function setSizeGuideMeasurement(
       isApproximate: input.isApproximate,
     });
 
-    const version = await bumpRevisionVersion(
-      transaction,
-      input.organizationId,
-      input.revisionId,
-    );
+    const version = await bumpRevisionVersion(transaction, input.organizationId, input.revisionId);
 
     await recordSizingAudit(transaction, {
       organizationId: input.organizationId,
@@ -1547,11 +1719,7 @@ export async function removeSizeGuideMeasurement(
       requireExisting: true,
     });
 
-    const version = await bumpRevisionVersion(
-      transaction,
-      input.organizationId,
-      input.revisionId,
-    );
+    const version = await bumpRevisionVersion(transaction, input.organizationId, input.revisionId);
 
     await recordSizingAudit(transaction, {
       organizationId: input.organizationId,
@@ -1610,9 +1778,7 @@ export async function setSizeGuideMeasurementsBulk(
       input.expectedVersion,
     );
 
-    const keys = input.changes.map(
-      (change) => `${change.rowId}:${change.measurementDefinitionId}`,
-    );
+    const keys = input.changes.map((change) => `${change.rowId}:${change.measurementDefinitionId}`);
     if (new Set(keys).size !== keys.length) {
       throw new SizingDomainError(
         'VALIDATION_ERROR',
@@ -1639,18 +1805,12 @@ export async function setSizeGuideMeasurementsBulk(
         guideDomainId: revision.guideDomainId,
         measurementDefinitionId: change.measurementDefinitionId,
         unitCode: change.unitCode,
-        ...('exact' in change
-          ? { exact: change.exact }
-          : { min: change.min, max: change.max }),
+        ...('exact' in change ? { exact: change.exact } : { min: change.min, max: change.max }),
         isApproximate: change.isApproximate,
       });
     }
 
-    const version = await bumpRevisionVersion(
-      transaction,
-      input.organizationId,
-      input.revisionId,
-    );
+    const version = await bumpRevisionVersion(transaction, input.organizationId, input.revisionId);
 
     await recordSizingAudit(transaction, {
       organizationId: input.organizationId,
@@ -1667,6 +1827,278 @@ export async function setSizeGuideMeasurementsBulk(
 }
 
 // ─── Publish ───────────────────────────────────────────────────────────────────
+
+type PublishPreviewToken = {
+  guideId: string;
+  guideVersion: number;
+  revisionId: string;
+  revisionVersion: number;
+  assignmentFingerprint: string;
+};
+
+export type SizeGuidePublishPreview = {
+  readonly previewToken: string;
+  readonly guide: { readonly id: string; readonly name: string; readonly version: number };
+  readonly workingRevision: {
+    readonly id: string;
+    readonly revisionNumber: number;
+    readonly version: number;
+  };
+  readonly publishedRevisionNumber: number | null;
+  readonly affectedProducts: number;
+  readonly affectedCategories: number;
+  readonly reconciliationConflicts: number;
+  readonly changes: {
+    readonly addedRows: number;
+    readonly removedRows: number;
+    readonly changedRows: number;
+    readonly guidanceChanged: boolean;
+  };
+};
+
+function encodePublishPreviewToken(token: PublishPreviewToken): string {
+  return Buffer.from(JSON.stringify(token), 'utf8').toString('base64url');
+}
+
+function decodePublishPreviewToken(value: string): PublishPreviewToken {
+  try {
+    const parsed = JSON.parse(
+      Buffer.from(value, 'base64url').toString('utf8'),
+    ) as Partial<PublishPreviewToken>;
+    if (
+      typeof parsed.guideId !== 'string' ||
+      typeof parsed.guideVersion !== 'number' ||
+      typeof parsed.revisionId !== 'string' ||
+      typeof parsed.revisionVersion !== 'number' ||
+      typeof parsed.assignmentFingerprint !== 'string'
+    ) {
+      throw new Error('Invalid token payload.');
+    }
+    return parsed as PublishPreviewToken;
+  } catch {
+    throw new SizingDomainError(
+      'CONFLICT',
+      'This publication preview is invalid or stale. Review the impact again before publishing.',
+    );
+  }
+}
+
+export async function previewSizeGuidePublication(
+  db: Kysely<DatabaseSchema>,
+  input: { organizationId: string; sizeGuideId: string; revisionId: string },
+): Promise<SizeGuidePublishPreview> {
+  const guideResult = await sql<{
+    id: string;
+    name: string;
+    version: string;
+    current_published_revision_id: string | null;
+  }>`
+    select id::text, name, version::text, current_published_revision_id::text
+    from sizing.size_guides
+    where organization_id = ${input.organizationId}
+      and id = ${input.sizeGuideId}::uuid
+      and status = 'ACTIVE'
+  `.execute(db);
+  const guide = guideResult.rows[0];
+  if (!guide) throw new SizingDomainError('NOT_FOUND', 'Active size guide was not found.');
+
+  const revisionResult = await sql<{
+    id: string;
+    revision_number: string;
+    version: string;
+    instructions: string | null;
+    fit_notes: string | null;
+  }>`
+    select id::text, revision_number::text, version::text, instructions, fit_notes
+    from sizing.size_guide_revisions
+    where organization_id = ${input.organizationId}
+      and id = ${input.revisionId}::uuid
+      and size_guide_id = ${input.sizeGuideId}::uuid
+      and status = 'DRAFT'
+  `.execute(db);
+  const revision = revisionResult.rows[0];
+  if (!revision) {
+    throw new SizingDomainError(
+      'INVALID_STATE',
+      'Only working changes can be reviewed for publication.',
+    );
+  }
+
+  const publishedResult = guide.current_published_revision_id
+    ? await sql<{
+        revision_number: string;
+        instructions: string | null;
+        fit_notes: string | null;
+      }>`
+        select revision_number::text, instructions, fit_notes
+        from sizing.size_guide_revisions
+        where organization_id = ${input.organizationId}
+          and id = ${guide.current_published_revision_id}::uuid
+          and status = 'PUBLISHED'
+      `.execute(db)
+    : { rows: [] };
+  const published = publishedResult.rows[0] ?? null;
+
+  const rowSignatures = await sql<{
+    revision_id: string;
+    row_key: string;
+    signature: string;
+  }>`
+    select row.revision_id::text,
+      coalesce(row.size_definition_id::text, lower(trim(row.display_label))) as row_key,
+      concat_ws('|', row.display_label, row.position::text,
+        coalesce(row.size_definition_id::text, ''),
+        coalesce(string_agg(concat_ws(':', measurement.measurement_definition_id::text,
+          measurement.unit_code, coalesce(measurement.value_exact::text, ''),
+          coalesce(measurement.value_min::text, ''), coalesce(measurement.value_max::text, ''),
+          measurement.is_approximate::text), ',' order by measurement.measurement_definition_id), '')) as signature
+    from sizing.size_guide_rows row
+    left join sizing.size_guide_measurements measurement
+      on measurement.organization_id = row.organization_id
+     and measurement.row_id = row.id
+    where row.organization_id = ${input.organizationId}
+      and row.revision_id in (${input.revisionId}::uuid, ${guide.current_published_revision_id}::uuid)
+    group by row.id, row.revision_id, row.display_label, row.position, row.size_definition_id
+  `.execute(db);
+  const workingRows = new Map(
+    rowSignatures.rows
+      .filter((row) => row.revision_id === input.revisionId)
+      .map((row) => [row.row_key, row.signature]),
+  );
+  const publishedRows = new Map(
+    rowSignatures.rows
+      .filter((row) => row.revision_id === guide.current_published_revision_id)
+      .map((row) => [row.row_key, row.signature]),
+  );
+  const addedRows = [...workingRows.keys()].filter((key) => !publishedRows.has(key)).length;
+  const removedRows = [...publishedRows.keys()].filter((key) => !workingRows.has(key)).length;
+  const changedRows = [...workingRows].filter(
+    ([key, signature]) => publishedRows.has(key) && publishedRows.get(key) !== signature,
+  ).length;
+
+  const impact = await sql<{
+    affected_products: string;
+    affected_categories: string;
+    reconciliation_conflicts: string;
+    assignment_fingerprint: string;
+  }>`
+    with category_targets as (
+      select product.id as product_id
+      from catalog.categories category
+      join catalog.products product
+        on product.organization_id = category.organization_id
+       and product.primary_category_id = category.id
+       and product.status <> 'ARCHIVED'
+      left join sizing.product_size_configurations configuration
+        on configuration.organization_id = product.organization_id
+       and configuration.product_id = product.id
+       and configuration.status = 'ACTIVE'
+      where category.organization_id = ${input.organizationId}
+        and category.default_size_guide_id = ${input.sizeGuideId}::uuid
+        and category.status <> 'ARCHIVED'
+        and coalesce(configuration.guide_outcome, 'INHERIT') = 'INHERIT'
+    ), direct_targets as (
+      select product_id
+      from sizing.product_size_configurations
+      where organization_id = ${input.organizationId}
+        and size_guide_id = ${input.sizeGuideId}::uuid
+        and guide_outcome = 'DIRECT'
+        and status = 'ACTIVE'
+    ), targets as (
+      select product_id from category_targets union select product_id from direct_targets
+    ), working_labels as (
+      select lower(trim(display_label)) as label
+      from sizing.size_guide_rows
+      where organization_id = ${input.organizationId}
+        and revision_id = ${input.revisionId}::uuid
+    ), product_sizes as (
+      select distinct target.product_id, lower(trim(value.display_value)) as label
+      from targets target
+      join catalog.product_option_axes axis
+        on axis.organization_id = ${input.organizationId}
+       and axis.product_id = target.product_id
+       and axis.status = 'ACTIVE'
+       and lower(axis.code) = 'size'
+      join catalog.product_option_values value
+        on value.organization_id = axis.organization_id
+       and value.option_axis_id = axis.id
+       and value.status = 'ACTIVE'
+    )
+    select
+      (select count(*)::text from targets) as affected_products,
+      (select count(*)::text from catalog.categories
+        where organization_id = ${input.organizationId}
+          and default_size_guide_id = ${input.sizeGuideId}::uuid
+          and status <> 'ARCHIVED') as affected_categories,
+      (select count(*)::text from product_sizes size
+        where not exists (select 1 from working_labels row where row.label = size.label)) as reconciliation_conflicts,
+      md5(concat_ws('|',
+        coalesce((select string_agg(product_id::text, ',' order by product_id::text) from targets), ''),
+        coalesce((select string_agg(id::text || ':' || version::text, ',' order by id::text)
+          from catalog.categories where organization_id = ${input.organizationId}
+            and default_size_guide_id = ${input.sizeGuideId}::uuid and status <> 'ARCHIVED'), '')
+      )) as assignment_fingerprint
+  `.execute(db);
+  const impactRow = impact.rows[0]!;
+  const guideVersion = numberFromDatabase(guide.version);
+  const revisionVersion = numberFromDatabase(revision.version);
+
+  return {
+    previewToken: encodePublishPreviewToken({
+      guideId: guide.id,
+      guideVersion,
+      revisionId: revision.id,
+      revisionVersion,
+      assignmentFingerprint: impactRow.assignment_fingerprint,
+    }),
+    guide: { id: guide.id, name: guide.name, version: guideVersion },
+    workingRevision: {
+      id: revision.id,
+      revisionNumber: numberFromDatabase(revision.revision_number),
+      version: revisionVersion,
+    },
+    publishedRevisionNumber: published ? numberFromDatabase(published.revision_number) : null,
+    affectedProducts: numberFromDatabase(impactRow.affected_products),
+    affectedCategories: numberFromDatabase(impactRow.affected_categories),
+    reconciliationConflicts: numberFromDatabase(impactRow.reconciliation_conflicts),
+    changes: {
+      addedRows,
+      removedRows,
+      changedRows,
+      guidanceChanged:
+        !published ||
+        published.instructions !== revision.instructions ||
+        published.fit_notes !== revision.fit_notes,
+    },
+  };
+}
+
+export async function publishReviewedSizeGuideRevision(
+  db: Kysely<DatabaseSchema>,
+  input: { organizationId: string; actorId: string; previewToken: string },
+): Promise<void> {
+  const token = decodePublishPreviewToken(input.previewToken);
+  await withSizingTransaction(db, async (transaction) => {
+    const refreshed = await previewSizeGuidePublication(transaction, {
+      organizationId: input.organizationId,
+      sizeGuideId: token.guideId,
+      revisionId: token.revisionId,
+    });
+    if (refreshed.previewToken !== input.previewToken) {
+      throw new SizingDomainError(
+        'CONFLICT',
+        'The guide, working changes, or assignments changed after this preview. Review the refreshed impact before publishing.',
+      );
+    }
+    await publishSizeGuideRevision(transaction, {
+      organizationId: input.organizationId,
+      sizeGuideId: token.guideId,
+      revisionId: token.revisionId,
+      expectedVersion: token.revisionVersion,
+      actorId: input.actorId,
+    });
+  });
+}
 
 export async function publishSizeGuideRevision(
   db: Kysely<DatabaseSchema>,
@@ -1693,11 +2125,7 @@ export async function publishSizeGuideRevision(
       );
     }
 
-    const guide = await lockActiveGuide(
-      transaction,
-      input.organizationId,
-      input.sizeGuideId,
-    );
+    const guide = await lockActiveGuide(transaction, input.organizationId, input.sizeGuideId);
 
     const rows = await sql<{
       id: string;
@@ -1722,6 +2150,35 @@ export async function publishSizeGuideRevision(
       throw new SizingDomainError(
         'VALIDATION_ERROR',
         'A size guide must have at least one size row before it can be published.',
+      );
+    }
+
+    const columnCoverage = await sql<{ column_count: string; missing_cell_count: string }>`
+      select
+        count(distinct guide_column.id)::text as column_count,
+        count(*) filter (where measurement.id is null)::text as missing_cell_count
+      from sizing.size_guide_revision_columns guide_column
+      cross join sizing.size_guide_rows row
+      left join sizing.size_guide_measurements measurement
+        on measurement.organization_id = guide_column.organization_id
+       and measurement.row_id = row.id
+       and measurement.measurement_definition_id = guide_column.measurement_definition_id
+      where guide_column.organization_id = ${input.organizationId}
+        and guide_column.revision_id = ${input.revisionId}
+        and row.organization_id = guide_column.organization_id
+        and row.revision_id = guide_column.revision_id
+    `.execute(transaction);
+    const coverage = columnCoverage.rows[0];
+    if (Number(coverage?.column_count ?? 0) === 0) {
+      throw new SizingDomainError(
+        'VALIDATION_ERROR',
+        'Add at least one measurement column before publishing this guide.',
+      );
+    }
+    if (Number(coverage?.missing_cell_count ?? 0) > 0) {
+      throw new SizingDomainError(
+        'VALIDATION_ERROR',
+        'Complete every row and measurement column before publishing this guide.',
       );
     }
 
@@ -1920,10 +2377,7 @@ export async function updateSizeGuide(
       `.execute(transaction);
 
       const usageRow = usage.rows[0];
-      if (
-        Boolean(usageRow?.has_published) ||
-        Number(usageRow?.row_count ?? 0) > 0
-      ) {
+      if (Boolean(usageRow?.has_published) || Number(usageRow?.row_count ?? 0) > 0) {
         throw new SizingDomainError(
           'CONFLICT',
           'The guide size system cannot be changed after size-definition mappings or published revisions exist. Create or duplicate a guide instead.',
@@ -2003,11 +2457,7 @@ export async function updateSizeGuideRevisionMeta(
         and organization_id = ${input.organizationId}
     `.execute(transaction);
 
-    const version = await bumpRevisionVersion(
-      transaction,
-      input.organizationId,
-      input.revisionId,
-    );
+    const version = await bumpRevisionVersion(transaction, input.organizationId, input.revisionId);
 
     await recordSizingAudit(transaction, {
       organizationId: input.organizationId,
@@ -2257,10 +2707,7 @@ export async function archiveSizeDefinition(
         and revision.status = 'DRAFT'
     `.execute(transaction);
 
-    if (
-      Number(optionUsage.rows[0]?.count ?? 0) > 0 ||
-      Number(draftUsage.rows[0]?.count ?? 0) > 0
-    ) {
+    if (Number(optionUsage.rows[0]?.count ?? 0) > 0 || Number(draftUsage.rows[0]?.count ?? 0) > 0) {
       throw new SizingDomainError(
         'DEPENDENCY_EXISTS',
         'This size definition is still used by active product option values or an editable guide revision.',
@@ -2300,10 +2747,7 @@ export async function archiveMeasurementDefinition(
     `.execute(transaction);
 
     if (!definition.rows[0]) {
-      throw new SizingDomainError(
-        'NOT_FOUND',
-        'Active measurement definition was not found.',
-      );
+      throw new SizingDomainError('NOT_FOUND', 'Active measurement definition was not found.');
     }
 
     const draftUsage = await sql<{ count: string }>`
@@ -2691,6 +3135,8 @@ export async function duplicateSizeGuide(
       guide_id: string;
       name: string;
       description: string | null;
+      kind: FitGuideKind;
+      measurement_basis: SubjectType;
       sizing_domain_id: string;
       size_system_id: string | null;
       revision_id: string | null;
@@ -2701,6 +3147,8 @@ export async function duplicateSizeGuide(
         guide.id::text as guide_id,
         guide.name,
         guide.description,
+        guide.kind,
+        guide.measurement_basis,
         guide.sizing_domain_id::text,
         guide.size_system_id::text,
         coalesce(
@@ -2747,6 +3195,8 @@ export async function duplicateSizeGuide(
         organization_id,
         name,
         description,
+        kind,
+        measurement_basis,
         sizing_domain_id,
         size_system_id
       )
@@ -2754,6 +3204,8 @@ export async function duplicateSizeGuide(
         ${input.organizationId},
         ${newName},
         ${guide.description},
+        ${guide.kind},
+        ${guide.measurement_basis},
         ${guide.sizing_domain_id},
         ${guide.size_system_id}
       )
@@ -2797,6 +3249,17 @@ export async function duplicateSizeGuide(
     }
 
     if (guide.revision_id) {
+      await sql`
+        insert into sizing.size_guide_revision_columns (
+          organization_id, revision_id, measurement_definition_id, display_name, position
+        )
+        select
+          ${input.organizationId}, ${newRevisionId}, measurement_definition_id, display_name, position
+        from sizing.size_guide_revision_columns
+        where revision_id = ${guide.revision_id}
+          and organization_id = ${input.organizationId}
+      `.execute(transaction);
+
       const sourceRows = await sql<{
         id: string;
         display_label: string;
@@ -2893,11 +3356,45 @@ export async function attachSizeGuideToProduct(
     productId: string;
     sizeSystemId: string;
     sizeGuideId?: string | undefined;
+    guideOutcome?: 'INHERIT' | 'DIRECT' | 'NONE' | undefined;
+    noGuideReason?: string | undefined;
+    assignmentOrigin?: 'MANUAL' | 'SUPPLY_PURCHASE' | undefined;
+    sourcePurchaseId?: string | undefined;
     expectedProductVersion?: number | undefined;
     actorId: string;
   },
 ): Promise<void> {
   await withSizingTransaction(db, async (transaction) => {
+    const guideOutcome = input.sizeGuideId ? 'DIRECT' : (input.guideOutcome ?? 'INHERIT');
+    if (guideOutcome === 'DIRECT' && !input.sizeGuideId) {
+      throw new SizingDomainError('VALIDATION_ERROR', 'Choose a guide for a direct assignment.');
+    }
+    if (guideOutcome === 'NONE' && !input.noGuideReason?.trim()) {
+      throw new SizingDomainError(
+        'VALIDATION_ERROR',
+        'Explain why this sized Product intentionally has no customer guide.',
+      );
+    }
+    if (guideOutcome !== 'NONE' && input.noGuideReason) {
+      throw new SizingDomainError(
+        'VALIDATION_ERROR',
+        'A no-guide reason is only valid when the customer guide outcome is None.',
+      );
+    }
+    const assignmentOrigin = input.sizeGuideId ? (input.assignmentOrigin ?? 'MANUAL') : null;
+    if (assignmentOrigin === 'SUPPLY_PURCHASE' && !input.sourcePurchaseId) {
+      throw new SizingDomainError(
+        'VALIDATION_ERROR',
+        'A Supply purchase is required for a Supply-origin guide assignment.',
+      );
+    }
+    if (assignmentOrigin !== 'SUPPLY_PURCHASE' && input.sourcePurchaseId) {
+      throw new SizingDomainError(
+        'VALIDATION_ERROR',
+        'A source Purchase may only be recorded for a Supply-origin guide assignment.',
+      );
+    }
+
     await lockProductForSizingMutation(transaction, {
       organizationId: input.organizationId,
       productId: input.productId,
@@ -2960,7 +3457,35 @@ export async function attachSizeGuideToProduct(
           'The selected size guide is bound to a different size system.',
         );
       }
+
+      if (input.sourcePurchaseId) {
+        const purchaseProduct = await sql<{ id: string }>`
+          select purchase.id::text
+          from procurement.purchases purchase
+          join procurement.purchase_lines line
+            on line.purchase_id = purchase.id
+           and line.organization_id = purchase.organization_id
+          join catalog.product_variants variant
+            on variant.id = line.variant_id
+           and variant.organization_id = line.organization_id
+          where purchase.id = ${input.sourcePurchaseId}
+            and purchase.organization_id = ${input.organizationId}
+            and variant.product_id = ${input.productId}
+          limit 1
+        `.execute(transaction);
+
+        if (!purchaseProduct.rows[0]) {
+          throw new SizingDomainError(
+            'VALIDATION_ERROR',
+            'The source Purchase does not contain this Product.',
+          );
+        }
+      }
     }
+
+    const assignedBy = input.sizeGuideId
+      ? await resolveIamActorId(transaction, input.actorId)
+      : null;
 
     await sql`
       insert into sizing.product_size_configurations (
@@ -2968,6 +3493,12 @@ export async function attachSizeGuideToProduct(
         product_id,
         size_system_id,
         size_guide_id,
+        guide_outcome,
+        no_guide_reason,
+        assignment_origin,
+        source_purchase_id,
+        assigned_by_actor_id,
+        assigned_at,
         status
       )
       values (
@@ -2975,13 +3506,27 @@ export async function attachSizeGuideToProduct(
         ${input.productId},
         ${input.sizeSystemId},
         ${input.sizeGuideId ?? null},
+        ${guideOutcome},
+        ${guideOutcome === 'NONE' ? input.noGuideReason!.trim() : null},
+        ${assignmentOrigin},
+        ${input.sourcePurchaseId ?? null},
+        ${assignedBy},
+        ${input.sizeGuideId ? sql`now()` : null},
         'ACTIVE'
       )
       on conflict (product_id)
       do update set
         size_system_id = excluded.size_system_id,
         size_guide_id = excluded.size_guide_id,
-        status = 'ACTIVE'
+        guide_outcome = excluded.guide_outcome,
+        no_guide_reason = excluded.no_guide_reason,
+        assignment_origin = excluded.assignment_origin,
+        source_purchase_id = excluded.source_purchase_id,
+        assigned_by_actor_id = excluded.assigned_by_actor_id,
+        assigned_at = excluded.assigned_at,
+        status = 'ACTIVE',
+        version = sizing.product_size_configurations.version + 1,
+        updated_at = now()
     `.execute(transaction);
 
     await bumpProductVersion(transaction, input.organizationId, input.productId);
@@ -2995,6 +3540,10 @@ export async function attachSizeGuideToProduct(
       metadata: {
         sizeSystemId: input.sizeSystemId,
         sizeGuideId: input.sizeGuideId ?? null,
+        guideOutcome,
+        noGuideReason: guideOutcome === 'NONE' ? input.noGuideReason!.trim() : null,
+        assignmentOrigin,
+        sourcePurchaseId: input.sourcePurchaseId ?? null,
       },
     });
   });
@@ -3018,7 +3567,7 @@ export async function removeProductSizingConfiguration(
 
     const changed = await sql`
       update sizing.product_size_configurations
-      set status = 'ARCHIVED'
+      set status = 'ARCHIVED', version = version + 1, updated_at = now()
       where product_id = ${input.productId}
         and organization_id = ${input.organizationId}
         and status = 'ACTIVE'
@@ -3066,6 +3615,11 @@ export async function getProductSizingConfiguration(
   effectiveGuideId: string | null;
   effectiveGuideName: string | null;
   effectiveSource: 'PRODUCT' | 'CATEGORY' | 'NONE';
+  guideOutcome: 'INHERIT' | 'DIRECT' | 'NONE' | null;
+  noGuideReason: string | null;
+  directAssignmentOrigin: 'MANUAL' | 'SUPPLY_PURCHASE' | null;
+  sourcePurchaseId: string | null;
+  assignedAt: string | null;
 }> {
   const product = await sql<{ version: string | number }>`
     select version
@@ -3087,6 +3641,11 @@ export async function getProductSizingConfiguration(
     guide_size_system_id: string | null;
     has_published_guide: boolean;
     config_status: LifecycleStatus;
+    assignment_origin: 'MANUAL' | 'SUPPLY_PURCHASE' | null;
+    source_purchase_id: string | null;
+    assigned_at: string | null;
+    guide_outcome: 'INHERIT' | 'DIRECT' | 'NONE';
+    no_guide_reason: string | null;
   }>`
     select
       config.size_system_id::text,
@@ -3096,7 +3655,12 @@ export async function getProductSizingConfiguration(
       guide.status as guide_status,
       guide.size_system_id::text as guide_size_system_id,
       (guide.current_published_revision_id is not null) as has_published_guide,
-      config.status as config_status
+      config.status as config_status,
+      config.assignment_origin,
+      config.source_purchase_id::text,
+      config.assigned_at::text
+      , config.guide_outcome
+      , config.no_guide_reason
     from sizing.product_size_configurations config
     join sizing.size_systems system
       on system.id = config.size_system_id
@@ -3154,8 +3718,15 @@ export async function getProductSizingConfiguration(
   const categoryDefaultGuideStatus = catRow?.guide_status ?? null;
   const categoryName = catRow?.category_name ?? null;
 
-  const hasDirectGuide = Boolean(row?.size_guide_id && row?.has_published_guide);
-  const hasCategoryGuide = Boolean(categoryDefaultGuideId && catRow?.has_published_guide);
+  const hasDirectGuide = Boolean(
+    row?.size_guide_id && row.has_published_guide && row.guide_status === 'ACTIVE',
+  );
+  const hasCategoryGuide = Boolean(
+    row?.guide_outcome !== 'NONE' &&
+    categoryDefaultGuideId &&
+    catRow?.has_published_guide &&
+    categoryDefaultGuideStatus === 'ACTIVE',
+  );
 
   const effectiveGuideId = hasDirectGuide
     ? row!.size_guide_id
@@ -3189,6 +3760,11 @@ export async function getProductSizingConfiguration(
       effectiveGuideId,
       effectiveGuideName,
       effectiveSource,
+      guideOutcome: null,
+      noGuideReason: null,
+      directAssignmentOrigin: null,
+      sourcePurchaseId: null,
+      assignedAt: null,
     };
   }
 
@@ -3211,7 +3787,437 @@ export async function getProductSizingConfiguration(
     effectiveGuideId,
     effectiveGuideName,
     effectiveSource,
+    guideOutcome: row.guide_outcome,
+    noGuideReason: row.no_guide_reason,
+    directAssignmentOrigin: row.assignment_origin,
+    sourcePurchaseId: row.source_purchase_id,
+    assignedAt: row.assigned_at,
   };
+}
+
+export interface ProductSizeReconciliation {
+  readonly productId: string;
+  readonly effectiveGuideId: string | null;
+  readonly effectiveGuideName: string | null;
+  readonly effectiveSource: 'PRODUCT' | 'CATEGORY' | 'NONE';
+  readonly productSizeCount: number;
+  readonly guideRowCount: number;
+  readonly matchedCount: number;
+  readonly conflictCount: number;
+  readonly productSizes: readonly {
+    optionValueId: string;
+    label: string;
+    sizeDefinitionId: string | null;
+    guideRowId: string | null;
+    guideRowLabel: string | null;
+    match: 'DEFINITION' | 'NORMALIZED_LABEL' | 'UNMATCHED' | 'AMBIGUOUS';
+  }[];
+  readonly guideOnlyRows: readonly { guideRowId: string; label: string }[];
+}
+
+function normalizeSizeLabel(value: string): string {
+  return value
+    .trim()
+    .toLocaleLowerCase()
+    .replace(/[^a-z0-9]+/g, '');
+}
+
+export async function getProductSizeReconciliation(
+  db: Kysely<DatabaseSchema>,
+  organizationId: string,
+  productId: string,
+): Promise<ProductSizeReconciliation> {
+  const effective = await getProductSizingConfiguration(db, organizationId, productId);
+  const productSizes = await sql<{
+    option_value_id: string;
+    label: string;
+    size_definition_id: string | null;
+  }>`
+    select
+      value.id::text as option_value_id,
+      value.display_value as label,
+      value.size_definition_id::text
+    from catalog.product_option_values value
+    join catalog.product_option_axes axis
+      on axis.id = value.option_axis_id
+     and axis.organization_id = value.organization_id
+    where value.product_id = ${productId}
+      and value.organization_id = ${organizationId}
+      and value.status = 'ACTIVE'
+      and axis.status = 'ACTIVE'
+      and (
+        value.size_definition_id is not null
+        or lower(axis.code) in ('size', 'sizes')
+        or lower(axis.name) = 'size'
+      )
+    order by axis.position, value.position, value.id
+  `.execute(db);
+
+  if (!effective.effectiveGuideId) {
+    return {
+      productId,
+      effectiveGuideId: null,
+      effectiveGuideName: null,
+      effectiveSource: 'NONE',
+      productSizeCount: productSizes.rows.length,
+      guideRowCount: 0,
+      matchedCount: 0,
+      conflictCount: productSizes.rows.length,
+      productSizes: productSizes.rows.map((size) => ({
+        optionValueId: size.option_value_id,
+        label: size.label,
+        sizeDefinitionId: size.size_definition_id,
+        guideRowId: null,
+        guideRowLabel: null,
+        match: 'UNMATCHED',
+      })),
+      guideOnlyRows: [],
+    };
+  }
+
+  const guideRows = await sql<{
+    guide_row_id: string;
+    label: string;
+    size_definition_id: string | null;
+  }>`
+    select
+      row.id::text as guide_row_id,
+      row.display_label as label,
+      row.size_definition_id::text
+    from sizing.size_guides guide
+    join sizing.size_guide_rows row
+      on row.revision_id = guide.current_published_revision_id
+     and row.organization_id = guide.organization_id
+    where guide.id = ${effective.effectiveGuideId}
+      and guide.organization_id = ${organizationId}
+      and guide.status = 'ACTIVE'
+    order by row.position, row.id
+  `.execute(db);
+
+  const usedGuideRows = new Set<string>();
+  const reconciledSizes = productSizes.rows.map((size) => {
+    const definitionMatches = size.size_definition_id
+      ? guideRows.rows.filter((row) => row.size_definition_id === size.size_definition_id)
+      : [];
+    const normalizedMatches = guideRows.rows.filter(
+      (row) => normalizeSizeLabel(row.label) === normalizeSizeLabel(size.label),
+    );
+    const candidates = definitionMatches.length > 0 ? definitionMatches : normalizedMatches;
+    const match =
+      candidates.length > 1
+        ? ('AMBIGUOUS' as const)
+        : candidates.length === 0
+          ? ('UNMATCHED' as const)
+          : definitionMatches.length > 0
+            ? ('DEFINITION' as const)
+            : ('NORMALIZED_LABEL' as const);
+    const guideRow = candidates.length === 1 ? candidates[0]! : null;
+    if (guideRow) usedGuideRows.add(guideRow.guide_row_id);
+
+    return {
+      optionValueId: size.option_value_id,
+      label: size.label,
+      sizeDefinitionId: size.size_definition_id,
+      guideRowId: guideRow?.guide_row_id ?? null,
+      guideRowLabel: guideRow?.label ?? null,
+      match,
+    };
+  });
+
+  const guideOnlyRows = guideRows.rows
+    .filter((row) => !usedGuideRows.has(row.guide_row_id))
+    .map((row) => ({ guideRowId: row.guide_row_id, label: row.label }));
+  const matchedCount = reconciledSizes.filter(
+    (size) => size.match === 'DEFINITION' || size.match === 'NORMALIZED_LABEL',
+  ).length;
+
+  return {
+    productId,
+    effectiveGuideId: effective.effectiveGuideId,
+    effectiveGuideName: effective.effectiveGuideName,
+    effectiveSource: effective.effectiveSource,
+    productSizeCount: productSizes.rows.length,
+    guideRowCount: guideRows.rows.length,
+    matchedCount,
+    conflictCount: reconciledSizes.length - matchedCount + guideOnlyRows.length,
+    productSizes: reconciledSizes,
+    guideOnlyRows,
+  };
+}
+
+export type SupplyPurchaseSizingDecision =
+  'PENDING' | 'KEEP_CURRENT' | 'EVIDENCE_ONLY' | 'APPLIED_TO_PRODUCT';
+
+export async function getSupplyPurchaseSizingReview(
+  db: Kysely<DatabaseSchema>,
+  organizationId: string,
+  purchaseId: string,
+): Promise<{
+  purchaseId: string;
+  purchaseNumber: string;
+  products: readonly {
+    productId: string;
+    productTitle: string;
+    variantLineCount: number;
+    currentGuideId: string | null;
+    currentGuideName: string | null;
+    effectiveSource: 'PRODUCT' | 'CATEGORY' | 'NONE';
+    evidenceId: string | null;
+    proposedGuideId: string | null;
+    proposedGuideName: string | null;
+    decision: SupplyPurchaseSizingDecision;
+    notes: string | null;
+    version: number | null;
+    reviewedAt: string | null;
+    conflict: boolean;
+  }[];
+}> {
+  const purchase = await sql<{ purchase_number: string }>`
+    select purchase_number
+    from procurement.purchases
+    where id = ${purchaseId}
+      and organization_id = ${organizationId}
+  `.execute(db);
+  const purchaseRow = purchase.rows[0];
+  if (!purchaseRow) throw new SizingDomainError('NOT_FOUND', 'Supply purchase was not found.');
+
+  const products = await sql<{
+    product_id: string;
+    product_title: string;
+    variant_line_count: string;
+    evidence_id: string | null;
+    proposed_guide_id: string | null;
+    proposed_guide_name: string | null;
+    decision: SupplyPurchaseSizingDecision | null;
+    notes: string | null;
+    version: string | number | null;
+    reviewed_at: string | null;
+  }>`
+    select
+      product.id::text as product_id,
+      product.title as product_title,
+      count(distinct line.id)::text as variant_line_count,
+      evidence.id::text as evidence_id,
+      evidence.proposed_size_guide_id::text as proposed_guide_id,
+      proposed_guide.name as proposed_guide_name,
+      evidence.decision,
+      evidence.notes,
+      evidence.version,
+      evidence.reviewed_at::text
+    from procurement.purchase_lines line
+    join catalog.product_variants variant
+      on variant.id = line.variant_id
+     and variant.organization_id = line.organization_id
+    join catalog.products product
+      on product.id = variant.product_id
+     and product.organization_id = variant.organization_id
+    left join sizing.supply_purchase_fit_evidence evidence
+      on evidence.purchase_id = line.purchase_id
+     and evidence.product_id = product.id
+     and evidence.organization_id = line.organization_id
+    left join sizing.size_guides proposed_guide
+      on proposed_guide.id = evidence.proposed_size_guide_id
+     and proposed_guide.organization_id = evidence.organization_id
+    where line.purchase_id = ${purchaseId}
+      and line.organization_id = ${organizationId}
+    group by product.id, evidence.id, proposed_guide.name
+    order by product.title, product.id
+  `.execute(db);
+
+  return {
+    purchaseId,
+    purchaseNumber: purchaseRow.purchase_number,
+    products: await Promise.all(
+      products.rows.map(async (product) => {
+        const current = await getProductSizingConfiguration(db, organizationId, product.product_id);
+        return {
+          productId: product.product_id,
+          productTitle: product.product_title,
+          variantLineCount: Number(product.variant_line_count),
+          currentGuideId: current.effectiveGuideId,
+          currentGuideName: current.effectiveGuideName,
+          effectiveSource: current.effectiveSource,
+          evidenceId: product.evidence_id,
+          proposedGuideId: product.proposed_guide_id,
+          proposedGuideName: product.proposed_guide_name,
+          decision: product.decision ?? 'PENDING',
+          notes: product.notes,
+          version: product.version === null ? null : numberFromDatabase(product.version),
+          reviewedAt: product.reviewed_at,
+          conflict: Boolean(
+            product.proposed_guide_id &&
+            current.effectiveGuideId &&
+            product.proposed_guide_id !== current.effectiveGuideId,
+          ),
+        };
+      }),
+    ),
+  };
+}
+
+export async function setSupplyPurchaseSizingDecision(
+  db: Kysely<DatabaseSchema>,
+  input: {
+    organizationId: string;
+    purchaseId: string;
+    productId: string;
+    decision: Exclude<SupplyPurchaseSizingDecision, 'PENDING'>;
+    sizeGuideId?: string;
+    notes?: string | null;
+    expectedVersion?: number;
+    expectedProductVersion?: number;
+    actorId: string;
+  },
+): Promise<{ id: string; version: number }> {
+  return withSizingTransaction(db, async (transaction) => {
+    const purchaseProduct = await sql<{ id: string }>`
+      select line.id::text
+      from procurement.purchase_lines line
+      join catalog.product_variants variant
+        on variant.id = line.variant_id
+       and variant.organization_id = line.organization_id
+      where line.purchase_id = ${input.purchaseId}
+        and line.organization_id = ${input.organizationId}
+        and variant.product_id = ${input.productId}
+      limit 1
+    `.execute(transaction);
+    if (!purchaseProduct.rows[0]) {
+      throw new SizingDomainError(
+        'VALIDATION_ERROR',
+        'The Supply purchase does not contain this Product.',
+      );
+    }
+
+    const existing = await sql<{ id: string; version: string | number }>`
+      select id::text, version
+      from sizing.supply_purchase_fit_evidence
+      where organization_id = ${input.organizationId}
+        and purchase_id = ${input.purchaseId}
+        and product_id = ${input.productId}
+      for update
+    `.execute(transaction);
+    const existingRow = existing.rows[0];
+    if (
+      input.expectedVersion !== undefined &&
+      (!existingRow || numberFromDatabase(existingRow.version) !== input.expectedVersion)
+    ) {
+      throw new SizingDomainError(
+        'VERSION_CONFLICT',
+        'Supplier sizing evidence changed. Refresh before applying this decision.',
+      );
+    }
+
+    if (input.decision === 'APPLIED_TO_PRODUCT' && !input.sizeGuideId) {
+      throw new SizingDomainError(
+        'VALIDATION_ERROR',
+        'Choose a published guide before applying supplier sizing to the Product.',
+      );
+    }
+    if (input.decision === 'KEEP_CURRENT' && input.sizeGuideId) {
+      throw new SizingDomainError(
+        'VALIDATION_ERROR',
+        'Keeping the current Product guide cannot also propose another guide.',
+      );
+    }
+
+    if (input.decision === 'APPLIED_TO_PRODUCT') {
+      const guide = await sql<{
+        size_system_id: string | null;
+        sizing_domain_id: string;
+      }>`
+        select size_system_id::text, sizing_domain_id::text
+        from sizing.size_guides
+        where id = ${input.sizeGuideId!}
+          and organization_id = ${input.organizationId}
+          and status = 'ACTIVE'
+          and current_published_revision_id is not null
+        for share
+      `.execute(transaction);
+      const guideRow = guide.rows[0];
+      if (!guideRow) {
+        throw new SizingDomainError(
+          'VALIDATION_ERROR',
+          'The proposed guide must be active and published.',
+        );
+      }
+      const current = await getProductSizingConfiguration(
+        transaction,
+        input.organizationId,
+        input.productId,
+      );
+      const sizeSystemId = guideRow.size_system_id ?? current.sizeSystemId;
+      if (!sizeSystemId) {
+        throw new SizingDomainError(
+          'VALIDATION_ERROR',
+          'This custom-label guide needs a compatible Product size system before assignment.',
+        );
+      }
+
+      await attachSizeGuideToProduct(transaction, {
+        organizationId: input.organizationId,
+        productId: input.productId,
+        sizeSystemId,
+        sizeGuideId: input.sizeGuideId!,
+        assignmentOrigin: 'SUPPLY_PURCHASE',
+        sourcePurchaseId: input.purchaseId,
+        ...(input.expectedProductVersion === undefined
+          ? {}
+          : { expectedProductVersion: input.expectedProductVersion }),
+        actorId: input.actorId,
+      });
+    }
+
+    const reviewedBy = await resolveIamActorId(transaction, input.actorId);
+    const evidence = await sql<{ id: string; version: string | number }>`
+      insert into sizing.supply_purchase_fit_evidence (
+        organization_id,
+        purchase_id,
+        product_id,
+        proposed_size_guide_id,
+        decision,
+        notes,
+        reviewed_by_actor_id,
+        reviewed_at
+      )
+      values (
+        ${input.organizationId},
+        ${input.purchaseId},
+        ${input.productId},
+        ${input.sizeGuideId ?? null},
+        ${input.decision},
+        ${input.notes ?? null},
+        ${reviewedBy},
+        now()
+      )
+      on conflict (organization_id, purchase_id, product_id)
+      do update set
+        proposed_size_guide_id = excluded.proposed_size_guide_id,
+        decision = excluded.decision,
+        notes = excluded.notes,
+        reviewed_by_actor_id = excluded.reviewed_by_actor_id,
+        reviewed_at = excluded.reviewed_at,
+        updated_at = now(),
+        version = sizing.supply_purchase_fit_evidence.version + 1
+      returning id::text, version
+    `.execute(transaction);
+    const evidenceRow = evidence.rows[0];
+    if (!evidenceRow) throw new Error('Supply sizing evidence did not return an id.');
+
+    await recordSizingAudit(transaction, {
+      organizationId: input.organizationId,
+      actorId: input.actorId,
+      action: 'SUPPLY_PURCHASE_SIZING_DECIDED',
+      targetType: 'PURCHASE',
+      targetId: input.purchaseId,
+      metadata: {
+        productId: input.productId,
+        decision: input.decision,
+        sizeGuideId: input.sizeGuideId ?? null,
+      },
+    });
+
+    return { id: evidenceRow.id, version: numberFromDatabase(evidenceRow.version) };
+  });
 }
 
 export async function setCategoryDefaultSizeGuide(
@@ -3273,6 +4279,637 @@ export async function setCategoryDefaultSizeGuide(
         sizeGuideId: input.sizeGuideId,
       },
     });
+  });
+}
+
+export interface CategoryGuideAssignmentPreview {
+  readonly previewToken: string;
+  readonly category: {
+    readonly id: string;
+    readonly name: string;
+    readonly version: number;
+    readonly currentGuideId: string | null;
+    readonly currentGuideName: string | null;
+  };
+  readonly nextGuide: {
+    readonly id: string;
+    readonly name: string;
+    readonly version: number;
+    readonly publishedRevisionId: string;
+  } | null;
+  readonly totalProducts: number;
+  readonly inheritingProducts: number;
+  readonly directAssignmentsUnaffected: number;
+  readonly explicitNoGuideUnaffected: number;
+  readonly compatibilityConflicts: number;
+  readonly sampleProducts: readonly {
+    readonly productId: string;
+    readonly productTitle: string;
+    readonly outcome: 'INHERIT' | 'DIRECT' | 'NONE';
+    readonly compatible: boolean;
+  }[];
+}
+
+type CategoryAssignmentToken = {
+  categoryId: string;
+  categoryVersion: number;
+  currentGuideId: string | null;
+  nextGuideId: string | null;
+  nextGuideVersion: number | null;
+  publishedRevisionId: string | null;
+  targetsFingerprint: string;
+};
+
+function encodeCategoryAssignmentToken(token: CategoryAssignmentToken): string {
+  return Buffer.from(JSON.stringify(token), 'utf8').toString('base64url');
+}
+
+function decodeCategoryAssignmentToken(value: string): CategoryAssignmentToken {
+  try {
+    const parsed = JSON.parse(
+      Buffer.from(value, 'base64url').toString('utf8'),
+    ) as Partial<CategoryAssignmentToken>;
+    if (
+      typeof parsed.categoryId !== 'string' ||
+      typeof parsed.categoryVersion !== 'number' ||
+      !('currentGuideId' in parsed) ||
+      !('nextGuideId' in parsed) ||
+      !('nextGuideVersion' in parsed) ||
+      !('publishedRevisionId' in parsed) ||
+      typeof parsed.targetsFingerprint !== 'string'
+    ) {
+      throw new Error('Invalid token payload.');
+    }
+    return parsed as CategoryAssignmentToken;
+  } catch {
+    throw new SizingDomainError(
+      'CONFLICT',
+      'This assignment preview is invalid or stale. Refresh the preview before applying it.',
+    );
+  }
+}
+
+export async function previewCategoryDefaultSizeGuide(
+  db: Kysely<DatabaseSchema>,
+  input: { organizationId: string; categoryId: string; sizeGuideId: string | null },
+): Promise<CategoryGuideAssignmentPreview> {
+  const categoryResult = await sql<{
+    id: string;
+    name: string;
+    version: string;
+    current_guide_id: string | null;
+    current_guide_name: string | null;
+  }>`
+    select category.id::text, category.name, category.version::text,
+      category.default_size_guide_id::text as current_guide_id,
+      current_guide.name as current_guide_name
+    from catalog.categories category
+    left join sizing.size_guides current_guide
+      on current_guide.id = category.default_size_guide_id
+     and current_guide.organization_id = category.organization_id
+    where category.organization_id = ${input.organizationId}
+      and category.id = ${input.categoryId}::uuid
+      and category.status <> 'ARCHIVED'
+  `.execute(db);
+  const category = categoryResult.rows[0];
+  if (!category) throw new SizingDomainError('NOT_FOUND', 'Active category was not found.');
+
+  let nextGuide: CategoryGuideAssignmentPreview['nextGuide'] = null;
+  let nextGuideDomainId: string | null = null;
+  let nextGuideSystemId: string | null = null;
+  if (input.sizeGuideId) {
+    const guideResult = await sql<{
+      id: string;
+      name: string;
+      version: string;
+      published_revision_id: string;
+      sizing_domain_id: string;
+      size_system_id: string | null;
+    }>`
+      select guide.id::text, guide.name, guide.version::text,
+        guide.current_published_revision_id::text as published_revision_id,
+        guide.sizing_domain_id::text, guide.size_system_id::text
+      from sizing.size_guides guide
+      join sizing.size_guide_revisions revision
+        on revision.id = guide.current_published_revision_id
+       and revision.organization_id = guide.organization_id
+       and revision.status = 'PUBLISHED'
+      where guide.organization_id = ${input.organizationId}
+        and guide.id = ${input.sizeGuideId}::uuid
+        and guide.status = 'ACTIVE'
+    `.execute(db);
+    const guide = guideResult.rows[0];
+    if (!guide) {
+      throw new SizingDomainError(
+        'VALIDATION_ERROR',
+        'Category default must reference an active guide with a published revision.',
+      );
+    }
+    nextGuide = {
+      id: guide.id,
+      name: guide.name,
+      version: numberFromDatabase(guide.version),
+      publishedRevisionId: guide.published_revision_id,
+    };
+    nextGuideDomainId = guide.sizing_domain_id;
+    nextGuideSystemId = guide.size_system_id;
+  }
+
+  const products = await sql<{
+    product_id: string;
+    product_title: string;
+    outcome: 'INHERIT' | 'DIRECT' | 'NONE';
+    configured_domain_id: string | null;
+    configured_system_id: string | null;
+  }>`
+    select product.id::text as product_id, product.title as product_title,
+      coalesce(configuration.guide_outcome, 'INHERIT') as outcome,
+      configured_system.sizing_domain_id::text as configured_domain_id,
+      configuration.size_system_id::text as configured_system_id
+    from catalog.products product
+    left join sizing.product_size_configurations configuration
+      on configuration.organization_id = product.organization_id
+     and configuration.product_id = product.id
+     and configuration.status = 'ACTIVE'
+    left join sizing.size_systems configured_system
+      on configured_system.organization_id = configuration.organization_id
+     and configured_system.id = configuration.size_system_id
+    where product.organization_id = ${input.organizationId}
+      and product.primary_category_id = ${input.categoryId}::uuid
+      and product.status <> 'ARCHIVED'
+    order by product.title, product.id
+  `.execute(db);
+
+  const targets = products.rows.map((product) => ({
+    productId: product.product_id,
+    productTitle: product.product_title,
+    outcome: product.outcome,
+    compatible:
+      product.outcome !== 'INHERIT' ||
+      nextGuide === null ||
+      product.configured_domain_id === null ||
+      (product.configured_domain_id === nextGuideDomainId &&
+        (nextGuideSystemId === null || product.configured_system_id === nextGuideSystemId)),
+  }));
+  const categoryVersion = numberFromDatabase(category.version);
+  const token: CategoryAssignmentToken = {
+    categoryId: category.id,
+    categoryVersion,
+    currentGuideId: category.current_guide_id,
+    nextGuideId: nextGuide?.id ?? null,
+    nextGuideVersion: nextGuide?.version ?? null,
+    publishedRevisionId: nextGuide?.publishedRevisionId ?? null,
+    targetsFingerprint: createHash('sha256')
+      .update(
+        JSON.stringify(
+          products.rows.map((product) => [
+            product.product_id,
+            product.outcome,
+            product.configured_domain_id,
+            product.configured_system_id,
+          ]),
+        ),
+      )
+      .digest('base64url'),
+  };
+
+  return {
+    previewToken: encodeCategoryAssignmentToken(token),
+    category: {
+      id: category.id,
+      name: category.name,
+      version: categoryVersion,
+      currentGuideId: category.current_guide_id,
+      currentGuideName: category.current_guide_name,
+    },
+    nextGuide,
+    totalProducts: targets.length,
+    inheritingProducts: targets.filter((target) => target.outcome === 'INHERIT').length,
+    directAssignmentsUnaffected: targets.filter((target) => target.outcome === 'DIRECT').length,
+    explicitNoGuideUnaffected: targets.filter((target) => target.outcome === 'NONE').length,
+    compatibilityConflicts: targets.filter(
+      (target) => target.outcome === 'INHERIT' && !target.compatible,
+    ).length,
+    sampleProducts: targets.slice(0, 100),
+  };
+}
+
+export async function applyCategoryDefaultSizeGuide(
+  db: Kysely<DatabaseSchema>,
+  input: { organizationId: string; actorId: string; previewToken: string },
+): Promise<void> {
+  const token = decodeCategoryAssignmentToken(input.previewToken);
+  const refreshed = await previewCategoryDefaultSizeGuide(db, {
+    organizationId: input.organizationId,
+    categoryId: token.categoryId,
+    sizeGuideId: token.nextGuideId,
+  });
+  const currentToken = decodeCategoryAssignmentToken(refreshed.previewToken);
+  if (JSON.stringify(currentToken) !== JSON.stringify(token)) {
+    throw new SizingDomainError(
+      'CONFLICT',
+      'Products, the Category, or the published guide changed after this preview. Review the refreshed impact before applying.',
+    );
+  }
+  if (refreshed.compatibilityConflicts > 0) {
+    throw new SizingDomainError(
+      'VALIDATION_ERROR',
+      'Resolve incompatible inheriting Product size systems before applying this Category guide.',
+    );
+  }
+
+  await withSizingTransaction(db, async (transaction) => {
+    const updated = await sql<{ id: string }>`
+      update catalog.categories
+      set default_size_guide_id = ${token.nextGuideId}::uuid,
+          version = version + 1,
+          updated_at = now()
+      where organization_id = ${input.organizationId}
+        and id = ${token.categoryId}::uuid
+        and version = ${token.categoryVersion}
+        and default_size_guide_id is not distinct from ${token.currentGuideId}::uuid
+      returning id::text
+    `.execute(transaction);
+    if (!updated.rows[0]) {
+      throw new SizingDomainError(
+        'CONFLICT',
+        'The Category changed while applying this assignment. Refresh and preview again.',
+      );
+    }
+    await recordSizingAudit(transaction, {
+      organizationId: input.organizationId,
+      actorId: input.actorId,
+      action: 'CATEGORY_DEFAULT_GUIDE_SET',
+      targetType: 'CATEGORY',
+      targetId: token.categoryId,
+      metadata: {
+        previousSizeGuideId: token.currentGuideId,
+        sizeGuideId: token.nextGuideId,
+        previewToken: input.previewToken,
+        affectedInheritingProducts: refreshed.inheritingProducts,
+      },
+    });
+  });
+}
+
+export interface ProductGuideAssignmentPreview {
+  readonly previewToken: string;
+  readonly product: { readonly id: string; readonly title: string; readonly version: number };
+  readonly current: {
+    readonly outcome: 'INHERIT' | 'DIRECT' | 'NONE';
+    readonly effectiveSource: 'PRODUCT' | 'CATEGORY' | 'NONE';
+    readonly guideId: string | null;
+    readonly guideName: string | null;
+  };
+  readonly next: {
+    readonly outcome: 'INHERIT' | 'DIRECT' | 'NONE';
+    readonly guideId: string | null;
+    readonly guideName: string | null;
+    readonly noGuideReason: string | null;
+  };
+  readonly productSizeCount: number;
+  readonly matchedSizeCount: number;
+  readonly conflictCount: number;
+}
+
+type ProductAssignmentToken = {
+  productId: string;
+  productVersion: number;
+  configurationVersion: number | null;
+  outcome: 'INHERIT' | 'DIRECT' | 'NONE';
+  guideId: string | null;
+  guideVersion: number | null;
+  publishedRevisionId: string | null;
+  sizeSystemId: string | null;
+  noGuideReason: string | null;
+};
+
+function encodeProductAssignmentToken(token: ProductAssignmentToken): string {
+  return Buffer.from(JSON.stringify(token), 'utf8').toString('base64url');
+}
+
+function decodeProductAssignmentToken(value: string): ProductAssignmentToken {
+  try {
+    const parsed = JSON.parse(
+      Buffer.from(value, 'base64url').toString('utf8'),
+    ) as Partial<ProductAssignmentToken>;
+    if (
+      typeof parsed.productId !== 'string' ||
+      typeof parsed.productVersion !== 'number' ||
+      !('configurationVersion' in parsed) ||
+      !['INHERIT', 'DIRECT', 'NONE'].includes(parsed.outcome ?? '') ||
+      !('guideId' in parsed) ||
+      !('guideVersion' in parsed) ||
+      !('publishedRevisionId' in parsed) ||
+      !('sizeSystemId' in parsed) ||
+      !('noGuideReason' in parsed)
+    ) {
+      throw new Error('Invalid token payload.');
+    }
+    return parsed as ProductAssignmentToken;
+  } catch {
+    throw new SizingDomainError(
+      'CONFLICT',
+      'This Product guide preview is invalid or stale. Review the change again before applying it.',
+    );
+  }
+}
+
+export async function previewProductGuideAssignment(
+  db: Kysely<DatabaseSchema>,
+  input: {
+    organizationId: string;
+    productId: string;
+    outcome: 'INHERIT' | 'DIRECT' | 'NONE';
+    sizeGuideId?: string | undefined;
+    noGuideReason?: string | undefined;
+  },
+): Promise<ProductGuideAssignmentPreview> {
+  if (input.outcome === 'DIRECT' && !input.sizeGuideId) {
+    throw new SizingDomainError('VALIDATION_ERROR', 'Choose a published guide to assign.');
+  }
+  const noGuideReason = input.noGuideReason?.trim() || null;
+  if (input.outcome === 'NONE' && !noGuideReason) {
+    throw new SizingDomainError(
+      'VALIDATION_ERROR',
+      'Explain why this Product intentionally has no customer guide.',
+    );
+  }
+
+  const productResult = await sql<{
+    id: string;
+    title: string;
+    version: string;
+    configuration_version: string | null;
+    configuration_outcome: 'INHERIT' | 'DIRECT' | 'NONE' | null;
+    configuration_system_id: string | null;
+  }>`
+    select product.id::text, product.title, product.version::text,
+      configuration.version::text as configuration_version,
+      configuration.guide_outcome as configuration_outcome,
+      configuration.size_system_id::text as configuration_system_id
+    from catalog.products product
+    left join sizing.product_size_configurations configuration
+      on configuration.organization_id = product.organization_id
+     and configuration.product_id = product.id
+     and configuration.status = 'ACTIVE'
+    where product.organization_id = ${input.organizationId}
+      and product.id = ${input.productId}::uuid
+      and product.status <> 'ARCHIVED'
+  `.execute(db);
+  const product = productResult.rows[0];
+  if (!product) throw new SizingDomainError('NOT_FOUND', 'Active Product was not found.');
+
+  const current = await getProductSizingConfiguration(db, input.organizationId, input.productId);
+  let nextGuide: {
+    id: string;
+    name: string;
+    version: number;
+    revisionId: string;
+    sizeSystemId: string | null;
+    domainId: string;
+  } | null = null;
+
+  if (input.outcome === 'DIRECT') {
+    const guideResult = await sql<{
+      id: string;
+      name: string;
+      version: string;
+      revision_id: string;
+      size_system_id: string | null;
+      domain_id: string;
+    }>`
+      select guide.id::text, guide.name, guide.version::text,
+        guide.current_published_revision_id::text as revision_id,
+        guide.size_system_id::text, guide.sizing_domain_id::text as domain_id
+      from sizing.size_guides guide
+      join sizing.size_guide_revisions revision
+        on revision.organization_id = guide.organization_id
+       and revision.id = guide.current_published_revision_id
+       and revision.status = 'PUBLISHED'
+      where guide.organization_id = ${input.organizationId}
+        and guide.id = ${input.sizeGuideId!}::uuid
+        and guide.status = 'ACTIVE'
+    `.execute(db);
+    const guide = guideResult.rows[0];
+    if (!guide) {
+      throw new SizingDomainError(
+        'VALIDATION_ERROR',
+        'Choose an active guide with a published customer version.',
+      );
+    }
+    nextGuide = {
+      id: guide.id,
+      name: guide.name,
+      version: numberFromDatabase(guide.version),
+      revisionId: guide.revision_id,
+      sizeSystemId: guide.size_system_id,
+      domainId: guide.domain_id,
+    };
+  } else if (input.outcome === 'INHERIT' && current.categoryDefaultGuideId) {
+    const guideResult = await sql<{
+      id: string;
+      name: string;
+      version: string;
+      revision_id: string;
+      size_system_id: string | null;
+      domain_id: string;
+    }>`
+      select guide.id::text, guide.name, guide.version::text,
+        guide.current_published_revision_id::text as revision_id,
+        guide.size_system_id::text, guide.sizing_domain_id::text as domain_id
+      from sizing.size_guides guide
+      join sizing.size_guide_revisions revision
+        on revision.organization_id = guide.organization_id
+       and revision.id = guide.current_published_revision_id
+       and revision.status = 'PUBLISHED'
+      where guide.organization_id = ${input.organizationId}
+        and guide.id = ${current.categoryDefaultGuideId}::uuid
+        and guide.status = 'ACTIVE'
+    `.execute(db);
+    const guide = guideResult.rows[0];
+    if (guide) {
+      nextGuide = {
+        id: guide.id,
+        name: guide.name,
+        version: numberFromDatabase(guide.version),
+        revisionId: guide.revision_id,
+        sizeSystemId: guide.size_system_id,
+        domainId: guide.domain_id,
+      };
+    }
+  }
+
+  let sizeSystemId = product.configuration_system_id;
+  if (input.outcome === 'DIRECT' && nextGuide) {
+    if (sizeSystemId) {
+      const compatible = await sql<{ id: string }>`
+        select id::text
+        from sizing.size_systems
+        where organization_id = ${input.organizationId}
+          and id = ${sizeSystemId}::uuid
+          and sizing_domain_id = ${nextGuide.domainId}::uuid
+          and (${nextGuide.sizeSystemId}::uuid is null or id = ${nextGuide.sizeSystemId}::uuid)
+          and status = 'ACTIVE'
+      `.execute(db);
+      if (!compatible.rows[0]) sizeSystemId = null;
+    }
+    sizeSystemId = nextGuide.sizeSystemId ?? sizeSystemId;
+    if (!sizeSystemId) {
+      const fallback = await sql<{ id: string }>`
+        select id::text
+        from sizing.size_systems
+        where organization_id = ${input.organizationId}
+          and sizing_domain_id = ${nextGuide.domainId}::uuid
+          and status = 'ACTIVE'
+        order by is_canonical desc, name, id
+        limit 1
+      `.execute(db);
+      sizeSystemId = fallback.rows[0]?.id ?? null;
+    }
+    if (!sizeSystemId) {
+      throw new SizingDomainError(
+        'VALIDATION_ERROR',
+        'This guide has no active size system available for Product assignment.',
+      );
+    }
+  }
+  if (input.outcome === 'NONE' && !sizeSystemId) {
+    const fallback = await sql<{ id: string }>`
+      select system.id::text
+      from sizing.size_systems system
+      where system.organization_id = ${input.organizationId}
+        and system.status = 'ACTIVE'
+      order by system.is_canonical desc, system.name, system.id
+      limit 1
+    `.execute(db);
+    sizeSystemId = fallback.rows[0]?.id ?? null;
+    if (!sizeSystemId) {
+      throw new SizingDomainError(
+        'VALIDATION_ERROR',
+        'Create an active sizing system before recording an intentional no-guide outcome.',
+      );
+    }
+  }
+
+  const productSizes = await sql<{
+    label: string;
+    size_definition_id: string | null;
+  }>`
+    select value.display_value as label, value.size_definition_id::text
+    from catalog.product_option_values value
+    join catalog.product_option_axes axis
+      on axis.organization_id = value.organization_id and axis.id = value.option_axis_id
+    where value.organization_id = ${input.organizationId}
+      and value.product_id = ${input.productId}::uuid
+      and value.status = 'ACTIVE'
+      and axis.status = 'ACTIVE'
+      and (value.size_definition_id is not null or lower(axis.code) in ('size', 'sizes') or lower(axis.name) = 'size')
+    order by axis.position, value.position, value.id
+  `.execute(db);
+  const guideRows = nextGuide
+    ? await sql<{ label: string; size_definition_id: string | null }>`
+        select row.display_label as label, row.size_definition_id::text
+        from sizing.size_guide_rows row
+        where row.organization_id = ${input.organizationId}
+          and row.revision_id = ${nextGuide.revisionId}::uuid
+        order by row.position, row.id
+      `.execute(db)
+    : { rows: [] as { label: string; size_definition_id: string | null }[] };
+  const matchedSizeCount = productSizes.rows.filter((size) => {
+    const matches = guideRows.rows.filter((row) =>
+      size.size_definition_id
+        ? row.size_definition_id === size.size_definition_id
+        : normalizeSizeLabel(row.label) === normalizeSizeLabel(size.label),
+    );
+    return matches.length === 1;
+  }).length;
+
+  const token: ProductAssignmentToken = {
+    productId: product.id,
+    productVersion: numberFromDatabase(product.version),
+    configurationVersion:
+      product.configuration_version === null
+        ? null
+        : numberFromDatabase(product.configuration_version),
+    outcome: input.outcome,
+    guideId: nextGuide?.id ?? null,
+    guideVersion: nextGuide?.version ?? null,
+    publishedRevisionId: nextGuide?.revisionId ?? null,
+    sizeSystemId: input.outcome === 'DIRECT' || input.outcome === 'NONE' ? sizeSystemId : null,
+    noGuideReason: input.outcome === 'NONE' ? noGuideReason : null,
+  };
+
+  return {
+    previewToken: encodeProductAssignmentToken(token),
+    product: {
+      id: product.id,
+      title: product.title,
+      version: numberFromDatabase(product.version),
+    },
+    current: {
+      outcome: product.configuration_outcome ?? 'INHERIT',
+      effectiveSource: current.effectiveSource,
+      guideId: current.effectiveGuideId,
+      guideName: current.effectiveGuideName,
+    },
+    next: {
+      outcome: input.outcome,
+      guideId: nextGuide?.id ?? null,
+      guideName: nextGuide?.name ?? null,
+      noGuideReason: input.outcome === 'NONE' ? noGuideReason : null,
+    },
+    productSizeCount: productSizes.rows.length,
+    matchedSizeCount,
+    conflictCount: nextGuide ? productSizes.rows.length - matchedSizeCount : 0,
+  };
+}
+
+export async function applyProductGuideAssignment(
+  db: Kysely<DatabaseSchema>,
+  input: { organizationId: string; actorId: string; previewToken: string },
+): Promise<void> {
+  const token = decodeProductAssignmentToken(input.previewToken);
+  const refreshed = await previewProductGuideAssignment(db, {
+    organizationId: input.organizationId,
+    productId: token.productId,
+    outcome: token.outcome,
+    ...(token.guideId ? { sizeGuideId: token.guideId } : {}),
+    ...(token.noGuideReason ? { noGuideReason: token.noGuideReason } : {}),
+  });
+  if (refreshed.previewToken !== input.previewToken) {
+    throw new SizingDomainError(
+      'CONFLICT',
+      'The Product, its guide source, or the published guide changed after review. Review the refreshed impact before applying.',
+    );
+  }
+
+  if (token.outcome === 'INHERIT') {
+    if (token.configurationVersion === null) return;
+    await removeProductSizingConfiguration(db, {
+      organizationId: input.organizationId,
+      productId: token.productId,
+      expectedProductVersion: token.productVersion,
+      actorId: input.actorId,
+    });
+    return;
+  }
+  if (!token.sizeSystemId) {
+    throw new SizingDomainError(
+      'CONFLICT',
+      'The reviewed Product size system is no longer available.',
+    );
+  }
+  await attachSizeGuideToProduct(db, {
+    organizationId: input.organizationId,
+    productId: token.productId,
+    sizeSystemId: token.sizeSystemId,
+    ...(token.outcome === 'DIRECT' && token.guideId ? { sizeGuideId: token.guideId } : {}),
+    guideOutcome: token.outcome,
+    ...(token.noGuideReason ? { noGuideReason: token.noGuideReason } : {}),
+    assignmentOrigin: 'MANUAL',
+    expectedProductVersion: token.productVersion,
+    actorId: input.actorId,
   });
 }
 
@@ -3340,10 +4977,7 @@ async function linkOptionValueToSizeDefinitionInternal(
 
     const definitionRow = definition.rows[0];
     if (!definitionRow) {
-      throw new SizingDomainError(
-        'NOT_FOUND',
-        'Active size definition was not found.',
-      );
+      throw new SizingDomainError('NOT_FOUND', 'Active size definition was not found.');
     }
 
     if (
@@ -3442,12 +5076,15 @@ export interface SizeGuideListItem {
   readonly id: string;
   readonly name: string;
   readonly description: string | null;
+  readonly kind: FitGuideKind;
+  readonly measurementBasis: SubjectType;
   readonly sizingDomainId: string;
   readonly sizingDomainName: string;
   readonly sizeSystemId: string | null;
   readonly sizeSystemName: string | null;
   readonly status: LifecycleStatus;
   readonly hasPublishedRevision: boolean;
+  readonly hasWorkingRevision: boolean;
   readonly version: number;
   readonly productCount: number;
   readonly categoryCount: number;
@@ -3462,24 +5099,33 @@ export async function listSizeGuides(
     pageSize: number;
     status?: LifecycleStatus | 'ALL';
     domainId?: string;
+    kind?: FitGuideKind | 'ALL';
+    publication?: 'PUBLISHED' | 'WORKING_CHANGES' | 'DRAFT_ONLY' | 'ALL';
+    sort?: 'UPDATED_DESC' | 'USAGE_DESC' | 'NAME_ASC';
     search?: string;
   },
 ): Promise<{ items: readonly SizeGuideListItem[]; totalItems: number }> {
   const offset = (input.page - 1) * input.pageSize;
   const statusFilter = input.status === 'ALL' ? null : (input.status ?? 'ACTIVE');
   const search = input.search?.trim() || null;
+  const kindFilter = input.kind === 'ALL' ? null : (input.kind ?? null);
+  const publicationFilter = input.publication === 'ALL' ? null : (input.publication ?? null);
+  const sort = input.sort ?? 'UPDATED_DESC';
 
   const [rows, countResult] = await Promise.all([
     sql<{
       id: string;
       name: string;
       description: string | null;
+      kind: FitGuideKind;
+      measurement_basis: SubjectType;
       sizing_domain_id: string;
       domain_name: string;
       size_system_id: string | null;
       system_name: string | null;
       status: LifecycleStatus;
       has_published: boolean;
+      has_working: boolean;
       version: string | number;
       product_count: string;
       category_count: string;
@@ -3489,12 +5135,19 @@ export async function listSizeGuides(
         guide.id::text,
         guide.name,
         guide.description,
+        guide.kind,
+        guide.measurement_basis,
         guide.sizing_domain_id::text,
         domain.name as domain_name,
         guide.size_system_id::text,
         system.name as system_name,
         guide.status,
         (guide.current_published_revision_id is not null) as has_published,
+        exists (
+          select 1 from sizing.size_guide_revisions draft
+          where draft.organization_id = guide.organization_id
+            and draft.size_guide_id = guide.id and draft.status = 'DRAFT'
+        ) as has_working,
         guide.version,
         count(distinct configuration.product_id)::text as product_count,
         count(distinct category.id)::text as category_count,
@@ -3517,6 +5170,21 @@ export async function listSizeGuides(
       where guide.organization_id = ${input.organizationId}
         and (${statusFilter}::text is null or guide.status = ${statusFilter}::text)
         and (${input.domainId ?? null}::uuid is null or guide.sizing_domain_id = ${input.domainId ?? null}::uuid)
+        and (${kindFilter}::text is null or guide.kind = ${kindFilter}::text)
+        and (
+          ${publicationFilter}::text is null
+          or (${publicationFilter} = 'PUBLISHED' and guide.current_published_revision_id is not null)
+          or (${publicationFilter} = 'DRAFT_ONLY' and guide.current_published_revision_id is null and exists (
+            select 1 from sizing.size_guide_revisions draft
+            where draft.organization_id = guide.organization_id
+              and draft.size_guide_id = guide.id and draft.status = 'DRAFT'
+          ))
+          or (${publicationFilter} = 'WORKING_CHANGES' and guide.current_published_revision_id is not null and exists (
+            select 1 from sizing.size_guide_revisions draft
+            where draft.organization_id = guide.organization_id
+              and draft.size_guide_id = guide.id and draft.status = 'DRAFT'
+          ))
+        )
         and (
           ${search}::text is null
           or guide.name ilike '%' || ${search ?? ''}::text || '%'
@@ -3524,8 +5192,12 @@ export async function listSizeGuides(
           or domain.name ilike '%' || ${search ?? ''}::text || '%'
           or coalesce(system.name, '') ilike '%' || ${search ?? ''}::text || '%'
         )
-      group by guide.id, domain.name, system.name
-      order by guide.updated_at desc, guide.id
+      group by guide.id, domain.name, domain.subject_type, system.name
+      order by
+        case when ${sort} = 'USAGE_DESC' then count(distinct configuration.product_id) + count(distinct category.id) end desc,
+        case when ${sort} = 'NAME_ASC' then lower(guide.name) end asc,
+        case when ${sort} = 'UPDATED_DESC' then guide.updated_at end desc,
+        guide.id
       limit ${input.pageSize}
       offset ${offset}
     `.execute(db),
@@ -3541,6 +5213,21 @@ export async function listSizeGuides(
       where guide.organization_id = ${input.organizationId}
         and (${statusFilter}::text is null or guide.status = ${statusFilter}::text)
         and (${input.domainId ?? null}::uuid is null or guide.sizing_domain_id = ${input.domainId ?? null}::uuid)
+        and (${kindFilter}::text is null or guide.kind = ${kindFilter}::text)
+        and (
+          ${publicationFilter}::text is null
+          or (${publicationFilter} = 'PUBLISHED' and guide.current_published_revision_id is not null)
+          or (${publicationFilter} = 'DRAFT_ONLY' and guide.current_published_revision_id is null and exists (
+            select 1 from sizing.size_guide_revisions draft
+            where draft.organization_id = guide.organization_id
+              and draft.size_guide_id = guide.id and draft.status = 'DRAFT'
+          ))
+          or (${publicationFilter} = 'WORKING_CHANGES' and guide.current_published_revision_id is not null and exists (
+            select 1 from sizing.size_guide_revisions draft
+            where draft.organization_id = guide.organization_id
+              and draft.size_guide_id = guide.id and draft.status = 'DRAFT'
+          ))
+        )
         and (
           ${search}::text is null
           or guide.name ilike '%' || ${search ?? ''}::text || '%'
@@ -3556,12 +5243,15 @@ export async function listSizeGuides(
       id: row.id,
       name: row.name,
       description: row.description,
+      kind: row.kind,
+      measurementBasis: row.measurement_basis,
       sizingDomainId: row.sizing_domain_id,
       sizingDomainName: row.domain_name,
       sizeSystemId: row.size_system_id,
       sizeSystemName: row.system_name,
       status: row.status,
       hasPublishedRevision: row.has_published,
+      hasWorkingRevision: row.has_working,
       version: numberFromDatabase(row.version),
       productCount: Number(row.product_count),
       categoryCount: Number(row.category_count),
@@ -3577,6 +5267,8 @@ export interface SizeGuideDetail {
   readonly id: string;
   readonly name: string;
   readonly description: string | null;
+  readonly kind: FitGuideKind;
+  readonly measurementBasis: SubjectType;
   readonly sizingDomainId: string;
   readonly sizingDomainName: string;
   readonly sizeSystemId: string | null;
@@ -3593,6 +5285,12 @@ export interface SizeGuideDetail {
     fitNotes: string | null;
     createdAt: string;
     publishedAt: string | null;
+    columns: readonly {
+      id: string;
+      measurementDefinitionId: string;
+      displayName: string;
+      position: number;
+    }[];
     rows: readonly {
       id: string;
       displayLabel: string;
@@ -3628,6 +5326,7 @@ export async function getSizeGuideDetail(
   guideId: string,
 ): Promise<SizeGuideDetail | null> {
   const [
+    columnsResult,
     guideResult,
     revisionsResult,
     rowsResult,
@@ -3637,8 +5336,28 @@ export async function getSizeGuideDetail(
   ] = await Promise.all([
     sql<{
       id: string;
+      revision_id: string;
+      measurement_definition_id: string;
+      display_name: string;
+      position: number;
+    }>`
+      select id::text, revision_id::text, measurement_definition_id::text, display_name, position
+      from sizing.size_guide_revision_columns column_definition
+      where organization_id = ${organizationId}
+        and exists (
+          select 1 from sizing.size_guide_revisions revision
+          where revision.id = column_definition.revision_id
+            and revision.organization_id = column_definition.organization_id
+            and revision.size_guide_id = ${guideId}
+        )
+      order by position, id
+    `.execute(db),
+    sql<{
+      id: string;
       name: string;
       description: string | null;
+      kind: FitGuideKind;
+      measurement_basis: SubjectType;
       sizing_domain_id: string;
       domain_name: string;
       size_system_id: string | null;
@@ -3651,6 +5370,8 @@ export async function getSizeGuideDetail(
         guide.id::text,
         guide.name,
         guide.description,
+        guide.kind,
+        guide.measurement_basis,
         guide.sizing_domain_id::text,
         domain.name as domain_name,
         guide.size_system_id::text,
@@ -3779,6 +5500,8 @@ export async function getSizeGuideDetail(
     id: guide.id,
     name: guide.name,
     description: guide.description,
+    kind: guide.kind,
+    measurementBasis: guide.measurement_basis,
     sizingDomainId: guide.sizing_domain_id,
     sizingDomainName: guide.domain_name,
     sizeSystemId: guide.size_system_id,
@@ -3795,6 +5518,14 @@ export async function getSizeGuideDetail(
       fitNotes: revision.fit_notes,
       createdAt: revision.created_at,
       publishedAt: revision.published_at,
+      columns: columnsResult.rows
+        .filter((column) => column.revision_id === revision.id)
+        .map((column) => ({
+          id: column.id,
+          measurementDefinitionId: column.measurement_definition_id,
+          displayName: column.display_name,
+          position: column.position,
+        })),
       rows: rowsResult.rows
         .filter((row) => row.revision_id === revision.id)
         .map((row) => ({
@@ -3913,67 +5644,58 @@ export async function getAdminSizingWorkspace(
   db: Kysely<DatabaseSchema>,
   organizationId: string,
 ): Promise<AdminSizingWorkspace> {
-  const [
-    domains,
-    systems,
-    definitions,
-    measurements,
-    guides,
-    revisions,
-    rows,
-    values,
-    configs,
-  ] = await Promise.all([
-    sql<{
-      id: string;
-      code: string;
-      name: string;
-      subject_type: SubjectType;
-      status: LifecycleStatus;
-    }>`
+  const [domains, systems, definitions, measurements, guides, revisions, rows, values, configs] =
+    await Promise.all([
+      sql<{
+        id: string;
+        code: string;
+        name: string;
+        subject_type: SubjectType;
+        status: LifecycleStatus;
+      }>`
       select id::text, code, name, subject_type, status
       from sizing.sizing_domains
       where organization_id = ${organizationId}
       order by status, name, id
     `.execute(db),
-    sql<{
-      id: string;
-      sizing_domain_id: string;
-      code: string;
-      name: string;
-      region_code: string | null;
-      status: LifecycleStatus;
-    }>`
+      sql<{
+        id: string;
+        sizing_domain_id: string;
+        code: string;
+        name: string;
+        region_code: string | null;
+        status: LifecycleStatus;
+      }>`
       select id::text, sizing_domain_id::text, code, name, region_code, status
       from sizing.size_systems
       where organization_id = ${organizationId}
       order by status, name, id
     `.execute(db),
-    sql<{
-      id: string;
-      size_system_id: string;
-      code: string;
-      label: string;
-      sort_order: number;
-      status: LifecycleStatus;
-    }>`
+      sql<{
+        id: string;
+        size_system_id: string;
+        code: string;
+        label: string;
+        sort_order: number;
+        status: LifecycleStatus;
+      }>`
       select id::text, size_system_id::text, code, label, sort_order, status
       from sizing.size_definitions
       where organization_id = ${organizationId}
       order by status, sort_order, label, id
     `.execute(db),
-    sql<{
-      id: string;
-      sizing_domain_id: string;
-      code: string;
-      name: string;
-      description: string | null;
-      instructions: string | null;
-      sort_order: number;
-      subject_type: SubjectType;
-      default_unit: MeasurementUnit;
-      status: LifecycleStatus;
-    }>`
+      sql<{
+        id: string;
+        sizing_domain_id: string;
+        code: string;
+        name: string;
+        description: string | null;
+        instructions: string | null;
+        sort_order: number;
+        subject_type: SubjectType;
+        default_unit: MeasurementUnit;
+        status: LifecycleStatus;
+      }>`
       select
         id::text,
         sizing_domain_id::text,
@@ -3989,16 +5711,16 @@ export async function getAdminSizingWorkspace(
       where organization_id = ${organizationId}
       order by status, sort_order, name, id
     `.execute(db),
-    sql<{
-      id: string;
-      name: string;
-      description: string | null;
-      sizing_domain_id: string;
-      size_system_id: string | null;
-      status: LifecycleStatus;
-      current_published_revision_id: string | null;
-      version: string | number;
-    }>`
+      sql<{
+        id: string;
+        name: string;
+        description: string | null;
+        sizing_domain_id: string;
+        size_system_id: string | null;
+        status: LifecycleStatus;
+        current_published_revision_id: string | null;
+        version: string | number;
+      }>`
       select
         id::text,
         name,
@@ -4012,17 +5734,17 @@ export async function getAdminSizingWorkspace(
       where organization_id = ${organizationId}
       order by updated_at desc, id
     `.execute(db),
-    sql<{
-      id: string;
-      size_guide_id: string;
-      revision_number: number;
-      status: RevisionStatus;
-      version: string | number;
-      instructions: string | null;
-      fit_notes: string | null;
-      created_at: string;
-      published_at: string | null;
-    }>`
+      sql<{
+        id: string;
+        size_guide_id: string;
+        revision_number: number;
+        status: RevisionStatus;
+        version: string | number;
+        instructions: string | null;
+        fit_notes: string | null;
+        created_at: string;
+        published_at: string | null;
+      }>`
       select
         id::text,
         size_guide_id::text,
@@ -4037,27 +5759,27 @@ export async function getAdminSizingWorkspace(
       where organization_id = ${organizationId}
       order by revision_number desc, id
     `.execute(db),
-    sql<{
-      id: string;
-      revision_id: string;
-      display_label: string;
-      position: number;
-      size_definition_id: string | null;
-    }>`
+      sql<{
+        id: string;
+        revision_id: string;
+        display_label: string;
+        position: number;
+        size_definition_id: string | null;
+      }>`
       select id::text, revision_id::text, display_label, position, size_definition_id::text
       from sizing.size_guide_rows
       where organization_id = ${organizationId}
       order by position, id
     `.execute(db),
-    sql<{
-      row_id: string;
-      measurement_definition_id: string;
-      value_exact: string | null;
-      value_min: string | null;
-      value_max: string | null;
-      unit_code: MeasurementUnit;
-      is_approximate: boolean;
-    }>`
+      sql<{
+        row_id: string;
+        measurement_definition_id: string;
+        value_exact: string | null;
+        value_min: string | null;
+        value_max: string | null;
+        unit_code: MeasurementUnit;
+        is_approximate: boolean;
+      }>`
       select
         row_id::text,
         measurement_definition_id::text,
@@ -4069,14 +5791,14 @@ export async function getAdminSizingWorkspace(
       from sizing.size_guide_measurements
       where organization_id = ${organizationId}
     `.execute(db),
-    sql<{
-      product_id: string;
-      product_title: string;
-      product_version: string | number;
-      size_system_id: string;
-      size_guide_id: string | null;
-      status: LifecycleStatus;
-    }>`
+      sql<{
+        product_id: string;
+        product_title: string;
+        product_version: string | number;
+        size_system_id: string;
+        size_guide_id: string | null;
+        status: LifecycleStatus;
+      }>`
       select
         configuration.product_id::text,
         product.title as product_title,
@@ -4091,7 +5813,7 @@ export async function getAdminSizingWorkspace(
       where configuration.organization_id = ${organizationId}
       order by product.title, product.id
     `.execute(db),
-  ]);
+    ]);
 
   return {
     domains: domains.rows.map((row) => ({
@@ -4230,6 +5952,14 @@ export async function getSizingQualityChecks(
           where configuration.product_id = product.id
             and configuration.organization_id = product.organization_id
             and configuration.status = 'ACTIVE'
+        )
+        and not exists (
+          select 1
+          from sizing.product_size_configurations configuration
+          where configuration.product_id = product.id
+            and configuration.organization_id = product.organization_id
+            and configuration.status = 'ACTIVE'
+            and configuration.guide_outcome = 'NONE'
         )
     `.execute(db),
     sql<{ count: string }>`
@@ -4388,27 +6118,236 @@ export async function getSizingQualityChecks(
     productsWithSizeAxisButNoSizingConfig: Number(noConfig.rows[0]?.count ?? 0),
     productsWithConfigButNoPublishedGuide: Number(noGuide.rows[0]?.count ?? 0),
     productsUsingArchivedGuide: Number(archivedGuide.rows[0]?.count ?? 0),
-    productConfigurationsWithSystemGuideMismatch: Number(
-      configGuideMismatch.rows[0]?.count ?? 0,
-    ),
+    productConfigurationsWithSystemGuideMismatch: Number(configGuideMismatch.rows[0]?.count ?? 0),
     publishedRevisionsWithEmptyRows: Number(emptyRevisions.rows[0]?.count ?? 0),
     publishedRowsWithoutMeasurements: Number(emptyPublishedRows.rows[0]?.count ?? 0),
-    optionValuesInSizeAxisWithoutSizeDefinitionLink: Number(
-      unlinkedValues.rows[0]?.count ?? 0,
-    ),
-    optionValuesMappedOutsideConfiguredSystem: Number(
-      optionSystemMismatch.rows[0]?.count ?? 0,
-    ),
+    optionValuesInSizeAxisWithoutSizeDefinitionLink: Number(unlinkedValues.rows[0]?.count ?? 0),
+    optionValuesMappedOutsideConfiguredSystem: Number(optionSystemMismatch.rows[0]?.count ?? 0),
     guideRowsWithSystemMismatch: Number(guideRowMismatch.rows[0]?.count ?? 0),
-    categoryDefaultsUsingUnavailableGuide: Number(
-      categoryGuideUnavailable.rows[0]?.count ?? 0,
-    ),
-    activeDefinitionsUnderArchivedSystem: Number(
-      orphanedDefinitions.rows[0]?.count ?? 0,
-    ),
-    activeMeasurementsUnderArchivedDomain: Number(
-      orphanedMeasurements.rows[0]?.count ?? 0,
-    ),
+    categoryDefaultsUsingUnavailableGuide: Number(categoryGuideUnavailable.rows[0]?.count ?? 0),
+    activeDefinitionsUnderArchivedSystem: Number(orphanedDefinitions.rows[0]?.count ?? 0),
+    activeMeasurementsUnderArchivedDomain: Number(orphanedMeasurements.rows[0]?.count ?? 0),
+  };
+}
+
+export type SizingAttentionIssueType =
+  | 'PRODUCT_WITHOUT_GUIDE'
+  | 'CATEGORY_GUIDE_UNAVAILABLE'
+  | 'PUBLISHED_GUIDE_HAS_CHANGES'
+  | 'SUPPLY_GUIDE_CONFLICT';
+
+export interface SizingAttentionItem {
+  readonly id: string;
+  readonly issueType: SizingAttentionIssueType;
+  readonly severity: 'BLOCKING' | 'WARNING';
+  readonly resourceType: 'PRODUCT' | 'CATEGORY' | 'GUIDE' | 'PURCHASE';
+  readonly resourceId: string;
+  readonly resourceLabel: string;
+  readonly consequence: string;
+  readonly actionHref: string;
+  readonly actionLabel: string;
+  readonly updatedAt: string;
+}
+
+export async function listSizingAttention(
+  db: Kysely<DatabaseSchema>,
+  input: { organizationId: string; page: number; pageSize: number },
+): Promise<{ items: readonly SizingAttentionItem[]; totalItems: number }> {
+  const offset = (input.page - 1) * input.pageSize;
+  const result = await sql<{
+    id: string;
+    issue_type: SizingAttentionIssueType;
+    severity: 'BLOCKING' | 'WARNING';
+    resource_type: SizingAttentionItem['resourceType'];
+    resource_id: string;
+    resource_label: string;
+    consequence: string;
+    action_href: string;
+    action_label: string;
+    updated_at: string;
+    total_count: string;
+  }>`
+    with issues as (
+      select
+        'product-no-guide-' || product.id::text as id,
+        'PRODUCT_WITHOUT_GUIDE'::text as issue_type,
+        'BLOCKING'::text as severity,
+        'PRODUCT'::text as resource_type,
+        product.id::text as resource_id,
+        product.title as resource_label,
+        'Customers can choose a size, but no published fit guide will appear on the Storefront.'::text as consequence,
+        '/products/' || product.id::text as action_href,
+        'Choose sizing outcome'::text as action_label,
+        product.updated_at as updated_at
+      from catalog.products product
+      where product.organization_id = ${input.organizationId}
+        and product.status <> 'ARCHIVED'
+        and exists (
+          select 1
+          from catalog.product_option_axes axis
+          join catalog.product_option_values value
+            on value.option_axis_id = axis.id
+           and value.organization_id = axis.organization_id
+           and value.status = 'ACTIVE'
+          where axis.product_id = product.id
+            and axis.organization_id = product.organization_id
+            and axis.status = 'ACTIVE'
+            and (
+              value.size_definition_id is not null
+              or lower(axis.code) in ('size', 'sizes')
+              or lower(axis.name) = 'size'
+            )
+        )
+        and not exists (
+          select 1
+          from sizing.product_size_configurations configuration
+          join sizing.size_guides guide
+            on guide.id = configuration.size_guide_id
+           and guide.organization_id = configuration.organization_id
+           and guide.status = 'ACTIVE'
+           and guide.current_published_revision_id is not null
+          where configuration.product_id = product.id
+            and configuration.organization_id = product.organization_id
+            and configuration.status = 'ACTIVE'
+        )
+        and not exists (
+          select 1
+          from catalog.categories category
+          join sizing.size_guides guide
+            on guide.id = category.default_size_guide_id
+           and guide.organization_id = category.organization_id
+           and guide.status = 'ACTIVE'
+           and guide.current_published_revision_id is not null
+          where category.id = product.primary_category_id
+            and category.organization_id = product.organization_id
+            and category.status <> 'ARCHIVED'
+        )
+
+      union all
+
+      select
+        'category-guide-' || category.id::text,
+        'CATEGORY_GUIDE_UNAVAILABLE',
+        'BLOCKING',
+        'CATEGORY',
+        category.id::text,
+        category.name,
+        'Products inheriting this Category cannot show its unavailable default fit guide.',
+        '/categories',
+        'Replace Category guide',
+        category.updated_at
+      from catalog.categories category
+      left join sizing.size_guides guide
+        on guide.id = category.default_size_guide_id
+       and guide.organization_id = category.organization_id
+      where category.organization_id = ${input.organizationId}
+        and category.status <> 'ARCHIVED'
+        and category.default_size_guide_id is not null
+        and (
+          guide.id is null
+          or guide.status <> 'ACTIVE'
+          or guide.current_published_revision_id is null
+        )
+
+      union all
+
+      select
+        'guide-draft-' || guide.id::text,
+        'PUBLISHED_GUIDE_HAS_CHANGES',
+        'WARNING',
+        'GUIDE',
+        guide.id::text,
+        guide.name,
+        'Working changes are not visible to customers using the current published guide.',
+        '/sizing/guides/' || guide.id::text,
+        'Review and publish',
+        guide.updated_at
+      from sizing.size_guides guide
+      where guide.organization_id = ${input.organizationId}
+        and guide.status = 'ACTIVE'
+        and guide.current_published_revision_id is not null
+        and exists (
+          select 1 from sizing.size_guide_revisions revision
+          where revision.size_guide_id = guide.id
+            and revision.organization_id = guide.organization_id
+            and revision.status = 'DRAFT'
+        )
+        and (
+          exists (
+            select 1 from sizing.product_size_configurations configuration
+            where configuration.size_guide_id = guide.id
+              and configuration.organization_id = guide.organization_id
+              and configuration.status = 'ACTIVE'
+          )
+          or exists (
+            select 1 from catalog.categories category
+            where category.default_size_guide_id = guide.id
+              and category.organization_id = guide.organization_id
+              and category.status <> 'ARCHIVED'
+          )
+        )
+
+      union all
+
+      select
+        'supply-conflict-' || evidence.id::text,
+        'SUPPLY_GUIDE_CONFLICT',
+        'WARNING',
+        'PURCHASE',
+        evidence.purchase_id::text,
+        purchase.purchase_number,
+        'Supplier fit evidence proposes a different guide from the Product customer guide.',
+        '/supply/purchases/' || evidence.purchase_id::text,
+        'Review supplier evidence',
+        evidence.updated_at
+      from sizing.supply_purchase_fit_evidence evidence
+      join procurement.purchases purchase
+        on purchase.id = evidence.purchase_id
+       and purchase.organization_id = evidence.organization_id
+      join sizing.product_size_configurations configuration
+        on configuration.product_id = evidence.product_id
+       and configuration.organization_id = evidence.organization_id
+       and configuration.status = 'ACTIVE'
+      where evidence.organization_id = ${input.organizationId}
+        and evidence.decision in ('PENDING', 'EVIDENCE_ONLY')
+        and evidence.proposed_size_guide_id is not null
+        and configuration.size_guide_id is distinct from evidence.proposed_size_guide_id
+    )
+    select
+      id,
+      issue_type,
+      severity,
+      resource_type,
+      resource_id,
+      resource_label,
+      consequence,
+      action_href,
+      action_label,
+      updated_at::text,
+      count(*) over()::text as total_count
+    from issues
+    order by
+      case severity when 'BLOCKING' then 0 else 1 end,
+      updated_at desc,
+      id
+    limit ${input.pageSize}
+    offset ${offset}
+  `.execute(db);
+
+  return {
+    items: result.rows.map((row) => ({
+      id: row.id,
+      issueType: row.issue_type,
+      severity: row.severity,
+      resourceType: row.resource_type,
+      resourceId: row.resource_id,
+      resourceLabel: row.resource_label,
+      consequence: row.consequence,
+      actionHref: row.action_href,
+      actionLabel: row.action_label,
+      updatedAt: row.updated_at,
+    })),
+    totalItems: Number(result.rows[0]?.total_count ?? 0),
   };
 }
 
@@ -4416,18 +6355,29 @@ export async function getSizingQualityChecks(
 
 export interface PublicSizeGuide {
   readonly name: string;
+  readonly kind:
+    'APPAREL_SIZE_CHART' | 'FOOTWEAR_SIZE_CHART' | 'WEARABLE_FIT_GUIDE' | 'CUSTOM_FIT_GUIDE';
+  readonly measurementBasis: SubjectType;
   readonly instructions: string | null;
   readonly fitNotes: string | null;
+  readonly columns: readonly {
+    id: string;
+    name: string;
+    instructions: string | null;
+    defaultUnit: MeasurementUnit;
+  }[];
   readonly rows: readonly {
+    id: string;
     label: string;
-    measurements: readonly {
-      name: string;
-      instructions: string | null;
+    productOptionValueId: string | null;
+    isSelectable: boolean;
+    values: readonly {
+      columnId: string;
       exact?: string;
       min?: string;
       max?: string;
-      unit: string;
-      approximate: boolean;
+      unit: MeasurementUnit;
+      isApproximate: boolean;
     }[];
   }[];
 }
@@ -4447,6 +6397,8 @@ export async function getPublicSizeGuideForProduct(
   const guide = await sql<{
     guide_id: string;
     name: string;
+    kind: PublicSizeGuide['kind'];
+    measurement_basis: SubjectType;
     revision_id: string;
     instructions: string | null;
     fit_notes: string | null;
@@ -4489,6 +6441,8 @@ export async function getPublicSizeGuideForProduct(
       select
         guide.id as guide_id,
         guide.name,
+        guide.kind,
+        guide.measurement_basis,
         revision.id as revision_id,
         revision.instructions,
         revision.fit_notes,
@@ -4500,6 +6454,9 @@ export async function getPublicSizeGuideForProduct(
       join sizing.size_guide_revisions revision
         on revision.id = guide.current_published_revision_id
        and revision.organization_id = guide.organization_id
+      join sizing.sizing_domains domain
+        on domain.id = guide.sizing_domain_id
+       and domain.organization_id = guide.organization_id
       where configuration.organization_id = ${organizationId}
         and configuration.product_id = ${productId}
         and configuration.status = 'ACTIVE'
@@ -4511,6 +6468,8 @@ export async function getPublicSizeGuideForProduct(
       select
         guide.id as guide_id,
         guide.name,
+        guide.kind,
+        guide.measurement_basis,
         revision.id as revision_id,
         revision.instructions,
         revision.fit_notes,
@@ -4526,6 +6485,9 @@ export async function getPublicSizeGuideForProduct(
       join sizing.size_guide_revisions revision
         on revision.id = guide.current_published_revision_id
        and revision.organization_id = guide.organization_id
+      join sizing.sizing_domains domain
+        on domain.id = guide.sizing_domain_id
+       and domain.organization_id = guide.organization_id
       where guide.status = 'ACTIVE'
         and revision.status = 'PUBLISHED'
         and (
@@ -4541,10 +6503,20 @@ export async function getPublicSizeGuideForProduct(
           where configuration.organization_id = ${organizationId}
             and configuration.product_id = ${productId}
             and configuration.status = 'ACTIVE'
-            and configuration.size_guide_id is not null
+            and (
+              configuration.size_guide_id is not null
+              or configuration.guide_outcome = 'NONE'
+            )
         )
     )
-    select guide_id::text, name, revision_id::text, instructions, fit_notes
+    select
+      guide_id::text,
+      name,
+      kind,
+      measurement_basis,
+      revision_id::text,
+      instructions,
+      fit_notes
     from candidate_guides
     order by priority
     limit 1
@@ -4556,19 +6528,25 @@ export async function getPublicSizeGuideForProduct(
   const records = await sql<{
     row_id: string;
     label: string;
+    product_option_value_id: string | null;
+    measurement_definition_id: string;
     name: string;
     instructions: string | null;
+    default_unit: MeasurementUnit;
     value_exact: string | null;
     value_min: string | null;
     value_max: string | null;
-    unit_code: string;
+    unit_code: MeasurementUnit;
     is_approximate: boolean;
   }>`
     select
       size_row.id::text as row_id,
       size_row.display_label as label,
-      definition.name,
+      product_option.id::text as product_option_value_id,
+      definition.id::text as measurement_definition_id,
+      guide_column.display_name as name,
       definition.instructions,
+      definition.default_unit,
       measurement.value_exact::text,
       measurement.value_min::text,
       measurement.value_max::text,
@@ -4581,46 +6559,79 @@ export async function getPublicSizeGuideForProduct(
     join sizing.measurement_definitions definition
       on definition.id = measurement.measurement_definition_id
      and definition.organization_id = measurement.organization_id
+    join sizing.size_guide_revision_columns guide_column
+      on guide_column.organization_id = measurement.organization_id
+     and guide_column.revision_id = size_row.revision_id
+     and guide_column.measurement_definition_id = measurement.measurement_definition_id
+    left join lateral (
+      select option_value.id
+      from catalog.product_option_values option_value
+      where option_value.organization_id = ${organizationId}
+        and option_value.product_id = ${productId}
+        and option_value.size_definition_id = size_row.size_definition_id
+        and option_value.status = 'ACTIVE'
+      order by option_value.position, option_value.id
+      limit 1
+    ) product_option on true
     where size_row.revision_id = ${row.revision_id}
       and size_row.organization_id = ${organizationId}
     order by
       size_row.position,
       size_row.id,
-      definition.sort_order,
-      definition.name,
-      definition.id
+      guide_column.position,
+      guide_column.id
   `.execute(db);
 
   const sizeRows = new Map<
     string,
     {
+      id: string;
       label: string;
-      measurements: {
-        name: string;
-        instructions: string | null;
+      productOptionValueId: string | null;
+      isSelectable: boolean;
+      values: {
+        columnId: string;
         exact?: string;
         min?: string;
         max?: string;
-        unit: string;
-        approximate: boolean;
+        unit: MeasurementUnit;
+        isApproximate: boolean;
       }[];
+    }
+  >();
+  const columns = new Map<
+    string,
+    {
+      id: string;
+      name: string;
+      instructions: string | null;
+      defaultUnit: MeasurementUnit;
     }
   >();
 
   for (const measurement of records.rows) {
     const current = sizeRows.get(measurement.row_id) ?? {
+      id: measurement.row_id,
       label: measurement.label,
-      measurements: [],
+      productOptionValueId: measurement.product_option_value_id,
+      isSelectable: measurement.product_option_value_id !== null,
+      values: [],
     };
 
-    current.measurements.push({
+    columns.set(measurement.measurement_definition_id, {
+      id: measurement.measurement_definition_id,
       name: measurement.name,
       instructions: measurement.instructions,
+      defaultUnit: measurement.default_unit,
+    });
+
+    current.values.push({
+      columnId: measurement.measurement_definition_id,
       ...(measurement.value_exact !== null ? { exact: measurement.value_exact } : {}),
       ...(measurement.value_min !== null ? { min: measurement.value_min } : {}),
       ...(measurement.value_max !== null ? { max: measurement.value_max } : {}),
       unit: measurement.unit_code,
-      approximate: measurement.is_approximate,
+      isApproximate: measurement.is_approximate,
     });
 
     sizeRows.set(measurement.row_id, current);
@@ -4628,8 +6639,11 @@ export async function getPublicSizeGuideForProduct(
 
   return {
     name: row.name,
+    kind: row.kind,
+    measurementBasis: row.measurement_basis,
     instructions: row.instructions,
     fitNotes: row.fit_notes,
+    columns: [...columns.values()],
     rows: [...sizeRows.values()],
   };
 }

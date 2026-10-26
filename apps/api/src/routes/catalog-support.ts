@@ -20,7 +20,7 @@ export async function requireCatalogCapability(
   headers: Record<string, string | string[] | undefined>,
   capability: string,
 ) {
-  const session = await auth.api.getSession({ headers: toHeaders(headers) });
+  const session = await auth.api.getSession({ headers: toHeaders(headers) }).catch(() => null);
   if (!session?.user?.id) return undefined;
   const context = await findActiveAdminContext(database.db, session.user.id, {
     requiredCapability: capability,

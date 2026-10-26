@@ -135,7 +135,7 @@ describe('durable System Integrity orchestration', () => {
     const initialOverview = await getIntegrityOverview(database.db, tenant.id);
     expect(initialOverview.overallStatus).toBe('NOT_ASSESSED');
     expect(initialOverview.latestRun).toBeNull();
-    expect(initialOverview.checksSummary.total).toBe(12);
+    expect(initialOverview.checksSummary.total).toBe(13);
 
     // Create a dead letter job to produce a finding
     await sql`insert into platform.jobs
@@ -186,4 +186,3 @@ describe('durable System Integrity orchestration', () => {
     expect(repairableList.items.length).toBe(0);
   });
 });
-

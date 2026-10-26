@@ -14,7 +14,7 @@ import {
   Trash2,
   Unlink,
 } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 
 import type {
   AgentAvailabilityView,
@@ -27,6 +27,17 @@ import type { CustomerSummaryDto } from '@maevelle/contracts';
 
 import { Button } from '@/components/ui/button';
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog';
+import {
   Dialog,
   DialogContent,
   DialogDescription,
@@ -38,6 +49,7 @@ import { Input } from '@/components/ui/input';
 import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select';
 import { Textarea } from '@/components/ui/textarea';
 import { toast } from '@/components/ui/toast';
+import { StatusBadge } from '@/components/status-badge';
 import { cn } from '@/lib/utils';
 import * as api from './api';
 import { formatDateTime, formatMoney } from './format';
@@ -45,6 +57,83 @@ import { useMessaging } from './messaging-provider';
 import type { AssignmentHistoryView, MessagingCustomerContextView } from './types';
 
 type PanelTab = 'context' | 'notes' | 'activity';
+
+function ConfirmAction({
+  triggerLabel,
+  title,
+  description,
+  confirmLabel,
+  onConfirm,
+  icon,
+  iconOnly = false,
+  triggerClassName,
+}: {
+  triggerLabel: string;
+  title: string;
+  description: string;
+  confirmLabel: string;
+  onConfirm: () => Promise<void>;
+  icon?: ReactNode;
+  iconOnly?: boolean;
+  triggerClassName?: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const [busy, setBusy] = useState(false);
+
+  async function confirm() {
+    setBusy(true);
+    try {
+      await onConfirm();
+      setOpen(false);
+    } catch (error) {
+      toast.add({
+        title: 'Action could not be completed',
+        description: error instanceof Error ? error.message : 'Try again.',
+        type: 'error',
+      });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <AlertDialog open={open} onOpenChange={setOpen}>
+      <AlertDialogTrigger
+        render={
+          <Button
+            variant="ghost"
+            size={iconOnly ? 'icon-sm' : 'sm'}
+            className={triggerClassName}
+            aria-label={iconOnly ? triggerLabel : undefined}
+          />
+        }
+      >
+        {icon}
+        {iconOnly ? null : triggerLabel}
+      </AlertDialogTrigger>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>{title}</AlertDialogTitle>
+          <AlertDialogDescription>{description}</AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel disabled={busy}>Keep current state</AlertDialogCancel>
+          <AlertDialogAction
+            variant="destructive"
+            disabled={busy}
+            onClick={(event) => {
+              event.preventDefault();
+              void confirm();
+            }}
+          >
+            {busy ? <Loader2 className="size-4 animate-spin" /> : null}
+            {confirmLabel}
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  );
+}
 
 export function CollaborationPanel() {
   const messaging = useMessaging();
@@ -201,20 +290,20 @@ function CustomerContext({
                 <ExternalLink className="size-3.5" /> View customer
               </Button>
               {messaging.capabilities.includes('messaging.customer_link.manage') ? (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={async () => {
-                    if (!window.confirm('Unlink this messaging contact from the customer?')) return;
+                <ConfirmAction
+                  triggerLabel="Unlink"
+                  title="Unlink messaging contact?"
+                  description="The customer and conversation histories remain intact, but future messages will no longer resolve to this customer until the contact is linked again."
+                  confirmLabel="Unlink contact"
+                  onConfirm={async () => {
                     await api.unlinkCustomer(
                       conversation.contact.id,
                       'Correcting messaging customer association',
                     );
                     await onRefresh();
                   }}
-                >
-                  <Unlink className="size-3.5" /> Unlink
-                </Button>
+                  icon={<Unlink className="size-3.5" />}
+                />
               ) : null}
             </div>
           </div>
@@ -244,6 +333,59 @@ function CustomerContext({
                 context.customer.commerceMetrics.returnedOrders ?? context.returns.length,
               )}
             />
+          </div>
+        </section>
+      ) : null}
+
+      {context?.crmProfile ? (
+        <section>
+          <SectionTitle>CRM relationship</SectionTitle>
+          <div className="space-y-2 rounded-lg border border-border p-3 text-xs">
+            <div className="flex flex-wrap gap-2">
+              <StatusBadge status={context.crmProfile.lifecycleStage} tone="info" />
+              <StatusBadge status={context.crmProfile.relationshipStatus} />
+            </div>
+            <p className="text-muted-foreground">
+              Owner: {context.crmProfile.relationshipOwnerName ?? 'Unassigned'}
+            </p>
+            {context.linkedIdentities.length ? (
+              <div className="flex flex-wrap gap-1">
+                {context.linkedIdentities.map((identity) => (
+                  <StatusBadge
+                    key={identity.id}
+                    status={`${identity.provider} · ${identity.assurance}`}
+                    tone={
+                      identity.assurance === 'HIGH'
+                        ? 'success'
+                        : identity.assurance === 'MEDIUM'
+                          ? 'info'
+                          : 'warning'
+                    }
+                  />
+                ))}
+              </div>
+            ) : (
+              <p className="text-muted-foreground">No linked channel identity.</p>
+            )}
+            {context.crmProfile.preferences.slice(0, 3).map((preference) => (
+              <div key={preference.id} className="flex items-start justify-between gap-2">
+                <span>{preference.key.replaceAll('_', ' ')}</span>
+                <span className="max-w-36 truncate text-muted-foreground">
+                  {typeof preference.value === 'string'
+                    ? preference.value
+                    : JSON.stringify(preference.value)}
+                </span>
+              </div>
+            ))}
+            {context.crmProfile.followUps.some((followUp) => followUp.status === 'OPEN') ? (
+              <p className="font-medium text-warning">
+                {
+                  context.crmProfile.followUps.filter((followUp) => followUp.status === 'OPEN')
+                    .length
+                }{' '}
+                open CRM follow-up(s)
+              </p>
+            ) : null}
           </div>
         </section>
       ) : null}
@@ -308,7 +450,9 @@ function CustomerContext({
               )}
             >
               <div className="flex items-center justify-between gap-2">
-                <p className="font-medium tabular-nums font-mono">{formatDateTime(followUp.dueAt)}</p>
+                <p className="font-medium tabular-nums font-mono">
+                  {formatDateTime(followUp.dueAt)}
+                </p>
                 {followUp.isOverdue ? (
                   <span className="text-[10px] text-destructive font-semibold">Overdue</span>
                 ) : null}
@@ -328,19 +472,18 @@ function CustomerContext({
                   >
                     <Check className="size-3.5" /> Complete
                   </Button>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-7 text-xs text-muted-foreground hover:text-destructive"
-                    onClick={async () => {
-                      if (!window.confirm('Cancel this scheduled follow-up?')) return;
+                  <ConfirmAction
+                    triggerLabel="Cancel"
+                    title="Cancel scheduled follow-up?"
+                    description="The follow-up remains in the activity history as cancelled and will no longer appear as pending."
+                    confirmLabel="Cancel follow-up"
+                    triggerClassName="h-7 text-xs text-muted-foreground hover:text-destructive"
+                    onConfirm={async () => {
                       await api.transitionFollowUp(followUp.id, followUp.version, 'CANCELLED');
                       await onRefresh();
                       await messaging.refreshInbox();
                     }}
-                  >
-                    Cancel
-                  </Button>
+                  />
                 </div>
               ) : null}
             </div>
@@ -496,18 +639,18 @@ function Notes({
                 >
                   <NotebookPen className="size-3.5" />
                 </Button>
-                <Button
-                  variant="ghost"
-                  size="icon-sm"
-                  aria-label="Delete note"
-                  onClick={async () => {
-                    if (!window.confirm('Delete this internal note?')) return;
+                <ConfirmAction
+                  iconOnly
+                  triggerLabel="Delete note"
+                  title="Delete internal note?"
+                  description="The note will be removed from the collaboration panel. The recorded audit evidence remains available to authorized operators."
+                  confirmLabel="Delete note"
+                  onConfirm={async () => {
                     await api.deleteNote(note.id, 'Removed from collaboration panel');
                     await onRefresh();
                   }}
-                >
-                  <Trash2 className="size-3.5" />
-                </Button>
+                  icon={<Trash2 className="size-3.5" />}
+                />
               </div>
             ) : null}
           </div>

@@ -17,6 +17,10 @@ export * from './customers/accounts.js';
 export * from './customers/communications.js';
 export * from './customers/timeline.js';
 export * from './customers/merge-preview.js';
+export * from './customers/crm-profile.js';
+export * from './customers/identities.js';
+export * from './customers/segments.js';
+export * from './customers/crm-operations.js';
 
 import type {
   CustomerRestriction,
@@ -47,7 +51,8 @@ export class CustomerDomainError extends Error {
       | 'CUSTOMER_BLOCKED'
       | 'IDEMPOTENCY_CONFLICT'
       | 'RESTRICTION_ACTIVE'
-      | 'ACCOUNT_LINK_CONFLICT',
+      | 'ACCOUNT_LINK_CONFLICT'
+      | 'FORBIDDEN',
     message: string,
   ) {
     super(message);
@@ -70,6 +75,11 @@ export interface CustomerSummary {
   readonly totalSpend?: string;
   readonly lastOrderAt?: string | null;
   readonly activeRestrictions?: readonly CustomerRestrictionType[];
+  readonly lifecycleStage?: string;
+  readonly relationshipOwnerMembershipId?: string | null;
+  readonly relationshipOwnerName?: string | null;
+  readonly lastActivityAt?: string | null;
+  readonly linkedChannels?: readonly string[];
 }
 
 function identityInput<T>(callback: () => T): T {
@@ -554,6 +564,18 @@ export interface CustomerListFilters {
   readonly q?: string;
   readonly sortBy?: 'CREATED_DESC' | 'CREATED_ASC' | 'ORDERS_DESC' | 'SPEND_DESC' | 'RECENT_ORDER';
   readonly minOrders?: number;
+  readonly maxOrders?: number;
+  readonly minSpend?: string;
+  readonly maxSpend?: string;
+  readonly lifecycleStage?: string;
+  readonly relationshipOwnerMembershipId?: string;
+  readonly tagId?: string;
+  readonly segmentId?: string;
+  readonly linkedChannel?: 'WEBSITE' | 'FACEBOOK' | 'INSTAGRAM';
+  readonly lastActivityFrom?: string;
+  readonly lastActivityTo?: string;
+  /** Allows matching private phone/email identifiers. Callers must authorize this separately. */
+  readonly searchSensitive?: boolean;
 }
 
 export interface PaginationMeta {
@@ -596,6 +618,11 @@ export async function listCustomers(
     total_spend: string;
     last_order_at: Date | null;
     active_restrictions: CustomerRestrictionType[] | null;
+    lifecycle_stage: string;
+    relationship_owner_membership_id: string | null;
+    relationship_owner_name: string | null;
+    last_activity_at: Date | null;
+    linked_channels: string[] | null;
     total_count: string;
   }>`
     select
@@ -604,9 +631,12 @@ export async function listCustomers(
       (select raw_value from customers.customer_phones p where p.customer_id = c.id order by is_primary desc, created_at, id limit 1) as primary_phone,
       (select raw_value from customers.customer_emails e where e.customer_id = c.id order by is_primary desc, created_at, id limit 1) as primary_email,
       stats.order_count, stats.total_spend, stats.last_order_at,
-      restr.active_restrictions,
+      restr.active_restrictions,c.lifecycle_stage,c.relationship_owner_membership_id,owner.name relationship_owner_name,c.last_activity_at,
+      coalesce((select array_agg(distinct l.provider order by l.provider) from customers.customer_identity_links l where l.organization_id=c.organization_id and l.customer_id=c.id and l.status='LINKED'),'{}') linked_channels,
       count(*) over ()::text as total_count
     from customers.customers c
+    left join iam.organization_memberships owner_membership on owner_membership.organization_id=c.organization_id and owner_membership.id=c.relationship_owner_membership_id
+    left join iam.users owner on owner.id=owner_membership.user_id
     left join lateral (
       select
         count(*)::text as order_count,
@@ -636,12 +666,26 @@ export async function listCustomers(
       and (${filters?.from ?? null}::text is null or c.created_at >= (${filters?.from ?? null})::timestamptz)
       and (${filters?.to ?? null}::text is null or c.created_at <= (${filters?.to ?? null})::timestamptz)
       and (${filters?.minOrders ?? null}::int is null or coalesce(stats.order_count::int, 0) >= (${filters?.minOrders ?? null})::int)
+      and (${filters?.maxOrders ?? null}::int is null or coalesce(stats.order_count::int, 0) <= (${filters?.maxOrders ?? null})::int)
+      and (${filters?.minSpend ?? null}::numeric is null or coalesce(stats.total_spend::numeric, 0) >= (${filters?.minSpend ?? null})::numeric)
+      and (${filters?.maxSpend ?? null}::numeric is null or coalesce(stats.total_spend::numeric, 0) <= (${filters?.maxSpend ?? null})::numeric)
+      and (${filters?.lifecycleStage ?? null}::text is null or c.lifecycle_stage=${filters?.lifecycleStage ?? null})
+      and (${filters?.relationshipOwnerMembershipId ?? null}::uuid is null or c.relationship_owner_membership_id=${filters?.relationshipOwnerMembershipId ?? null}::uuid)
+      and (${filters?.lastActivityFrom ?? null}::text is null or c.last_activity_at>=(${filters?.lastActivityFrom ?? null})::timestamptz)
+      and (${filters?.lastActivityTo ?? null}::text is null or c.last_activity_at<=(${filters?.lastActivityTo ?? null})::timestamptz)
+      and (${filters?.tagId ?? null}::uuid is null or exists(select 1 from customers.customer_tag_assignments ta where ta.organization_id=c.organization_id and ta.customer_id=c.id and ta.tag_id=${filters?.tagId ?? null}::uuid))
+      and (${filters?.segmentId ?? null}::uuid is null or exists(select 1 from customers.customer_segment_memberships sm where sm.organization_id=c.organization_id and sm.customer_id=c.id and sm.segment_id=${filters?.segmentId ?? null}::uuid))
+      and (${filters?.linkedChannel ?? null}::text is null or exists(select 1 from customers.customer_identity_links il where il.organization_id=c.organization_id and il.customer_id=c.id and il.status='LINKED' and il.provider=${filters?.linkedChannel ?? null}))
       and (
         ${searchTerm ?? null}::text is null
         or lower(c.display_name) like ${searchTerm ? `%${searchTerm.toLocaleLowerCase()}%` : ''}
         or lower(c.customer_number) like ${searchTerm ? `%${searchTerm.toLocaleLowerCase()}%` : ''}
-        or exists (select 1 from customers.customer_phones cp where cp.organization_id = c.organization_id and cp.customer_id = c.id and (cp.normalized_value = ${normalizedSearchPhone ?? ''} or cp.raw_value like ${searchTerm ? `%${searchTerm}%` : ''}))
-        or exists (select 1 from customers.customer_emails ce where ce.customer_id = c.id and (lower(ce.raw_value) like lower(${searchTerm ? `%${searchTerm}%` : ''}) or ce.normalized_value like lower(${searchTerm ? `%${searchTerm}%` : ''})))
+        or exists(select 1 from customers.customer_tag_assignments sta join customers.customer_tags st on st.organization_id=sta.organization_id and st.id=sta.tag_id where sta.organization_id=c.organization_id and sta.customer_id=c.id and lower(st.label) like ${searchTerm ? `%${searchTerm.toLocaleLowerCase()}%` : ''})
+        or exists(select 1 from orders.orders so where so.organization_id=c.organization_id and so.customer_id=c.id and lower(so.order_number) like ${searchTerm ? `%${searchTerm.toLocaleLowerCase()}%` : ''})
+        or (${filters?.searchSensitive ?? false} and exists(select 1 from customers.customer_addresses sa where sa.organization_id=c.organization_id and sa.customer_id=c.id and lower(concat_ws(' ',sa.address_line_1,sa.address_line_2,sa.area,sa.city,sa.district,sa.postal_code)) like ${searchTerm ? `%${searchTerm.toLocaleLowerCase()}%` : ''}))
+        or exists(select 1 from customers.customer_identity_links sil join messaging.contact_identities sii on sii.organization_id=sil.organization_id and sii.id=sil.contact_identity_id where sil.organization_id=c.organization_id and sil.customer_id=c.id and sil.status='LINKED' and (lower(coalesce(sii.display_name,'')) like ${searchTerm ? `%${searchTerm.toLocaleLowerCase()}%` : ''} or lower(coalesce(sii.username,'')) like ${searchTerm ? `%${searchTerm.toLocaleLowerCase()}%` : ''}))
+        or (${filters?.searchSensitive ?? false} and exists (select 1 from customers.customer_phones cp where cp.organization_id = c.organization_id and cp.customer_id = c.id and (cp.normalized_value = ${normalizedSearchPhone ?? ''} or cp.raw_value like ${searchTerm ? `%${searchTerm}%` : ''})))
+        or (${filters?.searchSensitive ?? false} and exists (select 1 from customers.customer_emails ce where ce.customer_id = c.id and (lower(ce.raw_value) like lower(${searchTerm ? `%${searchTerm}%` : ''}) or ce.normalized_value like lower(${searchTerm ? `%${searchTerm}%` : ''}))))
       )
     order by ${
       filters?.sortBy === 'CREATED_ASC'
@@ -677,6 +721,11 @@ export async function listCustomers(
       activeRestrictions: (row.active_restrictions ?? []).filter(
         Boolean,
       ) as readonly CustomerRestrictionType[],
+      lifecycleStage: row.lifecycle_stage,
+      relationshipOwnerMembershipId: row.relationship_owner_membership_id,
+      relationshipOwnerName: row.relationship_owner_name,
+      lastActivityAt: row.last_activity_at?.toISOString() ?? null,
+      linkedChannels: row.linked_channels ?? [],
     })),
     pagination: {
       page,
@@ -828,7 +877,7 @@ export async function verifyCustomerPhone(
       update customers.customer_phones
       set verification_status = 'VERIFIED',
           verified_at = ${verifiedAt},
-          verification_source = ${input.verificationSource ?? 'MANUAL_OPERATOR'},
+          verification_source = ${input.verificationSource ?? 'MANUAL_STAFF'},
           version = version + 1,
           updated_at = now()
       where organization_id = ${input.organizationId} and id = ${input.phoneId}
@@ -841,7 +890,7 @@ export async function verifyCustomerPhone(
       action: 'customers.customer.phone_verified',
       metadata: {
         phoneId: input.phoneId,
-        verificationSource: input.verificationSource ?? 'MANUAL_OPERATOR',
+        verificationSource: input.verificationSource ?? 'MANUAL_STAFF',
       },
     });
 
@@ -876,7 +925,7 @@ export async function verifyCustomerEmail(
       update customers.customer_emails
       set verification_status = 'VERIFIED',
           verified_at = ${verifiedAt},
-          verification_source = ${input.verificationSource ?? 'MANUAL_OPERATOR'},
+          verification_source = ${input.verificationSource ?? 'MANUAL_STAFF'},
           version = version + 1,
           updated_at = now()
       where organization_id = ${input.organizationId} and id = ${input.emailId}
@@ -889,7 +938,7 @@ export async function verifyCustomerEmail(
       action: 'customers.customer.email_verified',
       metadata: {
         emailId: input.emailId,
-        verificationSource: input.verificationSource ?? 'MANUAL_OPERATOR',
+        verificationSource: input.verificationSource ?? 'MANUAL_STAFF',
       },
     });
 
@@ -1090,6 +1139,9 @@ export interface CustomerDetailView extends CustomerSummary {
     id: string;
     authorActorId: string;
     body: string;
+    isPinned: boolean;
+    version: number;
+    updatedAt: string;
     createdAt: string;
   }[];
   readonly tags: readonly {
@@ -1220,9 +1272,17 @@ export async function getCustomerDetail(
       where organization_id = ${organizationId} and customer_id = ${customerId} and status = 'ACTIVE'
       order by is_default desc, created_at
     `.execute(db),
-    sql<{ id: string; author_actor_id: string; body: string; created_at: Date }>`
-      select id, author_actor_id, body, created_at from customers.customer_notes
-      where organization_id = ${organizationId} and customer_id = ${customerId} order by created_at desc
+    sql<{
+      id: string;
+      author_actor_id: string;
+      body: string;
+      is_pinned: boolean;
+      version: string;
+      updated_at: Date;
+      created_at: Date;
+    }>`
+      select id, author_actor_id, body, is_pinned, version::text, updated_at, created_at from customers.customer_notes
+      where organization_id = ${organizationId} and customer_id = ${customerId} order by is_pinned desc, created_at desc
     `.execute(db),
     sql<{ id: string; label: string; color: string | null }>`
       select t.id, t.label, t.color
@@ -1348,6 +1408,9 @@ export async function getCustomerDetail(
       id: n.id,
       authorActorId: n.author_actor_id,
       body: n.body,
+      isPinned: n.is_pinned,
+      version: Number(n.version),
+      updatedAt: n.updated_at.toISOString(),
       createdAt: n.created_at.toISOString(),
     })),
     tags: tags.rows.map((t) => ({
@@ -1678,6 +1741,54 @@ export async function mergeCustomers(
         )
     `.execute(transaction);
     await sql`update customers.customer_notes set customer_id = ${input.targetCustomerId} where organization_id = ${input.organizationId} and customer_id = ${input.sourceCustomerId}`.execute(
+      transaction,
+    );
+    await sql`update customers.customer_note_revisions set customer_id = ${input.targetCustomerId} where organization_id = ${input.organizationId} and customer_id = ${input.sourceCustomerId}`.execute(
+      transaction,
+    );
+    await sql`delete from customers.customer_preferences source where source.organization_id=${input.organizationId} and source.customer_id=${input.sourceCustomerId}
+      and exists(select 1 from customers.customer_preferences target where target.organization_id=source.organization_id and target.customer_id=${input.targetCustomerId} and target.preference_key=source.preference_key)`.execute(
+      transaction,
+    );
+    await sql`update customers.customer_preferences set customer_id=${input.targetCustomerId},updated_at=now(),version=version+1
+      where organization_id=${input.organizationId} and customer_id=${input.sourceCustomerId}`.execute(
+      transaction,
+    );
+    await sql`delete from customers.customer_custom_field_values source where source.organization_id=${input.organizationId} and source.customer_id=${input.sourceCustomerId}
+      and exists(select 1 from customers.customer_custom_field_values target where target.organization_id=source.organization_id and target.customer_id=${input.targetCustomerId} and target.field_definition_id=source.field_definition_id)`.execute(
+      transaction,
+    );
+    await sql`update customers.customer_custom_field_values set customer_id=${input.targetCustomerId},updated_at=now()
+      where organization_id=${input.organizationId} and customer_id=${input.sourceCustomerId}`.execute(
+      transaction,
+    );
+    await sql`update customers.customer_follow_ups set customer_id=${input.targetCustomerId},updated_at=now(),version=version+1
+      where organization_id=${input.organizationId} and customer_id=${input.sourceCustomerId}`.execute(
+      transaction,
+    );
+    await sql`insert into customers.customer_segment_memberships(organization_id,segment_id,customer_id,membership_source,explanation,evaluated_at)
+      select organization_id,segment_id,${input.targetCustomerId},membership_source,explanation,evaluated_at from customers.customer_segment_memberships
+      where organization_id=${input.organizationId} and customer_id=${input.sourceCustomerId} on conflict do nothing`.execute(
+      transaction,
+    );
+    await sql`delete from customers.customer_segment_memberships where organization_id=${input.organizationId} and customer_id=${input.sourceCustomerId}`.execute(
+      transaction,
+    );
+    await sql`update customers.customer_consents set customer_id=${input.targetCustomerId}
+      where organization_id=${input.organizationId} and customer_id=${input.sourceCustomerId}`.execute(
+      transaction,
+    );
+    await sql`update customers.customer_privacy_requests set customer_id=${input.targetCustomerId},updated_at=now(),version=version+1
+      where organization_id=${input.organizationId} and customer_id=${input.sourceCustomerId}`.execute(
+      transaction,
+    );
+    await sql`update customers.customer_identity_links set customer_id=${input.targetCustomerId},evidence_method='CUSTOMER_MERGE',
+      evidence_summary='Identity relationship transferred to the surviving canonical customer during an audited merge.',updated_at=now(),version=version+1
+      where organization_id=${input.organizationId} and customer_id=${input.sourceCustomerId}`.execute(
+      transaction,
+    );
+    await sql`update messaging.contacts set customer_id=${input.targetCustomerId},updated_at=now(),version=version+1
+      where organization_id=${input.organizationId} and customer_id=${input.sourceCustomerId}`.execute(
       transaction,
     );
     await sql`
@@ -2398,6 +2509,60 @@ export async function addCustomerNote(
     );
     await emitCustomerEvent(transaction, { ...input, action: 'customers.customer.note_added' });
     return { id };
+  });
+}
+
+export async function updateCustomerNote(
+  db: Kysely<DatabaseSchema>,
+  input: {
+    organizationId: string;
+    actorId: string;
+    customerId: string;
+    noteId: string;
+    body: string;
+    isPinned: boolean;
+    expectedVersion: number;
+  },
+): Promise<void> {
+  const body = input.body.trim();
+  if (!body) throw new CustomerDomainError('VALIDATION_FAILED', 'Note body cannot be empty.');
+  await db.transaction().execute(async (transaction) => {
+    const existing = await sql<{
+      body: string;
+      is_pinned: boolean;
+      version: string;
+    }>`select body,is_pinned,version::text
+      from customers.customer_notes where organization_id=${input.organizationId} and customer_id=${input.customerId}
+      and id=${input.noteId} for update`.execute(transaction);
+    const note = existing.rows[0];
+    if (!note) throw new CustomerDomainError('NOT_FOUND', 'Customer note was not found.');
+    if (Number(note.version) !== input.expectedVersion)
+      throw new CustomerDomainError('STALE_VERSION', 'The note changed while you were editing it.');
+    await sql`insert into customers.customer_note_revisions(organization_id,note_id,customer_id,body,is_pinned,version,changed_by_actor_id)
+      values(${input.organizationId},${input.noteId},${input.customerId},${note.body},${note.is_pinned},${Number(note.version)},${input.actorId})`.execute(
+      transaction,
+    );
+    await sql`update customers.customer_notes set body=${body},is_pinned=${input.isPinned},version=version+1,updated_at=now()
+      where organization_id=${input.organizationId} and customer_id=${input.customerId} and id=${input.noteId}`.execute(
+      transaction,
+    );
+    await sql`update customers.customers set version=version+1,updated_at=now() where organization_id=${input.organizationId} and id=${input.customerId}`.execute(
+      transaction,
+    );
+    await appendAuditEvent(transaction, {
+      organizationId: input.organizationId,
+      actorType: 'USER',
+      actorId: input.actorId,
+      action: 'customers.customer.note_updated',
+      targetType: 'customers.customer_note',
+      targetId: input.noteId,
+      metadata: {
+        customerId: input.customerId,
+        isPinned: input.isPinned,
+        previousVersion: Number(note.version),
+      },
+    });
+    await emitCustomerEvent(transaction, { ...input, action: 'customers.customer.updated' });
   });
 }
 

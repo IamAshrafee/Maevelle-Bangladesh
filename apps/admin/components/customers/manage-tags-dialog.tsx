@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Check, CircleAlert, Loader2, Plus, Tag as TagIcon, X } from 'lucide-react';
+import { Check, CircleAlert, Loader2, Plus, Tag as TagIcon } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -158,7 +158,7 @@ export function ManageTagsDialog({
                     type="button"
                     disabled={isPending}
                     onClick={() => void toggleTag(tag)}
-                    className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium transition-all ${
+                    className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium transition-colors duration-150 ${
                       isAssigned
                         ? 'bg-primary text-primary-foreground shadow-xs'
                         : 'bg-muted text-muted-foreground hover:bg-muted/80'

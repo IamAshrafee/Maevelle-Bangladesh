@@ -570,6 +570,10 @@ export function registerCatalogRoutes(
           collectionIds: Type.Optional(Type.Array(organizationIdParameter, { uniqueItems: true })),
           sizeSystemId: Type.Optional(Type.Union([organizationIdParameter, Type.Null()])),
           sizeGuideId: Type.Optional(Type.Union([organizationIdParameter, Type.Null()])),
+          sizingGuideSource: Type.Optional(
+            Type.Union([Type.Literal('CATEGORY'), Type.Literal('DIRECT'), Type.Literal('NONE')]),
+          ),
+          noGuideReason: Type.Optional(Type.Union([Type.String({ maxLength: 500 }), Type.Null()])),
           attributes: Type.Optional(
             Type.Array(
               Type.Object({

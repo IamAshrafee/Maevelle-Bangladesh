@@ -1,4 +1,10 @@
-import type { CustomerDetailDto, CustomerSummaryDto, OrderSummaryDto } from '@maevelle/contracts';
+import type {
+  CustomerCrmProfileDto,
+  CustomerDetailDto,
+  CustomerIdentityLinkDto,
+  CustomerSummaryDto,
+  OrderSummaryDto,
+} from '@maevelle/contracts';
 import type {
   AgentAvailabilityView,
   BusinessHoursView,
@@ -97,6 +103,8 @@ export interface MessagingCustomerContextView {
   readonly conversationId: string;
   readonly linkStatus: 'LINKED' | 'UNLINKED';
   readonly customer: CustomerDetailDto | null;
+  readonly crmProfile: CustomerCrmProfileDto | null;
+  readonly linkedIdentities: readonly CustomerIdentityLinkDto[];
   readonly orders: readonly {
     readonly id: string;
     readonly orderNumber: string;

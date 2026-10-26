@@ -96,6 +96,10 @@ export function useProductCreatorState({
   // Sizing
   const [sizeSystemId, setSizeSystemId] = useState('');
   const [sizeGuideId, setSizeGuideId] = useState('');
+  const [sizingGuideSource, setSizingGuideSource] = useState<'CATEGORY' | 'DIRECT' | 'NONE'>(
+    'CATEGORY',
+  );
+  const [noGuideReason, setNoGuideReason] = useState('');
 
   // Taxonomies
   const [selectedCategoryIds, setSelectedCategoryIds] = useState<string[]>([]);
@@ -186,6 +190,8 @@ export function useProductCreatorState({
       selectedCollectionIds,
       sizeSystemId,
       sizeGuideId,
+      sizingGuideSource,
+      noGuideReason,
       attributeValues,
       variantMode: variants.variantMode,
       priceAmount,
@@ -220,6 +226,8 @@ export function useProductCreatorState({
       setSelectedCollectionIds([...(d.selectedCollectionIds || [])]);
       setSizeSystemId(d.sizeSystemId || '');
       setSizeGuideId(d.sizeGuideId || '');
+      setSizingGuideSource(d.sizingGuideSource || (d.sizeGuideId ? 'DIRECT' : 'CATEGORY'));
+      setNoGuideReason(d.noGuideReason || '');
       setAttributeValues(d.attributeValues || {});
       variants.setVariantMode(d.variantMode || 'simple');
       setPriceAmount(d.priceAmount || '');
@@ -393,6 +401,8 @@ export function useProductCreatorState({
             setSelectedCollectionIds([...(workspace.organization.collectionIds || [])]);
             setSizeSystemId(workspace.sizeSystemId || '');
             setSizeGuideId(workspace.sizeGuideId || '');
+            setSizingGuideSource(workspace.sizingGuideSource || 'CATEGORY');
+            setNoGuideReason(workspace.noGuideReason || '');
 
             const attrs: Record<string, string | boolean | null> = {};
             (workspace.organization.attributes || []).forEach((a) => {
@@ -681,6 +691,12 @@ export function useProductCreatorState({
     if (!productTypeId) {
       errors.productTypeId = 'Please select a product type.';
     }
+    if (sizingGuideSource === 'DIRECT' && !sizeGuideId) {
+      errors.sizing = 'Choose a published guide for the direct Product assignment.';
+    }
+    if (sizingGuideSource === 'NONE' && !noGuideReason.trim()) {
+      errors.sizing = 'Explain why this sized Product intentionally has no customer guide.';
+    }
 
     if (variants.variantMode === 'simple') {
       if (!variants.sku.trim()) {
@@ -875,6 +891,8 @@ export function useProductCreatorState({
         collectionIds: Array.from(new Set(selectedCollectionIds)),
         sizeSystemId: sizeSystemId || null,
         sizeGuideId: sizeGuideId || null,
+        sizingGuideSource,
+        noGuideReason: sizingGuideSource === 'NONE' ? noGuideReason.trim() : null,
         inventoryPolicy: 'DENY',
         shippingProfile: 'STANDARD',
         shipping: {
@@ -984,6 +1002,8 @@ export function useProductCreatorState({
     selectedCollectionIds,
     sizeSystemId,
     sizeGuideId,
+    sizingGuideSource,
+    noGuideReason,
     priceAmount,
     compareAtAmount,
     costAmount,
@@ -1021,6 +1041,8 @@ export function useProductCreatorState({
     setIsDraggingOver: media.setIsDraggingOver,
     setSizeSystemId,
     setSizeGuideId,
+    setSizingGuideSource,
+    setNoGuideReason,
     setPriceAmount,
     setCompareAtAmount,
     setCostAmount,

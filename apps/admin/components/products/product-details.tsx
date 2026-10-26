@@ -25,10 +25,12 @@ import type {
   CatalogVocabularyItemDto,
   CatalogVocabularyListDto,
   ProductSizingDto,
+  ProductSizeReconciliationDto,
   WarehouseLocationDto,
 } from '@maevelle/contracts';
 
 import { ProductReadiness } from '@/components/products/product-readiness';
+import { ProductGuideAssignmentDialog } from '@/components/products/product-guide-assignment-dialog';
 import { QuickStockAdjustDialog } from '@/components/products/quick-stock-adjust-dialog';
 import { storefrontProductHref } from '@/components/products/product-workspace-links';
 import { StatusBadge } from '@/components/status-badge';
@@ -72,49 +74,66 @@ export function ProductDetails({ productId }: { productId: string }) {
     collections: readonly CatalogVocabularyItemDto[];
   }>({ tags: [], occasions: [], collections: [] });
   const [sizing, setSizing] = useState<ProductSizingDto>();
+  const [sizingReconciliation, setSizingReconciliation] = useState<ProductSizeReconciliationDto>();
   const [sizingUnavailable, setSizingUnavailable] = useState(false);
   const [locations, setLocations] = useState<readonly WarehouseLocationDto[]>([]);
-  const [adjustingVariant, setAdjustingVariant] = useState<CatalogProductWorkspaceDto['variants'][number] | null>(null);
+  const [adjustingVariant, setAdjustingVariant] = useState<
+    CatalogProductWorkspaceDto['variants'][number] | null
+  >(null);
   const [state, setState] = useState<'loading' | 'ready' | 'missing' | 'error'>('loading');
   const [message, setMessage] = useState('');
   const [busy, setBusy] = useState(false);
+  const [showGuideAssignment, setShowGuideAssignment] = useState(false);
 
   async function load(signal?: AbortSignal) {
     setState('loading');
     try {
-      const [product, categoryChoices, tags, occasions, collections, productSizing, warehouseLocations] =
-        await Promise.all([
-          catalogData<CatalogProductWorkspaceDto>(
-            `/admin/catalog/products/${productId}`,
-            signal ? { signal } : undefined,
-          ),
-          catalogData<readonly CatalogCategoryChoiceDto[]>(
-            '/admin/catalog/categories',
-            signal ? { signal } : undefined,
-          ),
-          catalogData<CatalogVocabularyListDto>(
-            '/admin/catalog/vocabulary/TAG?status=ALL&page=1&pageSize=100',
-            signal ? { signal } : undefined,
-          ),
-          catalogData<CatalogVocabularyListDto>(
-            '/admin/catalog/vocabulary/OCCASION?status=ALL&page=1&pageSize=100',
-            signal ? { signal } : undefined,
-          ),
-          catalogData<CatalogVocabularyListDto>(
-            '/admin/catalog/vocabulary/COLLECTION?status=ALL&page=1&pageSize=100',
-            signal ? { signal } : undefined,
-          ),
-          catalogData<ProductSizingDto>(
-            `/admin/catalog/products/${productId}/size-configuration`,
-            signal ? { signal } : undefined,
-          ).catch(() => undefined),
-          catalogData<readonly WarehouseLocationDto[]>(
-            '/admin/warehouse/locations',
-            signal ? { signal } : undefined,
-          ).catch(() => []),
-        ]);
+      const [
+        product,
+        categoryChoices,
+        tags,
+        occasions,
+        collections,
+        productSizing,
+        reconciliation,
+        warehouseLocations,
+      ] = await Promise.all([
+        catalogData<CatalogProductWorkspaceDto>(
+          `/admin/catalog/products/${productId}`,
+          signal ? { signal } : undefined,
+        ),
+        catalogData<readonly CatalogCategoryChoiceDto[]>(
+          '/admin/catalog/categories',
+          signal ? { signal } : undefined,
+        ),
+        catalogData<CatalogVocabularyListDto>(
+          '/admin/catalog/vocabulary/TAG?status=ALL&page=1&pageSize=100',
+          signal ? { signal } : undefined,
+        ),
+        catalogData<CatalogVocabularyListDto>(
+          '/admin/catalog/vocabulary/OCCASION?status=ALL&page=1&pageSize=100',
+          signal ? { signal } : undefined,
+        ),
+        catalogData<CatalogVocabularyListDto>(
+          '/admin/catalog/vocabulary/COLLECTION?status=ALL&page=1&pageSize=100',
+          signal ? { signal } : undefined,
+        ),
+        catalogData<ProductSizingDto>(
+          `/admin/catalog/products/${productId}/size-configuration`,
+          signal ? { signal } : undefined,
+        ).catch(() => undefined),
+        catalogData<ProductSizeReconciliationDto>(
+          `/admin/sizing/products/${productId}/reconciliation`,
+          signal ? { signal } : undefined,
+        ).catch(() => undefined),
+        catalogData<readonly WarehouseLocationDto[]>(
+          '/admin/warehouse/locations',
+          signal ? { signal } : undefined,
+        ).catch(() => []),
+      ]);
       setWorkspace(product);
       setSizing(productSizing);
+      setSizingReconciliation(reconciliation);
       setSizingUnavailable(productSizing === undefined && product.sizeSystemId !== null);
       setCategories(categoryChoices);
       setLocations(warehouseLocations ?? []);
@@ -951,104 +970,99 @@ export function ProductDetails({ productId }: { productId: string }) {
             ) : null}
           </section>
           <section className="rounded-xl bg-card p-5 ring-1 ring-foreground/10">
-            <div className="flex items-start justify-between gap-3">
+            <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
-                <h2 className="font-semibold">Sizing configuration</h2>
+                <p className="text-xs font-semibold uppercase tracking-wider text-primary">
+                  Customer sizing
+                </p>
+                <h2 className="mt-1 font-semibold">
+                  {sizing?.effectiveGuideName ??
+                    (sizing?.guideOutcome === 'NONE'
+                      ? 'No customer guide'
+                      : 'Sizing needs attention')}
+                </h2>
                 <p className="mt-1 text-sm text-muted-foreground">
-                  Product-specific sizing is managed by the Sizing workspace.
+                  {sizing?.effectiveSource === 'PRODUCT'
+                    ? `Assigned directly${sizing.directAssignmentOrigin === 'SUPPLY_PURCHASE' ? ' from a reviewed Supply purchase' : ''}.`
+                    : sizing?.effectiveSource === 'CATEGORY'
+                      ? `Inherited from primary Category: ${sizing.categoryName ?? 'Primary Category'}.`
+                      : sizing?.guideOutcome === 'NONE'
+                        ? sizing.noGuideReason
+                        : 'No published guide currently reaches the Storefront.'}
                 </p>
               </div>
-              <Button
-                size="sm"
-                variant="ghost"
-                render={<Link href={`/products/${workspace.id}/edit?section=organization`} />}
-              >
-                Edit
+              <Button size="sm" variant="outline" onClick={() => setShowGuideAssignment(true)}>
+                Change guide
               </Button>
             </div>
-            {sizing?.configured ? (
-              <dl className="mt-4 divide-y text-sm">
-                <div className="grid grid-cols-2 gap-3 py-2.5">
-                  <dt className="text-muted-foreground">Size System</dt>
-                  <dd className="font-medium text-foreground">{sizing.sizeSystemName ?? 'Unbound / Domain Standard'}</dd>
-                </div>
-                <div className="grid grid-cols-2 gap-3 py-2.5">
-                  <dt className="text-muted-foreground">Product Guide</dt>
-                  <dd>
-                    {sizing.sizeGuideName ? (
-                      <span className="font-medium text-foreground">{sizing.sizeGuideName}</span>
-                    ) : (
-                      <span className="text-muted-foreground italic">None (Direct)</span>
-                    )}
-                    {sizing.sizeGuideName && !sizing.hasPublishedGuide ? (
-                      <span className="block text-xs text-destructive mt-0.5">
-                        A published revision is required.
-                      </span>
-                    ) : null}
-                  </dd>
-                </div>
-                <div className="grid grid-cols-2 gap-3 py-2.5">
-                  <dt className="text-muted-foreground">Effective Chart</dt>
-                  <dd>
-                    {sizing.effectiveGuideName ? (
-                      <div className="space-y-1">
-                        <span className="font-medium text-foreground">{sizing.effectiveGuideName}</span>
-                        <div>
-                          {sizing.effectiveSource === 'PRODUCT' ? (
-                            <span className="inline-flex items-center rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-primary">
-                              Direct Product Override
-                            </span>
-                          ) : (
-                            <span className="inline-flex items-center rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
-                              Inherited from Category ({sizing.categoryName ?? 'Primary'})
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                    ) : (
-                      <span className="text-muted-foreground italic">No effective guide</span>
-                    )}
-                  </dd>
-                </div>
-              </dl>
-            ) : sizingUnavailable ? (
-              <p className="mt-4 text-sm text-muted-foreground">
-                A sizing configuration exists, but your current access cannot inspect it. Request
-                sizing access or open the editor to update it.
-              </p>
-            ) : (
-              <div className="mt-4 space-y-2 text-sm text-muted-foreground">
-                <p>
-                  No product-specific sizing configuration configured.
-                </p>
-                {sizing?.effectiveGuideName ? (
-                  <div className="rounded-lg border border-border bg-muted/40 p-3">
-                    <span className="text-xs font-semibold text-foreground block">
-                      Category Default Available:
-                    </span>
-                    <span className="text-xs text-foreground font-medium">
-                      {sizing.effectiveGuideName}
-                    </span>
-                    <span className="block text-[11px] text-muted-foreground">
-                      Inherited from primary category ({sizing.categoryName}).
-                    </span>
-                  </div>
-                ) : (
-                  <p className="text-xs">
-                    Assign a size system in the product editor to configure standardized sizes.
+
+            {sizingReconciliation ? (
+              <div className="mt-4 grid gap-3 sm:grid-cols-3">
+                <div className="rounded-lg border border-border bg-muted/30 p-3">
+                  <p className="text-xs text-muted-foreground">Product sizes</p>
+                  <p className="mt-1 font-mono text-lg font-semibold tabular-nums">
+                    {sizingReconciliation.productSizeCount}
                   </p>
-                )}
+                </div>
+                <div className="rounded-lg border border-border bg-muted/30 p-3">
+                  <p className="text-xs text-muted-foreground">Guide match</p>
+                  <p className="mt-1 font-mono text-lg font-semibold tabular-nums">
+                    {sizingReconciliation.matchedCount} of {sizingReconciliation.productSizeCount}
+                  </p>
+                </div>
+                <div className="rounded-lg border border-border bg-muted/30 p-3">
+                  <p className="text-xs text-muted-foreground">Conflicts</p>
+                  <p
+                    className={`mt-1 font-mono text-lg font-semibold tabular-nums ${sizingReconciliation.conflictCount > 0 ? 'text-destructive' : 'text-success'}`}
+                  >
+                    {sizingReconciliation.conflictCount}
+                  </p>
+                </div>
               </div>
-            )}
-            {sizing?.effectiveGuideId ? (
-              <Button
-                className="mt-4"
-                size="sm"
-                variant="outline"
-                render={<Link href={`/sizing/guides/${sizing.effectiveGuideId}`} />}
-              >
-                Open size guide
+            ) : null}
+
+            {sizingUnavailable ? (
+              <p className="mt-4 text-sm text-muted-foreground">
+                Your current access cannot inspect the customer sizing outcome.
+              </p>
+            ) : null}
+
+            <div className="mt-4 flex flex-wrap gap-2">
+              {sizing?.effectiveGuideId ? (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  render={<Link href={`/sizing/guides/${sizing.effectiveGuideId}`} />}
+                >
+                  Open guide
+                </Button>
+              ) : null}
+              <Button size="sm" variant="ghost" render={<Link href="/sizing/assignments" />}>
+                View assignments
               </Button>
+            </div>
+
+            {sizing?.configured ? (
+              <details className="mt-4 rounded-lg border border-border">
+                <summary className="cursor-pointer px-3 py-2 text-xs font-medium text-muted-foreground">
+                  Advanced details
+                </summary>
+                <dl className="grid gap-2 border-t border-border p-3 text-xs sm:grid-cols-2">
+                  <div>
+                    <dt className="text-muted-foreground">Size system</dt>
+                    <dd className="mt-0.5 font-medium text-foreground">
+                      {sizing.sizeSystemName ?? 'Custom'}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt className="text-muted-foreground">Assignment origin</dt>
+                    <dd className="mt-0.5 font-medium text-foreground">
+                      {sizing.directAssignmentOrigin?.replaceAll('_', ' ') ??
+                        'Category inheritance'}
+                    </dd>
+                  </div>
+                </dl>
+              </details>
             ) : null}
           </section>
         </div>
@@ -1106,7 +1120,9 @@ export function ProductDetails({ productId }: { productId: string }) {
               <p className="mt-3 text-sm font-medium text-info">
                 {workspace.content.seoTitle || workspace.title}
               </p>
-              <p className="font-mono text-xs tabular-nums text-success">/products/{workspace.handle}</p>
+              <p className="font-mono text-xs tabular-nums text-success">
+                /products/{workspace.handle}
+              </p>
               <p className="mt-1 text-sm text-muted-foreground">
                 {workspace.content.seoDescription ||
                   workspace.description ||
@@ -1130,6 +1146,13 @@ export function ProductDetails({ productId }: { productId: string }) {
           onSuccess={() => void load()}
         />
       )}
+      <ProductGuideAssignmentDialog
+        open={showGuideAssignment}
+        productId={workspace.id}
+        sizing={sizing}
+        onOpenChange={setShowGuideAssignment}
+        onApplied={() => load()}
+      />
     </main>
   );
 }

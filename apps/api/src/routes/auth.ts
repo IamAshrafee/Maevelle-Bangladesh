@@ -17,6 +17,7 @@ import { registerInventoryRoutes } from './inventory.js';
 import { registerInventoryUnitRoutes } from './inventory-units.js';
 import { registerWarehouseRoutes } from './warehouse.js';
 import { registerCustomerRoutes } from './customers.js';
+import { registerCrmRoutes } from './crm.js';
 import { registerPricingRoutes } from './pricing.js';
 import { registerPromotionRoutes } from './promotions.js';
 import { registerCartRoutes } from './cart.js';
@@ -137,13 +138,15 @@ export function registerAuthRoutes(
       path === '/admin/security/two-factor/enrollment/verify'
     )
       return;
-    const session = await auth.api.getSession({
-      headers: new Headers(
-        Object.entries(request.headers).flatMap(([name, value]) =>
-          typeof value === 'string' ? [[name, value]] : [],
+    const session = await auth.api
+      .getSession({
+        headers: new Headers(
+          Object.entries(request.headers).flatMap(([name, value]) =>
+            typeof value === 'string' ? [[name, value]] : [],
+          ),
         ),
-      ),
-    });
+      })
+      .catch(() => null);
     if (!session?.user?.id) return;
     const selectedOrganization = request.headers['x-organization-id'];
     const active = await findActiveAdminContext(database.db, session.user.id, {
@@ -194,6 +197,7 @@ export function registerAuthRoutes(
   registerInventoryUnitRoutes(app, database, auth);
   registerWarehouseRoutes(app, database, auth);
   registerCustomerRoutes(app, database, auth);
+  registerCrmRoutes(app, database, auth);
   registerPricingRoutes(app, database, auth);
   registerPromotionRoutes(app, database, auth);
   registerCartRoutes(app, database);

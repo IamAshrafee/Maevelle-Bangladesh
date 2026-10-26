@@ -166,6 +166,95 @@ export async function up(db: Kysely<DatabaseSchema>): Promise<void> {
     create index contact_link_events_contact on messaging.contact_customer_link_events(organization_id,contact_id,created_at desc);
     create index contact_link_events_customer on messaging.contact_customer_link_events(organization_id,customer_id,created_at desc);
 
+    -- CRM owns assurance and lifecycle for customer/identity relationships while
+    -- Messaging remains authoritative for scoped provider identities.
+    create table customers.customer_identity_links (
+      id uuid primary key default uuidv7(),
+      organization_id uuid not null references platform.organizations(id),
+      customer_id uuid not null,
+      contact_id uuid not null,
+      contact_identity_id uuid not null,
+      provider text not null check (provider in ('WEBSITE','FACEBOOK','INSTAGRAM')),
+      channel_connection_id uuid not null,
+      external_subject_id text not null,
+      status text not null default 'CANDIDATE' check (status in ('CANDIDATE','LINKED','REJECTED','REVOKED','DISPUTED')),
+      assurance text not null default 'UNVERIFIED' check (assurance in ('UNVERIFIED','LOW','MEDIUM','HIGH')),
+      evidence_method text not null check (evidence_method in ('AUTHENTICATED_ACCOUNT','VERIFIED_EMAIL','VERIFIED_PHONE','CHANNEL_ASSERTED','STAFF_REVIEW','CUSTOMER_REQUEST','CUSTOMER_MERGE','LEGACY_ASSOCIATION')),
+      evidence_reference text,
+      evidence_summary text not null check (length(trim(evidence_summary)) between 1 and 500),
+      linked_by_actor_id uuid,
+      linked_at timestamptz,
+      rejected_at timestamptz,
+      revoked_at timestamptz,
+      revocation_reason text,
+      created_at timestamptz not null default now(),
+      updated_at timestamptz not null default now(),
+      version bigint not null default 1 check (version > 0),
+      unique (organization_id, id),
+      foreign key (organization_id, customer_id) references customers.customers(organization_id, id),
+      foreign key (organization_id, contact_id) references messaging.contacts(organization_id, id),
+      foreign key (organization_id, contact_identity_id) references messaging.contact_identities(organization_id, id),
+      foreign key (organization_id, channel_connection_id) references messaging.channel_connections(organization_id, id),
+      check ((status = 'LINKED') = (linked_at is not null)),
+      check (status <> 'REVOKED' or (revoked_at is not null and revocation_reason is not null)),
+      check (status <> 'REJECTED' or rejected_at is not null)
+    );
+    create unique index customer_identity_links_active_identity_unique
+      on customers.customer_identity_links (organization_id, contact_identity_id)
+      where status = 'LINKED';
+    create unique index customer_identity_links_active_contact_unique
+      on customers.customer_identity_links (organization_id, contact_id)
+      where status = 'LINKED';
+    create index customer_identity_links_customer_idx
+      on customers.customer_identity_links (organization_id, customer_id, status, updated_at desc, id);
+    create index customer_identity_links_review_idx
+      on customers.customer_identity_links (organization_id, status, assurance, created_at, id)
+      where status in ('CANDIDATE','DISPUTED');
+    create index customer_identity_links_scope_idx
+      on customers.customer_identity_links (organization_id, provider, channel_connection_id, external_subject_id);
+
+    create table customers.customer_identity_link_events (
+      id bigint generated always as identity primary key,
+      organization_id uuid not null references platform.organizations(id),
+      identity_link_id uuid not null,
+      customer_id uuid not null,
+      contact_identity_id uuid not null,
+      action text not null check (action in ('CANDIDATE_CREATED','LINKED','REJECTED','REVOKED','DISPUTED','EVIDENCE_UPDATED')),
+      previous_status text,
+      new_status text not null,
+      assurance text not null,
+      evidence_method text not null,
+      evidence_reference text,
+      reason text not null check (length(trim(reason)) between 1 and 500),
+      actor_type text not null check (actor_type in ('USER','CUSTOMER','SYSTEM')),
+      actor_id uuid,
+      created_at timestamptz not null default now(),
+      foreign key (organization_id, identity_link_id) references customers.customer_identity_links(organization_id, id),
+      foreign key (organization_id, customer_id) references customers.customers(organization_id, id),
+      foreign key (organization_id, contact_identity_id) references messaging.contact_identities(organization_id, id)
+    );
+    create index customer_identity_link_events_link_idx on customers.customer_identity_link_events (organization_id, identity_link_id, created_at desc, id desc);
+
+    create table customers.customer_identity_verification_challenges (
+      id uuid primary key default uuidv7(),
+      organization_id uuid not null references platform.organizations(id),
+      identity_link_id uuid not null,
+      method text not null check (method in ('AUTHENTICATED_ACCOUNT','OTP_EMAIL','OTP_SMS')),
+      status text not null default 'PENDING' check (status in ('PENDING','VERIFIED','FAILED','EXPIRED','CANCELLED')),
+      challenge_digest bytea,
+      expires_at timestamptz not null,
+      attempt_count integer not null default 0 check (attempt_count between 0 and 10),
+      verified_at timestamptz,
+      created_by_actor_id uuid,
+      created_at timestamptz not null default now(),
+      updated_at timestamptz not null default now(),
+      unique (organization_id, id),
+      foreign key (organization_id, identity_link_id) references customers.customer_identity_links(organization_id, id),
+      check ((method = 'AUTHENTICATED_ACCOUNT') = (challenge_digest is null)),
+      check (status <> 'VERIFIED' or verified_at is not null)
+    );
+    create index customer_identity_challenges_pending_idx on customers.customer_identity_verification_challenges (organization_id, status, expires_at, id) where status = 'PENDING';
+
     create table messaging.conversations (
       id uuid primary key default uuidv7(), organization_id uuid not null references platform.organizations(id), channel_connection_id uuid not null,
       channel_kind text not null check(channel_kind in ('WEBSITE','FACEBOOK','INSTAGRAM')),

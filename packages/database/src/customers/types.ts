@@ -1,9 +1,7 @@
-import type { CustomerSource, CustomerSummary } from '../customers.js';
+import type { CustomerSummary } from '../customers.js';
 
 export type CustomerRestrictionType =
-  | 'ORDERING_BLOCKED'
-  | 'COD_RESTRICTED'
-  | 'ORDER_REVIEW_REQUIRED';
+  'ORDERING_BLOCKED' | 'COD_RESTRICTED' | 'ORDER_REVIEW_REQUIRED';
 
 export type CustomerRestrictionStatus = 'ACTIVE' | 'LIFTED' | 'EXPIRED';
 
@@ -23,11 +21,7 @@ export interface CustomerRestriction {
 }
 
 export type CustomerAccountLinkType =
-  | 'VERIFIED_PHONE'
-  | 'VERIFIED_EMAIL'
-  | 'MANUAL_CLAIM'
-  | 'INVITATION'
-  | 'GUEST_CONVERSION';
+  'VERIFIED_PHONE' | 'VERIFIED_EMAIL' | 'MANUAL_CLAIM' | 'INVITATION' | 'GUEST_CONVERSION';
 
 export type CustomerAccountStatus = 'ACTIVE' | 'UNLINKED' | 'SUSPENDED';
 
@@ -89,6 +83,10 @@ export type CustomerTimelineEventType =
   | 'RETURN_REQUESTED'
   | 'RETURN_COMPLETED'
   | 'REFUND_COMPLETED'
+  | 'PAYMENT_CONFIRMED'
+  | 'FULFILLMENT_UPDATED'
+  | 'DELIVERY_UPDATED'
+  | 'REVIEW_SUBMITTED'
   | 'RESTRICTION_APPLIED'
   | 'RESTRICTION_LIFTED'
   | 'NOTE_ADDED'
@@ -96,7 +94,14 @@ export type CustomerTimelineEventType =
   | 'ACCOUNT_LINKED'
   | 'ACCOUNT_UNLINKED'
   | 'CUSTOMER_MERGED'
-  | 'COMMUNICATION_SENT';
+  | 'COMMUNICATION_SENT'
+  | 'IDENTITY_LINKED'
+  | 'IDENTITY_REVOKED'
+  | 'LIFECYCLE_CHANGED'
+  | 'OWNER_CHANGED'
+  | 'FOLLOW_UP_CREATED'
+  | 'FOLLOW_UP_COMPLETED'
+  | 'CONVERSATION_STARTED';
 
 export interface CustomerTimelineEvent {
   readonly id: string;

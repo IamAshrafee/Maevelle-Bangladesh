@@ -4,8 +4,12 @@ import { sql } from 'kysely';
 import { createCatalogCategory, createCatalogProduct } from './catalog.js';
 import { createDatabase } from './index.js';
 import { createOrganization } from './platform.js';
+import { addPurchaseLine, createPurchase, createSupplier } from './procurement.js';
 import {
   addSizeGuideRow,
+  addSizeGuideColumn,
+  applyCategoryDefaultSizeGuide,
+  applyProductGuideAssignment,
   archiveMeasurementDefinition,
   archiveSizeDefinition,
   archiveSizeGuide,
@@ -22,14 +26,21 @@ import {
   getAdminSizingWorkspace,
   getProductSizingConfiguration,
   getPublicSizeGuideForProduct,
+  getSupplyPurchaseSizingReview,
   getSizeGuideDetail,
   getSizingQualityChecks,
   listCategorySizeGuideDefaults,
+  previewSizeGuidePublication,
+  publishReviewedSizeGuideRevision,
   publishSizeGuideRevision,
+  previewCategoryDefaultSizeGuide,
+  previewProductGuideAssignment,
   removeProductSizingConfiguration,
+  removeSizeGuideColumn,
   removeSizeGuideMeasurement,
   removeSizeGuideRow,
   reorderSizeGuideRows,
+  renameSizeGuideColumn,
   restoreMeasurementDefinition,
   restoreSizeDefinition,
   restoreSizeGuide,
@@ -38,6 +49,7 @@ import {
   setCategoryDefaultSizeGuide,
   setSizeGuideMeasurement,
   setSizeGuideMeasurementsBulk,
+  setSupplyPurchaseSizingDecision,
   updateSizeGuide,
   updateSizeGuideRevisionMeta,
   updateSizeGuideRow,
@@ -160,7 +172,6 @@ describe('revisioned sizing', () => {
       name: 'International',
       actorId,
     });
-
     const definition = await createSizeDefinition(database.db, {
       organizationId,
       sizeSystemId: system.id,
@@ -212,11 +223,21 @@ describe('revisioned sizing', () => {
 
     expect(await getRevisionVersion(guide.revisionId)).toBe(2);
 
-    await publishSizeGuideRevision(database.db, {
+    const publicationPreview = await previewSizeGuidePublication(database.db, {
       organizationId,
       sizeGuideId: guide.id,
       revisionId: guide.revisionId,
-      expectedVersion: 2,
+    });
+    expect(publicationPreview).toMatchObject({
+      affectedProducts: 0,
+      affectedCategories: 0,
+      reconciliationConflicts: 0,
+      changes: { addedRows: 1, removedRows: 0, changedRows: 0 },
+    });
+
+    await publishReviewedSizeGuideRevision(database.db, {
+      organizationId,
+      previewToken: publicationPreview.previewToken,
       actorId,
     });
 
@@ -740,6 +761,44 @@ describe('revisioned sizing', () => {
       instructions: 'Measure over light clothing.',
       fitNotes: 'Regular fit.',
     });
+    expect(draft?.columns).toHaveLength(2);
+    const waistColumn = draft!.columns.find(
+      (column) => column.measurementDefinitionId === waist.id,
+    )!;
+
+    await renameSizeGuideColumn(database.db, {
+      organizationId,
+      revisionId: guide.revisionId,
+      columnId: waistColumn.id,
+      displayName: 'Natural waist',
+      expectedVersion: 8,
+      actorId,
+    });
+    await removeSizeGuideColumn(database.db, {
+      organizationId,
+      revisionId: guide.revisionId,
+      columnId: waistColumn.id,
+      expectedVersion: 9,
+      actorId,
+    });
+    await addSizeGuideColumn(database.db, {
+      organizationId,
+      revisionId: guide.revisionId,
+      measurementDefinitionId: waist.id,
+      displayName: 'Waist',
+      expectedVersion: 10,
+      actorId,
+    });
+
+    detail = await getSizeGuideDetail(database.db, organizationId, guide.id);
+    draft = detail?.revisions.find((revision) => revision.id === guide.revisionId);
+    expect(draft).toMatchObject({ version: 11 });
+    expect(draft?.columns.map((column) => column.displayName)).toEqual(['Chest', 'Waist']);
+    expect(
+      draft?.rows
+        .find((row) => row.id === medium.id)
+        ?.measurements.some((measurement) => measurement.measurementDefinitionId === waist.id),
+    ).toBe(false);
 
     expect(draft?.rows).toEqual([
       expect.objectContaining({
@@ -1026,9 +1085,9 @@ describe('revisioned sizing', () => {
 
     expect(workspace.domains.find((item) => item.id === domain.id)?.status).toBe('ACTIVE');
     expect(workspace.systems.find((item) => item.id === system.id)?.status).toBe('ACTIVE');
-    expect(
-      workspace.sizeDefinitions.find((item) => item.id === definition.id)?.status,
-    ).toBe('ACTIVE');
+    expect(workspace.sizeDefinitions.find((item) => item.id === definition.id)?.status).toBe(
+      'ACTIVE',
+    );
     expect(
       workspace.measurementDefinitions.find((item) => item.id === measurement.id)?.status,
     ).toBe('ACTIVE');
@@ -1245,20 +1304,28 @@ describe('revisioned sizing', () => {
       )
     `.execute(database.db);
 
-    const publicGuide = await getPublicSizeGuideForProduct(
-      database.db,
-      organizationId,
-      product.id,
-    );
+    const publicGuide = await getPublicSizeGuideForProduct(database.db, organizationId, product.id);
 
     expect(publicGuide).toMatchObject({
       name: 'Category Default Guide',
+      kind: 'CUSTOM_FIT_GUIDE',
+      measurementBasis: 'GARMENT',
+      columns: [
+        expect.objectContaining({
+          id: measurement.id,
+          name: 'Bust',
+          defaultUnit: 'cm',
+        }),
+      ],
       rows: [
         expect.objectContaining({
+          id: row.id,
           label: 'M',
-          measurements: [
+          productOptionValueId: null,
+          isSelectable: false,
+          values: [
             expect.objectContaining({
-              name: 'Bust',
+              columnId: measurement.id,
               exact: '90.000',
               unit: 'cm',
             }),
@@ -1364,6 +1431,343 @@ describe('revisioned sizing', () => {
       name: 'Versioned Guide v2',
       description: null,
       version: initialVersion + 1,
+    });
+  });
+
+  it('previews Category impact, rejects stale assignment confirmation, and preserves an explicit no-guide Product outcome', async () => {
+    const { organizationId, actorId } = await createTestOrganization('Sizing Assignment Preview');
+    const domain = await createSizingDomain(database.db, {
+      organizationId,
+      code: 'preview-garment',
+      name: 'Preview Garment',
+      subjectType: 'GARMENT',
+      actorId,
+    });
+    const system = await createSizeSystem(database.db, {
+      organizationId,
+      sizingDomainId: domain.id,
+      code: 'preview-alpha',
+      name: 'Preview Alpha',
+      actorId,
+    });
+    const definition = await createSizeDefinition(database.db, {
+      organizationId,
+      sizeSystemId: system.id,
+      code: 'one-size',
+      label: 'One size',
+      actorId,
+    });
+    const measurement = await createMeasurementDefinition(database.db, {
+      organizationId,
+      sizingDomainId: domain.id,
+      code: 'preview-width',
+      name: 'Width',
+      subjectType: 'GARMENT',
+      defaultUnit: 'cm',
+      actorId,
+    });
+    const guide = await createSizeGuide(database.db, {
+      organizationId,
+      actorId,
+      name: 'Preview Published Guide',
+      sizingDomainId: domain.id,
+      sizeSystemId: system.id,
+    });
+    const row = await addSizeGuideRow(database.db, {
+      organizationId,
+      revisionId: guide.revisionId,
+      expectedVersion: 0,
+      displayLabel: 'One size',
+      position: 0,
+      sizeDefinitionId: definition.id,
+      actorId,
+    });
+    await setSizeGuideMeasurement(database.db, {
+      organizationId,
+      revisionId: guide.revisionId,
+      rowId: row.id,
+      measurementDefinitionId: measurement.id,
+      expectedVersion: row.version,
+      unitCode: 'cm',
+      exact: '40',
+      actorId,
+    });
+    await publishSizeGuideRevision(database.db, {
+      organizationId,
+      sizeGuideId: guide.id,
+      revisionId: guide.revisionId,
+      expectedVersion: 2,
+      actorId,
+    });
+
+    const category = await createCatalogCategory(database.db, {
+      organizationId,
+      handle: `preview-${crypto.randomUUID().slice(0, 8)}`,
+      name: 'Preview Category',
+    });
+    const product = await createTestProduct(organizationId, actorId, 'Preview Product');
+    await sql`
+      update catalog.products
+      set primary_category_id = ${category.id}::uuid
+      where organization_id = ${organizationId} and id = ${product.id}::uuid
+    `.execute(database.db);
+    await attachSizeGuideToProduct(database.db, {
+      organizationId,
+      productId: product.id,
+      sizeSystemId: system.id,
+      guideOutcome: 'INHERIT',
+      actorId,
+    });
+
+    const assignmentPreview = await previewCategoryDefaultSizeGuide(database.db, {
+      organizationId,
+      categoryId: category.id,
+      sizeGuideId: guide.id,
+    });
+    expect(assignmentPreview).toMatchObject({
+      totalProducts: 1,
+      inheritingProducts: 1,
+      directAssignmentsUnaffected: 0,
+      explicitNoGuideUnaffected: 0,
+      compatibilityConflicts: 0,
+    });
+    await applyCategoryDefaultSizeGuide(database.db, {
+      organizationId,
+      actorId,
+      previewToken: assignmentPreview.previewToken,
+    });
+    await expect(
+      getPublicSizeGuideForProduct(database.db, organizationId, product.id),
+    ).resolves.toMatchObject({ name: 'Preview Published Guide' });
+
+    const directPreview = await previewProductGuideAssignment(database.db, {
+      organizationId,
+      productId: product.id,
+      outcome: 'DIRECT',
+      sizeGuideId: guide.id,
+    });
+    expect(directPreview).toMatchObject({
+      current: { outcome: 'INHERIT', effectiveSource: 'CATEGORY' },
+      next: { outcome: 'DIRECT', guideId: guide.id },
+      conflictCount: 0,
+    });
+    await applyProductGuideAssignment(database.db, {
+      organizationId,
+      actorId,
+      previewToken: directPreview.previewToken,
+    });
+    await expect(
+      getProductSizingConfiguration(database.db, organizationId, product.id),
+    ).resolves.toMatchObject({
+      guideOutcome: 'DIRECT',
+      effectiveSource: 'PRODUCT',
+      directAssignmentOrigin: 'MANUAL',
+    });
+
+    const inheritPreview = await previewProductGuideAssignment(database.db, {
+      organizationId,
+      productId: product.id,
+      outcome: 'INHERIT',
+    });
+    await applyProductGuideAssignment(database.db, {
+      organizationId,
+      actorId,
+      previewToken: inheritPreview.previewToken,
+    });
+    await expect(
+      getProductSizingConfiguration(database.db, organizationId, product.id),
+    ).resolves.toMatchObject({
+      configured: false,
+      effectiveSource: 'CATEGORY',
+    });
+
+    const staleClearPreview = await previewCategoryDefaultSizeGuide(database.db, {
+      organizationId,
+      categoryId: category.id,
+      sizeGuideId: null,
+    });
+    await attachSizeGuideToProduct(database.db, {
+      organizationId,
+      productId: product.id,
+      sizeSystemId: system.id,
+      guideOutcome: 'NONE',
+      noGuideReason: 'This adjustable Product does not require customer measurements.',
+      actorId,
+    });
+    await expect(
+      applyCategoryDefaultSizeGuide(database.db, {
+        organizationId,
+        actorId,
+        previewToken: staleClearPreview.previewToken,
+      }),
+    ).rejects.toMatchObject({ code: 'CONFLICT' });
+
+    const refreshedClearPreview = await previewCategoryDefaultSizeGuide(database.db, {
+      organizationId,
+      categoryId: category.id,
+      sizeGuideId: null,
+    });
+    expect(refreshedClearPreview.explicitNoGuideUnaffected).toBe(1);
+    await applyCategoryDefaultSizeGuide(database.db, {
+      organizationId,
+      actorId,
+      previewToken: refreshedClearPreview.previewToken,
+    });
+
+    await expect(
+      getPublicSizeGuideForProduct(database.db, organizationId, product.id),
+    ).resolves.toBeNull();
+    await expect(
+      getProductSizingConfiguration(database.db, organizationId, product.id),
+    ).resolves.toMatchObject({
+      guideOutcome: 'NONE',
+      noGuideReason: 'This adjustable Product does not require customer measurements.',
+      effectiveSource: 'NONE',
+    });
+  });
+
+  it('keeps supplier fit evidence separate until an operator applies a purchase-origin Product assignment', async () => {
+    const { organizationId, actorId } = await createTestOrganization('Sizing Supply Evidence');
+    const product = await createTestProduct(organizationId, actorId, 'Supplier Sized Product');
+    const sku = `SIZE-${crypto.randomUUID().slice(0, 8).toUpperCase()}`;
+    const variant = await sql<{ id: string }>`
+      insert into catalog.product_variants (
+        organization_id, product_id, sku, sku_normalized, option_signature
+      ) values (
+        ${organizationId}, ${product.id}::uuid, ${sku}, ${sku}, ${crypto.randomUUID()}
+      ) returning id::text
+    `.execute(database.db);
+    const supplier = await createSupplier(database.db, {
+      organizationId,
+      actorId,
+      code: `SIZE-${crypto.randomUUID().slice(0, 6)}`,
+      name: 'Sizing Supplier',
+    });
+    const purchase = await createPurchase(database.db, {
+      organizationId,
+      actorId,
+      supplierId: supplier.id,
+      currencyCode: 'CNY',
+    });
+    await addPurchaseLine(database.db, {
+      organizationId,
+      actorId,
+      purchaseId: purchase.id,
+      variantId: variant.rows[0]!.id,
+      quantity: '4',
+      unitPrice: '10',
+    });
+
+    const domain = await createSizingDomain(database.db, {
+      organizationId,
+      code: 'supply-fit',
+      name: 'Supply Fit',
+      subjectType: 'PRODUCT',
+      actorId,
+    });
+    const system = await createSizeSystem(database.db, {
+      organizationId,
+      sizingDomainId: domain.id,
+      code: 'supply-custom',
+      name: 'Supply Custom',
+      actorId,
+    });
+    const definition = await createSizeDefinition(database.db, {
+      organizationId,
+      sizeSystemId: system.id,
+      code: 'adjustable',
+      label: 'Adjustable',
+      actorId,
+    });
+    const measurement = await createMeasurementDefinition(database.db, {
+      organizationId,
+      sizingDomainId: domain.id,
+      code: 'circumference',
+      name: 'Circumference',
+      subjectType: 'PRODUCT',
+      defaultUnit: 'cm',
+      actorId,
+    });
+    const guide = await createSizeGuide(database.db, {
+      organizationId,
+      actorId,
+      name: 'Supplier Adjustable Guide',
+      sizingDomainId: domain.id,
+      sizeSystemId: system.id,
+      kind: 'WEARABLE_FIT_GUIDE',
+    });
+    const row = await addSizeGuideRow(database.db, {
+      organizationId,
+      revisionId: guide.revisionId,
+      expectedVersion: 0,
+      displayLabel: 'Adjustable',
+      position: 0,
+      sizeDefinitionId: definition.id,
+      actorId,
+    });
+    await setSizeGuideMeasurement(database.db, {
+      organizationId,
+      revisionId: guide.revisionId,
+      rowId: row.id,
+      measurementDefinitionId: measurement.id,
+      expectedVersion: row.version,
+      unitCode: 'cm',
+      min: '18',
+      max: '24',
+      actorId,
+    });
+    await publishSizeGuideRevision(database.db, {
+      organizationId,
+      sizeGuideId: guide.id,
+      revisionId: guide.revisionId,
+      expectedVersion: 2,
+      actorId,
+    });
+
+    const initialReview = await getSupplyPurchaseSizingReview(
+      database.db,
+      organizationId,
+      purchase.id,
+    );
+    expect(initialReview.products).toEqual([
+      expect.objectContaining({
+        productId: product.id,
+        decision: 'PENDING',
+        effectiveSource: 'NONE',
+      }),
+    ]);
+
+    const evidence = await setSupplyPurchaseSizingDecision(database.db, {
+      organizationId,
+      purchaseId: purchase.id,
+      productId: product.id,
+      decision: 'EVIDENCE_ONLY',
+      sizeGuideId: guide.id,
+      notes: 'Supplier confirmed the adjustable range.',
+      actorId,
+    });
+    await expect(
+      getProductSizingConfiguration(database.db, organizationId, product.id),
+    ).resolves.toMatchObject({ configured: false, effectiveSource: 'NONE' });
+
+    await setSupplyPurchaseSizingDecision(database.db, {
+      organizationId,
+      purchaseId: purchase.id,
+      productId: product.id,
+      decision: 'APPLIED_TO_PRODUCT',
+      sizeGuideId: guide.id,
+      notes: 'Approved for customer display.',
+      expectedVersion: evidence.version,
+      actorId,
+    });
+    await expect(
+      getProductSizingConfiguration(database.db, organizationId, product.id),
+    ).resolves.toMatchObject({
+      guideOutcome: 'DIRECT',
+      sizeGuideId: guide.id,
+      directAssignmentOrigin: 'SUPPLY_PURCHASE',
+      sourcePurchaseId: purchase.id,
+      effectiveSource: 'PRODUCT',
     });
   });
 });
