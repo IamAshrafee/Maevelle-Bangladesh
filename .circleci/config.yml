@@ -1,0 +1,56 @@
+version: 2.1
+
+jobs:
+  publish-staging:
+    machine:
+      image: ubuntu-2404:current
+    resource_class: medium
+
+    steps:
+      - checkout
+
+      - run:
+          name: Verify approved Maevelle release
+          command: |
+            set -euo pipefail
+            RELEASE="dac53902bb71a86561c261a2dbbd75da1aad87ee"
+            git cat-file -e "$RELEASE^{commit}" || git fetch origin "$RELEASE"
+            git checkout --detach "$RELEASE"
+            test "$(git rev-parse HEAD)" = "$RELEASE"
+
+      - run:
+          name: Build and publish four Linux AMD64 images
+          no_output_timeout: 30m
+          command: |
+            set -euo pipefail
+            set +x
+
+            : "${GHCR_USERNAME:?Missing GHCR_USERNAME}"
+            : "${GHCR_TOKEN:?Missing GHCR_TOKEN}"
+
+            printf '%s' "$GHCR_TOKEN" |
+              docker login ghcr.io \
+                --username "$GHCR_USERNAME" \
+                --password-stdin
+
+            for SERVICE in api worker admin storefront; do
+              IMAGE="ghcr.io/iamashrafee/maevelle-${SERVICE}:staging-dac53902bb71"
+
+              docker build \
+                --platform linux/amd64 \
+                --file "infrastructure/docker/Dockerfile.${SERVICE}" \
+                --tag "$IMAGE" \
+                --label "org.opencontainers.image.revision=dac53902bb71a86561c261a2dbbd75da1aad87ee" \
+                .
+
+              docker push "$IMAGE"
+              echo "Published ${SERVICE}"
+            done
+
+workflows:
+  staging-images:
+    jobs:
+      - publish-staging:
+          filters:
+            branches:
+              only: main
