@@ -14,7 +14,7 @@ const patterns = [
     expression: /(?:api[_-]?key|secret|password)\s*[:=]\s*['"][^'"\s]{20,}['"]/i,
   },
 ];
-const allowed = new Set(['.env.example', 'compose.yaml', 'docs/implementation/status.md']);
+const allowed = new Set(['.env.example', 'compose.yaml']);
 const findings = [];
 for (const file of tracked.stdout.split(/\r?\n/).filter(Boolean)) {
   if (

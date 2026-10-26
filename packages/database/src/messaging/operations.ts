@@ -317,6 +317,7 @@ export async function setAgentAvailability(
       'VALIDATION_FAILED',
       'Capacity must be an integer from 0 to 100.',
     );
+  await ensureEligibleMembership(db, input.actor.organizationId, input.actor.membershipId);
   await sql`insert into messaging.agent_availability(organization_id,membership_id,status,capacity,last_heartbeat_at)
     values(${input.actor.organizationId},${input.actor.membershipId},${input.status},${input.capacity},now())
     on conflict(organization_id,membership_id) do update set status=excluded.status,capacity=excluded.capacity,last_heartbeat_at=now(),updated_at=now(),version=messaging.agent_availability.version+1`.execute(
@@ -336,6 +337,7 @@ export async function heartbeatAgentAvailability(
   db: Db,
   actor: MessagingActorContext,
 ): Promise<void> {
+  await ensureEligibleMembership(db, actor.organizationId, actor.membershipId);
   await sql`update messaging.agent_availability set last_heartbeat_at=now(),updated_at=now(),version=version+1
     where organization_id=${actor.organizationId} and membership_id=${actor.membershipId}`.execute(
     db,

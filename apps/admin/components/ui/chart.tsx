@@ -54,18 +54,18 @@ function ChartContainer({
   }
 }) {
   const uniqueId = React.useId()
-  const chartId = `chart-${id ?? uniqueId.replace(/:/g, "")}`
+  const chartId = `chart-${id && /^[a-zA-Z0-9_-]+$/.test(id) ? id : uniqueId.replace(/[^a-zA-Z0-9_-]/g, "")}`
 
   return (
     <ChartContext.Provider value={{ config }}>
       <div
+        {...props}
         data-slot="chart"
         data-chart={chartId}
         className={cn(
           "flex aspect-video justify-center text-xs [&_.recharts-cartesian-axis-tick_text]:fill-muted-foreground [&_.recharts-cartesian-grid_line[stroke='#ccc']]:stroke-border/50 [&_.recharts-curve.recharts-tooltip-cursor]:stroke-border [&_.recharts-dot[stroke='#fff']]:stroke-transparent [&_.recharts-layer]:outline-hidden [&_.recharts-polar-grid_[stroke='#ccc']]:stroke-border [&_.recharts-radial-bar-background-sector]:fill-muted [&_.recharts-rectangle.recharts-tooltip-cursor]:fill-muted [&_.recharts-reference-line_[stroke='#ccc']]:stroke-border [&_.recharts-sector]:outline-hidden [&_.recharts-sector[stroke='#fff']]:stroke-transparent [&_.recharts-surface]:outline-hidden",
           className
         )}
-        {...props}
       >
         <ChartStyle id={chartId} config={config} />
         <RechartsPrimitive.ResponsiveContainer
@@ -92,8 +92,7 @@ function isValidCssColor(val: unknown): val is string {
 }
 
 const ChartStyle = ({ id, config }: { id: string; config: ChartConfig }) => {
-  const safeId = id.replace(/[^a-zA-Z0-9_-]/g, "")
-  if (!safeId) {
+  if (!/^[a-zA-Z0-9_-]+$/.test(id)) {
     return null
   }
 
@@ -109,18 +108,17 @@ const ChartStyle = ({ id, config }: { id: string; config: ChartConfig }) => {
     .map(([theme, prefix]) => {
       const declarations = colorConfig
         .map(([key, itemConfig]) => {
-          const safeKey = key.replace(/[^a-zA-Z0-9_-]/g, "")
-          if (!safeKey) return null
+          if (!/^[a-zA-Z0-9_-]+$/.test(key)) return null
           const rawColor =
             itemConfig.theme?.[theme as keyof typeof itemConfig.theme] ??
             itemConfig.color
           if (!rawColor || !isValidCssColor(rawColor)) return null
-          return `  --color-${safeKey}: ${rawColor.trim()};`
+          return `  --color-${key}: ${rawColor.trim()};`
         })
         .filter(Boolean)
 
       if (!declarations.length) return null
-      return `${prefix ? `${prefix} ` : ""}[data-chart=${safeId}] {\n${declarations.join("\n")}\n}`
+      return `${prefix ? `${prefix} ` : ""}[data-chart=${id}] {\n${declarations.join("\n")}\n}`
     })
     .filter(Boolean)
     .join("\n")

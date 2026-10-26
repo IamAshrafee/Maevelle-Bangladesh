@@ -1,5 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
+import { resolve } from 'node:path';
+import { checkAdminRoutes } from './hardening-routes.mjs';
 
 const tracked = spawnSync(
   'git',
@@ -48,23 +50,13 @@ const routeFiles = files.filter(
     !file.endsWith('.test.ts') &&
     !file.endsWith('.spec.ts'),
 );
-
-const serverAuthBoundaryPattern =
-  /(findActiveAdminContext|require(?:Catalog|Messaging|Sizing)?Capability|authenticateMessagingAdmin|require(?:Admin|UserSession|Context|Sizing)|customerRouteContext|context\(|admin\(|authorize\(|sessionContext\(|capability\()/u;
-
-for (const file of routeFiles) {
-  const source = readFileSync(file, 'utf8');
-  if (
-    /[\x27\x22`]\/admin\//u.test(source) &&
-    !serverAuthBoundaryPattern.test(source)
-  )
-    failures.push(`${file}: Admin route lacks a recognizable server authorization boundary`);
-}
+const routes = checkAdminRoutes(routeFiles.map((file) => resolve(file)));
+failures.push(...routes.failures);
 
 if (failures.length > 0) {
   console.error('Hardening check failed:\n' + failures.map((failure) => `- ${failure}`).join('\n'));
   process.exit(1);
 }
 console.log(
-  `Hardening check passed across ${files.length} TypeScript/JavaScript sources and ${routeFiles.length} API route modules.`,
+  `Hardening check passed across ${files.length} TypeScript/JavaScript sources and ${routes.count} Admin handlers in ${routeFiles.length} API route modules.`,
 );

@@ -96,6 +96,62 @@ const actor = () => ({
   ],
 });
 
+it('rejects availability writes from a non-agent membership before changing state', async () => {
+  const email = `non-agent-${crypto.randomUUID()}@example.test`;
+  const user = await sql<{
+    id: string;
+  }>`insert into iam.users(name,email,email_normalized,email_verified,status)
+    values('Non-agent',${email},${email},true,'ACTIVE') returning id`.execute(database.db);
+  const member = await sql<{ id: string }>`insert into iam.organization_memberships
+    (organization_id,user_id,membership_type,status,display_name,activated_at)
+    values(${organizationId},${user.rows[0]!.id},'STANDARD','ACTIVE','Non-agent',now()) returning id`.execute(
+    database.db,
+  );
+  const membershipId = member.rows[0]!.id;
+  const unauthorized = {
+    organizationId,
+    actorId: user.rows[0]!.id,
+    membershipId,
+    capabilities: [],
+  };
+
+  await expect(
+    messaging.setAgentAvailability(database.db, {
+      actor: unauthorized,
+      status: 'ONLINE',
+      capacity: 1,
+    }),
+  ).rejects.toMatchObject({ code: 'VALIDATION_FAILED' });
+  const rows = await sql<{
+    membership_id: string;
+  }>`select membership_id from messaging.agent_availability
+    where organization_id=${organizationId} and membership_id=${membershipId}`.execute(database.db);
+  expect(rows.rows).toHaveLength(0);
+
+  await sql`insert into messaging.agent_availability(organization_id,membership_id,status,capacity,last_heartbeat_at)
+    values(${organizationId},${membershipId},'OFFLINE',0,now())`.execute(database.db);
+  const before = await sql<{
+    version: string;
+  }>`select version::text from messaging.agent_availability
+    where organization_id=${organizationId} and membership_id=${membershipId}`.execute(database.db);
+  await expect(
+    messaging.heartbeatAgentAvailability(database.db, unauthorized),
+  ).rejects.toMatchObject({ code: 'VALIDATION_FAILED' });
+  const after = await sql<{
+    version: string;
+  }>`select version::text from messaging.agent_availability
+    where organization_id=${organizationId} and membership_id=${membershipId}`.execute(database.db);
+  expect(after.rows[0]?.version).toBe(before.rows[0]?.version);
+
+  const eligible = await messaging.setAgentAvailability(database.db, {
+    actor: actor(),
+    status: 'ONLINE',
+    capacity: 2,
+  });
+  expect(eligible).toMatchObject({ membershipId: actor().membershipId, status: 'ONLINE' });
+  await expect(messaging.heartbeatAgentAvailability(database.db, actor())).resolves.toBeUndefined();
+});
+
 describe('messaging transactional core', () => {
   it('accepts one canonical outbound message and atomically creates reliability records', async () => {
     const conversationId = await messaging.createConversation(database.db, {
@@ -473,9 +529,7 @@ describe('messaging transactional core', () => {
     expect(BigInt(evidenceAfter.rows[0]!.realtime) - BigInt(evidenceBefore.rows[0]!.realtime)).toBe(
       1n,
     );
-    expect(BigInt(evidenceAfter.rows[0]!.outbox) - BigInt(evidenceBefore.rows[0]!.outbox)).toBe(
-      1n,
-    );
+    expect(BigInt(evidenceAfter.rows[0]!.outbox) - BigInt(evidenceBefore.rows[0]!.outbox)).toBe(1n);
     expect(evidenceAfter.rows[0]!.payload).toMatchObject({
       conversationId,
       messageId: outbound.message.id,
@@ -500,7 +554,10 @@ describe('messaging transactional core', () => {
       attemptCount: 1,
       outcome: 'PROCESSED',
     });
-    let eventState = await sql<{ status: string; lease_owner: string | null }>`select status,lease_owner
+    let eventState = await sql<{
+      status: string;
+      lease_owner: string | null;
+    }>`select status,lease_owner
       from messaging.provider_events where id=${eventId}::bigint`.execute(database.db);
     expect(eventState.rows[0]).toEqual({
       status: 'PROCESSING',
@@ -1182,7 +1239,9 @@ describe('Instagram messaging provider boundaries', () => {
       intent_status: 'SUCCEEDED',
     });
 
-    const events = await sql<{ count: string }>`select count(*)::text from messaging.realtime_events where aggregate_id=${messageId} and event_type='messaging.message.delivery_changed.v1' and payload->>'state'='SENT'`.execute(
+    const events = await sql<{
+      count: string;
+    }>`select count(*)::text from messaging.realtime_events where aggregate_id=${messageId} and event_type='messaging.message.delivery_changed.v1' and payload->>'state'='SENT'`.execute(
       database.db,
     );
     expect(Number(events.rows[0]!.count)).toBeGreaterThanOrEqual(1);
@@ -1246,7 +1305,9 @@ describe('Instagram messaging provider boundaries', () => {
       intent_status: 'SUCCEEDED',
     });
 
-    const events = await sql<{ count: string }>`select count(*)::text from messaging.realtime_events where aggregate_id=${messageId} and event_type='messaging.message.delivery_changed.v1' and payload->>'state'='SENT'`.execute(
+    const events = await sql<{
+      count: string;
+    }>`select count(*)::text from messaging.realtime_events where aggregate_id=${messageId} and event_type='messaging.message.delivery_changed.v1' and payload->>'state'='SENT'`.execute(
       database.db,
     );
     expect(Number(events.rows[0]!.count)).toBeGreaterThanOrEqual(1);

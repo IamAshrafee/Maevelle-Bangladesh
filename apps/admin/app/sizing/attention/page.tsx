@@ -4,7 +4,7 @@ import type { SizingAttentionItemDto } from '@maevelle/contracts';
 import { AlertTriangle, ArrowRight, CheckCircle2, RefreshCw } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { useCallback, useEffect, useState } from 'react';
+import { Suspense, useCallback, useEffect, useState } from 'react';
 
 import { StatusBadge } from '@/components/status-badge';
 import { Button } from '@/components/ui/button';
@@ -20,7 +20,7 @@ import { fetchSizingAttention } from '@/lib/sizing/api';
 
 const PAGE_SIZE = 20;
 
-export default function SizingAttentionPage() {
+function SizingAttentionContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const page = Math.max(1, Number(searchParams.get('page') ?? 1) || 1);
@@ -140,5 +140,13 @@ export default function SizingAttentionPage() {
         </div>
       ) : null}
     </AdminPage>
+  );
+}
+
+export default function SizingAttentionPage() {
+  return (
+    <Suspense fallback={<LoadingState message="Loading sizing attention…" />}>
+      <SizingAttentionContent />
+    </Suspense>
   );
 }

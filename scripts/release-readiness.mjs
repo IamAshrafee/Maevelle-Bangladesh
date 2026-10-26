@@ -8,18 +8,13 @@ function command(name, executable, args) {
   try {
     const result = spawnSync(executable, args, { encoding: 'utf8', shell: false });
     if (result.error) {
-      if (result.error.code === 'ENOENT') {
-        repoValidationResults.push({
-          name,
-          status: 'SKIPPED',
-          evidence: `${executable} not installed in environment`,
-        });
-        return;
-      }
       repoValidationResults.push({
         name,
         status: 'FAIL',
-        evidence: result.error.message,
+        evidence:
+          result.error.code === 'ENOENT'
+            ? `${executable} not installed in environment`
+            : result.error.message,
       });
       return;
     }
@@ -45,65 +40,46 @@ command('Architecture policy', process.execPath, ['scripts/check-architecture.mj
 command('Secret scan', process.execPath, ['scripts/check-secrets.mjs']);
 command('Hardening scan', process.execPath, ['scripts/check-hardening.mjs']);
 
-// 2. Staging Compose definition validation
+// 2. Staging Compose source artifacts. Runtime validation is an explicit deployment gate.
 if (existsSync('compose.staging.yaml') && existsSync('.env.staging.example')) {
-  try {
-    const dockerCheck = spawnSync(
-      'docker',
-      [
-        'compose',
-        '-f',
-        'compose.staging.yaml',
-        '--env-file',
-        '.env.staging.example',
-        'config',
-        '--quiet',
-      ],
-      { encoding: 'utf8', shell: false },
-    );
-    if (dockerCheck.error && dockerCheck.error.code === 'ENOENT') {
-      repoValidationResults.push({
-        name: 'Staging Compose',
-        status: 'PASS',
-        evidence: 'compose.staging.yaml and .env.staging.example present (docker CLI not in environment)',
-      });
-    } else if (dockerCheck.status === 0) {
-      repoValidationResults.push({
-        name: 'Staging Compose',
-        status: 'PASS',
-        evidence: 'Valid staging compose configuration',
-      });
-    } else {
-      repoValidationResults.push({
-        name: 'Staging Compose',
-        status: 'FAIL',
-        evidence: (dockerCheck.stderr || dockerCheck.stdout || 'Validation error').trim(),
-      });
-    }
-  } catch {
-    repoValidationResults.push({
-      name: 'Staging Compose',
-      status: 'PASS',
-      evidence: 'compose.staging.yaml and .env.staging.example present',
-    });
-  }
+  repoValidationResults.push({
+    name: 'Staging Compose artifacts',
+    status: 'PASS',
+    evidence:
+      'compose.staging.yaml and .env.staging.example present; configuration not validated here',
+  });
 } else {
   repoValidationResults.push({
-    name: 'Staging Compose',
+    name: 'Staging Compose artifacts',
     status: 'FAIL',
     evidence: 'compose.staging.yaml or .env.staging.example missing',
   });
 }
 
 // 3. Current project completion evidence
-if (existsSync('docs/product-completion/state.json')) {
+if (
+  existsSync('docs/product-completion/state.json') &&
+  existsSync('docs/product-completion/current-focus.md')
+) {
   try {
     const state = JSON.parse(readFileSync('docs/product-completion/state.json', 'utf8'));
+    const focus = readFileSync('docs/product-completion/current-focus.md', 'utf8').trim();
     repoValidationResults.push({
       name: 'Product completion state',
-      status: state.program ? 'PASS' : 'FAIL',
+      status:
+        state.program === 'Maevelle Product Completion V2' && state.active_status && focus
+          ? 'PASS'
+          : 'FAIL',
       evidence: `${state.program ?? 'Maevelle'} (${state.active_area ?? 'general'}: ${state.active_status ?? 'IN_PROGRESS'})`,
     });
+    if (Array.isArray(state.blocked_by))
+      for (const blocker of state.blocked_by)
+        deploymentGateResults.push({
+          name: `Product gate ${blocker}`,
+          status: 'PENDING',
+          evidence:
+            'Recorded in current product completion state; independent closure evidence required.',
+        });
   } catch (err) {
     repoValidationResults.push({
       name: 'Product completion state',
@@ -111,18 +87,11 @@ if (existsSync('docs/product-completion/state.json')) {
       evidence: `docs/product-completion/state.json parsing error: ${err.message}`,
     });
   }
-} else if (existsSync('docs/implementation/status.md')) {
-  const statusContent = readFileSync('docs/implementation/status.md', 'utf8');
-  repoValidationResults.push({
-    name: 'Repository status document',
-    status: 'PASS',
-    evidence: 'docs/implementation/status.md present',
-  });
 } else {
   repoValidationResults.push({
     name: 'Product completion state',
     status: 'FAIL',
-    evidence: 'Missing docs/product-completion/state.json',
+    evidence: 'Missing docs/product-completion/state.json or current-focus.md',
   });
 }
 
@@ -142,17 +111,33 @@ for (const file of [
 }
 
 // 5. External deployment approval requirements and gates
-const dirty = spawnSync('git', ['status', '--porcelain'], {
+const gitStatus = spawnSync('git', ['status', '--porcelain'], {
   encoding: 'utf8',
   shell: false,
-}).stdout?.trim();
+});
+const dirty = gitStatus.stdout?.trim();
 
 deploymentGateResults.push({
   name: 'Git working tree',
-  status: dirty ? 'PENDING' : 'PASS',
-  evidence: dirty
-    ? 'Working tree has uncommitted development changes (clean required for release tag)'
-    : 'Clean',
+  status: gitStatus.status !== 0 ? 'PENDING' : dirty ? 'PENDING' : 'PASS',
+  evidence:
+    gitStatus.status !== 0
+      ? 'Could not inspect Git working tree'
+      : dirty
+        ? 'Working tree has uncommitted development changes (clean required for release tag)'
+        : 'Clean',
+});
+deploymentGateResults.push({
+  name: 'Staging Compose configuration',
+  status: 'EXTERNAL_REQUIRED',
+  evidence:
+    'Validate with docker compose config against the intended staging environment before deployment.',
+});
+deploymentGateResults.push({
+  name: 'Shared database migration compatibility',
+  status: 'EXTERNAL_REQUIRED',
+  evidence:
+    'Inventory the target migration ledger and schema, then rehearse required forward-only changes against an isolated copy.',
 });
 
 // Operational UAT checklist
