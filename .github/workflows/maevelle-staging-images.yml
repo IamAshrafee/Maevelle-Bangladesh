@@ -1,0 +1,71 @@
+name: Maevelle Staging Images
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: maevelle-staging-images
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build ${{ matrix.service }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        service:
+          - api
+          - worker
+          - admin
+          - storefront
+
+    steps:
+      - name: Checkout approved release
+        uses: actions/checkout@v6
+        with:
+          ref: dac53902bb71a86561c261a2dbbd75da1aad87ee
+          persist-credentials: false
+
+      - name: Verify release revision
+        run: |
+          test "$(git rev-parse HEAD)" = \
+            "dac53902bb71a86561c261a2dbbd75da1aad87ee"
+
+      - name: Prepare image name
+        id: image
+        env:
+          REPOSITORY: ${{ github.repository }}
+          SERVICE: ${{ matrix.service }}
+        run: |
+          IMAGE="ghcr.io/${REPOSITORY,,}-maevelle-${SERVICE}"
+          echo "name=$IMAGE" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Authenticate to GitHub Container Registry
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and publish immutable release candidate
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: ./infrastructure/docker/Dockerfile.${{ matrix.service }}
+          platforms: linux/amd64
+          push: true
+          tags: ${{ steps.image.outputs.name }}:staging-dac53902bb71
+          labels: |
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.revision=dac53902bb71a86561c261a2dbbd75da1aad87ee
