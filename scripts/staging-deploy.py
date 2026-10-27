@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Operator-triggered Maevelle rootless staging status, plan, and deployment."""
+"""Operator-triggered Maevelle rootless staging status, plan, apply, and verify."""
 
 import argparse
 import json
@@ -8,7 +8,7 @@ from pathlib import Path
 
 sys.dont_write_bytecode = True
 
-from staging.execute import apply_release, read_record, state_directory
+from staging.execute import apply_release, read_record, reconcile_release, state_directory
 from staging.host import Host
 from staging.manifest import load
 from staging.plan import build_plan
@@ -48,6 +48,9 @@ def main() -> int:
     apply_parser = sub.add_parser("apply")
     apply_parser.add_argument("--release", type=Path, required=True)
     apply_parser.add_argument("--confirm", required=True, help="Full target commit SHA")
+    verify_parser = sub.add_parser("verify", help="Record an already-running release after independent health checks")
+    verify_parser.add_argument("--release", type=Path, required=True)
+    verify_parser.add_argument("--confirm", required=True, help="Full target commit SHA")
     args = parser.parse_args()
     host = Host()
     try:
@@ -57,8 +60,10 @@ def main() -> int:
         elif args.action == "plan":
             current = read_record(state_directory(host) / "current.json")
             result = build_plan(target, host, current).as_dict(host)
-        else:
+        elif args.action == "apply":
             result = apply_release(target, host, args.confirm)
+        else:
+            result = reconcile_release(target, host, args.confirm)
         print(json.dumps(result, indent=2, sort_keys=True))
         return 0
     except (OSError, ValueError, RuntimeError, KeyError, json.JSONDecodeError) as error:

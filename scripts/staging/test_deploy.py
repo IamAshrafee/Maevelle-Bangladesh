@@ -2,16 +2,18 @@ import fcntl
 import importlib.util
 import json
 import os
+import subprocess
 import tempfile
 import unittest
+import urllib.error
 from contextlib import contextmanager
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
-from staging.execute import apply_release, state_directory
-from staging.host import CONTAINERS, Host
-from staging.manifest import SERVICES, validate
+from staging.execute import apply_release, reconcile_release, state_directory
+from staging.host import CONTAINERS, Host, LedgerError, ReadinessError
+from staging.manifest import SERVICES, load, validate
 from staging.plan import build_plan
 from staging.quadlet import inspect
 
@@ -43,6 +45,7 @@ class FakeHost(Host):
         self.applied = MIGRATIONS.copy()
         self.fail_pull = False
         self.fail_ready = False
+        self.fail_ready_once = False
         quadlet_dir = home / ".config/containers/systemd"
         quadlet_dir.mkdir(parents=True)
         (home / "deployment/secrets").mkdir(parents=True)
@@ -95,10 +98,16 @@ class FakeHost(Host):
 
     def verify_service(self, name, ref, seconds=90):
         self.calls.append(("ready", name))
+        if self.fail_ready_once and name == "api":
+            self.fail_ready_once = False
+            raise RuntimeError("synthetic transient API readiness failure")
         if self.fail_ready and name == "api":
             raise RuntimeError("synthetic API readiness failure")
         if self.refs[name] != ref:
             raise RuntimeError("wrong running image")
+
+    def verify_gateway_routes(self, seconds=60):
+        self.calls.append(("gateway",))
 
 
 class DeploymentTests(unittest.TestCase):
@@ -112,6 +121,149 @@ class DeploymentTests(unittest.TestCase):
         self.environment = patch.dict(os.environ, {"XDG_RUNTIME_DIR": str(self.runtime)})
         self.environment.start()
         self.addCleanup(self.environment.stop)
+
+    def set_running_release(self, manifest):
+        for name in SERVICES:
+            path = self.host.quadlets[name]
+            ref = manifest["images"][name]["ref"]
+            path.write_text(path.read_text().replace(OLD[name], ref))
+            self.host.refs[name] = ref
+
+    def test_reconcile_matching_release_preserves_failed_attempt_and_all_services(self):
+        manifest = release(SERVICES)
+        self.set_running_release(manifest)
+        directory = state_directory(self.host)
+        directory.mkdir(parents=True)
+        failed = {"id": "failed-123", "outcome": "failed", "targetCommit": manifest["commitSha"], "failedStep": "release verification"}
+        (directory / "latest-attempt.json").write_text(json.dumps(failed))
+        before = {name: path.read_bytes() for name, path in self.host.quadlets.items()}
+        result = reconcile_release(manifest, self.host, manifest["commitSha"])
+        self.assertEqual(result["outcome"], "verified")
+        self.assertEqual(result["verificationMethod"], "reconciliation")
+        self.assertEqual(result["relatedFailedAttemptId"], "failed-123")
+        self.assertEqual(result["checks"]["appliedMigrations"], 51)
+        self.assertEqual(json.loads((directory / "latest-attempt.json").read_text()), failed)
+        self.assertEqual(json.loads((directory / "current.json").read_text()), result)
+        self.assertEqual(before, {name: path.read_bytes() for name, path in self.host.quadlets.items()})
+        self.assertFalse(any(call[0] in ("pull", "systemctl", "podman") for call in self.host.calls))
+        self.assertIn(("gateway",), self.host.calls)
+
+    def test_reconcile_rejects_wrong_confirmation_and_bad_manifest(self):
+        manifest = release(SERVICES)
+        self.set_running_release(manifest)
+        with self.assertRaisesRegex(RuntimeError, "full target commit SHA"):
+            reconcile_release(manifest, self.host, "b" * 40)
+        with self.assertRaisesRegex(ValueError, "digest"):
+            reconcile_release({**manifest, "images": {**manifest["images"], "api": {**manifest["images"]["api"], "digest": "invalid"}}}, self.host, manifest["commitSha"])
+        with self.assertRaises(FileNotFoundError):
+            load(self.home / "missing-release.json")
+        self.assertFalse(state_directory(self.host).exists())
+
+    def test_reconcile_rejects_running_and_quadlet_digest_mismatch(self):
+        manifest = release(SERVICES)
+        self.set_running_release(manifest)
+        self.host.refs["api"] = OLD["api"]
+        with self.assertRaisesRegex(RuntimeError, "running release digest mismatch"):
+            reconcile_release(manifest, self.host, manifest["commitSha"])
+        self.host.refs["api"] = manifest["images"]["api"]["ref"]
+        path = self.host.quadlets["api"]
+        path.write_text(path.read_text().replace(self.host.refs["api"], OLD["api"]))
+        with self.assertRaisesRegex(RuntimeError, "Quadlet release digest mismatch"):
+            reconcile_release(manifest, self.host, manifest["commitSha"])
+        self.assertFalse(state_directory(self.host).exists())
+
+    def test_reconcile_rejects_inactive_service_and_migration_mismatch(self):
+        manifest = release(SERVICES)
+        self.set_running_release(manifest)
+        self.host.states["worker"] = "inactive"
+        with self.assertRaisesRegex(RuntimeError, "worker service not started"):
+            reconcile_release(manifest, self.host, manifest["commitSha"])
+        self.host.states["worker"] = "active"
+        self.host.applied = MIGRATIONS[:-1]
+        with self.assertRaisesRegex(RuntimeError, "migration ledger does not exactly match"):
+            reconcile_release(manifest, self.host, manifest["commitSha"])
+        self.assertFalse(state_directory(self.host).exists())
+
+    def test_reconcile_lock_contention_and_existing_verified_release(self):
+        manifest = release(SERVICES)
+        self.set_running_release(manifest)
+        with (self.runtime / "maevelle-staging-migration.lock").open("a+") as lock:
+            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            with self.assertRaisesRegex(RuntimeError, "holds the lock"):
+                reconcile_release(manifest, self.host, manifest["commitSha"])
+        first = reconcile_release(manifest, self.host, manifest["commitSha"])
+        current_path = state_directory(self.host) / "current.json"
+        contents = current_path.read_bytes()
+        second = reconcile_release(manifest, self.host, manifest["commitSha"])
+        self.assertEqual(second["verifiedAt"], first["verifiedAt"])
+        self.assertTrue(second["alreadyVerified"])
+        self.assertEqual(current_path.read_bytes(), contents)
+
+    def test_reconcile_permanent_readiness_failure_records_no_success(self):
+        manifest = release(SERVICES)
+        self.set_running_release(manifest)
+        self.host.fail_ready = True
+        with self.assertRaisesRegex(RuntimeError, "readiness failure"):
+            reconcile_release(manifest, self.host, manifest["commitSha"])
+        self.assertFalse(state_directory(self.host).exists())
+
+    def test_api_readiness_recovers_and_permanent_failure_is_specific(self):
+        probes = []
+
+        def inspect_runtime(*args, timeout=30):
+            return "true" if args[3] == "{{.State.Running}}" else OLD["api"]
+
+        def http(path, label, allow_redirect=False):
+            probes.append(path)
+            if path == "/api/health/ready" and probes.count(path) == 1:
+                raise ReadinessError("API database readiness failure (HTTP 503)")
+
+        with patch.object(self.host, "run", side_effect=inspect_runtime), patch.object(self.host, "check_http", side_effect=http), patch("staging.host.time.sleep"):
+            Host.verify_service(self.host, "api", OLD["api"], seconds=1)
+        self.assertEqual(probes.count("/api/health/ready"), 2)
+        with patch.object(self.host, "run", side_effect=inspect_runtime), patch.object(self.host, "check_http", side_effect=ReadinessError("API database readiness failure (HTTP 503)")):
+            with self.assertRaisesRegex(RuntimeError, "database readiness failure"):
+                Host.verify_service(self.host, "api", OLD["api"], seconds=0)
+
+    def test_http_diagnostics_distinguish_api_and_database_failure(self):
+        upstream = urllib.error.HTTPError("http://127.0.0.1", 502, "unavailable", None, None)
+        with patch("staging.host.urllib.request.urlopen", side_effect=upstream):
+            with self.assertRaisesRegex(ReadinessError, "API not listening yet"):
+                Host.check_http(self.host, "/api/health/live", "API liveness")
+        upstream.close()
+        database = urllib.error.HTTPError("http://127.0.0.1", 503, "unavailable", None, None)
+        with patch("staging.host.urllib.request.urlopen", side_effect=database):
+            with self.assertRaisesRegex(ReadinessError, "database readiness failure"):
+                Host.check_http(self.host, "/api/health/ready", "API readiness")
+        database.close()
+
+    def test_ledger_retry_and_sanitized_exec_diagnostics(self):
+        with patch.object(self.host, "ledger", side_effect=[LedgerError("migration ledger DNS unavailable", True), MIGRATIONS.copy()]), patch("staging.host.time.sleep"):
+            self.assertEqual(Host.ledger_ready(self.host, seconds=1), MIGRATIONS)
+        outcome = subprocess.CompletedProcess(["podman", "exec"], 1, "", "MAEVELLE_LEDGER_ERROR:DNS_UNAVAILABLE password=synthetic-secret")
+        with patch("staging.host.subprocess.run", return_value=outcome):
+            with self.assertRaises(LedgerError) as caught:
+                Host.run(self.host, "podman", "exec", "synthetic")
+        self.assertTrue(caught.exception.transient)
+        self.assertNotIn("synthetic-secret", str(caught.exception))
+
+    def test_apply_retries_transient_final_ledger_failure(self):
+        manifest = release(("admin",))
+        with patch.object(self.host, "ledger", side_effect=[MIGRATIONS.copy(), LedgerError("migration ledger DNS unavailable", True), MIGRATIONS.copy()]), patch("staging.host.time.sleep"):
+            result = apply_release(manifest, self.host, manifest["commitSha"])
+        self.assertEqual(result["outcome"], "verified")
+        self.assertEqual(result["checks"]["appliedMigrations"], 51)
+
+    def test_apply_preserves_failed_final_verification_after_rollout(self):
+        manifest = release(("admin",))
+        with patch.object(self.host, "ledger", side_effect=[MIGRATIONS.copy(), LedgerError("migration ledger table missing", False)]):
+            with self.assertRaisesRegex(RuntimeError, "ledger table missing"):
+                apply_release(manifest, self.host, manifest["commitSha"])
+        directory = state_directory(self.host)
+        attempt = json.loads((directory / "latest-attempt.json").read_text())
+        self.assertEqual(attempt["failedStep"], "release verification")
+        self.assertTrue(attempt["rolloutCompleted"])
+        self.assertFalse((directory / "current.json").exists())
 
     @contextmanager
     def mocked_runtime(self, network="maevelle-staging", attachment="maevelle-staging"):

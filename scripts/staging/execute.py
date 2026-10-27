@@ -4,11 +4,12 @@ import os
 import shutil
 import stat
 import uuid
+from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 
-from .host import Host, UNITS
-from .manifest import load, validate
+from .host import CONTAINERS, SERVICES, Host, UNITS
+from .manifest import validate
 from .plan import build_plan
 from .quadlet import replace_image
 
@@ -44,17 +45,76 @@ def state_directory(host: Host) -> Path:
     return directory
 
 
-def apply_release(manifest: dict, host: Host, confirmation: str) -> dict:
-    validate(manifest)
-    if confirmation != manifest["commitSha"]:
-        raise RuntimeError("Apply requires --confirm with the full target commit SHA")
+@contextmanager
+def deployment_lock():
     lock_path = Path(os.environ.get("XDG_RUNTIME_DIR", f"/run/user/{os.geteuid()}")) / "maevelle-staging-migration.lock"
     with lock_path.open("a+") as lock:
         try:
             fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError:
             raise RuntimeError("Another Maevelle deployment or migration holds the lock") from None
+        yield
+
+
+def verify_running_release(manifest: dict, host: Host) -> dict:
+    validate(manifest)
+    host.verify_identity()
+    states = host.service_states()
+    for name in CONTAINERS:
+        if states.get(name) != "active":
+            raise RuntimeError(f"{name} service not started (systemd: {states.get(name) or 'unknown'})")
+    quadlets = host.quadlet_refs()
+    running = host.container_refs()
+    for name in SERVICES:
+        expected = manifest["images"][name]["ref"]
+        if quadlets[name] != expected:
+            raise RuntimeError(f"{name} Quadlet release digest mismatch")
+        if running[name] != expected:
+            raise RuntimeError(f"{name} running release digest mismatch")
+    applied = host.ledger_ready()
+    if applied != manifest["schema"]["migrationNames"]:
+        raise RuntimeError("Staging migration ledger does not exactly match target release")
+    for name in SERVICES:
+        host.verify_service(name, manifest["images"][name]["ref"])
+    host.verify_gateway_routes()
+    return {"appliedMigrations": len(applied), "verifiedServices": list(SERVICES)}
+
+
+def apply_release(manifest: dict, host: Host, confirmation: str) -> dict:
+    validate(manifest)
+    if confirmation != manifest["commitSha"]:
+        raise RuntimeError("Apply requires --confirm with the full target commit SHA")
+    with deployment_lock():
         return _apply_locked(manifest, host)
+
+
+def reconcile_release(manifest: dict, host: Host, confirmation: str) -> dict:
+    validate(manifest)
+    if confirmation != manifest["commitSha"]:
+        raise RuntimeError("Verify requires --confirm with the full target commit SHA")
+    with deployment_lock():
+        directory = state_directory(host)
+        current = read_record(directory / "current.json")
+        checks = verify_running_release(manifest, host)
+        if current and current.get("outcome") == "verified":
+            prior = validate(current["manifest"])
+            if prior == manifest:
+                return {**current, "alreadyVerified": True}
+        last = read_record(directory / "latest-attempt.json")
+        result = {
+            "outcome": "verified",
+            "verifiedAt": datetime.now(timezone.utc).isoformat(),
+            "verificationMethod": "reconciliation",
+            "manifest": manifest,
+            "checks": checks,
+        }
+        if last and last.get("outcome") == "failed" and last.get("targetCommit") == manifest["commitSha"]:
+            result["relatedFailedAttemptId"] = last.get("id")
+        directory.mkdir(mode=0o700, parents=True, exist_ok=True)
+        if current:
+            json_record(directory / "previous.json", current)
+        json_record(directory / "current.json", result)
+        return result
 
 
 def _apply_locked(manifest: dict, host: Host) -> dict:
@@ -76,6 +136,7 @@ def _apply_locked(manifest: dict, host: Host) -> dict:
         "targetCommit": manifest["commitSha"],
         "startedAt": datetime.now(timezone.utc).isoformat(),
         "outcome": "running",
+        "rolloutCompleted": False,
         "changed": list(plan.changed),
         "selected": list(plan.selected),
         "backupDirectory": str(backup_dir),
@@ -109,14 +170,12 @@ def _apply_locked(manifest: dict, host: Host) -> dict:
             if "worker" in plan.selected:
                 host.run("systemctl", "--user", "start", UNITS["worker"], timeout=120)
                 host.verify_service("worker", plan.new_refs["worker"])
+        attempt["rolloutCompleted"] = True
         step = "release verification"
-        if host.ledger() != list(plan.applied):
-            raise RuntimeError("Migration ledger changed during deployment")
-        for name in plan.selected:
-            host.verify_service(name, plan.new_refs[name])
+        checks = verify_running_release(manifest, host)
         result = {
             "outcome": "verified", "verifiedAt": datetime.now(timezone.utc).isoformat(),
-            "manifest": manifest, "attemptId": attempt_id,
+            "manifest": manifest, "attemptId": attempt_id, "checks": checks,
         }
         if current:
             json_record(directory / "previous.json", current)
