@@ -27,6 +27,14 @@ for SERVICE in "${SERVICES[@]}"; do
     "$IMAGE")" = "$CIRCLE_SHA1"
 done
 
+echo "========== MIGRATION HISTORY POLICY =========="
+docker run --rm --network none --entrypoint node \
+  "${IMAGE_PREFIX}-api:staging-${SHORT}" \
+  /app/scripts/check-migration-history.mjs
+docker run --rm --network none --entrypoint node \
+  "${IMAGE_PREFIX}-api:staging-${SHORT}" \
+  --test /app/scripts/check-migration-history.test.mjs
+
 echo "========== API AND WORKER MODULE CHECKS =========="
 
 docker run --rm --network none --entrypoint node \
@@ -81,6 +89,8 @@ ENCRYPTION_KEY="$(openssl rand -base64 32 | tr -d '\n')"
 {
   printf 'DATABASE_URL=postgresql://maevelle_ci:%s@%s:5432/maevelle_ci\n' \
     "$DB_PASSWORD" "$PG"
+  printf 'TEST_DATABASE_URL=postgresql://maevelle_ci:%s@%s:5432/maevelle_test\n' \
+    "$DB_PASSWORD" "$PG"
   printf 'BETTER_AUTH_SECRET=%s\n' "$AUTH_SECRET"
   printf 'AUTH_ENCRYPTION_KEY=%s\n' "$ENCRYPTION_KEY"
 
@@ -90,7 +100,7 @@ ENCRYPTION_KEY="$(openssl rand -base64 32 | tr -d '\n')"
     'API_HOST=0.0.0.0' \
     'API_PORT=3000' \
     'DATABASE_POOL_MAX=2' \
-    'BETTER_AUTH_URL=http://127.0.0.1:18080/api' \
+    'BETTER_AUTH_URL=http://127.0.0.1:18080' \
     'AUTH_TRUSTED_ORIGINS=http://127.0.0.1:18080' \
     'STOREFRONT_BASE_URL=http://127.0.0.1:18080' \
     'STOREFRONT_INTERNAL_API_URL=http://127.0.0.1:3000' \
@@ -132,6 +142,21 @@ if [ "$READY" != 1 ]; then
 fi
 
 echo "========== TEST REAL DATABASE MIGRATIONS =========="
+
+docker run --rm \
+  --network "$NETWORK" \
+  --env-file "$ENVFILE" \
+  --entrypoint /app/node_modules/.bin/vitest \
+  "${IMAGE_PREFIX}-api:staging-${SHORT}" \
+  run packages/database/src/migrate.test.ts
+
+docker run --rm \
+  --network "$NETWORK" \
+  --env-file "$ENVFILE" \
+  -e UPGRADE_TEST_ALLOW=1 \
+  --entrypoint node \
+  "${IMAGE_PREFIX}-api:staging-${SHORT}" \
+  /app/packages/database/dist/src/upgrade-test-cli.js
 
 docker run --rm \
   --network "$NETWORK" \
@@ -196,11 +221,38 @@ printf '%s' "$GHCR_TOKEN" |
     --username "$GHCR_USERNAME" \
     --password-stdin >/dev/null
 
+RELEASE_WORK="$(mktemp -d)"
+trap 'rm -rf "$RELEASE_WORK"; docker logout ghcr.io >/dev/null 2>&1 || true' EXIT
 for SERVICE in "${SERVICES[@]}"; do
-  docker push "${IMAGE_PREFIX}-${SERVICE}:staging-${SHORT}"
+  docker push "${IMAGE_PREFIX}-${SERVICE}:staging-${SHORT}" | tee "$RELEASE_WORK/${SERVICE}.push.log"
   echo "Published verified ${SERVICE}: staging-${SHORT}"
 done
 
-docker logout ghcr.io >/dev/null
+docker run --rm --user "$(id -u):$(id -g)" --network none \
+  --mount "type=bind,src=$PWD,dst=/workspace,readonly" \
+  --mount "type=bind,src=$RELEASE_WORK,dst=/release-work" \
+  --workdir /workspace --entrypoint node \
+  "${IMAGE_PREFIX}-api:staging-${SHORT}" \
+  /workspace/scripts/release/cli.mjs create \
+    --sha "$CIRCLE_SHA1" --push-logs /release-work --dir /release-work/out
 
+mkdir -p "$RELEASE_WORK/context" artifacts/staging-releases
+cp "$RELEASE_WORK/out/${CIRCLE_SHA1}.json" "$RELEASE_WORK/context/release.json"
+RELEASE_IMAGE="ghcr.io/iamashrafee/maevelle-release:staging-${SHORT}"
+docker build --platform linux/amd64 \
+  -f infrastructure/docker/Dockerfile.release \
+  --build-arg "COMMIT_SHA=$CIRCLE_SHA1" \
+  -t "$RELEASE_IMAGE" "$RELEASE_WORK/context"
+docker push "$RELEASE_IMAGE" | tee "$RELEASE_WORK/release.push.log"
+MANIFEST_DIGEST="$(docker run --rm --user "$(id -u):$(id -g)" --network none \
+  --mount "type=bind,src=$PWD,dst=/workspace,readonly" \
+  --mount "type=bind,src=$RELEASE_WORK,dst=/release-work,readonly" \
+  --workdir /workspace --entrypoint node \
+  "${IMAGE_PREFIX}-api:staging-${SHORT}" \
+  /workspace/scripts/release/cli.mjs digest --push-log /release-work/release.push.log)"
+cp "$RELEASE_WORK/out/${CIRCLE_SHA1}.json" "artifacts/staging-releases/${CIRCLE_SHA1}.json"
+printf 'ghcr.io/iamashrafee/maevelle-release@%s\n' "$MANIFEST_DIGEST" > "artifacts/staging-releases/${CIRCLE_SHA1}.ref"
+
+docker logout ghcr.io >/dev/null
 echo "ALL IMAGES VALIDATED AND PUBLISHED: $CIRCLE_SHA1"
+echo "Release manifest: ghcr.io/iamashrafee/maevelle-release@$MANIFEST_DIGEST"

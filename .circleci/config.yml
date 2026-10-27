@@ -16,6 +16,9 @@ jobs:
             set -euo pipefail
             bash scripts/ci-publish-staging-images.sh
 
+      - store_artifacts:
+          path: artifacts/staging-releases
+
 workflows:
   staging-images:
     jobs:

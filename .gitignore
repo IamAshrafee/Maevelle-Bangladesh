@@ -7,9 +7,13 @@ dist/
 .next/
 coverage/
 *.tsbuildinfo
+__pycache__/
+*.pyc
 .eslintcache
 .vitest/
 var/backups/
+var/releases/
+artifacts/staging-releases/
 
 # Local environment and logs
 .env

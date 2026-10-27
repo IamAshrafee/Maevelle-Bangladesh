@@ -16,6 +16,9 @@ try {
     for (const migration of status) {
       console.log(`${migration.executedAt ? 'applied' : 'pending'} ${migration.name}`);
     }
+    console.log(
+      `Migration status: ${status.filter((migration) => migration.executedAt).length} applied, ${status.filter((migration) => !migration.executedAt).length} pending.`,
+    );
   } else {
     const result = await runMigrations(database.db);
     console.log(

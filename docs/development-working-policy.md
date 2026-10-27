@@ -20,8 +20,8 @@ The operational instructions for coding agents are in the repository-root
 During ordinary feature work:
 
 - implement complete product capabilities in manageable, coherent increments;
-- evolve the database by editing the current domain migration baseline;
-- reset and rebuild the local database instead of preserving disposable data;
+- add a new forward-only Kysely migration for each normal schema change;
+- preserve staging data during ordinary deployments; reset disposable local data only deliberately;
 - run focused checks that cover the changed behavior;
 - defer exhaustive regression, staging, backup, and release checks until a
   meaningful milestone; and
@@ -36,9 +36,13 @@ only, as described in the [documentation authority](README.md).
 
 ## Schema workflow
 
-Existing migration files are mutable while the project has no persistent or
-shared database to upgrade. Prefer changing the relevant original table
-definition over writing a chain of development-only `ALTER TABLE` operations.
+The staging database is persistent. The 51 migrations at release
+`ccd405c1e6fa8c827307977b947a4a3dbce859f5` form an immutable historical
+baseline. New schema work uses new migrations; run `pnpm check:migrations`
+before commit. A deliberate history rebaseline requires coordinating every
+affected environment, a verified backup, an explicit reset or reconciliation
+plan, and a new reviewed baseline manifest. Never silently regenerate the
+manifest or edit an applied migration to make validation pass.
 
 When a clean rebuild is needed:
 
@@ -52,8 +56,9 @@ The first command permanently removes local Docker data. A normal
 volume and therefore does not replay modified migrations against a clean
 database.
 
-The minimum invariant is that the checked-in baseline can construct a fresh,
-working database. Preserving old local data is not currently an invariant.
+These commands are for the disposable **local** Compose project only. They
+must never be used as the staging reset procedure. A fresh database must be
+constructible from migrations; normal staging deployment preserves its data.
 
 ## Verification workflow
 
@@ -63,22 +68,19 @@ Choose verification according to the change:
 | --- | --- |
 | Local implementation detail | Relevant typecheck or focused test |
 | API/UI behavior | Targeted test or one realistic manual/API workflow |
-| Schema baseline | Clean database rebuild plus the affected workflow |
+| Schema migration | History check, focused migration test, and an upgrade fixture for a new migration |
 | Money, inventory, authorization, or tenant isolation | Focused invariant and failure-path checks |
 | Area closure or release preparation | Broader regression and readiness checks |
 
 Full-suite and release-grade checks remain available, but they are checkpoint
 tools rather than a tax on every commit.
 
-## Transition to durable migrations
+## Staging migration discipline
 
-Before real data, a shared environment, another developer, beta, or production:
-
-1. consolidate and review the current schema baseline;
-2. verify a clean installation;
-3. mark the baseline as immutable;
-4. begin adding forward-only migrations for subsequent changes; and
-5. introduce the appropriate CI, upgrade, backup, and release verification.
-
-Until one of those triggers occurs, implementation speed and focused evidence
-are the default.
+The durable-migration transition has occurred for the shared staging database.
+CI checks the historical file hashes, clean installation, and upgrade harness.
+The harness currently reports when no post-baseline migration exists; each
+future migration must add a representative before/after upgrade case. Migration
+application on the VPS remains an explicit, one-time operation, separate from
+Owner bootstrap, seed and intentional reset. See the
+[development deployment strategy](architecture/development-deployment-strategy.md).

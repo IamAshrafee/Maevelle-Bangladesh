@@ -4,7 +4,8 @@ This repository is currently in **solo, heavy-development mode**. The delivery
 target is a complete, production-quality commerce and operations platform—not
 an MVP, demo, prototype, or deliberately reduced first version. At the same
 time, local data is disposable and release-process ceremony is not the current
-priority.
+priority. The existing VPS staging database persists across ordinary
+deployments, though an authorized staging reset may discard it.
 
 These instructions apply to every task unless the user explicitly asks for a
 different level of rigor.
@@ -55,7 +56,8 @@ different level of rigor.
 3. Minimize ceremony, repetitive documentation, token usage, and long-running
    verification during ordinary implementation.
 4. Do not confuse production-quality code with release ceremony: build the
-   former now, defer staging/launch/backup bureaucracy until it is relevant.
+   former now, and use the focused staging deployment and recovery controls
+   needed for the existing development environment.
 
 ## Engineering standards
 
@@ -212,20 +214,52 @@ in all frontend work across `apps/admin`:
 
 ## Database and schema changes
 
-- Treat the checked-in migration set as a **mutable development baseline**.
-- Prefer editing the relevant existing domain migration and its `CREATE TABLE`
-  definitions instead of adding incremental `ALTER TABLE` migrations.
-- Do not preserve or backfill disposable local data unless the feature itself
-  requires testing a data transition.
-- After baseline changes, rebuild the disposable local database when needed
-  with `docker compose down --volumes` followed by
-  `docker compose up -d --build`.
-- Remember that deleting/recreating containers without `--volumes` does not
-  erase the PostgreSQL named volume.
-- A new forward-only migration is required only when the user asks for one or
-  when a real/shared environment must retain existing data.
-- Keep the clean-database path working: a fresh database must still be
-  constructible from the checked-in baseline.
+- Use a **migration-first, reset-friendly** workflow. Every normal schema
+  change gets a new, version-controlled Kysely migration. Never silently edit
+  a migration already applied in staging or another persistent environment.
+- Preserve staging data during ordinary migration and deployment. Breaking
+  changes are allowed; plan data transformations and the compatible
+  API/Worker/Admin/Storefront deployment order explicitly.
+- Keep fresh installation reproducible from migrations and test both an empty
+  database and an upgrade from a prior release schema in CI. Deliberately
+  rebaselining migration history requires a recorded plan for every affected
+  environment and an intentional rebuild.
+- Local data may be discarded deliberately, but `docker compose down --volumes`
+  is destructive and must be scoped to the local Compose project. Container
+  recreation without `--volumes` preserves its PostgreSQL volume.
+- Staging reset is a separate, manually authorized operation guarded by target
+  host, database, environment, and explicit confirmation. Back up first,
+  preserve diagnostics, rebuild from migrations, then provision the initial
+  organization/Owner and reproducible synthetic seed data. Never make reset
+  an automatic consequence of a push or migration.
+- Application image rollback does not reverse database migrations. Before a
+  schema change, identify the last release compatible with the resulting
+  schema and a forward-repair or verified backup/restore path.
+
+## Development staging and deployment
+
+- Staging is for development and browser testing, not a production launch.
+  Follow [the development deployment strategy](docs/architecture/development-deployment-strategy.md)
+  for topology, workflow, and open verification gates.
+- Reuse CircleCI, GHCR, the existing Maevelle rootless Podman/Quadlet service
+  group, private Caddy gateway, and host Nginx. Identify each release by full
+  commit SHA and immutable image digests; record the deployed manifest and last
+  compatible release. Deploy only affected services when compatibility allows,
+  and keep PostgreSQL and media storage persistent.
+- Run migrations once as a controlled deployment job, never concurrently in
+  API or Worker startup. Stop on failed preflight, migration, service health,
+  or smoke checks and retain logs and current/previous release metadata.
+- Keep Maevelle's host user, units, networks, volumes, and gateway isolated from
+  other VPS applications. Routine deployment must not update the host OS,
+  shared Nginx, unrelated containers, or unrelated applications. Do not expose
+  PostgreSQL or internal service ports publicly.
+- Keep staging credentials and provider secrets outside Git and logs. Validate
+  public HTTPS origin, auth trust/cookies/callbacks, Storefront URLs, and Next.js
+  `/admin` routing together before enabling the dedicated staging hostname.
+- Verify deployment with migration status, service status and logs, API health,
+  and focused browser smoke checks. Record release SHA/digests, schema state,
+  verification outcome, and any operator action in the deployment log. A
+  passing CI build alone does not establish a successful VPS deployment.
 
 ## Verification
 
@@ -238,7 +272,8 @@ in all frontend work across `apps/admin`:
 - Prefer focused typechecking, focused tests, or a targeted API/manual workflow.
 - Do not run the full test suite, all-package build, complete acceptance suite,
   backup drill, staging smoke suite, or release-readiness checks after every
-  task or checkpoint.
+  ordinary implementation task or checkpoint. Run relevant deployment checks
+  when publishing a staging release.
 - Run broad verification only when the user requests it, at a meaningful area
   closure/release checkpoint, or when a cross-cutting/high-risk change makes it
   necessary.
@@ -269,8 +304,7 @@ they require broader work.
 
 ## When this mode ends
 
-Revisit and replace this policy before the first environment or dataset that
-must survive schema upgrades, before another developer depends on migration
-history, or when beta/release preparation begins. At that point, freeze the
-baseline and adopt immutable forward-only migrations plus broader automated
-verification.
+Revisit this solo-development policy when another developer depends on the
+migration history or beta/release preparation begins. Staging already requires
+forward-only migration discipline and deliberate recovery, independent of
+production-launch ceremony.

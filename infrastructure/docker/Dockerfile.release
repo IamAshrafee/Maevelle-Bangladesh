@@ -1,0 +1,4 @@
+FROM scratch
+ARG COMMIT_SHA
+LABEL org.opencontainers.image.revision=$COMMIT_SHA
+COPY release.json /release.json

@@ -33,6 +33,16 @@ describe('clean PostgreSQL migration path', () => {
 
       const first = await runMigrations(database.db);
       expect(first.executed).toHaveLength(Object.keys(migrations).length);
+      expect(first.executed).toEqual(Object.keys(migrations).sort());
+      const initialStatus = await migrationStatus(database.db);
+      expect(initialStatus.map((migration) => migration.name)).toEqual(
+        Object.keys(migrations).sort(),
+      );
+      expect(initialStatus.filter((migration) => !migration.executedAt)).toEqual([]);
+      const ledger = await sql<{
+        name: string;
+      }>`select name from public.kysely_migration order by name`.execute(database.db);
+      expect(ledger.rows.map((row) => row.name)).toEqual(Object.keys(migrations).sort());
       const extensions = await sql<{ extname: string }>`
         select extname from pg_extension where extname in ('pg_trgm', 'pg_stat_statements') order by extname
       `.execute(database.db);
@@ -285,6 +295,11 @@ describe('clean PostgreSQL migration path', () => {
 
       const second = await runMigrations(database.db);
       expect(second.executed).toEqual([]);
+      await sql`insert into public.kysely_migration (name, "timestamp") values ('9999_unknown', '2026-10-27T00:00:00.000Z')`.execute(
+        database.db,
+      );
+      await expect(migrationStatus(database.db)).rejects.toThrow(/Migration ledger mismatch/);
+      await expect(runMigrations(database.db)).rejects.toThrow(/Migration ledger mismatch/);
     } finally {
       await database?.close();
       await adminPool.query(
