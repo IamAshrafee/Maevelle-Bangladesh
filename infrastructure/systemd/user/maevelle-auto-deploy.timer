@@ -1,0 +1,11 @@
+[Unit]
+Description=Check Maevelle staging release every two minutes
+
+[Timer]
+OnStartupSec=2min
+OnUnitActiveSec=2min
+AccuracySec=15s
+Unit=maevelle-auto-deploy.service
+
+[Install]
+WantedBy=timers.target

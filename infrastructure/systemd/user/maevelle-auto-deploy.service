@@ -1,0 +1,9 @@
+[Unit]
+Description=Check published Maevelle staging release
+
+[Service]
+Type=oneshot
+WorkingDirectory=/home/maevelle/deployment/tooling
+Environment=REGISTRY_AUTH_FILE=/home/maevelle/.config/containers/auth.json
+ExecStart=/usr/bin/python3 /home/maevelle/deployment/tooling/staging-auto-deploy.py check
+TimeoutStartSec=10min

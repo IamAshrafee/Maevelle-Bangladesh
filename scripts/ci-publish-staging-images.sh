@@ -4,6 +4,8 @@ set +x
 
 : "${CIRCLE_SHA1:?Missing CircleCI revision}"
 [[ "$CIRCLE_SHA1" =~ ^[a-f0-9]{40}$ ]] || exit 1
+[[ "${MAEVELLE_SOURCE_BRANCH:-}" == main ]] || { echo 'Only main may publish a staging release.' >&2; exit 1; }
+[[ "${MAEVELLE_PIPELINE_NUMBER:-}" =~ ^[1-9][0-9]*$ ]] || { echo 'Missing CircleCI pipeline number.' >&2; exit 1; }
 test "$(git rev-parse HEAD)" = "$CIRCLE_SHA1"
 
 SHORT="${CIRCLE_SHA1:0:12}"
@@ -253,6 +255,18 @@ MANIFEST_DIGEST="$(docker run --rm --user "$(id -u):$(id -g)" --network none \
 cp "$RELEASE_WORK/out/${CIRCLE_SHA1}.json" "artifacts/staging-releases/${CIRCLE_SHA1}.json"
 printf 'ghcr.io/iamashrafee/maevelle-release@%s\n' "$MANIFEST_DIGEST" > "artifacts/staging-releases/${CIRCLE_SHA1}.ref"
 
-docker logout ghcr.io >/dev/null
 echo "ALL IMAGES VALIDATED AND PUBLISHED: $CIRCLE_SHA1"
 echo "Release manifest: ghcr.io/iamashrafee/maevelle-release@$MANIFEST_DIGEST"
+
+# Ready tags are published only after every required check and release push.
+# The pipeline number preserves source order when CI jobs finish out of order.
+MAIN_SHA="$(git ls-remote origin refs/heads/main | cut -f1)"
+if [ "$MAIN_SHA" != "$CIRCLE_SHA1" ]; then
+  echo "Skipping automatic deployment marker: main advanced to another commit."
+  exit 0
+fi
+printf -v READY_SEQUENCE '%012d' "$MAEVELLE_PIPELINE_NUMBER"
+READY_IMAGE="ghcr.io/iamashrafee/maevelle-release:staging-ready-${READY_SEQUENCE}-${SHORT}"
+docker tag "$RELEASE_IMAGE" "$READY_IMAGE"
+docker push "$READY_IMAGE" >/dev/null
+echo "Automatic staging candidate: ${READY_IMAGE}"
