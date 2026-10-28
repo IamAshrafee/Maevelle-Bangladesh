@@ -1,0 +1,85 @@
+{
+  "formatVersion": 1,
+  "status": "published",
+  "commitSha": "87fec723c9fcfa30424f82c7520c984bded477f3",
+  "shortSha": "87fec723c9fc",
+  "builtAt": "2026-10-27T15:21:12.769Z",
+  "images": {
+    "api": {
+      "repository": "ghcr.io/iamashrafee/maevelle-api",
+      "digest": "sha256:bc50c4dc43b2477ef16c032bf6bd1d95280b63ed220d2fe8d324afdc418c20cc",
+      "ref": "ghcr.io/iamashrafee/maevelle-api@sha256:bc50c4dc43b2477ef16c032bf6bd1d95280b63ed220d2fe8d324afdc418c20cc"
+    },
+    "worker": {
+      "repository": "ghcr.io/iamashrafee/maevelle-worker",
+      "digest": "sha256:f2c31f1a0810af154287211d9333d8d97834eca949568ec6998e1e67a8a2c699",
+      "ref": "ghcr.io/iamashrafee/maevelle-worker@sha256:f2c31f1a0810af154287211d9333d8d97834eca949568ec6998e1e67a8a2c699"
+    },
+    "admin": {
+      "repository": "ghcr.io/iamashrafee/maevelle-admin",
+      "digest": "sha256:d677480cab02a7262a4f47d117becc7809b5b119f28eefb3b11b91181ffcd279",
+      "ref": "ghcr.io/iamashrafee/maevelle-admin@sha256:d677480cab02a7262a4f47d117becc7809b5b119f28eefb3b11b91181ffcd279"
+    },
+    "storefront": {
+      "repository": "ghcr.io/iamashrafee/maevelle-storefront",
+      "digest": "sha256:283335c9076a2eed78bf2877b0d57bbe2561d7843d33d45dd18eaf549ea4d22b",
+      "ref": "ghcr.io/iamashrafee/maevelle-storefront@sha256:283335c9076a2eed78bf2877b0d57bbe2561d7843d33d45dd18eaf549ea4d22b"
+    }
+  },
+  "schema": {
+    "migrationNames": [
+      "0000_extensions_and_database_baseline",
+      "0001_platform_core",
+      "0002_audit_foundation",
+      "0003_platform_operations",
+      "0004_iam_and_authentication",
+      "0005_iam_user_normalization",
+      "0200_catalog",
+      "0300_sizing",
+      "0301_sizing_category_defaults",
+      "0400_media",
+      "0500_warehouse",
+      "0600_inventory",
+      "0601_inventory_stocktake_session_timestamp",
+      "0650_geography",
+      "0700_customers",
+      "0800_pricing",
+      "0900_promotions",
+      "1000_cart",
+      "1001_geography_source_code_nulls",
+      "1100_orders_checkout_cod",
+      "1200_payments",
+      "1201_checkout_payment_default",
+      "1202_refund_allocations",
+      "1300_fulfillment",
+      "1400_delivery",
+      "1500_procurement",
+      "1600_inbound_shipment",
+      "1700_receiving",
+      "1800_landed_cost",
+      "1900_costing",
+      "1901_costing_adjustment_effects",
+      "2000_returns",
+      "2100_return_cost_recovery",
+      "2101_return_cost_layer_provenance",
+      "2200_finance",
+      "2300_reviews",
+      "2400_notifications_integrations",
+      "2500_analytics",
+      "2600_admin_operations",
+      "2601_notifications_integrations_operations",
+      "2602_analytics_reporting_operations",
+      "2603_admin_operations_complete",
+      "2700_storefront_search",
+      "2701_operational_controls",
+      "2800_supply_operations",
+      "2900_asset_management",
+      "3000_centralized_runtime_settings",
+      "3100_unit_traceability",
+      "3200_messaging_core",
+      "3201_messaging_reconciliation",
+      "3202_messaging_performance"
+    ],
+    "baselineRelease": "ccd405c1e6fa8c827307977b947a4a3dbce859f5"
+  }
+}
