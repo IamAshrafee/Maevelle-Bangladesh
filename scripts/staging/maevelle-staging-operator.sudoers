@@ -1,0 +1,3 @@
+# Install as /etc/sudoers.d/maevelle-staging-operator, root:root 0440.
+# The command has no arguments; all requests are validated by the root-owned gateway.
+ashrafee ALL=(root) NOPASSWD: /usr/local/libexec/maevelle-staging-operator ""

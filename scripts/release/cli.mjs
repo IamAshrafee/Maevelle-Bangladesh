@@ -84,7 +84,7 @@ try {
     console.log(path);
   } else if (action === 'list') {
     if (args.includes('--remote')) {
-      for (const release of await listRegistryReleases())
+      for (const release of await listRegistryReleases({ engine: option(args, '--engine', 'docker') }))
         console.log(`${release.tag} ${release.ref}`);
     } else {
       for (const release of listLocal(directory))

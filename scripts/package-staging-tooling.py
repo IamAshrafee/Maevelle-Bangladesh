@@ -15,6 +15,7 @@ ROOT = Path(__file__).resolve().parents[1]
 OUTPUT = Path("/tmp/maevelle-phase03-tooling.tar.gz")
 FILES = (
     "staging-deploy.py",
+    "staging-operator-entry.py",
     "staging-migrate.sh",
     "staging/__init__.py",
     "staging/execute.py",
@@ -52,7 +53,7 @@ def build() -> None:
                     for member, content in contents.items():
                         info = tarfile.TarInfo(member)
                         info.size = len(content)
-                        info.mode = 0o755 if member in ("staging-deploy.py", "staging-migrate.sh") else 0o644
+                        info.mode = 0o755 if member in ("staging-deploy.py", "staging-operator-entry.py", "staging-migrate.sh") else 0o644
                         info.mtime = 0
                         archive.addfile(info, io.BytesIO(content))
         os.chmod(temporary_path, 0o600)

@@ -16,6 +16,7 @@
     "check:architecture": "node scripts/check-architecture.mjs",
     "check:migrations": "node scripts/check-migration-history.mjs",
     "release": "node scripts/release/cli.mjs",
+    "staging": "node scripts/staging/cli.mjs",
     "test:migration-policy": "node --test scripts/check-migration-history.test.mjs",
     "test:migration-upgrade": "pnpm --filter @maevelle/database build && node packages/database/dist/src/upgrade-test-cli.js",
     "check:secrets": "node scripts/check-secrets.mjs",
