@@ -112,6 +112,13 @@ class AutoDeployTests(unittest.TestCase):
         self.assertEqual(self.run_check()["outcome"], "failed-release-held")
         self.assertFalse(any(call[0] == "pull" for call in self.host.calls))
 
+    def test_interrupted_apply_leaves_a_hold_record_before_any_rollout(self):
+        with patch("staging.auto.apply_release", side_effect=SystemExit(2)):
+            with self.assertRaises(SystemExit):
+                self.run_check()
+        self.assertEqual(json.loads(self.state.read_text())["inProgressRef"], REF)
+        self.assertEqual(self.run_check()["outcome"], "interrupted-release-held")
+
     def test_preflight_does_not_apply(self):
         self.assertEqual(self.run_check(dry_run=True)["outcome"], "ready")
         self.assertFalse(self.state.exists())

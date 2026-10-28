@@ -96,11 +96,14 @@ def check(*, dry_run=False, host=None, registry=None, fetch=download, state_path
         if state.get("failedRef") == ref and not (current_sha and current_sha.startswith(short)):
             log("Release previously failed; manual review required before retry")
             return {"outcome": "failed-release-held", "runningCommit": current_sha}
+        if state.get("inProgressRef") == ref and not (current_sha and current_sha.startswith(short)):
+            log("Previous auto-deploy was interrupted; manual review required before retry")
+            return {"outcome": "interrupted-release-held", "runningCommit": current_sha}
         try:
             manifest = fetch(ref, short, host)
             if manifest["commitSha"] == current_sha:
                 if not dry_run:
-                    record(state_path, {**state, "appliedSequence": sequence, "appliedRef": ref, "appliedCommit": current_sha, "failedRef": None})
+                    record(state_path, {**state, "appliedSequence": sequence, "appliedRef": ref, "appliedCommit": current_sha, "failedRef": None, "inProgressRef": None})
                 log("Staging is already on the latest published release")
                 return {"outcome": "already-current", "runningCommit": current_sha}
             if state.get("failedRef") == ref:
@@ -123,10 +126,13 @@ def check(*, dry_run=False, host=None, registry=None, fetch=download, state_path
         if dry_run:
             log(f"Preflight ready for {manifest['commitSha']}; services: {', '.join(plan.selected) or 'none'}")
             return {"outcome": "ready", "targetCommit": manifest["commitSha"], "selectedServices": list(plan.selected)}
+        # Persist a hold marker before any application unit can be changed. If
+        # the process is interrupted, the next timer run will not retry it.
+        record(state_path, {**state, "inProgressRef": ref, "targetCommit": manifest["commitSha"]})
         try:
             result = apply_release(manifest, host, manifest["commitSha"])
         except Exception as error:
-            record(state_path, {**state, "failedRef": ref, "failedCommit": manifest["commitSha"], "failure": str(error)[:500]})
+            record(state_path, {**state, "failedRef": ref, "inProgressRef": None, "failedCommit": manifest["commitSha"], "failure": str(error)[:500]})
             log(f"Auto-deploy failed for {manifest['commitSha']}; held until operator review")
             raise
         record(state_path, {"appliedSequence": sequence, "appliedRef": ref, "appliedCommit": manifest["commitSha"], "failedRef": None})

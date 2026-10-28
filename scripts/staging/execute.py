@@ -58,11 +58,13 @@ def deployment_lock():
 
 def verify_running_release(manifest: dict, host: Host) -> dict:
     validate(manifest)
-    host.verify_identity()
     states = host.service_states()
     for name in CONTAINERS:
         if states.get(name) != "active":
             raise RuntimeError(f"{name} service not started (systemd: {states.get(name) or 'unknown'})")
+    # A stopped Quadlet may remove its container. Report the unit state before
+    # probing container identity so a partial rollout remains diagnosable.
+    host.verify_identity()
     quadlets = host.quadlet_refs()
     running = host.container_refs()
     for name in SERVICES:
@@ -144,6 +146,7 @@ def _apply_locked(manifest: dict, host: Host) -> dict:
     json_record(directory / "latest-attempt.json", attempt)
     json_record(attempt_dir / "result.json", attempt)
     changed_files = False
+    worker_needs_recovery = False
     step = "pull"
     try:
         for name in plan.changed:
@@ -161,6 +164,7 @@ def _apply_locked(manifest: dict, host: Host) -> dict:
         if plan.selected:
             step = "service restart/readiness"
             if "worker" in plan.selected:
+                worker_needs_recovery = True
                 host.run("systemctl", "--user", "stop", UNITS["worker"])
             for name in plan.selected:
                 if name == "worker":
@@ -173,6 +177,7 @@ def _apply_locked(manifest: dict, host: Host) -> dict:
         attempt["rolloutCompleted"] = True
         step = "release verification"
         checks = verify_running_release(manifest, host)
+        worker_needs_recovery = False
         result = {
             "outcome": "verified", "verifiedAt": datetime.now(timezone.utc).isoformat(),
             "manifest": manifest, "attemptId": attempt_id, "checks": checks,
@@ -183,9 +188,21 @@ def _apply_locked(manifest: dict, host: Host) -> dict:
         attempt.update({"outcome": "verified", "finishedAt": result["verifiedAt"]})
         return result
     except Exception as error:
+        recovery = "not needed"
+        if worker_needs_recovery:
+            try:
+                # Restart only after the new API and frontends are healthy.
+                for name in ("api", "admin", "storefront"):
+                    host.verify_service(name, plan.new_refs[name], seconds=5)
+                host.run("systemctl", "--user", "start", UNITS["worker"], timeout=120)
+                host.verify_service("worker", plan.new_refs["worker"], seconds=30)
+                recovery = "worker restarted and verified"
+            except Exception as recovery_error:
+                recovery = f"worker remains stopped or unhealthy: {recovery_error}"
         attempt.update({
             "outcome": "failed", "failedStep": step,
             "error": str(error),
+            "workerRecovery": recovery,
             "recovery": "Inspect this attempt's Quadlet backups and Maevelle user-unit logs. Database migrations were not run. Restore previous compatible application refs only after checking current schema and recorded release.",
             "diagnosticCommands": [f"journalctl --user -u maevelle-{name}.service -n 100 --no-pager" for name in plan.selected],
         })
@@ -193,6 +210,8 @@ def _apply_locked(manifest: dict, host: Host) -> dict:
         # may have changed the database concurrently outside the shared lock.
         raise
     finally:
+        if attempt["outcome"] == "running":
+            attempt.update({"outcome": "failed", "failedStep": step, "error": "deployment interrupted"})
         attempt["finishedAt"] = datetime.now(timezone.utc).isoformat()
         json_record(attempt_dir / "result.json", attempt)
         json_record(directory / "latest-attempt.json", attempt)

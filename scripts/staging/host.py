@@ -93,6 +93,10 @@ class Host:
     def verify_identity(self) -> None:
         if pwd.getpwuid(os.geteuid()).pw_name != "maevelle" or self.home != HOME:
             raise RuntimeError("Run only as rootless maevelle with /home/maevelle")
+        states = self.service_states()
+        for name in CONTAINERS:
+            if states.get(name) != "active":
+                raise RuntimeError(f"{name} service not started (systemd: {states.get(name) or 'unknown'})")
         if self.run("podman", "info", "--format", "{{.Host.Security.Rootless}}") != "true":
             raise RuntimeError("Podman is not rootless")
         self.run("podman", "network", "exists", "maevelle-staging")

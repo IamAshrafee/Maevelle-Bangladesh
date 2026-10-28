@@ -426,6 +426,67 @@ class DeploymentTests(unittest.TestCase):
         self.assertEqual(self.host.quadlets["postgres"].read_bytes(), postgres)
         self.assertEqual(self.host.quadlets["caddy"].read_bytes(), caddy)
 
+    def test_failure_after_worker_stop_records_failure_and_recovers_healthy_worker(self):
+        self.host.fail_ready_once = True
+        with self.assertRaisesRegex(RuntimeError, "transient API readiness failure"):
+            apply_release(release(("api",)), self.host, "a" * 40)
+        latest = json.loads((state_directory(self.host) / "latest-attempt.json").read_text())
+        self.assertEqual(latest["outcome"], "failed")
+        self.assertEqual(latest["failedStep"], "service restart/readiness")
+        self.assertEqual(self.host.states["worker"], "active")
+        self.assertIn(("systemctl", "--user", "start", "maevelle-worker.service"), self.host.calls)
+
+    def test_final_verification_reports_stopped_worker_before_container_probe(self):
+        manifest = release(SERVICES)
+        self.set_running_release(manifest)
+        self.host.states["worker"] = "inactive"
+        original = self.host.verify_identity
+        def identity():
+            if self.host.states["worker"] != "active":
+                raise RuntimeError("podman container failed (exit 1)")
+            return original()
+        self.host.verify_identity = identity
+        with self.assertRaisesRegex(RuntimeError, "worker service not started"):
+            from staging.execute import verify_running_release
+            verify_running_release(manifest, self.host)
+
+    def test_host_identity_checks_stopped_unit_before_podman_container_exists(self):
+        self.host.states["worker"] = "inactive"
+        with patch("staging.host.HOME", self.home), \
+             patch("staging.host.pwd.getpwuid", return_value=SimpleNamespace(pw_name="maevelle")), \
+             patch("staging.host.os.geteuid", return_value=1001):
+            with self.assertRaisesRegex(RuntimeError, "worker service not started"):
+                Host.verify_identity(self.host)
+        self.assertFalse(any(call[:3] == ("podman", "container", "exists") for call in self.host.calls))
+
+    def test_interrupted_rollout_does_not_leave_attempt_running(self):
+        def interrupt(name, ref, seconds=90):
+            if name == "api":
+                raise SystemExit(2)
+        self.host.verify_service = interrupt
+        with self.assertRaises(SystemExit):
+            apply_release(release(("api",)), self.host, "a" * 40)
+        latest = json.loads((state_directory(self.host) / "latest-attempt.json").read_text())
+        self.assertEqual(latest["outcome"], "failed")
+        self.assertEqual(latest["error"], "deployment interrupted")
+
+    def test_worker_exits_before_final_verification_is_restarted_but_attempt_fails(self):
+        original = self.host.verify_service
+        exited = False
+        def transient_exit(name, ref, seconds=90):
+            nonlocal exited
+            original(name, ref, seconds)
+            if name == "worker" and not exited:
+                exited = True
+                self.host.states["worker"] = "inactive"
+        self.host.verify_service = transient_exit
+        with self.assertRaisesRegex(RuntimeError, "worker service not started"):
+            apply_release(release(("api",)), self.host, "a" * 40)
+        latest = json.loads((state_directory(self.host) / "latest-attempt.json").read_text())
+        self.assertEqual(latest["outcome"], "failed")
+        self.assertEqual(latest["workerRecovery"], "worker restarted and verified")
+        self.assertEqual(self.host.states["worker"], "active")
+
 
 if __name__ == "__main__":
     unittest.main()
