@@ -1,5 +1,5 @@
-import { PricingConsole } from '@/components/commerce-console';
+import { PricingWorkspace } from '@/components/pricing/pricing-workspace';
 
 export default function PricingPage() {
-  return <PricingConsole />;
+  return <PricingWorkspace />;
 }
