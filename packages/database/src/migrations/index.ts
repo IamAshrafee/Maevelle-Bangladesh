@@ -53,6 +53,7 @@ import * as messagingReconciliation from './3201_messaging_reconciliation.js';
 import * as messagingPerformance from './3202_messaging_performance.js';
 import * as mediaPurgeRecovery from './3203_media_purge_recovery.js';
 import * as mediaPurgeReferenceIndexes from './3204_media_purge_reference_indexes.js';
+import * as externalMediaImports from './3205_external_media_imports.js';
 
 /**
  * The migration list is deliberately explicit. Migration files are reviewed
@@ -112,6 +113,7 @@ export const migrations = {
   '3202_messaging_performance': messagingPerformance,
   '3203_media_purge_recovery': mediaPurgeRecovery,
   '3204_media_purge_reference_indexes': mediaPurgeReferenceIndexes,
+  '3205_external_media_imports': externalMediaImports,
 } satisfies Record<string, Migration>;
 
 export const migrationProvider: MigrationProvider = {

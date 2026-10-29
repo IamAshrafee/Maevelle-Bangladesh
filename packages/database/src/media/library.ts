@@ -54,6 +54,8 @@ export async function findMediaAsset(
       limit 1
     ) rendition on true
     where asset.id=${assetId}::uuid and asset.status in ('READY','ARCHIVED')
+      and object.storage_provider<>'url'
+      and coalesce(rendition.storage_provider,object.storage_provider)<>'url'
       ${organizationId ? sql`and asset.organization_id=${organizationId}` : sql``}
   `.execute(db);
   const row = result.rows[0];
@@ -173,6 +175,9 @@ export async function listMediaLibrary(
       height_px: number | null;
       processing_error_code: string | null;
       processing_error_message: string | null;
+      import_status: 'PENDING' | 'PROCESSING' | 'RETRY_WAIT' | 'COMPLETE' | 'FAILED' | null;
+      import_attempts: number | null;
+      import_next_attempt_at: string | null;
       purge_attempts: number;
       purge_retry_after: string | null;
       purge_lease_until: string | null;
@@ -186,6 +191,8 @@ export async function listMediaLibrary(
         asset.folder_id::text,asset.title,asset.alt_text,asset.caption,asset.internal_description,
         object.mime_type,object.byte_size::text,object.width_px,object.height_px,
         asset.processing_error_code,asset.processing_error_message,
+        import_job.status import_status,import_job.attempt_count import_attempts,
+        import_job.next_attempt_at::text import_next_attempt_at,
         asset.purge_attempts,asset.purge_retry_after::text,asset.purge_lease_until::text,
         asset.purge_last_error,
         asset.created_at::text,asset.updated_at::text,asset.version::text
@@ -193,6 +200,8 @@ export async function listMediaLibrary(
       left join media.media_objects object
         on object.id=asset.current_object_id and object.organization_id=asset.organization_id
       left join iam.users uploader on uploader.id=asset.uploaded_by
+      left join media.external_image_imports import_job
+        on import_job.organization_id=asset.organization_id and import_job.asset_id=asset.id
       where ${filter}
       order by asset.created_at desc,asset.id desc
       limit ${input.pageSize} offset ${offset}
@@ -230,6 +239,11 @@ export async function listMediaLibrary(
       heightPx: asset.height_px,
       processingErrorCode: asset.processing_error_code,
       processingErrorMessage: asset.processing_error_message,
+      externalImport: asset.import_status ? {
+        status: asset.import_status,
+        attempts: asset.import_attempts ?? 0,
+        nextAttemptAt: asset.import_next_attempt_at,
+      } : null,
       purgeAttempts: asset.purge_attempts,
       purgeRetryAfter: asset.purge_retry_after,
       purgeLeaseUntil: asset.purge_lease_until,
@@ -425,7 +439,14 @@ export async function retryMediaProcessing(
     const result =
       await sql`update media.media_assets set status='UPLOADED',processing_error_code=null,
       processing_error_message=null,updated_at=now(),version=version+1
-      where organization_id=${input.organizationId} and id=${input.assetId}::uuid and status='FAILED'`.execute(
+      where organization_id=${input.organizationId} and id=${input.assetId}::uuid
+        and status='FAILED' and current_object_id is not null
+        and not exists(select 1 from media.media_objects original
+          where original.organization_id=media_assets.organization_id
+            and original.id=media_assets.current_object_id and original.storage_provider='url')
+        and not exists(select 1 from media.external_image_imports job
+          where job.organization_id=media_assets.organization_id and job.asset_id=media_assets.id
+            and job.status='FAILED')`.execute(
         transaction,
       );
     if (Number(result.numAffectedRows) !== 1)
@@ -506,12 +527,31 @@ export async function restoreTrashedMediaAsset(
   input: { organizationId: string; assetId: string; actorId?: string },
 ): Promise<void> {
   await db.transaction().execute(async (transaction) => {
+    const legacy = await sql<{ object_id: string; object_key: string }>`
+      select object.id::text object_id,object.object_key
+      from media.media_assets asset join media.media_objects object
+        on object.organization_id=asset.organization_id and object.id=asset.current_object_id
+      where asset.organization_id=${input.organizationId} and asset.id=${input.assetId}::uuid
+        and asset.status='TRASHED' and asset.purge_after>now()
+        and object.storage_provider='url'
+      for update of asset`.execute(transaction);
+    if (legacy.rows[0]) {
+      await sql`insert into media.external_image_imports
+        (organization_id,asset_id,source_url,old_object_id,restore_archived)
+        values(${input.organizationId},${input.assetId},${legacy.rows[0].object_key},
+          ${legacy.rows[0].object_id}::uuid,true)
+        on conflict (asset_id) do update set status='PENDING',attempt_count=0,
+          next_attempt_at=null,claim_token=null,lease_until=null,restore_archived=true,
+          updated_at=now()`.execute(transaction);
+    }
     const result = await sql`update media.media_assets set status='ARCHIVED',archived_at=now(),
       trashed_at=null,purge_after=null,updated_at=now(),version=version+1
       where organization_id=${input.organizationId} and id=${input.assetId}::uuid
         and status='TRASHED' and purge_after>now()`.execute(transaction);
     if (Number(result.numAffectedRows) !== 1)
       throw new MediaDomainError('CONFLICT', 'Asset is not recoverable from trash.');
+    if (legacy.rows[0]) await sql`update media.media_assets set status='PENDING_UPLOAD',archived_at=null
+      where organization_id=${input.organizationId} and id=${input.assetId}::uuid`.execute(transaction);
     if (input.actorId)
       await appendAuditEvent(transaction, {
         organizationId: input.organizationId,

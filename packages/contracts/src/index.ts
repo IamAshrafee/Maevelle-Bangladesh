@@ -357,6 +357,7 @@ export interface CatalogProductMediaDto {
   readonly visibility: 'PUBLIC' | 'PRIVATE';
   readonly width: number | null;
   readonly height: number | null;
+  readonly pendingImport?: boolean;
 }
 
 export interface CatalogVariantCreateDto {

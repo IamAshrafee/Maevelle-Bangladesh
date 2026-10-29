@@ -424,6 +424,7 @@ export function useProductCreatorState({
                 position: m.position,
                 altText: m.altText || m.title || '',
                 isUploading: false,
+                pendingImport: m.pendingImport ?? false,
               })),
             );
 

@@ -87,6 +87,7 @@ export interface StagedMediaItem {
   position?: number | undefined;
   altText: string;
   isUploading: boolean;
+  pendingImport?: boolean;
   uploadProgress?: number | undefined;
   processingStage?: 'UPLOADING' | 'PROCESSING' | undefined;
   error?: string | undefined;

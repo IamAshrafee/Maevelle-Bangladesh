@@ -10,7 +10,6 @@ import {
 } from 'react';
 import Image from 'next/image';
 import {
-  AlertCircle,
   ArrowLeft,
   ArrowRight,
   Camera,
@@ -37,7 +36,6 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import {
   NativeSelect,
-  NativeSelectOptGroup,
   NativeSelectOption,
 } from '@/components/ui/native-select';
 import { MediaPlacementField, type MediaScopeUpdate } from './media-placement-field';
@@ -613,14 +611,21 @@ export function MediaCard({
                 >
                   {/* Media Image Container */}
                   <div className="relative aspect-3/4 w-full overflow-hidden bg-muted">
-                    <Image
-                      src={media.previewUrl}
-                      alt={media.altText || 'Product preview'}
-                      fill
-                      className="object-cover"
-                      unoptimized
-                      sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 25vw"
-                    />
+                    {media.pendingImport ? (
+                      <div className="flex size-full flex-col items-center justify-center gap-2 text-muted-foreground">
+                        <ImageIcon className="size-8" aria-hidden="true" />
+                        <span className="text-xs">Image import pending</span>
+                      </div>
+                    ) : (
+                      <Image
+                        src={media.previewUrl}
+                        alt={media.altText || 'Product preview'}
+                        fill
+                        className="object-cover"
+                        unoptimized
+                        sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 25vw"
+                      />
+                    )}
 
                     {/* Multi-select Checkbox */}
                     <button
@@ -662,7 +667,9 @@ export function MediaCard({
 
                     {/* Status & Scope Badges on preview */}
                     <div className="absolute right-2 top-2 flex flex-col items-end gap-1">
-                      {!media.isUploading && media.assetId && !media.error ? (
+                      {media.pendingImport ? (
+                        <Badge variant="secondary" className="text-[10px] shadow-xs">Import pending</Badge>
+                      ) : !media.isUploading && media.assetId && !media.error ? (
                         <Badge className="bg-success text-success-foreground text-[10px] shadow-xs">
                           Ready
                         </Badge>

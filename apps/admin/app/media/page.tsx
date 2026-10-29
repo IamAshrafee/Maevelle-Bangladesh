@@ -118,7 +118,13 @@ type MediaAsset = {
     | 'PURGING';
   readonly createdAt: string;
   readonly version: number;
+  readonly processingErrorCode: string | null;
   readonly processingErrorMessage: string | null;
+  readonly externalImport: {
+    readonly status: 'PENDING' | 'PROCESSING' | 'RETRY_WAIT' | 'COMPLETE' | 'FAILED';
+    readonly attempts: number;
+    readonly nextAttemptAt: string | null;
+  } | null;
   readonly purgeAttempts: number;
   readonly purgeRetryAfter: string | null;
   readonly purgeLeaseUntil: string | null;
@@ -564,7 +570,7 @@ export default function MediaPage() {
     }
   }
 
-  async function runAssetAction(action: 'retry' | 'retry-purge' | 'archive' | 'trash' | 'restore') {
+  async function runAssetAction(action: 'retry' | 'retry-import' | 'retry-purge' | 'archive' | 'trash' | 'restore') {
     if (!selectedAsset) return;
     if (
       action === 'trash' &&
@@ -584,6 +590,8 @@ export default function MediaPage() {
       setMessage(
         action === 'retry'
           ? 'Media processing queued for retry.'
+          : action === 'retry-import'
+            ? 'External image import queued for retry.'
           : action === 'retry-purge'
             ? 'Media purge queued for retry.'
           : action === 'archive'
@@ -1286,15 +1294,20 @@ export default function MediaPage() {
                   <div className="rounded-md bg-amber-500/10 border border-amber-500/30 p-2.5 text-xs text-amber-700 dark:text-amber-400">
                     <p className="font-semibold">Processing: {selectedAsset.status}</p>
                     <p className="text-[11px] mt-0.5">
-                      {selectedAsset.processingErrorMessage ||
-                        'Derivatives are not yet available for storefront delivery.'}
+                      {selectedAsset.processingErrorMessage || (selectedAsset.externalImport?.status === 'RETRY_WAIT'
+                        ? `Import retry ${selectedAsset.externalImport.attempts} scheduled for ${selectedAsset.externalImport.nextAttemptAt ? new Date(selectedAsset.externalImport.nextAttemptAt).toLocaleString() : 'soon'}.`
+                        : selectedAsset.externalImport?.status === 'PROCESSING'
+                          ? 'Importing and validating the source image.'
+                          : selectedAsset.externalImport?.status === 'PENDING'
+                            ? 'Waiting for the image import worker.'
+                            : 'Derivatives are not yet available for storefront delivery.')}
                     </p>
                   </div>
                 )}
 
                 {/* Action Buttons: Retry, Archive, Restore, Trash */}
                 <div className="flex flex-wrap items-center gap-2">
-                  {selectedAsset.status === 'FAILED' && (
+                  {selectedAsset.status === 'FAILED' && selectedAsset.processingErrorCode !== 'EXTERNAL_IMPORT_FAILED' && (
                     <Button
                       size="sm"
                       variant="outline"
@@ -1303,6 +1316,12 @@ export default function MediaPage() {
                       disabled={busy}
                     >
                       <RotateCw className="size-3" /> Retry Processing
+                    </Button>
+                  )}
+
+                  {selectedAsset.status === 'FAILED' && selectedAsset.processingErrorCode === 'EXTERNAL_IMPORT_FAILED' && (
+                    <Button size="sm" variant="outline" onClick={() => void runAssetAction('retry-import')} disabled={busy}>
+                      <RotateCw className="size-3" /> Retry Import
                     </Button>
                   )}
 

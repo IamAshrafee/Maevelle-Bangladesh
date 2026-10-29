@@ -1,4 +1,3 @@
-import { createHash } from 'node:crypto';
 import { sql, type Kysely } from 'kysely';
 
 import type { DatabaseSchema } from '../index.js';
@@ -325,41 +324,56 @@ export async function registerUrlMedia(
     title?: string | null;
     altText?: string | null;
     visibility?: MediaVisibility;
-    widthPx?: number | null;
-    heightPx?: number | null;
+    uploadSource?: 'MIGRATION' | 'SUPPLIER_IMPORT';
   },
 ) {
-  const existing = await sql<{ id: string }>`select asset.id::text from media.media_assets asset
-    join media.media_objects object on object.id=asset.current_object_id
-    where asset.organization_id=${input.organizationId} and object.storage_provider='url'
-      and object.object_key=${input.url} and asset.status='READY' limit 1`.execute(db);
-  if (existing.rows[0]) return { id: existing.rows[0].id };
-  const extension = input.url.toLowerCase().includes('.png')
-    ? 'png'
-    : input.url.toLowerCase().includes('.webp')
-      ? 'webp'
-      : 'jpg';
-  const mimeType =
-    extension === 'png' ? 'image/png' : extension === 'webp' ? 'image/webp' : 'image/jpeg';
+  let location: URL;
+  try {
+    location = new URL(input.url);
+  } catch {
+    throw new MediaDomainError('VALIDATION_FAILED', 'External image URL is invalid.');
+  }
+  if (input.url.length > 2048 || location.protocol !== 'https:' || location.port ||
+    location.username || location.password ||
+    !/^[a-z0-9-]+(?:\.[a-z0-9-]+)+$/.test(location.hostname.toLowerCase()))
+    throw new MediaDomainError('VALIDATION_FAILED', 'External image URL must use standard HTTPS.');
+  const originalFilename = safeFilename(
+    location.pathname.split('/').at(-1)?.slice(0, 255) || 'imported-image.jpg',
+  );
+  const extension = originalFilename.toLowerCase().match(/\.(jpe?g|png|webp)$/)?.[1] ?? 'jpg';
+  const normalizedExtension = extension === 'jpeg' ? 'jpg' : extension;
   return withMediaTransaction(db, async (transaction) => {
+    const existing = await sql<{ id: string; status: string; import_status: string }>`
+      select asset.id::text,asset.status,job.status import_status
+      from media.external_image_imports job join media.media_assets asset
+        on asset.organization_id=job.organization_id and asset.id=job.asset_id
+      where job.organization_id=${input.organizationId} and job.source_url=${input.url}
+        and asset.status not in ('TRASHED','PURGING')
+      order by job.created_at desc limit 1`.execute(transaction);
+    if (existing.rows[0]) {
+      if (existing.rows[0].status === 'FAILED' && existing.rows[0].import_status === 'FAILED') {
+        await sql`update media.external_image_imports set status='PENDING',attempt_count=0,
+          next_attempt_at=null,last_error_code=null,last_error_message=null,updated_at=now()
+          where organization_id=${input.organizationId} and asset_id=${existing.rows[0].id}::uuid`
+          .execute(transaction);
+        await sql`update media.media_assets set status='PENDING_UPLOAD',
+          processing_error_code=null,processing_error_message=null,updated_at=now(),version=version+1
+          where organization_id=${input.organizationId} and id=${existing.rows[0].id}::uuid`
+          .execute(transaction);
+      }
+      return { id: existing.rows[0].id };
+    }
     const asset = await sql<{ id: string }>`insert into media.media_assets(
       organization_id,asset_type,visibility_class,status,original_filename,normalized_extension,
       title,alt_text,upload_source
-    ) values (${input.organizationId},'IMAGE',${input.visibility ?? 'PUBLIC'},'READY',
-      ${new URL(input.url).pathname.split('/').at(-1) || `imported.${extension}`},${extension},
-      ${input.title ?? null},${input.altText ?? null},'MIGRATION') returning id::text`.execute(
+    ) values (${input.organizationId},'IMAGE',${input.visibility ?? 'PUBLIC'},'PENDING_UPLOAD',
+      ${originalFilename},${normalizedExtension},
+      ${input.title ?? null},${input.altText ?? null},${input.uploadSource ?? 'MIGRATION'}) returning id::text`.execute(
       transaction,
     );
     const assetId = asset.rows[0]!.id;
-    const object = await sql<{ id: string }>`insert into media.media_objects(
-      organization_id,asset_id,object_role,storage_provider,bucket_name,object_key,mime_type,
-      byte_size,checksum_sha256,width_px,height_px,file_format
-    ) values (${input.organizationId},${assetId},'ORIGINAL','url','external',${input.url},${mimeType},
-      102400,${createHash('sha256').update(input.url).digest('hex')},${input.widthPx ?? null},
-      ${input.heightPx ?? null},${extension}) returning id::text`.execute(transaction);
-    await sql`update media.media_assets set current_object_id=${object.rows[0]!.id}::uuid where id=${assetId}::uuid`.execute(
-      transaction,
-    );
+    await sql`insert into media.external_image_imports(organization_id,asset_id,source_url)
+      values(${input.organizationId},${assetId},${input.url})`.execute(transaction);
     return { id: assetId };
   });
 }

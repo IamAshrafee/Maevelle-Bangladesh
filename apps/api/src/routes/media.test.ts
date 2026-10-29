@@ -1,33 +1,21 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, expect, it, vi } from 'vitest';
 
-import { fetchExternalImage } from './media.js';
+import { deliverObject } from './media.js';
 
-describe('external media delivery', () => {
-  afterEach(() => vi.unstubAllGlobals());
+afterEach(() => vi.unstubAllGlobals());
 
-  it('loads an approved remote image server-side instead of redirecting the browser to it', async () => {
-    const image = Buffer.from('jpeg-content');
-    vi.stubGlobal(
-      'fetch',
-      vi.fn().mockResolvedValue(
-        new Response(image, {
-          status: 200,
-          headers: { 'content-type': 'image/jpeg', 'content-length': String(image.length) },
-        }),
-      ),
-    );
-
-    await expect(fetchExternalImage('https://global-img-cdn.1688.com/example.jpg')).resolves.toEqual({
-      content: image,
-      mimeType: 'image/jpeg',
-    });
-  });
-
-  it('does not request non-HTTPS remote media sources', async () => {
-    const request = vi.fn();
-    vi.stubGlobal('fetch', request);
-
-    await expect(fetchExternalImage('http://global-img-cdn.1688.com/example.jpg')).resolves.toBeNull();
-    expect(request).not.toHaveBeenCalled();
+it('never fetches a legacy URL-backed asset during public delivery', async () => {
+  const fetch = vi.fn();
+  vi.stubGlobal('fetch', fetch);
+  const send = vi.fn();
+  const code = vi.fn(() => ({ send }));
+  const reply = { code, send, header: vi.fn(), redirect: vi.fn() };
+  await deliverObject(reply as never, {} as never, {
+    provider: 'url', objectKey: 'https://images.example.test/photo.jpg',
+  } as never, true);
+  expect(fetch).not.toHaveBeenCalled();
+  expect(code).toHaveBeenCalledWith(404);
+  expect(send).toHaveBeenCalledWith({
+    error: { code: 'NOT_FOUND', message: 'Media was not found.' },
   });
 });

@@ -128,7 +128,16 @@ export async function completeMediaProcessing(
         checksum_sha256=excluded.checksum_sha256,width_px=excluded.width_px,
         height_px=excluded.height_px,created_at=now()`.execute(transaction);
     }
-    await sql`update media.media_assets set status='READY',updated_at=now(),version=version+1,
+    await sql`update media.media_assets set
+      status=case when exists(select 1 from media.external_image_imports job
+        where job.organization_id=${input.asset.organizationId}
+          and job.asset_id=${input.asset.assetId}::uuid and job.restore_archived)
+        then 'ARCHIVED' else 'READY' end,
+      archived_at=case when exists(select 1 from media.external_image_imports job
+        where job.organization_id=${input.asset.organizationId}
+          and job.asset_id=${input.asset.assetId}::uuid and job.restore_archived)
+        then now() else null end,
+      updated_at=now(),version=version+1,
       processing_error_code=null,processing_error_message=null
       where organization_id=${input.asset.organizationId} and id=${input.asset.assetId}::uuid`.execute(
       transaction,

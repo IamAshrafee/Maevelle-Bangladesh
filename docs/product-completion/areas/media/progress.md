@@ -33,6 +33,22 @@
   size; external URL objects are explicitly unverified, and the UI does not claim checksum
   or image-property integrity. Issue counts remain exact when displayed details are capped.
 
+- External image URLs from seed and supplier import now create pending Media assets and
+  durable import jobs. The worker validates each HTTPS redirect and DNS result, pins the
+  connection to the checked public address, limits time and bytes, validates MIME/signature,
+  stores owned bytes, then runs normal rendition processing. Failed jobs have bounded retries,
+  lease recovery, and an Admin retry action. Public and Admin delivery never fetch a remote
+  URL; legacy URL-backed assets are queued by migration `3205` and unavailable until imported.
+  Previously archived assets return to Archived after processing. Failed imports retain their
+  source URL in the job for retry, while obsolete URL object records are removed.
+
+For the `3205` upgrade, stop the old API and Worker before the migration; deploy the updated
+API and Worker together after it. The migration temporarily makes legacy URL images pending,
+so schedule the change when the importer can reach suppliers and monitor failed imports in
+the Media Library. Do not start the old Worker against the migrated schema. Keep the database
+and media volume together in the pre-upgrade backup; a code-only rollback cannot reverse the
+new schema or recover remote-only images.
+
 For an upgrade, stop the old worker, apply migrations `3203` and `3204` once, then deploy
 the new Worker, API, and Admin together. Check Media Library's Purging filter and Media
 Health for previously stranded assets; an unclaimed legacy `PURGING` row is eligible for

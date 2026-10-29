@@ -93,6 +93,11 @@ export interface MediaLibraryAsset {
   readonly version: number;
   readonly processingErrorCode: string | null;
   readonly processingErrorMessage: string | null;
+  readonly externalImport: {
+    readonly status: 'PENDING' | 'PROCESSING' | 'RETRY_WAIT' | 'COMPLETE' | 'FAILED';
+    readonly attempts: number;
+    readonly nextAttemptAt: string | null;
+  } | null;
   readonly purgeAttempts: number;
   readonly purgeRetryAfter: string | null;
   readonly purgeLeaseUntil: string | null;

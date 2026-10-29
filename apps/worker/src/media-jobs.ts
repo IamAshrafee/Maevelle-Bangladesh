@@ -1,15 +1,21 @@
 import type { DatabaseClient } from '@maevelle/database';
 import {
   claimDueMediaPurge,
+  claimExternalImageImport,
   claimMediaAssetForProcessing,
   completeMediaProcessing,
   completeMediaPurge,
+  completeExternalImageImport,
   expireMediaUploadSessions,
   failMediaPurge,
+  failExternalImageImport,
   failMediaProcessing,
 } from '@maevelle/database/media';
 import {
   createRenditionObjectKey,
+  createMediaObjectKey,
+  downloadExternalImage,
+  ExternalImageImportError,
   inspectAndProcessImage,
   InvalidImageError,
   sha256,
@@ -17,6 +23,59 @@ import {
 } from '@maevelle/media';
 
 const PROCESSOR_VERSION = 'sharp-1';
+
+export async function importOneExternalImage(
+  database: DatabaseClient,
+  storage: ObjectStoragePort,
+): Promise<number> {
+  const job = await claimExternalImageImport(database.db);
+  if (!job) return 0;
+  let locator: { provider: string; bucket: string; key: string } | undefined;
+  try {
+    const image = await downloadExternalImage(job.sourceUrl);
+    const extension = image.mimeType === 'image/jpeg' ? 'jpg' : image.mimeType.split('/')[1]!;
+    locator = {
+      provider: storage.provider,
+      bucket: job.visibility === 'PUBLIC' ? storage.publicBucket : storage.privateBucket,
+      key: createMediaObjectKey({ organizationId: job.organizationId, assetId: job.assetId,
+        purpose: 'original', extension }),
+    };
+    const checksumSha256 = sha256(image.content);
+    await storage.put(locator, image.content, {
+      contentType: image.mimeType, checksumSha256,
+    });
+    await completeExternalImageImport(database.db, {
+      ...job, provider: locator.provider, bucket: locator.bucket, objectKey: locator.key,
+      mimeType: image.mimeType, byteSize: image.content.length, checksumSha256,
+    });
+    return 1;
+  } catch (error) {
+    if (locator) await storage.delete(locator).catch(() => undefined);
+    await failExternalImageImport(database.db, {
+      ...job,
+      code: error instanceof ExternalImageImportError ? error.code : 'EXTERNAL_IMPORT_FAILED',
+      retryable: error instanceof ExternalImageImportError ? error.retryable : true,
+    });
+    return 1;
+  }
+}
+
+export async function importExternalImageBatch(
+  database: DatabaseClient,
+  storage: ObjectStoragePort,
+  maximum = 8,
+): Promise<number> {
+  let processed = 0;
+  while (processed < maximum) {
+    const count = Math.min(4, maximum - processed);
+    const claims = await Promise.all(Array.from({ length: count }, () =>
+      importOneExternalImage(database, storage)));
+    const completed = claims.reduce((sum, claimed) => sum + claimed, 0);
+    processed += completed;
+    if (completed < count) break;
+  }
+  return processed;
+}
 
 export async function processOneMediaAsset(
   database: DatabaseClient,
@@ -152,6 +211,8 @@ export async function purgeOneMediaAsset(
   if (!purge) return 0;
   try {
     for (const object of purge.objects) {
+      // Legacy URL records are metadata only; no bytes were ever stored for them.
+      if (object.provider === 'url') continue;
       if (object.provider !== storage.provider)
         throw new Error(`Storage provider ${object.provider} is not configured in this worker.`);
       await storage.delete({

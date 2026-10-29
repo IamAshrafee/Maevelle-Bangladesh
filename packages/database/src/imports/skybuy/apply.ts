@@ -464,6 +464,7 @@ async function syncProductEvidence(
         organizationId,
         url: variant.imageUrl,
         visibility: 'PUBLIC',
+        uploadSource: 'SUPPLIER_IMPORT',
         title: mediaTitle(`${product.title} - ${variant.sku}`),
       });
       await attachMediaToProduct(db, {
@@ -481,6 +482,7 @@ async function syncProductEvidence(
       organizationId,
       url: product.imageUrl,
       visibility: 'PUBLIC',
+      uploadSource: 'SUPPLIER_IMPORT',
       title: mediaTitle(product.title),
     });
     await attachMediaToProduct(db, {

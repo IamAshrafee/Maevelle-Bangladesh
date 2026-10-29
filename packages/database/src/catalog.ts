@@ -167,6 +167,7 @@ export interface CatalogProductMedia {
   readonly visibility: 'PUBLIC' | 'PRIVATE';
   readonly width: number | null;
   readonly height: number | null;
+  readonly pendingImport?: boolean;
 }
 
 export interface CatalogProductAttribute {
@@ -3663,6 +3664,7 @@ export async function listCatalogVariantChoicePage(
          join media.media_assets asset on asset.id = media.asset_id and asset.organization_id = media.organization_id
          where media.organization_id = variant.organization_id
            and media.product_id = product.id
+           and asset.status in ('READY','ARCHIVED')
            and (media.variant_id = variant.id or media.variant_id is null)
          order by case when media.variant_id = variant.id then 0 else 1 end, media.position asc
          limit 1),
@@ -3800,6 +3802,7 @@ export async function listCatalogVariantChoices(
          join media.media_assets asset on asset.id = media.asset_id and asset.organization_id = media.organization_id
          where media.organization_id = variant.organization_id
            and media.product_id = product.id
+           and asset.status in ('READY','ARCHIVED')
            and (media.variant_id = variant.id or media.variant_id is null)
          order by case when media.variant_id = variant.id then 0 else 1 end, media.position asc
          limit 1),
@@ -4167,16 +4170,22 @@ export async function getCatalogProductWorkspace(
       visibility_class: CatalogProductMedia['visibility'];
       width_px: number | null;
       height_px: number | null;
+      pending_import: boolean;
     }>`select placement.id::text,placement.asset_id::text,placement.variant_id::text,
         placement.option_value_id::text,placement.role,placement.is_primary,placement.position,
         asset.title,coalesce(placement.alt_text_override,asset.alt_text) alt_text,
-        asset.visibility_class,object.width_px,object.height_px
+        asset.visibility_class,object.width_px,object.height_px,
+        (asset.status='PENDING_UPLOAD') pending_import
       from catalog.product_media placement join media.media_assets asset
         on asset.organization_id=placement.organization_id and asset.id=placement.asset_id
-      join media.media_objects object on object.organization_id=asset.organization_id
+      left join media.media_objects object on object.organization_id=asset.organization_id
         and object.id=asset.current_object_id
       where placement.organization_id=${organizationId} and placement.product_id=${productId}::uuid
-        and asset.status in ('READY','ARCHIVED')
+        and (asset.status in ('READY','ARCHIVED') or
+          (asset.status='PENDING_UPLOAD' and exists(
+            select 1 from media.external_image_imports job
+            where job.organization_id=asset.organization_id and job.asset_id=asset.id
+              and job.status in ('PENDING','PROCESSING','RETRY_WAIT'))))
       order by placement.is_primary desc,placement.position,placement.id`.execute(db),
   ]);
   if (!validation) return undefined;
@@ -4394,6 +4403,7 @@ export async function getCatalogProductWorkspace(
       visibility: placement.visibility_class,
       width: placement.width_px,
       height: placement.height_px,
+      pendingImport: placement.pending_import,
     })),
     readiness: validation.readiness,
     operationalSignals: validation.operationalSignals,

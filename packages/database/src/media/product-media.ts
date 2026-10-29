@@ -39,27 +39,24 @@ export async function attachMediaToProduct(
   await withMediaTransaction(db, async (transaction) => {
     const asset = await sql<{ id: string }>`select id::text from media.media_assets
       where id=${input.assetId}::uuid and organization_id=${input.organizationId}
-        and asset_type='IMAGE' and status='READY' and visibility_class='PUBLIC' for share`.execute(
+        and asset_type='IMAGE' and visibility_class='PUBLIC'
+        and (status='READY' or (status='PENDING_UPLOAD' and exists(
+          select 1 from media.external_image_imports job
+          where job.organization_id=media_assets.organization_id and job.asset_id=media_assets.id
+            and job.status in ('PENDING','PROCESSING','RETRY_WAIT'))))
+        for share`.execute(
       transaction,
     );
     if (!asset.rows[0])
       throw new MediaDomainError(
         'MEDIA_NOT_READY',
-        'Only ready public image assets can be used by Products.',
+        'Only ready or queued imported public images can be used by Products.',
       );
     const product = await sql<{ id: string }>`select id::text from catalog.products
       where id=${input.productId}::uuid and organization_id=${input.organizationId} for update`.execute(
       transaction,
     );
     if (!product.rows[0]) throw new MediaDomainError('NOT_FOUND', 'Product was not found.');
-
-    const visualAxis = await sql<{ id: string; name: string }>`
-      select id::text, name from catalog.product_option_axes
-      where organization_id=${input.organizationId}
-        and product_id=${input.productId}::uuid
-        and status='ACTIVE' and is_visual
-    `.execute(transaction);
-    const hasVisualAxis = Boolean(visualAxis.rows[0]);
 
     // Visual axis validation: option-value media must belong to the visual axis (checked below),
     // while shared general media (variantId and optionValueId null) remains fully supported.
@@ -159,12 +156,6 @@ export async function syncProductMediaPlacements(
     );
     if (!product.rows[0]) throw new MediaDomainError('NOT_FOUND', 'Product was not found.');
 
-    const visualAxis = await sql<{ id: string; name: string }>`
-      select id::text, name from catalog.product_option_axes
-      where organization_id=${input.organizationId}
-        and product_id=${input.productId}::uuid
-        and status='ACTIVE' and is_visual
-    `.execute(transaction);
     // Option values must belong to the visual presentation axis (validated below).
     // Shared general media across all variants/choices remains fully supported.
 
@@ -176,7 +167,12 @@ export async function syncProductMediaPlacements(
         asset_type: string;
         status: string;
         visibility_class: string;
-      }>`select id::text, asset_type, status, visibility_class from media.media_assets
+        queued_import: boolean;
+      }>`select asset.id::text, asset.asset_type, asset.status, asset.visibility_class,
+        exists(select 1 from media.external_image_imports job
+          where job.organization_id=asset.organization_id and job.asset_id=asset.id
+            and job.status in ('PENDING','PROCESSING','RETRY_WAIT')) queued_import
+        from media.media_assets asset
         where organization_id=${input.organizationId} and id in (${assetList}) for share`.execute(
         transaction,
       );
@@ -189,13 +185,14 @@ export async function syncProductMediaPlacements(
       const invalid = foundAssets.rows.find(
         (a) =>
           a.asset_type !== 'IMAGE' ||
-          !['READY', 'ARCHIVED'].includes(a.status) ||
+          (!['READY', 'ARCHIVED'].includes(a.status) &&
+            !(a.status === 'PENDING_UPLOAD' && a.queued_import)) ||
           a.visibility_class !== 'PUBLIC',
       );
       if (invalid) {
         throw new MediaDomainError(
           'MEDIA_NOT_READY',
-          'Only ready public image assets can be used by Products.',
+          'Only ready or queued imported public images can be used by Products.',
         );
       }
     }
@@ -407,13 +404,18 @@ export async function replaceProductMediaAsset(
   await withMediaTransaction(db, async (transaction) => {
     const asset = await sql<{ id: string }>`select id::text from media.media_assets
       where id=${input.newAssetId}::uuid and organization_id=${input.organizationId}
-        and asset_type='IMAGE' and status in ('READY','ARCHIVED') and visibility_class='PUBLIC' for share`.execute(
+        and asset_type='IMAGE' and visibility_class='PUBLIC'
+        and (status in ('READY','ARCHIVED') or (status='PENDING_UPLOAD' and exists(
+          select 1 from media.external_image_imports job
+          where job.organization_id=media_assets.organization_id and job.asset_id=media_assets.id
+            and job.status in ('PENDING','PROCESSING','RETRY_WAIT'))))
+        for share`.execute(
       transaction,
     );
     if (!asset.rows[0]) {
       throw new MediaDomainError(
         'MEDIA_NOT_READY',
-        'Only ready public image assets can be used by Products.',
+        'Only ready or queued imported public images can be used by Products.',
       );
     }
 

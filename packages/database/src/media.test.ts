@@ -11,6 +11,8 @@ import {
 } from './catalog.js';
 import {
   archiveMediaAsset,
+  claimExternalImageImport,
+  completeExternalImageImport,
   claimDueMediaPurge,
   completeMediaPurge,
   attachMediaToProduct,
@@ -21,13 +23,16 @@ import {
   detachMediaFromProduct,
   findMediaAsset,
   failMediaPurge,
+  failExternalImageImport,
   listMediaHealthIssues,
   listMediaStorageInventory,
   listMediaLibrary,
   organizeMediaAsset,
   registerUploadedMedia,
+  registerUrlMedia,
   restoreTrashedMediaAsset,
   retryFailedMediaPurge,
+  retryExternalImageImport,
   syncProductMediaPlacements,
   trashUnusedMediaAsset,
   updateMediaAssetMetadata,
@@ -41,6 +46,88 @@ const database = createDatabase({
 afterAll(async () => database.close());
 
 describe('media tenant ownership', () => {
+  it('requeues a restored legacy URL image instead of exposing its remote source', async () => {
+    const owner = await createOrganization(database.db, {
+      code: `media-legacy-${crypto.randomUUID().slice(0, 8)}`,
+      displayName: 'Legacy image test', timezone: 'UTC', defaultLocale: 'en', defaultCurrency: 'USD',
+    });
+    const created = await sql<{ id: string }>`insert into media.media_assets
+      (organization_id,asset_type,visibility_class,status,original_filename,
+        normalized_extension,upload_source,trashed_at,purge_after)
+      values(${owner.id},'IMAGE','PUBLIC','TRASHED','legacy.jpg','jpg','MIGRATION',
+        now(),now()+interval '7 days') returning id::text`.execute(database.db);
+    const assetId = created.rows[0]!.id;
+    const original = await sql<{ id: string }>`insert into media.media_objects
+      (organization_id,asset_id,object_role,storage_provider,bucket_name,object_key,
+        mime_type,byte_size)
+      values(${owner.id},${assetId},'ORIGINAL','url','external',
+        ${`https://images.example.test/${assetId}.jpg`},'image/jpeg',100)
+      returning id::text`.execute(database.db);
+    await sql`update media.media_assets set current_object_id=${original.rows[0]!.id}::uuid
+      where id=${assetId}::uuid`.execute(database.db);
+    await restoreTrashedMediaAsset(database.db, { organizationId: owner.id, assetId });
+    const state = await sql<{ status: string; import_status: string; restore_archived: boolean }>`
+      select asset.status,job.status import_status,job.restore_archived
+      from media.media_assets asset join media.external_image_imports job on job.asset_id=asset.id
+      where asset.id=${assetId}::uuid`.execute(database.db);
+    expect(state.rows[0]).toMatchObject({
+      status: 'PENDING_UPLOAD', import_status: 'PENDING', restore_archived: true,
+    });
+    expect(await findMediaAsset(database.db, assetId)).toBeUndefined();
+    const claim = await claimExternalImageImport(database.db);
+    expect(claim?.assetId).toBe(assetId);
+    await failExternalImageImport(database.db, {
+      ...claim!, code: 'UNSAFE_MEDIA_HOST', retryable: false,
+    });
+  });
+  it('queues external images, fences imports, and exposes only local bytes', async () => {
+    const owner = await createOrganization(database.db, {
+      code: `media-import-${crypto.randomUUID().slice(0, 8)}`,
+      displayName: 'Media import test', timezone: 'UTC', defaultLocale: 'en', defaultCurrency: 'USD',
+    });
+    const sourceUrl = `https://images.example.test/${crypto.randomUUID()}.jpg`;
+    const asset = await registerUrlMedia(database.db, {
+      organizationId: owner.id, url: sourceUrl, visibility: 'PUBLIC',
+    });
+    expect(await findMediaAsset(database.db, asset.id)).toBeUndefined();
+    const productType = await sql<{ id: string }>`insert into catalog.product_types
+      (organization_id,code,name) values(${owner.id},'imported','Imported') returning id::text`
+      .execute(database.db);
+    const product = await createCatalogProduct(database.db, {
+      organizationId: owner.id, actorId: crypto.randomUUID(),
+      productTypeId: productType.rows[0]!.id,
+      title: 'Imported image product', handle: `import-media-${crypto.randomUUID().slice(0, 8)}`,
+    });
+    await attachMediaToProduct(database.db, {
+      organizationId: owner.id, productId: product.id, assetId: asset.id, role: 'GALLERY',
+    });
+    const workspace = await getCatalogProductWorkspace(database.db, owner.id, product.id);
+    expect(workspace?.media).toEqual(expect.arrayContaining([
+      expect.objectContaining({ assetId: asset.id, pendingImport: true }),
+    ]));
+    const claim = await claimExternalImageImport(database.db);
+    expect(claim).toMatchObject({ assetId: asset.id, sourceUrl, attempt: 1 });
+    await failExternalImageImport(database.db, { ...claim!, code: 'UNSAFE_MEDIA_HOST', retryable: false });
+    const failed = await listMediaLibrary(database.db, owner.id);
+    expect(failed.find((item) => item.id === asset.id)).toMatchObject({
+      status: 'FAILED', processingErrorCode: 'EXTERNAL_IMPORT_FAILED',
+    });
+    await retryExternalImageImport(database.db, { organizationId: owner.id, assetId: asset.id });
+    const retried = await claimExternalImageImport(database.db);
+    expect(retried).toMatchObject({ assetId: asset.id, attempt: 1 });
+    await expect(completeExternalImageImport(database.db, {
+      ...claim!, provider: 'local', bucket: 'public', objectKey: 'stale.jpg',
+      mimeType: 'image/jpeg', byteSize: 8, checksumSha256: 'a'.repeat(64),
+    })).rejects.toMatchObject({ code: 'CONFLICT' });
+    await completeExternalImageImport(database.db, {
+      ...retried!, provider: 'local', bucket: 'public',
+      objectKey: `organizations/${owner.id}/assets/${asset.id}/source-test.jpg`,
+      mimeType: 'image/jpeg', byteSize: 8, checksumSha256: 'a'.repeat(64),
+    });
+    expect(await findMediaAsset(database.db, asset.id)).toBeUndefined();
+    await sql`update media.media_assets set status='READY' where id=${asset.id}::uuid`.execute(database.db);
+    expect(await findMediaAsset(database.db, asset.id)).toMatchObject({ provider: 'local' });
+  });
   it('pages through more than 2,000 storage records without truncation or duplicates', async () => {
     const owner = await createOrganization(database.db, {
       code: `media-inventory-${crypto.randomUUID().slice(0, 8)}`,

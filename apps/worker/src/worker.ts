@@ -25,7 +25,7 @@ import { expireInventoryReservations } from '@maevelle/database/inventory';
 import { dispatchPostDeliveryReviewInvitations } from '@maevelle/database/reviews';
 import { processCourierBookings, type CourierProviderResolver } from './courier-bookings.js';
 import type { ObjectStoragePort } from '@maevelle/media';
-import { cleanupExpiredMediaUploads, processMediaBatch, purgeOneMediaAsset } from './media-jobs.js';
+import { cleanupExpiredMediaUploads, importExternalImageBatch, processMediaBatch, purgeOneMediaAsset } from './media-jobs.js';
 import {
   ChannelAdapterRegistry,
   processMessagingDeliveries,
@@ -181,6 +181,7 @@ export function createWorker(options: WorkerOptions): WorkerRuntime {
         expiredPaymentOrders,
         courierBookings,
         mediaProcessed,
+        externalMediaImported,
         expiredMediaUploads,
         mediaPurged,
         webhookDeliveries,
@@ -259,6 +260,9 @@ export function createWorker(options: WorkerOptions): WorkerRuntime {
         runJob(() => processCourierBookings(options.database, options.courierProviderResolver)),
         options.mediaStorage
           ? runJob(() => processMediaBatch(options.database, options.mediaStorage!))
+          : Promise.resolve(0),
+        options.mediaStorage
+          ? runJob(() => importExternalImageBatch(options.database, options.mediaStorage!))
           : Promise.resolve(0),
         options.mediaStorage
           ? runJob(() => cleanupExpiredMediaUploads(options.database, options.mediaStorage!))
@@ -355,6 +359,7 @@ export function createWorker(options: WorkerOptions): WorkerRuntime {
           expiredPaymentOrders,
           courierBookings,
           mediaProcessed,
+          externalMediaImported,
           expiredMediaUploads,
           mediaPurged,
           webhookDeliveries,

@@ -17,6 +17,14 @@ state. The worker validates signatures, applies EXIF orientation, strips public
 derivative metadata, generates four WebP delivery renditions, recovers stale
 processing, expires abandoned uploads, and purges retained trash.
 
+Supplier and seed image URLs enter a durable import queue. A restricted Worker
+fetch validates HTTPS, redirects, DNS and public destination addresses, pins each
+connection to its validated address, then checks the bounded image bytes before
+writing an original to Maevelle storage. Normal processing creates renditions.
+The delivery API reads stored objects only; a legacy URL object cannot trigger
+an outbound request. Failed imports are visible and retryable in the Admin Media
+Library, and leases allow a crashed importer to be reclaimed.
+
 Admin uploads and customer Review uploads both use the session/confirmation
 pipeline. Review uploads are bound to a hashed verified-purchase credential,
 remain private during moderation, and become publicly addressable only after
