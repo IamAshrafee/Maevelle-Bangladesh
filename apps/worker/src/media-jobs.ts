@@ -5,6 +5,7 @@ import {
   completeMediaProcessing,
   completeMediaPurge,
   expireMediaUploadSessions,
+  failMediaPurge,
   failMediaProcessing,
 } from '@maevelle/database/media';
 import {
@@ -149,15 +150,23 @@ export async function purgeOneMediaAsset(
 ): Promise<number> {
   const purge = await claimDueMediaPurge(database.db);
   if (!purge) return 0;
-  for (const object of purge.objects) {
-    if (object.provider !== storage.provider)
-      throw new Error(`Storage provider ${object.provider} is not configured in this worker.`);
-    await storage.delete({
-      provider: object.provider,
-      bucket: object.bucket,
-      key: object.objectKey,
+  try {
+    for (const object of purge.objects) {
+      if (object.provider !== storage.provider)
+        throw new Error(`Storage provider ${object.provider} is not configured in this worker.`);
+      await storage.delete({
+        provider: object.provider,
+        bucket: object.bucket,
+        key: object.objectKey,
+      });
+    }
+    await completeMediaPurge(database.db, purge);
+  } catch (error) {
+    await failMediaPurge(database.db, {
+      ...purge,
+      error: error instanceof Error ? error.message : 'Media purge failed.',
     });
+    throw error;
   }
-  await completeMediaPurge(database.db, purge);
   return 1;
 }

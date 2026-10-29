@@ -7,6 +7,8 @@ export interface MediaHealthIssue {
     | 'MISSING_CURRENT_OBJECT'
     | 'MISSING_IMAGE_RENDITIONS'
     | 'STALE_PROCESSING'
+    | 'PURGE_RETRY_PENDING'
+    | 'STALE_PURGE'
     | 'USAGE_PROJECTION_DRIFT'
     | 'MISSING_PUBLIC_ALT_TEXT'
     | 'LARGE_ORIGINAL'
@@ -39,6 +41,18 @@ export async function listMediaHealthIssues(
     from media.media_assets asset
     where asset.organization_id=${organizationId} and asset.status='PROCESSING'
       and asset.updated_at<now()-interval '10 minutes'
+    union all
+    select 'PURGE_RETRY_PENDING',asset.id::text,
+      'A purge attempt failed and is queued for retry.'
+    from media.media_assets asset
+    where asset.organization_id=${organizationId} and asset.status='PURGING'
+      and asset.purge_last_error is not null
+    union all
+    select 'STALE_PURGE',asset.id::text,
+      'A purge lease expired and can be reclaimed by a worker.'
+    from media.media_assets asset
+    where asset.organization_id=${organizationId} and asset.status='PURGING'
+      and asset.purge_lease_until<=now()
     union all
     select 'MISSING_PUBLIC_ALT_TEXT',asset.id::text,
       'Public image has no default alternative text.'

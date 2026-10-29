@@ -173,6 +173,10 @@ export async function listMediaLibrary(
       height_px: number | null;
       processing_error_code: string | null;
       processing_error_message: string | null;
+      purge_attempts: number;
+      purge_retry_after: string | null;
+      purge_lease_until: string | null;
+      purge_last_error: string | null;
       created_at: string;
       updated_at: string;
       version: string;
@@ -182,6 +186,8 @@ export async function listMediaLibrary(
         asset.folder_id::text,asset.title,asset.alt_text,asset.caption,asset.internal_description,
         object.mime_type,object.byte_size::text,object.width_px,object.height_px,
         asset.processing_error_code,asset.processing_error_message,
+        asset.purge_attempts,asset.purge_retry_after::text,asset.purge_lease_until::text,
+        asset.purge_last_error,
         asset.created_at::text,asset.updated_at::text,asset.version::text
       from media.media_assets asset
       left join media.media_objects object
@@ -224,6 +230,10 @@ export async function listMediaLibrary(
       heightPx: asset.height_px,
       processingErrorCode: asset.processing_error_code,
       processingErrorMessage: asset.processing_error_message,
+      purgeAttempts: asset.purge_attempts,
+      purgeRetryAfter: asset.purge_retry_after,
+      purgeLeaseUntil: asset.purge_lease_until,
+      purgeLastError: asset.purge_last_error,
       createdAt: asset.created_at,
       updatedAt: asset.updated_at,
       version: Number(asset.version),

@@ -93,5 +93,9 @@ export interface MediaLibraryAsset {
   readonly version: number;
   readonly processingErrorCode: string | null;
   readonly processingErrorMessage: string | null;
+  readonly purgeAttempts: number;
+  readonly purgeRetryAfter: string | null;
+  readonly purgeLeaseUntil: string | null;
+  readonly purgeLastError: string | null;
   readonly usages: readonly MediaUsage[];
 }

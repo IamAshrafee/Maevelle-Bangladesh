@@ -51,6 +51,8 @@ import * as unitTraceability from './3100_unit_traceability.js';
 import * as messagingCore from './3200_messaging_core.js';
 import * as messagingReconciliation from './3201_messaging_reconciliation.js';
 import * as messagingPerformance from './3202_messaging_performance.js';
+import * as mediaPurgeRecovery from './3203_media_purge_recovery.js';
+import * as mediaPurgeReferenceIndexes from './3204_media_purge_reference_indexes.js';
 
 /**
  * The migration list is deliberately explicit. Migration files are reviewed
@@ -108,6 +110,8 @@ export const migrations = {
   '3200_messaging_core': messagingCore,
   '3201_messaging_reconciliation': messagingReconciliation,
   '3202_messaging_performance': messagingPerformance,
+  '3203_media_purge_recovery': mediaPurgeRecovery,
+  '3204_media_purge_reference_indexes': mediaPurgeReferenceIndexes,
 } satisfies Record<string, Migration>;
 
 export const migrationProvider: MigrationProvider = {

@@ -11,6 +11,8 @@ import {
 } from './catalog.js';
 import {
   archiveMediaAsset,
+  claimDueMediaPurge,
+  completeMediaPurge,
   attachMediaToProduct,
   bulkOrganizeMediaAssets,
   bulkTrashMediaAssets,
@@ -18,12 +20,13 @@ import {
   createMediaTag,
   detachMediaFromProduct,
   findMediaAsset,
+  failMediaPurge,
   listMediaHealthIssues,
   listMediaLibrary,
   organizeMediaAsset,
   registerUploadedMedia,
-  replaceProductMediaAsset,
   restoreTrashedMediaAsset,
+  retryFailedMediaPurge,
   syncProductMediaPlacements,
   trashUnusedMediaAsset,
   updateMediaAssetMetadata,
@@ -37,6 +40,45 @@ const database = createDatabase({
 afterAll(async () => database.close());
 
 describe('media tenant ownership', () => {
+  it('retries failed and stale purge claims with fencing, then removes the asset', async () => {
+    const owner = await createOrganization(database.db, {
+      code: `media-purge-${crypto.randomUUID().slice(0, 8)}`,
+      displayName: 'Media purge owner', timezone: 'UTC', defaultLocale: 'en', defaultCurrency: 'USD',
+    });
+    const asset = await registerUploadedMedia(database.db, {
+      organizationId: owner.id,
+      objectKey: `organizations/${owner.id}/assets/${crypto.randomUUID()}/original.webp`,
+      mimeType: 'image/webp', byteSize: 100, checksumSha256: 'f'.repeat(64), visibility: 'PRIVATE',
+    });
+    await trashUnusedMediaAsset(database.db, { organizationId: owner.id, assetId: asset.id });
+    await sql`update media.media_assets set purge_after=now()-interval '100 years'
+      where organization_id=${owner.id} and id=${asset.id}::uuid`.execute(database.db);
+
+    const first = await claimDueMediaPurge(database.db);
+    expect(first).toMatchObject({ assetId: asset.id, attempt: 1 });
+    await failMediaPurge(database.db, { ...first!, error: 'Storage unavailable' });
+    const failed = await sql<{ purge_attempts: number; purge_last_error: string; purge_retry_after: Date }>`
+      select purge_attempts,purge_last_error,purge_retry_after from media.media_assets
+      where organization_id=${owner.id} and id=${asset.id}::uuid`.execute(database.db);
+    expect(failed.rows[0]).toMatchObject({ purge_attempts: 1, purge_last_error: 'Storage unavailable' });
+    expect(failed.rows[0]!.purge_retry_after.getTime()).toBeGreaterThan(Date.now());
+    expect(await listMediaHealthIssues(database.db, owner.id)).toEqual(expect.arrayContaining([
+      expect.objectContaining({ code: 'PURGE_RETRY_PENDING', assetId: asset.id }),
+    ]));
+    expect(await retryFailedMediaPurge(database.db, { organizationId: owner.id, assetId: asset.id })).toBe(true);
+
+    const second = await claimDueMediaPurge(database.db);
+    expect(second).toMatchObject({ assetId: asset.id, attempt: 2 });
+    await sql`update media.media_assets set purge_lease_until=now()-interval '1 second'
+      where organization_id=${owner.id} and id=${asset.id}::uuid`.execute(database.db);
+    const third = await claimDueMediaPurge(database.db);
+    expect(third).toMatchObject({ assetId: asset.id, attempt: 3 });
+    await expect(completeMediaPurge(database.db, second!)).rejects.toThrow('no longer current');
+    await completeMediaPurge(database.db, third!);
+    const remaining = await sql<{ count: string }>`select count(*)::text count from media.media_assets
+      where organization_id=${owner.id} and id=${asset.id}::uuid`.execute(database.db);
+    expect(remaining.rows[0]?.count).toBe('0');
+  });
   it('manages one primary gallery per Variant and rejects a Variant from another Product', async () => {
     const owner = await createOrganization(database.db, {
       code: `variant-media-${crypto.randomUUID().slice(0, 8)}`,

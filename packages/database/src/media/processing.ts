@@ -1,6 +1,7 @@
 import { sql, type Kysely } from 'kysely';
 
 import type { DatabaseSchema } from '../index.js';
+import { appendAuditEvent } from '../platform.js';
 import { withMediaTransaction } from './transaction.js';
 import type { MediaRenditionKey } from './types.js';
 
@@ -201,19 +202,27 @@ export async function claimDueMediaPurge(db: Kysely<DatabaseSchema>) {
       object.bucket_name,object.object_key from media.media_assets asset
       join media.media_objects object on object.organization_id=asset.organization_id
         and object.asset_id=asset.id
-      where asset.status='TRASHED' and asset.purge_after<=now()
+      where ((asset.status='TRASHED' and asset.purge_after<=now())
+        or (asset.status='PURGING' and
+          ((asset.purge_claim_token is null and coalesce(asset.purge_retry_after,asset.updated_at)<=now())
+            or asset.purge_lease_until<=now())))
         and not exists(select 1 from catalog.product_media usage where usage.organization_id=asset.organization_id and usage.asset_id=asset.id)
         and not exists(select 1 from reviews.review_media usage where usage.organization_id=asset.organization_id and usage.media_asset_id=asset.id)
         and not exists(select 1 from messaging.message_attachments usage where usage.organization_id=asset.organization_id and usage.media_asset_id=asset.id)
+        and not exists(select 1 from assets.media_links usage where usage.organization_id=asset.organization_id and usage.media_asset_id=asset.id)
+        and not exists(select 1 from customers.customers usage where usage.organization_id=asset.organization_id and usage.profile_image_asset_id=asset.id)
       order by asset.purge_after,asset.id for update of asset skip locked limit 1`.execute(
       transaction,
     );
     const row = result.rows[0];
     if (!row) return undefined;
-    await sql`update media.media_assets set status='PURGING',updated_at=now()
-      where organization_id=${row.organization_id} and id=${row.asset_id}::uuid`.execute(
-      transaction,
-    );
+    const claim = await sql<{ token: string; attempts: number }>`
+      update media.media_assets set status='PURGING',purge_claim_token=uuidv7(),
+        purge_lease_until=now()+interval '15 minutes',purge_retry_after=null,
+        purge_last_error=null,purge_attempts=purge_attempts+1,updated_at=now(),version=version+1
+      where organization_id=${row.organization_id} and id=${row.asset_id}::uuid
+      returning purge_claim_token::text token,purge_attempts attempts
+    `.execute(transaction);
     const renditions = await sql<{
       storage_provider: string;
       bucket_name: string;
@@ -226,6 +235,8 @@ export async function claimDueMediaPurge(db: Kysely<DatabaseSchema>) {
     return {
       assetId: row.asset_id,
       organizationId: row.organization_id,
+      claimToken: claim.rows[0]!.token,
+      attempt: claim.rows[0]!.attempts,
       objects: [
         { provider: row.storage_provider, bucket: row.bucket_name, objectKey: row.object_key },
         ...renditions.rows.map((item) => ({
@@ -240,9 +251,14 @@ export async function claimDueMediaPurge(db: Kysely<DatabaseSchema>) {
 
 export async function completeMediaPurge(
   db: Kysely<DatabaseSchema>,
-  input: { organizationId: string; assetId: string },
+  input: { organizationId: string; assetId: string; claimToken: string },
 ): Promise<void> {
   await db.transaction().execute(async (transaction) => {
+    const ownership = await sql<{ id: string }>`select id::text from media.media_assets
+      where organization_id=${input.organizationId} and id=${input.assetId}::uuid
+        and status='PURGING' and purge_claim_token=${input.claimToken}::uuid
+      for update`.execute(transaction);
+    if (!ownership.rows[0]) throw new Error('Media purge claim is no longer current.');
     await sql`delete from media.media_renditions where organization_id=${input.organizationId}
       and asset_id=${input.assetId}::uuid`.execute(transaction);
     await sql`update media.media_assets set current_object_id=null where organization_id=${input.organizationId}
@@ -257,9 +273,48 @@ export async function completeMediaPurge(
       and asset_id=${input.assetId}::uuid`.execute(transaction);
     await sql`delete from media.media_processing_records where organization_id=${input.organizationId}
       and asset_id=${input.assetId}::uuid`.execute(transaction);
+    await sql`delete from messaging.website_attachment_uploads where organization_id=${input.organizationId}
+      and media_asset_id=${input.assetId}::uuid`.execute(transaction);
+    await sql`delete from messaging.staff_attachment_uploads where organization_id=${input.organizationId}
+      and media_asset_id=${input.assetId}::uuid`.execute(transaction);
     await sql`delete from media.media_upload_sessions where organization_id=${input.organizationId}
       and asset_id=${input.assetId}::uuid`.execute(transaction);
     await sql`delete from media.media_assets where organization_id=${input.organizationId}
-      and id=${input.assetId}::uuid and status='PURGING'`.execute(transaction);
+      and id=${input.assetId}::uuid and status='PURGING'
+        and purge_claim_token=${input.claimToken}::uuid`.execute(transaction);
+  });
+}
+
+export async function failMediaPurge(
+  db: Kysely<DatabaseSchema>,
+  input: { organizationId: string; assetId: string; claimToken: string; attempt: number; error: string },
+): Promise<void> {
+  const delaySeconds = Math.min(3600, 30 * 2 ** Math.min(input.attempt - 1, 7));
+  await sql`update media.media_assets set purge_claim_token=null,purge_lease_until=null,
+    purge_retry_after=now()+(${delaySeconds}::text || ' seconds')::interval,
+    purge_last_error=${input.error.slice(0, 500)},updated_at=now(),version=version+1
+    where organization_id=${input.organizationId} and id=${input.assetId}::uuid
+      and status='PURGING' and purge_claim_token=${input.claimToken}::uuid`.execute(db);
+}
+
+export async function retryFailedMediaPurge(
+  db: Kysely<DatabaseSchema>,
+  input: { organizationId: string; assetId: string; actorId?: string },
+): Promise<boolean> {
+  return db.transaction().execute(async (transaction) => {
+    const result = await sql`update media.media_assets set purge_retry_after=now(),
+      updated_at=now(),version=version+1
+      where organization_id=${input.organizationId} and id=${input.assetId}::uuid
+        and status='PURGING' and purge_claim_token is null and purge_last_error is not null`.execute(transaction);
+    if (Number(result.numAffectedRows) !== 1) return false;
+    if (input.actorId) await appendAuditEvent(transaction, {
+      organizationId: input.organizationId,
+      actorType: 'USER',
+      actorId: input.actorId,
+      action: 'media.asset.purge_retry_requested',
+      targetType: 'media.asset',
+      targetId: input.assetId,
+    });
+    return true;
   });
 }

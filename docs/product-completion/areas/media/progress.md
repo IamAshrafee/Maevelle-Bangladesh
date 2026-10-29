@@ -21,6 +21,18 @@
 - Media Library usage, unused filtering, and single/bulk trash checks now include
   conversation attachments. Admin shows the conversation use and links to its inbox entry;
   the existing purge worker also retains assets referenced by messages.
+- Purge claims now use a 15-minute lease and fencing token. Failed attempts record an error
+  and retry with capped exponential delay (30 seconds to one hour); expired leases are
+  reclaimable after worker crashes. Admin can filter `PURGING`, inspect attempts and errors,
+  and request an immediate retry of an unclaimed failure. Health reports failed and stale
+  purges. Purge selection checks customer profile and business asset references; the final
+  transaction removes messaging upload ledger rows before deleting their media records.
+
+For an upgrade, stop the old worker, apply migrations `3203` and `3204` once, then deploy
+the new Worker, API, and Admin together. Check Media Library's Purging filter and Media
+Health for previously stranded assets; an unclaimed legacy `PURGING` row is eligible for
+automatic recovery after migration. File deletion is safe to repeat when a previous
+attempt removed some objects before failing.
 - Upgraded Admin Media Library (`apps/admin/app/media/page.tsx`) to production-grade shadcn/ui
   and Tailwind CSS, featuring Grid and List views, multi-select checkboxes, sticky bulk action
   bar (Move to Folder, Trash Unused), taxonomy creation, search/filter toolbar (including unused

@@ -26,6 +26,7 @@ import {
   organizeMediaAsset,
   replaceProductMediaAsset,
   retryMediaProcessing,
+  retryFailedMediaPurge,
   restoreTrashedMediaAsset,
   syncProductMediaPlacements,
   trashUnusedMediaAsset,
@@ -893,6 +894,25 @@ export function registerMediaRoutes(
       return mediaError(reply, error);
     }
   });
+
+  app.post(
+    '/admin/media/:assetId/retry-purge',
+    { schema: { params: Type.Object({ assetId: UUID }) } },
+    async (request, reply) => {
+      const context = await requireCapability(database, auth, request.headers, 'media.manage');
+      if (!context) return sendForbidden(reply);
+      const queued = await retryFailedMediaPurge(database.db, {
+        organizationId: context.organizationId,
+        assetId: (request.params as { assetId: string }).assetId,
+        actorId: context.actorId,
+      });
+      if (!queued)
+        return reply.code(409).send({
+          error: { code: 'CONFLICT', message: 'Only a failed, unclaimed purge can be retried.' },
+        });
+      return reply.code(202).send({ data: { status: 'PURGING' } });
+    },
+  );
 
   app.post('/admin/media/:assetId/archive', async (request, reply) => {
     const context = await requireCapability(database, auth, request.headers, 'media.manage');

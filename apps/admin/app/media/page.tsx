@@ -113,6 +113,10 @@ type MediaAsset = {
   readonly createdAt: string;
   readonly version: number;
   readonly processingErrorMessage: string | null;
+  readonly purgeAttempts: number;
+  readonly purgeRetryAfter: string | null;
+  readonly purgeLeaseUntil: string | null;
+  readonly purgeLastError: string | null;
   readonly usages: readonly MediaUsage[];
 };
 
@@ -558,7 +562,7 @@ export default function MediaPage() {
     }
   }
 
-  async function runAssetAction(action: 'retry' | 'archive' | 'trash' | 'restore') {
+  async function runAssetAction(action: 'retry' | 'retry-purge' | 'archive' | 'trash' | 'restore') {
     if (!selectedAsset) return;
     if (
       action === 'trash' &&
@@ -578,6 +582,8 @@ export default function MediaPage() {
       setMessage(
         action === 'retry'
           ? 'Media processing queued for retry.'
+          : action === 'retry-purge'
+            ? 'Media purge queued for retry.'
           : action === 'archive'
             ? 'Asset archived.'
             : action === 'restore'
@@ -860,6 +866,7 @@ export default function MediaPage() {
               <option value="QUARANTINED">Quarantined</option>
               <option value="ARCHIVED">Archived</option>
               <option value="TRASHED">Trash</option>
+              <option value="PURGING">Purging</option>
             </select>
 
             {/* Visibility filter */}
@@ -1259,8 +1266,21 @@ export default function MediaPage() {
                   )}
                 </div>
 
-                {/* Lifecycle status alert if failed/quarantined */}
-                {selectedAsset.status !== 'READY' && (
+                {selectedAsset.status === 'PURGING' ? (
+                  <div className="rounded-md border border-border bg-muted p-3 text-xs">
+                    <p className="font-semibold text-foreground">Purge attempt {selectedAsset.purgeAttempts}</p>
+                    <p className="mt-1 text-muted-foreground">
+                      {selectedAsset.purgeLeaseUntil
+                        ? 'File removal is in progress. An interrupted attempt will be reclaimed automatically.'
+                        : selectedAsset.purgeRetryAfter
+                          ? `Next retry: ${new Date(selectedAsset.purgeRetryAfter).toLocaleString()}`
+                          : 'Waiting for the purge worker.'}
+                    </p>
+                    {selectedAsset.purgeLastError && (
+                      <p className="mt-2 break-words text-destructive">Last error: {selectedAsset.purgeLastError}</p>
+                    )}
+                  </div>
+                ) : selectedAsset.status !== 'READY' && (
                   <div className="rounded-md bg-amber-500/10 border border-amber-500/30 p-2.5 text-xs text-amber-700 dark:text-amber-400">
                     <p className="font-semibold">Processing: {selectedAsset.status}</p>
                     <p className="text-[11px] mt-0.5">
@@ -1283,6 +1303,18 @@ export default function MediaPage() {
                       <RotateCw className="size-3" /> Retry Processing
                     </Button>
                   )}
+
+                  {selectedAsset.status === 'PURGING' && selectedAsset.purgeLastError &&
+                    !selectedAsset.purgeLeaseUntil && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => void runAssetAction('retry-purge')}
+                        disabled={busy}
+                      >
+                        <RotateCw className="size-3" /> Retry Purge Now
+                      </Button>
+                    )}
 
                   {selectedAsset.status === 'READY' && (
                     <Button
