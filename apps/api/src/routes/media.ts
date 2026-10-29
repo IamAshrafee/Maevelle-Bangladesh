@@ -16,6 +16,7 @@ import {
   detachMediaFromProduct,
   findGuestMediaAssetStatus,
   findMediaAsset,
+  findPublicMediaRendition,
   getMediaUploadSession,
   listMediaFolders,
   listMediaHealthIssues,
@@ -24,6 +25,7 @@ import {
   listMediaTags,
   MediaDomainError,
   organizeMediaAsset,
+  queueMissingPublicMediaRenditions,
   replaceProductMediaAsset,
   retryMediaProcessing,
   retryExternalImageImport,
@@ -41,14 +43,13 @@ import { findActiveAdminContext } from '@maevelle/database/platform';
 import { resolveMediaSettings } from '@maevelle/database/settings';
 import {
   createMediaObjectKey,
-  sha256,
-  validateMediaSignature,
   type ObjectStoragePort,
   type StoredObjectLocator,
 } from '@maevelle/media';
 
 import type { createAuth } from '../auth/auth.js';
 import { inspectMediaStoragePage } from './media-health.js';
+import { storeLocalMediaUpload } from './media-upload-stream.js';
 
 type Auth = ReturnType<typeof createAuth>;
 
@@ -188,6 +189,7 @@ export function registerMediaRoutes(
               ...(authorization.strategy === 'API_PROXY'
                 ? {
                     url: `/api/reviews/media/uploads/${session.id}/content?organizationId=${encodeURIComponent(body.organizationId)}`,
+                    headers: { 'content-type': 'application/x-maevelle-media-upload' },
                   }
                 : {}),
             },
@@ -227,18 +229,7 @@ export function registerMediaRoutes(
           throw new MediaDomainError('CONFLICT', 'Upload session is not open.');
         if (new Date(session.expiresAt).getTime() <= Date.now())
           throw new MediaDomainError('UPLOAD_EXPIRED', 'Upload session has expired.');
-        if (!Buffer.isBuffer(request.body) || request.body.length !== session.declaredByteSize)
-          throw new MediaDomainError('UPLOAD_INCOMPLETE', 'Upload body size is not authorized.');
-        if (!validateMediaSignature(request.body, session.declaredMimeType))
-          throw new MediaDomainError(
-            'VALIDATION_FAILED',
-            'Uploaded file signature does not match declared type.',
-          );
-        await storage.put(
-          { provider: session.provider, bucket: session.bucket, key: session.objectKey },
-          request.body,
-          { contentType: session.declaredMimeType, checksumSha256: sha256(request.body) },
-        );
+        await storeLocalMediaUpload(storage, request.body, session);
         return reply.code(204).send();
       } catch (error) {
         return reviewMediaError(reply, error);
@@ -700,7 +691,8 @@ export function registerMediaRoutes(
             upload: {
               ...authorization,
               ...(authorization.strategy === 'API_PROXY'
-                ? { url: `/api/admin/media/uploads/${session.id}/content` }
+                ? { url: `/api/admin/media/uploads/${session.id}/content`,
+                    headers: { 'content-type': 'application/x-maevelle-media-upload' } }
                 : {}),
             },
           },
@@ -747,18 +739,7 @@ export function registerMediaRoutes(
           throw new MediaDomainError('CONFLICT', 'Upload session is not open.');
         if (new Date(session.expiresAt).getTime() <= Date.now())
           throw new MediaDomainError('UPLOAD_EXPIRED', 'Upload session has expired.');
-        if (!Buffer.isBuffer(request.body) || request.body.length !== session.declaredByteSize)
-          throw new MediaDomainError('UPLOAD_INCOMPLETE', 'Upload body size is not authorized.');
-        if (!validateMediaSignature(request.body, session.declaredMimeType))
-          throw new MediaDomainError(
-            'VALIDATION_FAILED',
-            'Uploaded file signature does not match declared type.',
-          );
-        await storage.put(
-          { provider: session.provider, bucket: session.bucket, key: session.objectKey },
-          request.body,
-          { contentType: session.declaredMimeType, checksumSha256: sha256(request.body) },
-        );
+        await storeLocalMediaUpload(storage, request.body, session);
         return reply.code(204).send();
       } catch (error) {
         return mediaError(reply, error);
@@ -850,6 +831,23 @@ export function registerMediaRoutes(
     if (!context) return sendForbidden(reply);
     try {
       await retryMediaProcessing(database.db, {
+        organizationId: context.organizationId,
+        assetId: (request.params as { assetId: string }).assetId,
+        actorId: context.actorId,
+      });
+      return reply.code(202).send({ data: { status: 'UPLOADED' } });
+    } catch (error) {
+      return mediaError(reply, error);
+    }
+  });
+
+  app.post('/admin/media/:assetId/repair-renditions', {
+    schema: { params: Type.Object({ assetId: UUID }) },
+  }, async (request, reply) => {
+    const context = await requireCapability(database, auth, request.headers, 'media.manage');
+    if (!context) return sendForbidden(reply);
+    try {
+      await queueMissingPublicMediaRenditions(database.db, {
         organizationId: context.organizationId,
         assetId: (request.params as { assetId: string }).assetId,
         actorId: context.actorId,
@@ -1098,12 +1096,18 @@ export function registerMediaRoutes(
     }
   });
 
-  app.get('/media/public/:assetId', async (request, reply) => {
+  app.get('/media/public/:assetId', {
+    schema: {
+      params: Type.Object({ assetId: UUID }),
+      querystring: Type.Object({ rendition: Type.Optional(Type.Union([
+        Type.Literal('thumbnail'),Type.Literal('card'),Type.Literal('pdp'),Type.Literal('zoom'),
+      ])) }),
+    },
+  }, async (request, reply) => {
     const requested = (request.query as { rendition?: MediaRenditionKey }).rendition ?? 'pdp';
-    const asset = await findMediaAsset(
+    const asset = await findPublicMediaRendition(
       database.db,
       (request.params as { assetId: string }).assetId,
-      undefined,
       requested,
     );
     if (!asset || asset.visibility !== 'PUBLIC')
@@ -1174,6 +1178,9 @@ export async function deliverObject(
 ) {
   if (asset.provider === 'url')
     return reply.code(404).send({ error: { code: 'NOT_FOUND', message: 'Media was not found.' } });
+  if (isPublic && (!['thumbnail','card','pdp','zoom'].includes(asset.renditionKey) ||
+    !['image/webp','image/avif'].includes(asset.mimeType)))
+    return reply.code(404).send({ error: { code: 'NOT_FOUND', message: 'Media was not found.' } });
   const locator: StoredObjectLocator = {
     provider: asset.provider,
     bucket: asset.bucket,
@@ -1190,17 +1197,18 @@ export async function deliverObject(
       return reply.redirect(url, 302);
     }
   }
-  const content = await storage.get(locator);
-  if (!content)
+  const local = storage.provider === 'local' ? await storage.openRead?.(locator) : undefined;
+  const content = local ? undefined : await storage.get(locator);
+  if (!local && !content)
     return reply
       .code(404)
       .send({ error: { code: 'MEDIA_OBJECT_MISSING', message: 'Media file is unavailable.' } });
   reply
     .header('content-type', asset.mimeType)
-    .header('content-length', String(content.length))
+    .header('content-length', String(local?.byteSize ?? content!.length))
     .header(
       'cache-control',
-      isPublic ? 'public, max-age=31536000, immutable' : 'private, no-store',
+      isPublic ? 'public, max-age=3600' : 'private, no-store',
     );
   if (options?.download) {
     reply.header(
@@ -1208,5 +1216,5 @@ export async function deliverObject(
       `attachment; filename="${asset.originalFilename.replace(/"/g, '')}"`,
     );
   }
-  return reply.send(content);
+  return reply.send(local?.stream ?? content);
 }

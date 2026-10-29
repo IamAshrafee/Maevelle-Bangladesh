@@ -3,6 +3,7 @@
 import { useRef, useState } from 'react';
 import type { CatalogProductWorkspaceDto } from '@maevelle/contracts';
 import { uploadMediaFile, waitForMediaReady } from '@/lib/media/api';
+import { mapSettledLimited } from '@/lib/media/concurrency';
 import type { SelectedMediaAsset } from '@/components/media/asset-picker-dialog';
 import type { OptionAxisState, StagedMediaItem } from '../types';
 
@@ -100,9 +101,8 @@ export function useCreatorMedia({
 
     setMediaItems((prev) => [...prev, ...newItems]);
 
-    // Upload independently so one slow image does not block remaining files.
-    await Promise.all(
-      newItems.map(async (item) => {
+    // Bound simultaneous upload and processing polls for large product galleries.
+    await mapSettledLimited(newItems, 3, async (item) => {
         if (!item.file) return;
 
         try {
@@ -149,8 +149,7 @@ export function useCreatorMedia({
             ),
           );
         }
-      }),
-    );
+    });
   };
 
   const handleSetPrimaryMedia = (id: string) => {

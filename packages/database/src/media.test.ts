@@ -12,6 +12,7 @@ import {
 import {
   archiveMediaAsset,
   claimExternalImageImport,
+  completeMediaProcessing,
   completeExternalImageImport,
   claimDueMediaPurge,
   completeMediaPurge,
@@ -22,6 +23,8 @@ import {
   createMediaTag,
   detachMediaFromProduct,
   findMediaAsset,
+  findPublicMediaRendition,
+  queueMissingPublicMediaRenditions,
   failMediaPurge,
   failExternalImageImport,
   listMediaHealthIssues,
@@ -46,6 +49,61 @@ const database = createDatabase({
 afterAll(async () => database.close());
 
 describe('media tenant ownership', () => {
+  it('serves only the requested processed public rendition', async () => {
+    const owner = await createOrganization(database.db, {
+      code: `media-public-${crypto.randomUUID().slice(0, 8)}`,
+      displayName: 'Public rendition test', timezone: 'UTC', defaultLocale: 'en', defaultCurrency: 'USD',
+    });
+    const asset = await registerUploadedMedia(database.db, {
+      organizationId: owner.id, objectKey: `images/${crypto.randomUUID()}.jpg`,
+      mimeType: 'image/jpeg', byteSize: 100, checksumSha256: 'a'.repeat(64), visibility: 'PUBLIC',
+    });
+    expect(await findPublicMediaRendition(database.db, asset.id, 'pdp')).toBeUndefined();
+    const original = await sql<{ current_object_id: string }>`select current_object_id::text
+      from media.media_assets where id=${asset.id}::uuid`.execute(database.db);
+    await sql`insert into media.media_renditions
+      (organization_id,asset_id,source_object_id,rendition_key,storage_provider,bucket_name,
+        object_key,mime_type,byte_size,checksum_sha256,width_px,height_px,processor_version)
+      values(${owner.id},${asset.id},${original.rows[0]!.current_object_id},'thumbnail',
+        'local','public',${`organizations/${owner.id}/assets/${asset.id}/renditions/thumb.webp`},
+        'image/webp',20,${'b'.repeat(64)},100,100,'sharp-1')`.execute(database.db);
+    expect(await findPublicMediaRendition(database.db, asset.id, 'pdp')).toBeUndefined();
+    expect(await findPublicMediaRendition(database.db, asset.id, 'thumbnail')).toMatchObject({
+      renditionKey: 'thumbnail',mimeType: 'image/webp',byteSize: 20,
+    });
+    expect((await listMediaLibrary(database.db, owner.id)).find((item) => item.id === asset.id))
+      .toMatchObject({ missingPublicRenditions: true });
+    expect(await listMediaHealthIssues(database.db, owner.id)).toEqual(expect.arrayContaining([
+      expect.objectContaining({ code: 'MISSING_IMAGE_RENDITIONS', assetId: asset.id }),
+    ]));
+    await archiveMediaAsset(database.db, { organizationId: owner.id, assetId: asset.id });
+    await queueMissingPublicMediaRenditions(database.db, {
+      organizationId: owner.id, assetId: asset.id,
+    });
+    expect(await findPublicMediaRendition(database.db, asset.id, 'thumbnail')).toBeUndefined();
+    await sql`update media.media_assets set status='PROCESSING' where id=${asset.id}::uuid`.execute(database.db);
+    await completeMediaProcessing(database.db, {
+      asset: {
+        assetId: asset.id,organizationId: owner.id,assetType: 'IMAGE',uploadSource: 'MIGRATION',
+        visibility: 'PUBLIC',attempt: 1,
+        original: { id: original.rows[0]!.current_object_id,provider: 'local',bucket: 'private',
+          objectKey: asset.objectKey,mimeType: 'image/jpeg',byteSize: 100 },
+      },
+      processorVersion: 'test',checksumSha256: 'a'.repeat(64),fileFormat: 'jpeg',renditions: [],
+    });
+    const repaired = await sql<{ status: string }>`select status from media.media_assets
+      where id=${asset.id}::uuid`.execute(database.db);
+    expect(repaired.rows[0]?.status).toBe('ARCHIVED');
+    const replacement = await sql<{ id: string }>`insert into media.media_objects
+      (organization_id,asset_id,object_role,storage_provider,bucket_name,object_key,
+        mime_type,byte_size)
+      values(${owner.id},${asset.id},'ORIGINAL','local','private',
+        ${`organizations/${owner.id}/assets/${asset.id}/replacement.jpg`},'image/jpeg',100)
+      returning id::text`.execute(database.db);
+    await sql`update media.media_assets set current_object_id=${replacement.rows[0]!.id}::uuid
+      where id=${asset.id}::uuid`.execute(database.db);
+    expect(await findPublicMediaRendition(database.db, asset.id, 'thumbnail')).toBeUndefined();
+  });
   it('requeues a restored legacy URL image instead of exposing its remote source', async () => {
     const owner = await createOrganization(database.db, {
       code: `media-legacy-${crypto.randomUUID().slice(0, 8)}`,

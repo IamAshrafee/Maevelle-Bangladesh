@@ -10,22 +10,15 @@ import {
   ChevronRight,
   Eye,
   FileIcon,
-  Filter,
   FolderIcon,
   FolderPlus,
   ImageIcon,
   Images,
-  Info,
-  Layers,
   LoaderCircle,
   Plus,
   Search,
-  SlidersHorizontal,
-  Square,
-  Trash2,
   UploadCloud,
   X,
-  ZoomIn,
 } from 'lucide-react';
 
 import type { MediaFolderDto, MediaLibraryItemDto } from '@maevelle/contracts';
@@ -54,6 +47,7 @@ import {
   uploadMediaFile,
   waitForMediaReady,
 } from '@/lib/media/api';
+import { mapSettledLimited } from '@/lib/media/concurrency';
 
 export interface SelectedMediaAsset {
   readonly id: string;
@@ -285,7 +279,7 @@ export function AssetPickerDialog({
     }
   };
 
-  // High speed concurrent uploading
+  // Keep browser, API, and processor load within a predictable upload budget.
   const handleUploadFiles = async (fileList: FileList | readonly File[] | null) => {
     if (!fileList || fileList.length === 0 || isUploading) return;
     const files = Array.from(fileList);
@@ -314,9 +308,7 @@ export function AssetPickerDialog({
 
     const newlyReady: SelectedMediaAsset[] = [];
 
-    // Parallel concurrent uploads
-    await Promise.all(
-      queue.map(async (item) => {
+    await mapSettledLimited(queue, 3, async (item) => {
         try {
           setUploadQueue((current) =>
             current.map((q) => (q.id === item.id ? { ...q, stage: 'UPLOADING' } : q)),
@@ -376,8 +368,7 @@ export function AssetPickerDialog({
             ),
           );
         }
-      }),
-    );
+    });
 
     setIsUploading(false);
 

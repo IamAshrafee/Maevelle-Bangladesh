@@ -12,11 +12,10 @@ import {
 import * as messaging from '@maevelle/database/messaging';
 import {
   createMediaObjectKey,
-  sha256,
-  validateMediaSignature,
   type ObjectStoragePort,
 } from '@maevelle/media';
 
+import { storeLocalMediaUpload } from './media-upload-stream.js';
 import { registerOperationalMessagingRoutes } from './messaging-operations.js';
 import {
   authenticateMessagingAdmin as requireCapability,
@@ -150,6 +149,7 @@ export function registerMessagingRoutes(
                 ...(authorization.strategy === 'API_PROXY'
                   ? {
                       url: `/api/admin/messaging/conversations/${conversationId}/uploads/${session.id}/content`,
+                      headers: { 'content-type': 'application/x-maevelle-media-upload' },
                     }
                   : {}),
               },
@@ -206,18 +206,7 @@ export function registerMessagingRoutes(
           });
           if (session.status !== 'PENDING')
             throw new MediaDomainError('CONFLICT', 'Upload session is not open.');
-          if (!Buffer.isBuffer(request.body) || request.body.length !== session.declaredByteSize)
-            throw new MediaDomainError('UPLOAD_INCOMPLETE', 'Upload body size is not authorized.');
-          if (!validateMediaSignature(request.body, session.declaredMimeType))
-            throw new MediaDomainError(
-              'VALIDATION_FAILED',
-              'Uploaded file signature does not match its declared type.',
-            );
-          await storage.put(
-            { provider: session.provider, bucket: session.bucket, key: session.objectKey },
-            request.body,
-            { contentType: session.declaredMimeType, checksumSha256: sha256(request.body) },
-          );
+          await storeLocalMediaUpload(storage, request.body, session);
           return reply.code(204).send();
         } catch (error) {
           if (error instanceof messaging.MessagingDomainError)

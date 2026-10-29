@@ -1,4 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto';
+import type { Readable } from 'node:stream';
 
 export interface StoredObjectLocator {
   readonly provider: string;
@@ -49,6 +50,12 @@ export interface ObjectStoragePort {
     input: { readonly contentType: string; readonly checksumSha256?: string },
   ): Promise<void>;
   get(locator: StoredObjectLocator): Promise<Buffer | undefined>;
+  openRead?(locator: StoredObjectLocator): Promise<{ stream: Readable; byteSize: number } | undefined>;
+  putStream?(locator: StoredObjectLocator, source: Readable, input: {
+    readonly expectedByteSize: number; readonly mimeType: string;
+    readonly expectedChecksumSha256?: string;
+  }): Promise<{ byteSize: number; checksumSha256: string }>;
+  cleanupAbandonedUploads?(olderThanMs: number): Promise<number>;
   head(locator: StoredObjectLocator): Promise<StoredObjectHead | undefined>;
   /** Lightweight existence and size check; unlike head, it need not hash local bytes. */
   probe(locator: StoredObjectLocator): Promise<Pick<StoredObjectHead, 'byteSize'> | undefined>;

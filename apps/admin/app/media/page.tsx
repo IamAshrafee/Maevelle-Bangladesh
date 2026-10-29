@@ -24,7 +24,6 @@ import {
   List,
   LoaderCircle,
   Plus,
-  RefreshCw,
   RotateCw,
   Search,
   ShieldCheck,
@@ -35,6 +34,7 @@ import {
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { RefreshButton } from '@/components/ui/refresh-button';
 import {
   Card,
   CardContent,
@@ -70,6 +70,7 @@ import {
   getAdminMediaUrl,
   uploadMediaFile,
 } from '../../lib/media/api';
+import { mapSettledLimited } from '../../lib/media/concurrency';
 import {
   emptyHealthSummary,
   scanMediaHealth,
@@ -120,6 +121,7 @@ type MediaAsset = {
   readonly version: number;
   readonly processingErrorCode: string | null;
   readonly processingErrorMessage: string | null;
+  readonly missingPublicRenditions: boolean;
   readonly externalImport: {
     readonly status: 'PENDING' | 'PROCESSING' | 'RETRY_WAIT' | 'COMPLETE' | 'FAILED';
     readonly attempts: number;
@@ -338,8 +340,8 @@ export default function MediaPage() {
     setMessage('');
     try {
       const progress = new Map<number, number>();
-      const results = await Promise.allSettled(
-        fileList.map((file, index) =>
+      const results = await mapSettledLimited(
+        fileList, 3, (file, index) =>
           uploadMediaFile(file, {
             visibility: initialVisibility,
             title: file.name.replace(/\.[^.]+$/, '').replaceAll('-', ' '),
@@ -356,7 +358,6 @@ export default function MediaPage() {
               );
             },
           }),
-        ),
       );
       const uploaded = results.flatMap((result) =>
         result.status === 'fulfilled' ? [result.value] : [],
@@ -570,7 +571,7 @@ export default function MediaPage() {
     }
   }
 
-  async function runAssetAction(action: 'retry' | 'retry-import' | 'retry-purge' | 'archive' | 'trash' | 'restore') {
+  async function runAssetAction(action: 'retry' | 'retry-import' | 'repair-renditions' | 'retry-purge' | 'archive' | 'trash' | 'restore') {
     if (!selectedAsset) return;
     if (
       action === 'trash' &&
@@ -592,6 +593,8 @@ export default function MediaPage() {
           ? 'Media processing queued for retry.'
           : action === 'retry-import'
             ? 'External image import queued for retry.'
+          : action === 'repair-renditions'
+            ? 'Missing public image sizes queued for regeneration.'
           : action === 'retry-purge'
             ? 'Media purge queued for retry.'
           : action === 'archive'
@@ -694,16 +697,12 @@ export default function MediaPage() {
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            className="h-8 gap-1.5 text-xs"
-            onClick={() => void load()}
-            disabled={loading}
-          >
-            <RefreshCw className={`size-3.5 ${loading ? 'animate-spin' : ''}`} />
-            Refresh
-          </Button>
+          <RefreshButton
+            size="icon-sm"
+            loading={loading}
+            onRefresh={() => void load()}
+            tooltip="Refresh media library"
+          />
 
           <Button
             variant="outline"
@@ -1322,6 +1321,12 @@ export default function MediaPage() {
                   {selectedAsset.status === 'FAILED' && selectedAsset.processingErrorCode === 'EXTERNAL_IMPORT_FAILED' && (
                     <Button size="sm" variant="outline" onClick={() => void runAssetAction('retry-import')} disabled={busy}>
                       <RotateCw className="size-3" /> Retry Import
+                    </Button>
+                  )}
+
+                  {selectedAsset.missingPublicRenditions && ['READY', 'ARCHIVED'].includes(selectedAsset.status) && (
+                    <Button size="sm" variant="outline" onClick={() => void runAssetAction('repair-renditions')} disabled={busy}>
+                      <RotateCw className="size-3" /> Generate Missing Sizes
                     </Button>
                   )}
 

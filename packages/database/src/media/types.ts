@@ -98,6 +98,7 @@ export interface MediaLibraryAsset {
     readonly attempts: number;
     readonly nextAttemptAt: string | null;
   } | null;
+  readonly missingPublicRenditions: boolean;
   readonly purgeAttempts: number;
   readonly purgeRetryAfter: string | null;
   readonly purgeLeaseUntil: string | null;

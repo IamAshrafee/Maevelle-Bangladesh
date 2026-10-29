@@ -3,12 +3,45 @@ import { sql, type Kysely } from 'kysely';
 import type { DatabaseSchema } from '../index.js';
 import { appendAuditEvent } from '../platform.js';
 import { withMediaTransaction } from './transaction.js';
-import type { MediaRenditionKey } from './types.js';
+import { MediaDomainError, type MediaRenditionKey } from './types.js';
+
+export async function queueMissingPublicMediaRenditions(
+  db: Kysely<DatabaseSchema>,
+  input: { organizationId: string; assetId: string; actorId?: string },
+): Promise<void> {
+  await withMediaTransaction(db, async (transaction) => {
+    const result = await sql`update media.media_assets asset set status='UPLOADED',
+      restore_archived_after_processing=(asset.status='ARCHIVED'),archived_at=null,
+      processing_error_code=null,processing_error_message=null,updated_at=now(),version=version+1
+      where asset.organization_id=${input.organizationId} and asset.id=${input.assetId}::uuid
+        and asset.asset_type='IMAGE' and asset.visibility_class='PUBLIC'
+        and asset.status in ('READY','ARCHIVED') and exists(
+          select 1 from media.media_objects original
+          where original.organization_id=asset.organization_id and original.id=asset.current_object_id
+            and original.storage_provider<>'url')
+        and (select count(distinct rendition.rendition_key)
+          from media.media_renditions rendition
+          where rendition.organization_id=asset.organization_id and rendition.asset_id=asset.id
+            and rendition.source_object_id=asset.current_object_id
+            and rendition.storage_provider<>'url'
+            and rendition.mime_type in ('image/webp','image/avif')
+            and (asset.upload_source<>'MESSAGING_ATTACHMENT' or
+              rendition.rendition_key in ('thumbnail','card')))
+          < case when asset.upload_source='MESSAGING_ATTACHMENT' then 2 else 4 end`.execute(transaction);
+    if (Number(result.numAffectedRows) !== 1)
+      throw new MediaDomainError('CONFLICT', 'This public image has no missing rendition to repair.');
+    if (input.actorId) await appendAuditEvent(transaction, {
+      organizationId: input.organizationId,actorType: 'USER',actorId: input.actorId,
+      action: 'media.asset.rendition_repair_queued',targetType: 'media.asset',targetId: input.assetId,
+    });
+  });
+}
 
 export interface ClaimedMediaAsset {
   readonly assetId: string;
   readonly organizationId: string;
   readonly assetType: 'IMAGE' | 'DOCUMENT';
+  readonly uploadSource: string;
   readonly visibility: 'PUBLIC' | 'PRIVATE';
   readonly attempt: number;
   readonly original: {
@@ -30,6 +63,7 @@ export async function claimMediaAssetForProcessing(
       asset_id: string;
       organization_id: string;
       asset_type: 'IMAGE' | 'DOCUMENT';
+      upload_source: string;
       visibility_class: 'PUBLIC' | 'PRIVATE';
       object_id: string;
       storage_provider: string;
@@ -37,7 +71,7 @@ export async function claimMediaAssetForProcessing(
       object_key: string;
       mime_type: string;
       byte_size: string;
-    }>`select asset.id::text asset_id,asset.organization_id::text,asset.asset_type,
+    }>`select asset.id::text asset_id,asset.organization_id::text,asset.asset_type,asset.upload_source,
       asset.visibility_class,
       object.id::text object_id,object.storage_provider,object.bucket_name,object.object_key,
       object.mime_type,object.byte_size::text
@@ -67,6 +101,7 @@ export async function claimMediaAssetForProcessing(
       assetId: row.asset_id,
       organizationId: row.organization_id,
       assetType: row.asset_type,
+      uploadSource: row.upload_source,
       visibility: row.visibility_class,
       attempt,
       original: {
@@ -129,15 +164,15 @@ export async function completeMediaProcessing(
         height_px=excluded.height_px,created_at=now()`.execute(transaction);
     }
     await sql`update media.media_assets set
-      status=case when exists(select 1 from media.external_image_imports job
+      status=case when restore_archived_after_processing or exists(select 1 from media.external_image_imports job
         where job.organization_id=${input.asset.organizationId}
           and job.asset_id=${input.asset.assetId}::uuid and job.restore_archived)
         then 'ARCHIVED' else 'READY' end,
-      archived_at=case when exists(select 1 from media.external_image_imports job
+      archived_at=case when restore_archived_after_processing or exists(select 1 from media.external_image_imports job
         where job.organization_id=${input.asset.organizationId}
           and job.asset_id=${input.asset.assetId}::uuid and job.restore_archived)
         then now() else null end,
-      updated_at=now(),version=version+1,
+      restore_archived_after_processing=false,updated_at=now(),version=version+1,
       processing_error_code=null,processing_error_message=null
       where organization_id=${input.asset.organizationId} and id=${input.asset.assetId}::uuid`.execute(
       transaction,

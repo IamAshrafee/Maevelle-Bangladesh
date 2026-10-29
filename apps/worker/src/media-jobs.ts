@@ -36,7 +36,7 @@ export async function importOneExternalImage(
     const extension = image.mimeType === 'image/jpeg' ? 'jpg' : image.mimeType.split('/')[1]!;
     locator = {
       provider: storage.provider,
-      bucket: job.visibility === 'PUBLIC' ? storage.publicBucket : storage.privateBucket,
+      bucket: storage.privateBucket,
       key: createMediaObjectKey({ organizationId: job.organizationId, assetId: job.assetId,
         purpose: 'original', extension }),
     };
@@ -117,7 +117,11 @@ export async function processOneMediaAsset(
       return 1;
     }
 
-    const processed = await inspectAndProcessImage(source);
+    const processed = await inspectAndProcessImage(source, {
+      ...(asset.uploadSource === 'MESSAGING_ATTACHMENT'
+        ? { renditionKeys: ['thumbnail', 'card'] as const }
+        : {}),
+    });
     const actualMimeType = `image/${processed.metadata.format}`.replace('image/jpeg', 'image/jpeg');
     if (actualMimeType !== asset.original.mimeType)
       throw new InvalidImageError(
@@ -200,6 +204,7 @@ export async function cleanupExpiredMediaUploads(
         storage.delete({ provider: object.provider, bucket: object.bucket, key: object.objectKey }),
       ),
   );
+  await storage.cleanupAbandonedUploads?.(60 * 60 * 1000);
   return expired.length;
 }
 

@@ -72,6 +72,22 @@ describe('API health endpoints', () => {
 });
 
 describe('API hardening foundation', () => {
+  it('streams local Media proxy content past the ordinary JSON body limit', async () => {
+    const database = createDatabaseStub(vi.fn().mockResolvedValue(undefined));
+    const app = buildApi({ database, logger: false });
+    app.put('/test/stream-media', async (request) => {
+      let byteSize = 0;
+      for await (const chunk of request.body as NodeJS.ReadableStream) byteSize += Buffer.byteLength(chunk);
+      return { byteSize };
+    });
+    const response = await app.inject({ method: 'PUT', url: '/test/stream-media',
+      headers: { 'content-type': 'application/x-maevelle-media-upload' },
+      payload: Buffer.alloc(2 * 1024 * 1024),
+    });
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({ byteSize: 2 * 1024 * 1024 });
+    await app.close();
+  });
   it('routes storefront-sized product handles without rejecting the path parameter', async () => {
     const database = createDatabaseStub(vi.fn().mockResolvedValue(undefined));
     const app = buildApi({ database, logger: false });

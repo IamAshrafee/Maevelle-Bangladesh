@@ -66,7 +66,9 @@ export function validateMediaSignature(buffer: Buffer, declaredMimeType: string)
   }
 }
 
-export async function inspectAndProcessImage(content: Buffer): Promise<{
+export async function inspectAndProcessImage(content: Buffer, options: {
+  readonly renditionKeys?: readonly ProcessedImageRendition['key'][];
+} = {}): Promise<{
   readonly metadata: ProcessedImageMetadata;
   readonly renditions: readonly ProcessedImageRendition[];
 }> {
@@ -95,27 +97,27 @@ export async function inspectAndProcessImage(content: Buffer): Promise<{
       'Image dimensions exceed the processing safety limit.',
     );
 
-  const renditions = await Promise.all(
-    RENDITIONS.map(async (rendition) => {
-      // autoOrient applies EXIF orientation. Sharp omits source EXIF from output unless
-      // metadata is explicitly retained, keeping public renditions privacy-safe.
-      const result = await sharp(content, { limitInputPixels: MAX_IMAGE_PIXELS })
-        .autoOrient()
-        .resize({ width: rendition.width, withoutEnlargement: true, fit: 'inside' })
-        .webp({ quality: rendition.quality, effort: 4 })
-        .toBuffer({ resolveWithObject: true });
-      return {
-        key: rendition.key,
-        width: result.info.width,
-        height: result.info.height,
-        mimeType: 'image/webp' as const,
-        extension: 'webp' as const,
-        byteSize: result.data.length,
-        checksumSha256: sha256(result.data),
-        content: result.data,
-      };
-    }),
-  );
+  const renditions: ProcessedImageRendition[] = [];
+  for (const rendition of RENDITIONS) {
+    if (options.renditionKeys && !options.renditionKeys.includes(rendition.key)) continue;
+    // autoOrient applies EXIF orientation. Sharp omits source EXIF from output unless
+    // metadata is explicitly retained, keeping public renditions privacy-safe.
+    const result = await sharp(content, { limitInputPixels: MAX_IMAGE_PIXELS })
+      .autoOrient()
+      .resize({ width: rendition.width, withoutEnlargement: true, fit: 'inside' })
+      .webp({ quality: rendition.quality, effort: 4 })
+      .toBuffer({ resolveWithObject: true });
+    renditions.push({
+      key: rendition.key,
+      width: result.info.width,
+      height: result.info.height,
+      mimeType: 'image/webp' as const,
+      extension: 'webp' as const,
+      byteSize: result.data.length,
+      checksumSha256: sha256(result.data),
+      content: result.data,
+    });
+  }
   return {
     metadata: {
       width: metadata.width,

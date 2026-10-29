@@ -30,12 +30,18 @@ export async function listMediaHealthIssues(
       and asset.status in ('READY','ARCHIVED') and asset.current_object_id is null
     union all
     select 'MISSING_IMAGE_RENDITIONS',asset.id::text,
-      'Ready or archived image has no generated rendition.'
+      'Ready or archived image is missing required processed renditions.'
     from media.media_assets asset
     where asset.organization_id=${organizationId} and asset.asset_type='IMAGE'
       and asset.status in ('READY','ARCHIVED')
-      and not exists(select 1 from media.media_renditions rendition
-        where rendition.organization_id=asset.organization_id and rendition.asset_id=asset.id)
+      and (select count(distinct rendition.rendition_key) from media.media_renditions rendition
+        where rendition.organization_id=asset.organization_id and rendition.asset_id=asset.id
+          and rendition.source_object_id=asset.current_object_id
+          and rendition.storage_provider<>'url'
+          and rendition.mime_type in ('image/webp','image/avif')
+          and (asset.upload_source<>'MESSAGING_ATTACHMENT' or
+            rendition.rendition_key in ('thumbnail','card')))
+        < case when asset.upload_source='MESSAGING_ATTACHMENT' then 2 else 4 end
     union all
     select 'STALE_PROCESSING',asset.id::text,
       'Processing lease is older than ten minutes and is eligible for recovery.'

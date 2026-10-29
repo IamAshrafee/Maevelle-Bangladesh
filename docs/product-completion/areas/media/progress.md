@@ -32,6 +32,23 @@
   complete, degraded, and failed results. The scan checks storage presence and recorded byte
   size; external URL objects are explicitly unverified, and the UI does not claim checksum
   or image-property integrity. Issue counts remain exact when displayed details are capped.
+- Public image delivery now resolves only the exact requested processed WebP/AVIF rendition
+  of the current original. Missing variants return 404; public requests cannot fall back
+  to an original or another size. The Media Library identifies incomplete public rendition
+  sets and offers an audited regeneration action; archived assets return to Archived after
+  repair. The stable URL uses a bounded one-hour cache lifetime.
+  Migration `3206` records whether an Archived asset must return to that state after repair;
+  apply it before deploying the updated API and Worker.
+- Local API-proxy uploads for Admin, Reviews, staff messaging, and storefront chat stream
+  into bounded temporary files with incremental signature,
+  size, and SHA-256 checks, then atomically publish the stored object. Local delivery streams
+  bytes, and `head()` uses file metadata instead of rereading and hashing originals. The
+  Worker removes abandoned upload temporary files. Admin library, picker, and Product
+  creator uploads run at most three files concurrently. Storefront chat still checks its
+  declared SHA-256 during the streaming write. Imported originals use private storage.
+  Messaging attachments generate thumbnail and card
+  renditions; other images retain all four. Sharp encodes variants sequentially to limit
+  peak CPU and memory use.
 
 - External image URLs from seed and supplier import now create pending Media assets and
   durable import jobs. The worker validates each HTTPS redirect and DNS result, pins the

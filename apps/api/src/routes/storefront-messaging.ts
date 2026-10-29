@@ -13,12 +13,11 @@ import {
 import { resolveStorefrontContext } from '@maevelle/database/storefront';
 import {
   createMediaObjectKey,
-  sha256,
-  validateMediaSignature,
   type ObjectStoragePort,
 } from '@maevelle/media';
 
 import type { createAuth } from '../auth/auth.js';
+import { storeLocalMediaUpload } from './media-upload-stream.js';
 
 type Auth = ReturnType<typeof createAuth>;
 const UUID = Type.String({ format: 'uuid' });
@@ -476,7 +475,8 @@ export function registerStorefrontMessagingRoutes(
             upload: {
               ...authorization,
               ...(authorization.strategy === 'API_PROXY'
-                ? { url: `/api/storefront/v1/chat/uploads/${uploadId}/content` }
+                ? { url: `/api/storefront/v1/chat/uploads/${uploadId}/content`,
+                    headers: { 'content-type': 'application/x-maevelle-media-upload' } }
                 : {}),
             },
           },
@@ -511,18 +511,7 @@ export function registerStorefrontMessagingRoutes(
         });
         if (!session || session.status !== 'PENDING')
           throw new MediaDomainError('CONFLICT', 'Upload session is not open.');
-        if (!Buffer.isBuffer(request.body) || request.body.length !== session.declaredByteSize)
-          throw new MediaDomainError('UPLOAD_INCOMPLETE', 'Upload body size is not authorized.');
-        if (!validateMediaSignature(request.body, session.declaredMimeType))
-          throw new MediaDomainError('VALIDATION_FAILED', 'Uploaded file signature does not match its type.');
-        const checksum = sha256(request.body);
-        if (checksum !== upload.expectedSha256)
-          throw new MediaDomainError('UPLOAD_INCOMPLETE', 'Uploaded file checksum does not match.');
-        await storage.put(
-          { provider: session.provider, bucket: session.bucket, key: session.objectKey },
-          request.body,
-          { contentType: session.declaredMimeType, checksumSha256: checksum },
-        );
+        await storeLocalMediaUpload(storage, request.body, session, upload.expectedSha256);
         return reply.code(204).send();
       } catch (error) {
         return fail(reply, error, request.id);
@@ -554,14 +543,17 @@ export function registerStorefrontMessagingRoutes(
         bucket: session.bucket,
         key: session.objectKey,
       });
-      if (!object || object.checksumSha256 !== upload.expectedSha256)
+      if (!object || object.byteSize !== session.declaredByteSize ||
+        (storage.provider !== 'local' && object.checksumSha256 !== upload.expectedSha256) ||
+        (storage.provider === 'local' && object.checksumSha256 !== null &&
+          object.checksumSha256 !== upload.expectedSha256))
         throw new MediaDomainError('UPLOAD_INCOMPLETE', 'Uploaded object is incomplete.');
       await completeMediaUploadSession(database.db, {
         organizationId: principal.organizationId,
         sessionId: session.id,
         actualByteSize: object.byteSize,
         actualContentType: object.contentType,
-        checksumSha256: object.checksumSha256,
+        checksumSha256: object.checksumSha256 ?? upload.expectedSha256,
         guestOwnerHash: ownerHash,
       });
       await messaging.markWebsiteAttachmentProcessing(database.db, { visitor: principal, uploadId });

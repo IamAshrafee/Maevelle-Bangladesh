@@ -79,6 +79,37 @@ export async function findMediaAsset(
     : undefined;
 }
 
+/** Public image delivery is only from the exact, processed rendition of the current original. */
+export async function findPublicMediaRendition(
+  db: Kysely<DatabaseSchema>,
+  assetId: string,
+  renditionKey: MediaRenditionKey,
+): Promise<MediaAssetDelivery | undefined> {
+  const result = await sql<{
+    asset_id: string; status: MediaStatus; original_filename: string; alt_text: string | null;
+    storage_provider: string; bucket_name: string; object_key: string; mime_type: string;
+    byte_size: string; width_px: number; height_px: number;
+  }>`select asset.id::text asset_id,asset.status,asset.original_filename,asset.alt_text,
+      rendition.storage_provider,rendition.bucket_name,rendition.object_key,
+      rendition.mime_type,rendition.byte_size::text,rendition.width_px,rendition.height_px
+    from media.media_assets asset
+    join media.media_renditions rendition on rendition.organization_id=asset.organization_id
+      and rendition.asset_id=asset.id and rendition.source_object_id=asset.current_object_id
+      and rendition.rendition_key=${renditionKey}
+    where asset.id=${assetId}::uuid and asset.asset_type='IMAGE'
+      and asset.visibility_class='PUBLIC' and asset.status in ('READY','ARCHIVED')
+      and rendition.storage_provider<>'url' and rendition.mime_type in ('image/webp','image/avif')
+    order by rendition.created_at desc limit 1`.execute(db);
+  const row = result.rows[0];
+  return row ? {
+    id: row.asset_id, assetId: row.asset_id, visibility: 'PUBLIC', status: row.status,
+    originalFilename: row.original_filename, altText: row.alt_text,
+    provider: row.storage_provider, bucket: row.bucket_name, objectKey: row.object_key,
+    mimeType: row.mime_type, byteSize: Number(row.byte_size), widthPx: row.width_px,
+    heightPx: row.height_px, renditionKey,
+  } : undefined;
+}
+
 export function listMediaLibrary(
   db: Kysely<DatabaseSchema>,
   organizationId: string,
@@ -178,6 +209,7 @@ export async function listMediaLibrary(
       import_status: 'PENDING' | 'PROCESSING' | 'RETRY_WAIT' | 'COMPLETE' | 'FAILED' | null;
       import_attempts: number | null;
       import_next_attempt_at: string | null;
+      missing_public_renditions: boolean;
       purge_attempts: number;
       purge_retry_after: string | null;
       purge_lease_until: string | null;
@@ -193,6 +225,20 @@ export async function listMediaLibrary(
         asset.processing_error_code,asset.processing_error_message,
         import_job.status import_status,import_job.attempt_count import_attempts,
         import_job.next_attempt_at::text import_next_attempt_at,
+        (asset.asset_type='IMAGE' and asset.visibility_class='PUBLIC'
+          and asset.status in ('READY','ARCHIVED') and
+          exists(select 1 from media.media_objects original
+            where original.organization_id=asset.organization_id and original.id=asset.current_object_id
+              and original.storage_provider<>'url') and
+          (select count(distinct candidate.rendition_key) from media.media_renditions candidate
+            where candidate.organization_id=asset.organization_id and candidate.asset_id=asset.id
+              and candidate.source_object_id=asset.current_object_id
+              and candidate.storage_provider<>'url'
+              and candidate.mime_type in ('image/webp','image/avif')
+              and (asset.upload_source<>'MESSAGING_ATTACHMENT' or
+                candidate.rendition_key in ('thumbnail','card')))
+            < case when asset.upload_source='MESSAGING_ATTACHMENT' then 2 else 4 end
+        ) missing_public_renditions,
         asset.purge_attempts,asset.purge_retry_after::text,asset.purge_lease_until::text,
         asset.purge_last_error,
         asset.created_at::text,asset.updated_at::text,asset.version::text
@@ -244,6 +290,7 @@ export async function listMediaLibrary(
         attempts: asset.import_attempts ?? 0,
         nextAttemptAt: asset.import_next_attempt_at,
       } : null,
+      missingPublicRenditions: asset.missing_public_renditions,
       purgeAttempts: asset.purge_attempts,
       purgeRetryAfter: asset.purge_retry_after,
       purgeLeaseUntil: asset.purge_lease_until,

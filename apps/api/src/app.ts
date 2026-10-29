@@ -63,6 +63,10 @@ export function buildApi(options: BuildApiOptions) {
   app.addContentTypeParser('*', { parseAs: 'buffer' }, (_request, body, done) => {
     done(null, body);
   });
+  // The dedicated local Media proxy is streamed; other binary endpoints retain their parser.
+  app.addContentTypeParser('application/x-maevelle-media-upload', (_request, payload, done) => {
+    done(null, payload);
+  });
 
   app.addHook('onRequest', async (request, reply) => {
     reply.header('x-request-id', request.id);
