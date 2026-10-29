@@ -223,6 +223,55 @@ export async function setCurrentVariantPrice(
   });
 }
 
+/** Explicitly archives a price definition, deactivating it without removing historical record. */
+export async function archivePriceDefinition(
+  db: Kysely<DatabaseSchema>,
+  input: {
+    organizationId: string;
+    actorId: string;
+    priceDefinitionId: string;
+  },
+): Promise<{ priceDefinitionId: string; status: 'ARCHIVED'; version: number }> {
+  return db.transaction().execute(async (transaction) => {
+    const existing = await sql<{ id: string; status: string; version: string }>`
+      select id, status, version::text from pricing.price_definitions
+      where id = ${input.priceDefinitionId} and organization_id = ${input.organizationId}
+    `.execute(transaction);
+    const row = existing.rows[0];
+    if (!row) {
+      throw new PricingDomainError('NOT_FOUND', 'Price definition was not found.');
+    }
+    if (row.status === 'ARCHIVED') {
+      return {
+        priceDefinitionId: row.id,
+        status: 'ARCHIVED',
+        version: Number(row.version),
+      };
+    }
+    const result = await sql<{ id: string; version: string }>`
+      update pricing.price_definitions
+      set status = 'ARCHIVED',
+          updated_at = now(),
+          version = version + 1
+      where id = ${input.priceDefinitionId} and organization_id = ${input.organizationId}
+      returning id, version::text
+    `.execute(transaction);
+    const updated = result.rows[0];
+    if (!updated) throw new Error('Price definition archive did not return a row.');
+    await emitPriceEvent(transaction, {
+      organizationId: input.organizationId,
+      actorId: input.actorId,
+      priceDefinitionId: updated.id,
+      action: 'pricing.price_definition.archived',
+    });
+    return {
+      priceDefinitionId: updated.id,
+      status: 'ARCHIVED',
+      version: Number(updated.version),
+    };
+  });
+}
+
 /** The sole V1 price resolver shared by storefront, Cart, and Promotion calculation. */
 export async function resolveVariantPrice(
   db: Kysely<DatabaseSchema>,
@@ -269,6 +318,7 @@ export async function listVariantPrices(
     productId: string;
     productTitle: string;
     sku: string;
+    variantTitle: string | null;
     effectiveFrom: string;
     effectiveTo: string | null;
     status: string;
@@ -288,10 +338,11 @@ export async function listVariantPrices(
     product_id: string;
     product_title: string;
     sku: string;
+    variant_title: string | null;
   }>`
     select price.id,price.variant_id,price.amount::text,price.compare_at_amount::text,
       price.currency_code,price.effective_from,price.effective_to,price.status,price.version::text,
-      product.id::text as product_id,product.title as product_title,variant.sku
+      product.id::text as product_id,product.title as product_title,variant.sku,variant.title as variant_title
     from pricing.price_definitions price
     join catalog.product_variants variant
       on variant.id=price.variant_id and variant.organization_id=price.organization_id
@@ -310,6 +361,7 @@ export async function listVariantPrices(
     productId: row.product_id,
     productTitle: row.product_title,
     sku: row.sku,
+    variantTitle: row.variant_title ?? null,
     effectiveFrom: row.effective_from.toISOString(),
     effectiveTo: row.effective_to?.toISOString() ?? null,
     status: row.status,

@@ -2,6 +2,7 @@
 import type { CustomerLifecycleStageDto } from './crm.js';
 
 export * from './messaging/index.js';
+export * from './pricing.js';
 export interface ApiEnvelope<T> {
   readonly data: T;
 }

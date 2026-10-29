@@ -3,6 +3,7 @@ import { Type } from 'typebox';
 
 import type { DatabaseClient } from '@maevelle/database';
 import {
+  archivePriceDefinition,
   listVariantPrices,
   createPriceDefinition,
   PricingDomainError,
@@ -155,6 +156,24 @@ export function registerPricingRoutes(
               amount: string;
               compareAtAmount?: string | null;
             }),
+          }),
+        };
+      } catch (caught) {
+        return error(reply, caught);
+      }
+    },
+  );
+  app.post(
+    '/admin/pricing/prices/:id/archive',
+    { schema: { params: Type.Object({ id: Type.String() }) } },
+    async (request, reply) => {
+      const active = await requireCapability(database, auth, request.headers, 'pricing.manage');
+      if (!active) return reply.code(403).send({ error: 'FORBIDDEN' });
+      try {
+        return {
+          data: await archivePriceDefinition(database.db, {
+            ...active,
+            priceDefinitionId: (request.params as { id: string }).id,
           }),
         };
       } catch (caught) {
