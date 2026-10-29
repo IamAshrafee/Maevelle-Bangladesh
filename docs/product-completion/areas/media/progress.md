@@ -18,6 +18,9 @@
 - Added single-transaction asset replacement (`replaceProductMediaAsset`) with full audit trail.
 - Implemented bulk operations: `bulkOrganizeMediaAssets` (multi-asset folder and tag updates)
   and `bulkTrashMediaAssets` (safe usage-checked batch trashing of unattached assets).
+- Media Library usage, unused filtering, and single/bulk trash checks now include
+  conversation attachments. Admin shows the conversation use and links to its inbox entry;
+  the existing purge worker also retains assets referenced by messages.
 - Upgraded Admin Media Library (`apps/admin/app/media/page.tsx`) to production-grade shadcn/ui
   and Tailwind CSS, featuring Grid and List views, multi-select checkboxes, sticky bulk action
   bar (Move to Folder, Trash Unused), taxonomy creation, search/filter toolbar (including unused

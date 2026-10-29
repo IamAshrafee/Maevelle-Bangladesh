@@ -7,6 +7,12 @@ import * as messaging from './messaging/index.js';
 import * as facebook from './messaging/facebook.js';
 import * as instagram from './messaging/instagram.js';
 import { processNotificationOutbox } from './notifications.js';
+import {
+  bulkTrashMediaAssets,
+  listMediaLibrary,
+  registerUploadedMedia,
+  trashUnusedMediaAsset,
+} from './media.js';
 
 const database = createDatabase({
   connectionString: process.env.TEST_DATABASE_URL!,
@@ -94,6 +100,63 @@ const actor = () => ({
     'messaging.customer_link.manage',
     'messaging.reports.view',
   ],
+});
+
+it('keeps conversation attachments visible as media usage and out of trash', async () => {
+  const conversationId = await messaging.createConversation(database.db, {
+    organizationId,
+    channelConnectionId: connectionId,
+    contactId,
+    contactIdentityId: identityId,
+  });
+  const attached = await registerUploadedMedia(database.db, {
+    organizationId,
+    objectKey: `messages/${crypto.randomUUID()}.webp`,
+    mimeType: 'image/webp',
+    byteSize: 64,
+    checksumSha256: 'a'.repeat(64),
+    visibility: 'PRIVATE',
+  });
+  const unused = await registerUploadedMedia(database.db, {
+    organizationId,
+    objectKey: `messages/${crypto.randomUUID()}.webp`,
+    mimeType: 'image/webp',
+    byteSize: 64,
+    checksumSha256: 'b'.repeat(64),
+    visibility: 'PRIVATE',
+  });
+  const message = await sql<{ id: string }>`insert into messaging.messages
+    (organization_id,conversation_id,sequence,direction,sender_type,message_type,delivery_state)
+    values(${organizationId},${conversationId},1,'INBOUND','PROVIDER','ATTACHMENT','RECEIVED')
+    returning id::text`.execute(database.db);
+  await sql`insert into messaging.message_attachments
+    (organization_id,message_id,media_asset_id,position,kind,security_status)
+    values(${organizationId},${message.rows[0]!.id},${attached.id},0,'IMAGE','AVAILABLE')`.execute(database.db);
+
+  const library = await listMediaLibrary(database.db, {
+    organizationId, page: 1, pageSize: 100, unused: true,
+  });
+  expect(library.items.map((asset) => asset.id)).toContain(unused.id);
+  expect(library.items.map((asset) => asset.id)).not.toContain(attached.id);
+  const detail = (await listMediaLibrary(database.db, organizationId)).find(
+    (asset) => asset.id === attached.id,
+  );
+  expect(detail?.usages).toEqual([
+    expect.objectContaining({ domain: 'messaging', conversationId, label: 'Conversation attachment' }),
+  ]);
+  await expect(trashUnusedMediaAsset(database.db, {
+    organizationId, assetId: attached.id,
+  })).rejects.toMatchObject({ code: 'MEDIA_IN_USE', details: { usageCount: 1 } });
+  expect(await bulkTrashMediaAssets(database.db, {
+    organizationId, assetIds: [attached.id, unused.id],
+  })).toMatchObject({ trashedCount: 1, inUseCount: 1, trashedAssetIds: [unused.id] });
+  const states = await sql<{ id: string; status: string }>`select id::text,status
+    from media.media_assets where organization_id=${organizationId}
+      and id in (${attached.id}::uuid,${unused.id}::uuid)`.execute(database.db);
+  expect(states.rows).toEqual(expect.arrayContaining([
+    { id: attached.id, status: 'READY' },
+    { id: unused.id, status: 'TRASHED' },
+  ]));
 });
 
 it('rejects availability writes from a non-agent membership before changing state', async () => {

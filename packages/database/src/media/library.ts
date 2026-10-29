@@ -144,7 +144,8 @@ export async function listMediaLibrary(
     ${
       input.unused
         ? sql`and not exists(select 1 from catalog.product_media product_usage where product_usage.organization_id=asset.organization_id and product_usage.asset_id=asset.id)
-      and not exists(select 1 from reviews.review_media review_usage where review_usage.organization_id=asset.organization_id and review_usage.media_asset_id=asset.id)`
+      and not exists(select 1 from reviews.review_media review_usage where review_usage.organization_id=asset.organization_id and review_usage.media_asset_id=asset.id)
+      and not exists(select 1 from messaging.message_attachments message_usage where message_usage.organization_id=asset.organization_id and message_usage.media_asset_id=asset.id)`
         : sql``
     }
   `;
@@ -260,7 +261,7 @@ async function loadUsages(
   assetIds: readonly string[],
 ): Promise<readonly MediaUsage[]> {
   const idList = sql.join(assetIds.map((id) => sql`${id}::uuid`));
-  const [products, reviews] = await Promise.all([
+  const [products, reviews, messages] = await Promise.all([
     sql<{
       asset_id: string;
       id: string;
@@ -290,6 +291,15 @@ async function loadUsages(
       join reviews.reviews review on review.id=revision.review_id
       where link.organization_id=${organizationId} and link.media_asset_id in (${idList})
     `.execute(db),
+    sql<{ asset_id: string; id: string; conversation_id: string }>`
+      select attachment.media_asset_id::text asset_id,attachment.id::text,
+        message.conversation_id::text
+      from messaging.message_attachments attachment
+      join messaging.messages message on message.organization_id=attachment.organization_id
+        and message.id=attachment.message_id
+      where attachment.organization_id=${organizationId}
+        and attachment.media_asset_id in (${idList})
+    `.execute(db),
   ]);
   return [
     ...products.rows.map((usage) => ({
@@ -314,6 +324,14 @@ async function loadUsages(
       usageType: 'REVIEW_MEDIA',
       entityId: usage.asset_id,
       label: `Review ${usage.review_id}`,
+    })),
+    ...messages.rows.map((usage) => ({
+      id: usage.id,
+      domain: 'messaging',
+      usageType: 'MESSAGE_ATTACHMENT',
+      entityId: usage.asset_id,
+      label: 'Conversation attachment',
+      conversationId: usage.conversation_id,
     })),
   ];
 }
@@ -504,6 +522,7 @@ export async function authoritativeMediaUsageCount(
   const result = await sql<{ count: string }>`select (
     (select count(*) from catalog.product_media where organization_id=${organizationId} and asset_id=${assetId}::uuid)
     + (select count(*) from reviews.review_media where organization_id=${organizationId} and media_asset_id=${assetId}::uuid)
+    + (select count(*) from messaging.message_attachments where organization_id=${organizationId} and media_asset_id=${assetId}::uuid)
   )::text count`.execute(db);
   return Number(result.rows[0]?.count ?? 0);
 }

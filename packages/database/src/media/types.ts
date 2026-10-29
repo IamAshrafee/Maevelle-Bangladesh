@@ -58,6 +58,7 @@ export interface MediaUsage {
   readonly usageType: string;
   readonly entityId: string;
   readonly label: string | null;
+  readonly conversationId?: string;
   readonly productId?: string;
   readonly productTitle?: string;
   readonly variantId?: string | null;

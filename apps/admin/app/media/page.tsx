@@ -10,6 +10,7 @@ import {
   useState,
 } from 'react';
 import Image from 'next/image';
+import Link from 'next/link';
 import {
   Archive,
   Copy,
@@ -75,6 +76,7 @@ type MediaUsage = {
   readonly label: string | null;
   readonly productId?: string;
   readonly productTitle?: string;
+  readonly conversationId?: string;
   readonly variantId?: string | null;
   readonly variantSku?: string | null;
   readonly role?: 'GALLERY' | 'THUMBNAIL' | 'COLOR_GALLERY' | 'SIZE_DIAGRAM';
@@ -622,7 +624,7 @@ export default function MediaPage() {
     try {
       const result = await bulkTrashMedia(Array.from(selectedForBulk));
       setMessage(
-        `Bulk trash complete: ${result.trashedCount} trashed${result.skippedInUseCount > 0 ? `, ${result.skippedInUseCount} skipped because they are active in catalog/reviews` : ''}.`,
+        `Bulk trash complete: ${result.trashedCount} trashed${result.skippedInUseCount > 0 ? `, ${result.skippedInUseCount} skipped because they are in use` : ''}.`,
       );
       setTone(result.skippedInUseCount > 0 ? 'warning' : 'success');
       setSelectedForBulk(new Set());
@@ -1065,7 +1067,7 @@ export default function MediaPage() {
                               {asset.byteSize ? `${Math.ceil(asset.byteSize / 1024)} KB` : '—'}
                             </span>
                             <span>
-                              {asset.usages.length} placement{asset.usages.length === 1 ? '' : 's'}
+                              {asset.usages.length} use{asset.usages.length === 1 ? '' : 's'}
                             </span>
                           </div>
                         </div>
@@ -1642,9 +1644,9 @@ export default function MediaPage() {
                   </Button>
                 </form>
 
-                {/* Existing Usages / Placements */}
+                {/* Existing asset uses */}
                 <div className="space-y-2 border-t pt-3">
-                  <h3 className="text-xs font-semibold text-foreground">Active Placements</h3>
+                  <h3 className="text-xs font-semibold text-foreground">Active Uses</h3>
                   {selectedAsset.usages.length === 0 ? (
                     <p className="text-xs text-muted-foreground">
                       This asset is currently unattached (can be safely trashed).
@@ -1661,9 +1663,19 @@ export default function MediaPage() {
                               {u.productTitle ?? u.label ?? u.domain}
                             </p>
                             <p className="text-[10px] text-muted-foreground">
-                              {u.role ?? 'MEDIA'} · Position {u.position ?? 0}
+                              {u.domain === 'messaging'
+                                ? 'Message attachment'
+                                : `${u.role ?? 'MEDIA'}${u.position === undefined ? '' : ` · Position ${u.position}`}`}
                               {u.variantSku ? ` · SKU: ${u.variantSku}` : ''}
                             </p>
+                            {u.conversationId && (
+                              <Link
+                                href={`/messaging?conversation=${encodeURIComponent(u.conversationId)}`}
+                                className="text-primary underline-offset-2 hover:underline"
+                              >
+                                Open conversation
+                              </Link>
+                            )}
                           </div>
                           {u.productId && (
                             <Button
