@@ -14,7 +14,6 @@ import {
   Lock,
   Mail,
   MessageSquare,
-  RefreshCw,
   Send,
   ShieldAlert,
   ShieldCheck,
@@ -22,6 +21,7 @@ import {
   XCircle,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { RefreshButton } from '@/components/ui/refresh-button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -177,15 +177,12 @@ export function NotificationChannelsTab() {
           </p>
         </div>
 
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => void loadDiagnostics()}
-          className="h-8 text-xs border-border"
-        >
-          <RefreshCw className={cn('size-3.5 mr-1.5', loading && 'animate-spin')} />
-          Refresh Status
-        </Button>
+        <RefreshButton
+          size="icon-sm"
+          loading={loading}
+          onRefresh={() => void loadDiagnostics()}
+          tooltip="Refresh channel status"
+        />
       </div>
 
       {/* Channel Cards Grid */}

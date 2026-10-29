@@ -1,10 +1,11 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { Fingerprint, RefreshCw, UserCheck, Users, UserX } from 'lucide-react';
+import { Fingerprint, UserCheck, Users, UserX } from 'lucide-react';
 import type { CrmAnalyticsDto } from '@maevelle/contracts';
 import { fetchApiData } from '@/lib/api';
 import { Button } from '@/components/ui/button';
+import { RefreshButton } from '@/components/ui/refresh-button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select';
@@ -61,10 +62,7 @@ export function CrmAnalyticsConsole() {
         title="CRM analytics"
         description="Identity coverage, lifecycle distribution, relationship workload, and profile data quality from authoritative records."
         actions={
-          <Button variant="outline" onClick={() => void load()}>
-            <RefreshCw className="size-4" />
-            Refresh
-          </Button>
+          <RefreshButton onRefresh={() => void load()} tooltip="Refresh CRM analytics" />
         }
       />
       <CrmNav />

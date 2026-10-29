@@ -1,7 +1,8 @@
-import { RefreshCw, Search, X } from 'lucide-react';
+import { Search, X } from 'lucide-react';
 import type { UnitConditionDto, UnitStatusDto, WarehouseLocationDto } from '@maevelle/contracts';
 
 import { Button } from '@/components/ui/button';
+import { RefreshButton } from '@/components/ui/refresh-button';
 import { Input } from '@/components/ui/input';
 import { NativeSelect } from '@/components/ui/native-select';
 
@@ -160,10 +161,12 @@ export function UnitsListFilters({
           ) : null}
         </div>
 
-        <Button variant="outline" size="xs" onClick={onRefresh} disabled={loading}>
-          <RefreshCw className={loading ? 'animate-spin' : undefined} aria-hidden="true" />
-          Refresh
-        </Button>
+        <RefreshButton
+          size="icon-xs"
+          loading={loading}
+          onRefresh={onRefresh}
+          tooltip="Refresh units list"
+        />
       </div>
     </div>
   );

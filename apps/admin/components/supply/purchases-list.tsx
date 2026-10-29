@@ -24,6 +24,7 @@ import { OperationalFeedback } from '@/components/operational-worklist';
 import { StatusBadge } from '@/components/status-badge';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { RefreshButton } from '@/components/ui/refresh-button';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select';
@@ -245,6 +246,11 @@ export function PurchasesList() {
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
+          <RefreshButton
+            loading={loading}
+            tooltip="Refresh purchase orders"
+          />
+
           {canManageProcurement ? (
             <Button size="sm" onClick={() => setCreateOpen(true)} className="h-11 gap-1.5 sm:h-8">
               <Plus aria-hidden="true" className="size-4" />

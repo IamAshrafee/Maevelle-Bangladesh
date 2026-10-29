@@ -33,6 +33,7 @@ import { StatusBadge } from '@/components/status-badge';
 import { SupplyWorkspaceNav } from '@/components/supply/supply-workspace-nav';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { RefreshButton } from '@/components/ui/refresh-button';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import {
@@ -298,6 +299,7 @@ export function ReceivingWorkspace() {
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
+          <RefreshButton tooltip="Refresh receiving workspace" />
           <Button
             variant="outline"
             size="sm"

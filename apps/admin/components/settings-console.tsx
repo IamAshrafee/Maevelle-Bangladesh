@@ -1,12 +1,13 @@
 'use client';
 
-import { Building2, RefreshCw, Save, Store } from 'lucide-react';
+import { Building2, Save, Store } from 'lucide-react';
 import { type FormEvent, useCallback, useEffect, useState } from 'react';
 
 import { Stats, StatsCard, StatsTitle, StatsValue, StatsDescription } from '@/components/ui/stats';
 import { SettingsNav } from './settings/settings-nav';
 import { OperationalFeedback, OperationalPageHeader } from './operational-worklist';
 import { Button } from '@/components/ui/button';
+import { RefreshButton } from '@/components/ui/refresh-button';
 
 type Profile = {
   readonly display_name: string;
@@ -132,9 +133,7 @@ export function SettingsConsole() {
           title="Organization settings"
           description="Manage typed business and Storefront presentation profiles without mixing secrets into operational settings."
           actions={
-            <button className="button secondary" type="button" onClick={refresh}>
-              <RefreshCw aria-hidden="true" /> Refresh
-            </button>
+            <RefreshButton onRefresh={refresh} tooltip="Refresh organization settings" />
           }
         />
         <SettingsNav />

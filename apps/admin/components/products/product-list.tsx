@@ -9,7 +9,6 @@ import {
   ImageIcon,
   Package,
   PackagePlus,
-  RefreshCw,
 } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
@@ -23,6 +22,7 @@ import type {
 } from '@maevelle/contracts';
 
 import { ProductTypeManager } from '@/components/product-types';
+import { RefreshButton } from '@/components/ui/refresh-button';
 import { productReadinessResolutionHref } from '@/components/products/product-workspace-links';
 import { StatusBadge } from '@/components/status-badge';
 import { Button } from '@/components/ui/button';
@@ -228,9 +228,11 @@ export function ProductList() {
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <ProductTypeManager compact onChanged={() => load(undefined, true)} />
-          <Button variant="outline" disabled={state === 'loading'} onClick={() => void load()}>
-            <RefreshCw aria-hidden="true" /> Refresh
-          </Button>
+          <RefreshButton
+            loading={state === 'loading'}
+            onRefresh={() => void load()}
+            tooltip="Refresh products"
+          />
           <Button render={<Link href="/products/new" />}>
             <PackagePlus aria-hidden="true" /> Create Product
           </Button>

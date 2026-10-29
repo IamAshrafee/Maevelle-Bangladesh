@@ -2,13 +2,14 @@
 
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { RefreshCw, RotateCcw, Search } from 'lucide-react';
+import { RotateCcw, Search } from 'lucide-react';
 import { useDeferredValue, useEffect, useState } from 'react';
 
 import type { InventoryHistoryDto, PaginatedDto, WarehouseLocationDto } from '@maevelle/contracts';
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { RefreshButton } from '@/components/ui/refresh-button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import {
@@ -183,9 +184,11 @@ export function MovementHistory() {
             and resulting balance.
           </p>
         </div>
-        <Button variant="outline" disabled={state === 'loading'} onClick={() => void load()}>
-          <RefreshCw aria-hidden="true" /> Refresh
-        </Button>
+        <RefreshButton
+          loading={state === 'loading'}
+          onRefresh={() => void load()}
+          tooltip="Refresh movement history"
+        />
       </header>
 
       <InventoryFeedback isError={state === 'error'} message={message} />

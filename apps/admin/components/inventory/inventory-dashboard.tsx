@@ -21,6 +21,7 @@ import type { InventoryOverviewDto } from '@maevelle/contracts';
 import { useAdminCapability } from '@/components/admin-capabilities';
 import { StatusBadge } from '@/components/status-badge';
 import { Button } from '@/components/ui/button';
+import { RefreshButton } from '@/components/ui/refresh-button';
 import {
   AdminPage,
   EmptyState,
@@ -77,6 +78,11 @@ export function InventoryDashboard() {
         description="A location-aware snapshot of stock health, work queues, recent ledger movement, and the next operational actions."
         actions={
           <>
+            <RefreshButton
+              loading={loading}
+              onRefresh={() => setReload((value) => value + 1)}
+              tooltip="Refresh inventory overview"
+            />
             <Button variant="outline" render={<Link href="/inventory/replenishment" />}>
               <TrendingDown className="size-4" />Replenishment
             </Button>

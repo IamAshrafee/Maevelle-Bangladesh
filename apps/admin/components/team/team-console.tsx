@@ -8,7 +8,6 @@ import {
   KeyRound,
   Layers,
   Mail,
-  RefreshCw,
   Shield,
   ShieldCheck,
   UserCheck,
@@ -19,6 +18,7 @@ import {
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { RefreshButton } from '@/components/ui/refresh-button';
 import {
   Stats,
   StatsCard,
@@ -155,14 +155,10 @@ function TeamConsoleContent() {
                   await reloadAll();
                 }}
               />
-              <Button
-                variant="outline"
-                size="sm"
-                className="h-9 px-3 text-xs"
-                onClick={() => void reloadAll()}
-              >
-                <RefreshCw className="size-3.5 mr-1" /> Refresh
-              </Button>
+              <RefreshButton
+                onRefresh={() => void reloadAll()}
+                tooltip="Refresh team members"
+              />
             </div>
           }
         />

@@ -9,7 +9,6 @@ import {
   ExternalLink,
   GitMerge,
   PlusCircle,
-  RefreshCw,
   ShoppingBag,
   Tag,
   FileText,
@@ -19,6 +18,7 @@ import type { CustomerDetailDto } from '@maevelle/contracts';
 
 import { Breadcrumb } from '@/components/ui/breadcrumb';
 import { Button } from '@/components/ui/button';
+import { RefreshButton } from '@/components/ui/refresh-button';
 import { Badge } from '@/components/ui/badge';
 import { useAdminCapability } from '@/components/admin-capabilities';
 import { CustomerStatusBadge } from './customer-status-badge';
@@ -155,19 +155,11 @@ export function CustomerHeader({
 
         {/* Action Bar */}
         <div className="flex flex-wrap items-center gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={isRefreshing}
-            onClick={onRefresh}
-            className="h-9"
-          >
-            <RefreshCw
-              className={`mr-1.5 size-3.5 ${isRefreshing ? 'animate-spin' : ''}`}
-              aria-hidden="true"
-            />
-            Refresh
-          </Button>
+          <RefreshButton
+            loading={isRefreshing}
+            onRefresh={onRefresh}
+            tooltip="Refresh customer details"
+          />
 
           {/* Quick Create Manual Order Button */}
           {!isReadOnly && (

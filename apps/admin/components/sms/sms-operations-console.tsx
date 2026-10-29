@@ -10,7 +10,6 @@ import {
   LayoutDashboard,
   Layers,
   MessageSquareText,
-  RefreshCw,
   Settings2,
   ShieldCheck,
 } from 'lucide-react';
@@ -36,6 +35,7 @@ import { SmsTemplatesTab } from './sms-templates-tab';
 import { SmsTestLabTab } from './sms-test-lab-tab';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { RefreshButton } from '@/components/ui/refresh-button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
 const tabs: readonly { key: SmsTabKey; label: string; icon: typeof Activity }[] = [
@@ -206,13 +206,11 @@ export function SmsOperationsConsole() {
             recipient protection, and provider readiness.
           </p>
         </div>
-        <Button variant="outline" onClick={() => void reload()} disabled={loading || isPending}>
-          <RefreshCw
-            aria-hidden="true"
-            className={`mr-2 size-4 ${loading ? 'animate-spin motion-reduce:animate-none' : ''}`}
-          />
-          Refresh Data
-        </Button>
+        <RefreshButton
+          loading={loading || isPending}
+          onRefresh={() => void reload()}
+          tooltip="Refresh SMS operations"
+        />
       </header>
       {error ? (
         <div

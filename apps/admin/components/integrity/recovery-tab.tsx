@@ -8,13 +8,13 @@ import {
   Info,
   Layers,
   Lock,
-  RefreshCw,
   Shield,
   ShieldAlert,
   ShieldCheck,
   Wrench,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { RefreshButton } from '@/components/ui/refresh-button';
 import { StatusBadge } from '@/components/status-badge';
 import {
   Table,
@@ -66,10 +66,12 @@ export function RecoveryTab({
         title={`Pending Repairable Projections (${repairableFindings.length})`}
         description="Findings where authoritative source data is intact and derived read projections can be safely recalculated."
         actions={
-          <Button variant="outline" size="sm" onClick={onRefresh} disabled={loading} className="h-8 text-xs">
-            <RefreshCw className={`size-3.5 mr-1.5 ${loading ? 'animate-spin' : ''}`} />
-            Refresh
-          </Button>
+          <RefreshButton
+            size="icon-sm"
+            loading={loading}
+            onRefresh={onRefresh}
+            tooltip="Refresh repairable projections"
+          />
         }
       >
         {repairableFindings.length === 0 ? (

@@ -2,9 +2,10 @@
 
 import Link from 'next/link';
 import { useCallback, useEffect, useState } from 'react';
-import { GitCompareArrows, RefreshCw } from 'lucide-react';
+import { GitCompareArrows } from 'lucide-react';
 import { fetchApiData } from '@/lib/api';
 import { Button } from '@/components/ui/button';
+import { RefreshButton } from '@/components/ui/refresh-button';
 import { Textarea } from '@/components/ui/textarea';
 import {
   Dialog,
@@ -89,10 +90,7 @@ export function DuplicateReviewConsole() {
         title="Duplicate review center"
         description="Compare explainable identity signals before merging. No candidate is merged automatically."
         actions={
-          <Button variant="outline" onClick={() => void load()}>
-            <RefreshCw className="size-4" />
-            Refresh
-          </Button>
+          <RefreshButton onRefresh={() => void load()} tooltip="Refresh duplicate reviews" />
         }
       />
       <CrmNav />

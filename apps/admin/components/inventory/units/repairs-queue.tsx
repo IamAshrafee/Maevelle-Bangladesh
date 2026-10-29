@@ -2,9 +2,10 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
-import { Wrench, Boxes, ShieldCheck, CheckCircle, Search, RefreshCw, Loader2 } from 'lucide-react';
+import { Wrench, Boxes, ShieldCheck, CheckCircle, Search, Loader2 } from 'lucide-react';
 import type { InventoryUnitDto, PaginationDto, WarehouseLocationDto } from '@maevelle/contracts';
 import { Button } from '@/components/ui/button';
+import { RefreshButton } from '@/components/ui/refresh-button';
 import { Input } from '@/components/ui/input';
 import { NativeSelect } from '@/components/ui/native-select';
 import {
@@ -126,16 +127,11 @@ export function RepairsQueue() {
             <span>All Units</span>
           </Button>
 
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => void loadRepairUnits()}
-            disabled={loading}
-            className="gap-1.5"
-          >
-            <RefreshCw className={cn('size-3.5', loading && 'animate-spin')} />
-            <span>Refresh</span>
-          </Button>
+          <RefreshButton
+            loading={loading}
+            onRefresh={() => void loadRepairUnits()}
+            tooltip="Refresh repairs queue"
+          />
         </PageActions>
       </PageHeader>
       <QualityWorkspaceTabs />

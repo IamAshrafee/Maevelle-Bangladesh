@@ -9,12 +9,12 @@ import {
   PauseCircle,
   PhoneCall,
   PlayCircle,
-  RefreshCw,
   XCircle,
 } from 'lucide-react';
 
 import type { OrderDetailDto } from '@maevelle/contracts';
 import { Button } from '@/components/ui/button';
+import { RefreshButton } from '@/components/ui/refresh-button';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -70,10 +70,7 @@ export function OrderHeaderActions({
 
   return (
     <div className="flex flex-wrap items-center gap-2">
-      <Button variant="outline" size="sm" onClick={onRefresh}>
-        <RefreshCw className="mr-1.5 size-3.5" aria-hidden="true" />
-        Refresh
-      </Button>
+      <RefreshButton onRefresh={onRefresh} size="icon-sm" tooltip="Refresh order" />
 
       {/* Primary Action Button */}
       {capabilities.canConfirm && (

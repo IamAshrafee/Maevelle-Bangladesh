@@ -14,6 +14,7 @@ import { SmsStatusBadge } from './sms-status-badge';
 import { fetchSmsApi } from './sms-api';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { RefreshButton } from '@/components/ui/refresh-button';
 import {
   Dialog,
   DialogContent,
@@ -235,10 +236,12 @@ export function SmsDetailSheet({
                       Send Another Copy
                     </Button>
                   ) : null}
-                  <Button size="sm" variant="ghost" onClick={() => void onRefresh(notification.id)}>
-                    <RefreshCw aria-hidden="true" className="mr-1.5 size-3.5" />
-                    Refresh
-                  </Button>
+                  <RefreshButton
+                    size="icon-sm"
+                    variant="ghost"
+                    onRefresh={() => void onRefresh(notification.id)}
+                    tooltip="Refresh notification"
+                  />
                 </div>
                 <p className="mt-2 text-[11px] text-muted-foreground">
                   {notification.availableActions.canRetry

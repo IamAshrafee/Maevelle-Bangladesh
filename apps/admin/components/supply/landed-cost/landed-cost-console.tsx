@@ -2,13 +2,14 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
-import { HelpCircle, Layers3, PackageCheck, RefreshCw } from 'lucide-react';
+import { HelpCircle, Layers3, PackageCheck } from 'lucide-react';
 import type { ApiEnvelope, InboundShipmentDto } from '@maevelle/contracts';
 import { useAdminCapability } from '@/components/admin-capabilities';
 import { OperationalFeedback } from '@/components/operational-worklist';
 import { SupplyWorkspaceNav } from '@/components/supply/supply-workspace-nav';
 import { Breadcrumb } from '@/components/ui/breadcrumb';
 import { Button } from '@/components/ui/button';
+import { RefreshButton } from '@/components/ui/refresh-button';
 import { LoadingState } from '@/components/ui/page-shell';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
@@ -127,16 +128,11 @@ export function LandedCostConsole() {
           </p>
         </div>
 
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => void loadData()}
-          disabled={loading}
-          className="gap-1.5 self-start lg:self-auto"
-        >
-          <RefreshCw aria-hidden="true" className={`size-3.5 ${loading ? 'animate-spin' : ''}`} />
-          <span>{loading ? 'Refreshing…' : 'Refresh'}</span>
-        </Button>
+        <RefreshButton
+          loading={loading}
+          onRefresh={() => void loadData()}
+          tooltip="Refresh landed cost"
+        />
       </header>
 
       <SupplyWorkspaceNav />

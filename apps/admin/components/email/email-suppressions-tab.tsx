@@ -6,7 +6,6 @@ import {
   ShieldAlert,
   Search,
   Plus,
-  RotateCw,
   Copy,
   Check,
   AlertTriangle,
@@ -15,6 +14,7 @@ import {
 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { RefreshButton } from '@/components/ui/refresh-button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -199,9 +199,7 @@ export function EmailSuppressionsTab({ suppressions, onRefresh }: EmailSuppressi
               <Button size="sm" variant="outline" onClick={() => setAddDialogOpen(true)} className="h-8 text-xs">
                 <Plus className="mr-1.5 size-3.5" /> Suppress Address
               </Button>
-              <Button size="sm" variant="ghost" onClick={onRefresh} className="h-8 text-xs">
-                <RotateCw className="size-3.5" />
-              </Button>
+              <RefreshButton size="icon-sm" variant="ghost" onRefresh={onRefresh} tooltip="Refresh suppressions" />
             </div>
           </div>
 

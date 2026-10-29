@@ -15,6 +15,7 @@ import {
   Zap,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { RefreshButton } from '@/components/ui/refresh-button';
 import { Badge } from '@/components/ui/badge';
 import { SettingsCard, SettingsSection } from '@/components/settings/settings-card';
 import { SettingsNav } from '@/components/settings/settings-nav';
@@ -82,17 +83,11 @@ export function SystemSettingsConsole() {
           </p>
         </div>
 
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          onClick={loadData}
-          disabled={loading}
-          className="text-xs h-8 gap-1.5"
-        >
-          <RefreshCw className={`size-3.5 ${loading ? 'animate-spin' : ''}`} />
-          Refresh Diagnostics
-        </Button>
+        <RefreshButton
+          loading={loading}
+          onRefresh={loadData}
+          tooltip="Refresh diagnostics"
+        />
       </div>
 
       {error && (

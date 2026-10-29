@@ -2,7 +2,7 @@
 
 import { useDeferredValue, useEffect, useState } from 'react';
 import Link from 'next/link';
-import { ArrowRight, PackagePlus, Pencil, Plus, RefreshCw, RotateCcw } from 'lucide-react';
+import { ArrowRight, PackagePlus, Pencil, Plus, RotateCcw } from 'lucide-react';
 
 import type {
   ReplenishmentPolicyDto,
@@ -23,6 +23,7 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
+import { RefreshButton } from '@/components/ui/refresh-button';
 import { Input } from '@/components/ui/input';
 import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select';
 import {
@@ -218,7 +219,11 @@ export function ReplenishmentWorkspace() {
               {locations.map((location) => <NativeSelectOption key={location.id} value={location.id}>{location.name}</NativeSelectOption>)}
             </NativeSelect>
           </label>
-          <Button variant="outline" onClick={() => setReload((value) => value + 1)}><RefreshCw className="size-4" />Refresh</Button>
+          <RefreshButton
+            loading={loading}
+            onRefresh={() => setReload((value) => value + 1)}
+            tooltip="Refresh replenishment rules"
+          />
         </div>
       </PagePanel>
 

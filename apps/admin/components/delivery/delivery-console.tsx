@@ -18,7 +18,6 @@ import {
   PackageX,
   Phone,
   Receipt,
-  RefreshCw,
   RotateCcw,
   Route,
   Search,
@@ -34,6 +33,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { RefreshButton } from '@/components/ui/refresh-button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Stats, StatsCard, StatsDescription, StatsTitle, StatsValue } from '@/components/ui/stats';
@@ -346,15 +346,12 @@ export function DeliveryConsole() {
           >
             <Truck className="size-4" /> Couriers & Accounts
           </Button>
-          <Button
+          <RefreshButton
             variant="ghost"
-            size="icon"
-            onClick={() => void reload()}
-            title="Refresh"
-            disabled={loading}
-          >
-            <RefreshCw className={`size-4 ${loading ? 'animate-spin' : ''}`} />
-          </Button>
+            loading={loading}
+            onRefresh={() => void reload()}
+            tooltip="Refresh deliveries"
+          />
         </div>
       </div>
 

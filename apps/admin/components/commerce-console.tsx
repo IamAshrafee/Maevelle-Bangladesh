@@ -1,6 +1,6 @@
 'use client';
 
-import { BadgePercent, CalendarClock, Plus, RefreshCw, Tags } from 'lucide-react';
+import { BadgePercent, CalendarClock, Plus, Tags } from 'lucide-react';
 import { type FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
 
 import { Stats, StatsCard, StatsTitle, StatsValue, StatsDescription } from '@/components/ui/stats';
@@ -13,6 +13,7 @@ import {
 } from './operational-worklist';
 import { StatusBadge } from './status-badge';
 import { Button } from '@/components/ui/button';
+import { RefreshButton } from '@/components/ui/refresh-button';
 import {
   Table,
   TableBody,
@@ -177,9 +178,7 @@ export function PricingConsole() {
           title="Variant pricing"
           description="Create exact-money, scheduled Variant prices using named Product and SKU selections."
           actions={
-            <Button variant="outline" size="sm" onClick={() => void load()}>
-            <RefreshCw className="size-3.5 mr-1.5" /> Refresh
-          </Button>
+            <RefreshButton onRefresh={() => void load()} tooltip="Refresh pricing" />
           }
         />
         {message ? <OperationalFeedback tone={tone}>{message}</OperationalFeedback> : null}
@@ -472,9 +471,7 @@ export function PromotionsConsole() {
           title="Promotions and coupons"
           description="Create scheduled server-evaluated benefits and review committed commercial usage."
           actions={
-            <button className="button secondary" type="button" onClick={() => void load()}>
-              <RefreshCw aria-hidden="true" /> Refresh
-            </button>
+            <RefreshButton onRefresh={() => void load()} tooltip="Refresh promotions" />
           }
         />
         {message ? <OperationalFeedback tone={tone}>{message}</OperationalFeedback> : null}

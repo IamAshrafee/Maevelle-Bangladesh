@@ -14,7 +14,6 @@ import {
   Package,
   PackageCheck,
   PackageOpen,
-  RefreshCw,
   RotateCcw,
   Search,
   Send,
@@ -32,6 +31,7 @@ import { CustomerDeliveryRiskCard } from '@/components/delivery/customer-deliver
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button, buttonVariants } from '@/components/ui/button';
+import { RefreshButton } from '@/components/ui/refresh-button';
 import {
   Card,
   CardContent,
@@ -233,16 +233,11 @@ export function DeliveryOperationsConsole() {
         </div>
 
         <div className="flex items-center gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => void loadOperations()}
-            disabled={loading}
-            className="h-9"
-          >
-            <RefreshCw className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
-            Refresh Overview
-          </Button>
+          <RefreshButton
+            loading={loading}
+            onRefresh={() => void loadOperations()}
+            tooltip="Refresh delivery operations"
+          />
 
           <Link
             href="/fulfillments"

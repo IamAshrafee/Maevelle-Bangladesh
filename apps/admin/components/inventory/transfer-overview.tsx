@@ -2,13 +2,14 @@
 
 import { useDeferredValue, useEffect, useState } from 'react';
 import Link from 'next/link';
-import { ArrowRight, Plus, RefreshCw, Search, Truck } from 'lucide-react';
+import { ArrowRight, Plus, Search, Truck } from 'lucide-react';
 
 import type { PaginatedDto, WarehouseLocationDto, WarehouseTransferDto } from '@maevelle/contracts';
 
 import { useAdminCapability } from '@/components/admin-capabilities';
 import { StatusBadge } from '@/components/status-badge';
 import { Button } from '@/components/ui/button';
+import { RefreshButton } from '@/components/ui/refresh-button';
 import { Input } from '@/components/ui/input';
 import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select';
 import { AdminPage, EmptyState, ErrorState, LoadingState, PageHeader, PagePanel, PageSection } from '@/components/ui/page-shell';
@@ -106,7 +107,11 @@ export function TransferOverview() {
           <label className="space-y-1.5 text-sm font-medium"><span>Status</span><NativeSelect value={status} onChange={(event) => { setStatus(event.target.value); setPage(1); }} className="w-full"><NativeSelectOption value="">All statuses</NativeSelectOption>{statuses.map((value) => <NativeSelectOption key={value} value={value}>{readable(value)}</NativeSelectOption>)}</NativeSelect></label>
           <label className="space-y-1.5 text-sm font-medium"><span>Source</span><NativeSelect value={sourceLocationId} onChange={(event) => { setSourceLocationId(event.target.value); setPage(1); }} className="w-full"><NativeSelectOption value="">Any source</NativeSelectOption>{locations.map((location) => <NativeSelectOption key={location.id} value={location.id}>{location.name}</NativeSelectOption>)}</NativeSelect></label>
           <label className="space-y-1.5 text-sm font-medium"><span>Destination</span><NativeSelect value={destinationLocationId} onChange={(event) => { setDestinationLocationId(event.target.value); setPage(1); }} className="w-full"><NativeSelectOption value="">Any destination</NativeSelectOption>{locations.map((location) => <NativeSelectOption key={location.id} value={location.id}>{location.name}</NativeSelectOption>)}</NativeSelect></label>
-          <Button variant="outline" onClick={() => setReload((value) => value + 1)}><RefreshCw className="size-4" />Refresh</Button>
+          <RefreshButton
+            loading={loading}
+            onRefresh={() => setReload((value) => value + 1)}
+            tooltip="Refresh transfers"
+          />
         </div>
       </PagePanel>
 

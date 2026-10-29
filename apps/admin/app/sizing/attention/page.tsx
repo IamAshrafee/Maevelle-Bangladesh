@@ -1,13 +1,14 @@
 'use client';
 
 import type { SizingAttentionItemDto } from '@maevelle/contracts';
-import { AlertTriangle, ArrowRight, CheckCircle2, RefreshCw } from 'lucide-react';
+import { AlertTriangle, ArrowRight, CheckCircle2 } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Suspense, useCallback, useEffect, useState } from 'react';
 
 import { StatusBadge } from '@/components/status-badge';
 import { Button } from '@/components/ui/button';
+import { RefreshButton } from '@/components/ui/refresh-button';
 import {
   AdminPage,
   EmptyState,
@@ -60,9 +61,11 @@ function SizingAttentionContent() {
         title="Needs Attention"
         description="Resolve specific customer-facing sizing problems. Each item explains the consequence and opens the exact place to fix it."
         actions={
-          <Button variant="outline" onClick={() => void load()} disabled={loading}>
-            <RefreshCw aria-hidden="true" /> Refresh
-          </Button>
+          <RefreshButton
+            loading={loading}
+            onRefresh={() => void load()}
+            tooltip="Refresh sizing attention"
+          />
         }
       />
 

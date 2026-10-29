@@ -12,12 +12,12 @@ import {
   Eye,
   Filter,
   Loader2,
-  RefreshCw,
   Search,
   SlidersHorizontal,
 } from 'lucide-react';
 import type { NotificationHistoryRowDto } from '@maevelle/contracts';
 import { Button } from '@/components/ui/button';
+import { RefreshButton } from '@/components/ui/refresh-button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { NativeSelect } from '@/components/ui/native-select';
@@ -195,15 +195,13 @@ export function NotificationHistoryTab({
             />
           </div>
 
-          <Button
+          <RefreshButton
             variant="ghost"
-            size="icon"
-            onClick={() => void loadHistory()}
-            className="size-8 text-muted-foreground hover:text-foreground shrink-0"
-            title="Refresh logs"
-          >
-            <RefreshCw className={cn('size-3.5', loading && 'animate-spin')} />
-          </Button>
+            size="icon-sm"
+            loading={loading}
+            onRefresh={() => void loadHistory()}
+            tooltip="Refresh logs"
+          />
         </div>
       </div>
 

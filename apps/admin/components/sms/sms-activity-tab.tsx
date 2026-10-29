@@ -1,12 +1,13 @@
 'use client';
 
 import { useState } from 'react';
-import { Eye, Filter, RefreshCw, Search, X } from 'lucide-react';
+import { Eye, Filter, Search, X } from 'lucide-react';
 import type { SmsActivityFilters, SmsNotificationRowDto, SmsTemplateDto } from './sms-types';
 import { formatBangladeshPhone, formatSmsDate, smsEventLabel } from './sms-types';
 import { SmsStatusBadge } from './sms-status-badge';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { RefreshButton } from '@/components/ui/refresh-button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -68,13 +69,12 @@ export function SmsActivityTab({
               available.
             </CardDescription>
           </div>
-          <Button size="sm" variant="outline" onClick={onRefresh} disabled={loading}>
-            <RefreshCw
-              aria-hidden="true"
-              className={`mr-1.5 size-3.5 ${loading ? 'animate-spin motion-reduce:animate-none' : ''}`}
-            />
-            Refresh
-          </Button>
+          <RefreshButton
+            size="icon-sm"
+            loading={loading}
+            onRefresh={onRefresh}
+            tooltip="Refresh SMS activity"
+          />
         </div>
         <form
           className="mt-4 grid gap-3 lg:grid-cols-[minmax(240px,1.4fr)_repeat(4,minmax(145px,0.6fr))]"

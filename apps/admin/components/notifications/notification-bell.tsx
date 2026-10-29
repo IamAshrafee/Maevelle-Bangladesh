@@ -9,7 +9,6 @@ import {
   CheckCheck,
   ExternalLink,
   Loader2,
-  RefreshCw,
   ShoppingBag,
   CreditCard,
   Truck,
@@ -22,6 +21,7 @@ import {
 } from 'lucide-react';
 import type { NotificationInboxItemDto } from '@maevelle/contracts';
 import { Button } from '@/components/ui/button';
+import { RefreshButton } from '@/components/ui/refresh-button';
 import { Badge } from '@/components/ui/badge';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import {
@@ -242,15 +242,13 @@ export function NotificationBell() {
             </Button>
           )}
 
-          <Button
+          <RefreshButton
             variant="ghost"
-            size="icon"
-            className="size-7 text-muted-foreground hover:text-foreground transition-colors"
-            onClick={() => void fetchInbox(true)}
-            title="Refresh inbox"
-          >
-            <RefreshCw className={cn('size-3.5', loading && 'animate-spin')} />
-          </Button>
+            size="icon-xs"
+            loading={loading}
+            onRefresh={() => void fetchInbox(true)}
+            tooltip="Refresh notifications"
+          />
         </div>
       </div>
 

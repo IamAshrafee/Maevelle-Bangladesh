@@ -15,6 +15,7 @@ import {
   SlidersHorizontal,
 } from 'lucide-react';
 import { AdminPage, PageHeader } from '@/components/ui/page-shell';
+import { RefreshButton } from '@/components/ui/refresh-button';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import { NotificationInboxTab } from './notification-inbox-tab';
@@ -115,6 +116,9 @@ export function NotificationsCenter() {
         eyebrow="Communications & Dispatch"
         title="Notifications Center"
         description="Unified administration for in-app staff alerts, customer transactional email and SMS deliveries, channel adapters, template authoring, and operational recovery."
+        actions={
+          <RefreshButton tooltip="Refresh notifications center" />
+        }
       />
 
       {/* Primary Sub-Navigation Bar */}

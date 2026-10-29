@@ -2,10 +2,11 @@
 
 import Link from 'next/link';
 import { useCallback, useEffect, useState } from 'react';
-import { Fingerprint, RefreshCw } from 'lucide-react';
+import { Fingerprint } from 'lucide-react';
 import type { CustomerIdentityLinkDto } from '@maevelle/contracts';
 import { fetchApiData } from '@/lib/api';
 import { Button } from '@/components/ui/button';
+import { RefreshButton } from '@/components/ui/refresh-button';
 import { StatusBadge } from '@/components/status-badge';
 import {
   Table,
@@ -52,10 +53,7 @@ export function IdentityReviewConsole() {
         title="Identity review"
         description="Review scoped website, Facebook, and Instagram identity evidence. Unverified candidates never expose customer history."
         actions={
-          <Button variant="outline" onClick={() => void load()}>
-            <RefreshCw className="size-4" />
-            Refresh
-          </Button>
+          <RefreshButton onRefresh={() => void load()} tooltip="Refresh identity review" />
         }
       />
       <CrmNav />

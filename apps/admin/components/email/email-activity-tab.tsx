@@ -5,7 +5,6 @@ import Link from 'next/link';
 import {
   Search,
   Filter,
-  RotateCw,
   Eye,
   Send,
   ExternalLink,
@@ -15,6 +14,7 @@ import {
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { RefreshButton } from '@/components/ui/refresh-button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { EmailStatusBadge } from './email-status-badge';
@@ -81,10 +81,12 @@ export function EmailActivityTab({
             </CardDescription>
           </div>
           <div className="flex items-center gap-2">
-            <Button size="sm" variant="outline" onClick={onRefresh} disabled={loading} className="h-8 text-xs">
-              <RotateCw className={`mr-1.5 size-3.5 ${loading ? 'animate-spin' : ''}`} />
-              Refresh
-            </Button>
+            <RefreshButton
+              size="icon-sm"
+              loading={loading}
+              onRefresh={onRefresh}
+              tooltip="Refresh email activity"
+            />
           </div>
         </div>
 

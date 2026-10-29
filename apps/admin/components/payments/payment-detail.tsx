@@ -6,7 +6,6 @@ import {
   Landmark,
   PackageCheck,
   ReceiptText,
-  RefreshCw,
   RotateCcw,
   UserRound,
   XCircle,
@@ -21,6 +20,7 @@ import { useAdminCapability } from '@/components/admin-capabilities';
 import { OperationalEmptyState, OperationalFeedback } from '@/components/operational-worklist';
 import { StatusBadge } from '@/components/status-badge';
 import { Button } from '@/components/ui/button';
+import { RefreshButton } from '@/components/ui/refresh-button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
@@ -225,9 +225,10 @@ export function PaymentDetail({ paymentId }: { readonly paymentId: string }) {
             <Button render={<Link href={`/orders/${payment.orderId}`} />} variant="outline">
               Open order <ExternalLink className="size-4" />
             </Button>
-            <Button variant="outline" onClick={() => void load()}>
-              <RefreshCw className="size-4" /> Refresh
-            </Button>
+            <RefreshButton
+              onRefresh={load}
+              tooltip="Refresh payment details"
+            />
           </div>
         </header>
 

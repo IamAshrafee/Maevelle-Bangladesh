@@ -1,8 +1,9 @@
 'use client';
 
-import { RotateCcw, Search, SlidersHorizontal, X } from 'lucide-react';
+import { Search, SlidersHorizontal, X } from 'lucide-react';
 import type { AssetConditionDto, AssetOptionsDto, AssetStatusDto } from '@maevelle/contracts';
 import { Button } from '@/components/ui/button';
+import { RefreshButton } from '@/components/ui/refresh-button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { NativeSelect } from '@/components/ui/native-select';
@@ -139,9 +140,7 @@ export function AssetFilters({ filters, options, onChange, onRefresh }: AssetFil
                 Reset
               </Button>
             ) : null}
-            <Button variant="outline" size="sm" onClick={onRefresh} title="Refresh data">
-              <RotateCcw className="size-4" />
-            </Button>
+            <RefreshButton size="icon-sm" onRefresh={onRefresh} tooltip="Refresh asset data" />
           </div>
         </div>
 

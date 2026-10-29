@@ -26,6 +26,7 @@ import { OperationalFeedback } from '@/components/operational-worklist';
 import { StatusBadge } from '@/components/status-badge';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { RefreshButton } from '@/components/ui/refresh-button';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select';
@@ -233,6 +234,11 @@ export function SuppliersList() {
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
+          <RefreshButton
+            loading={loading}
+            tooltip="Refresh suppliers"
+          />
+
           {canManageProcurement ? (
             <Button
               size="sm"

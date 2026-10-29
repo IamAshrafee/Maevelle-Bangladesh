@@ -10,7 +10,6 @@ import {
   Image,
   PackageSearch,
   Plus,
-  RefreshCw,
   Ruler,
   Search,
   Tags,
@@ -42,6 +41,7 @@ import {
 } from '@/components/catalog-content-state';
 import { CatalogContentEditor } from '@/components/catalog-content-editor';
 import { ProductTypeManager } from '@/components/product-types';
+import { RefreshButton } from '@/components/ui/refresh-button';
 import {
   catalogOverviewFromWorkspace,
   isCatalogOverviewDirty,
@@ -1104,14 +1104,11 @@ export function CatalogConsole() {
             disabled={workspaceDirty || createDirty}
             onChanged={productTypesChanged}
           />
-          <button
-            className="button secondary"
-            type="button"
-            disabled={busy}
-            onClick={() => void reload()}
-          >
-            <RefreshCw /> Refresh
-          </button>
+          <RefreshButton
+            loading={busy}
+            onRefresh={() => void reload()}
+            tooltip="Refresh catalog"
+          />
           <button
             ref={createButtonRef}
             className="button primary"

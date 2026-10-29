@@ -4,7 +4,6 @@ import {
   CheckCircle2,
   Clock,
   AlertTriangle,
-  RotateCw,
   Server,
   Radio,
   Mail,
@@ -17,6 +16,7 @@ import {
 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { RefreshButton } from '@/components/ui/refresh-button';
 import { Badge } from '@/components/ui/badge';
 import { EmailStatusBadge } from './email-status-badge';
 import {
@@ -214,9 +214,7 @@ export function EmailOverviewTab({
                   Authoritative email deliveries created and processed today
                 </CardDescription>
               </div>
-              <Button size="sm" variant="ghost" className="h-8 text-xs" onClick={onRefresh}>
-                <RotateCw className="mr-1.5 size-3.5" /> Refresh
-              </Button>
+              <RefreshButton size="icon-sm" variant="ghost" onRefresh={onRefresh} tooltip="Refresh snapshot" />
             </div>
           </CardHeader>
           <CardContent>

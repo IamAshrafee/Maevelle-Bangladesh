@@ -11,7 +11,6 @@ import {
   Layers,
   Pencil,
   Power,
-  RefreshCw,
   Scale,
   Smartphone,
 } from 'lucide-react';
@@ -20,6 +19,7 @@ import type { FinanceAccountDetailDto } from '@maevelle/contracts';
 import { StatusBadge } from '@/components/status-badge';
 import { Breadcrumb } from '@/components/ui/breadcrumb';
 import { Button } from '@/components/ui/button';
+import { RefreshButton } from '@/components/ui/refresh-button';
 import {
   Tooltip,
   TooltipContent,
@@ -253,22 +253,14 @@ export function AccountDetailHeader({
               </Tooltip>
             ) : null}
 
-            <Tooltip>
-              <TooltipTrigger
-                render={
-                  <Button
-                    variant="ghost"
-                    size="icon-sm"
-                    onClick={onRefresh}
-                    disabled={isRefreshing}
-                    aria-label="Refresh financial account"
-                  >
-                    <RefreshCw className={`size-3.5 ${isRefreshing ? 'animate-spin' : ''}`} />
-                  </Button>
-                }
-              />
-              <TooltipContent side="bottom">Refresh account & ledger</TooltipContent>
-            </Tooltip>
+            <RefreshButton
+              variant="ghost"
+              size="icon-sm"
+              loading={isRefreshing}
+              onRefresh={onRefresh}
+              tooltip="Refresh account & ledger"
+              tooltipSide="bottom"
+            />
           </div>
         </div>
       </header>

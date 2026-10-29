@@ -2,8 +2,9 @@
 
 import Link from 'next/link';
 import { useCallback, useEffect, useState } from 'react';
-import { Download, RefreshCw, ShieldCheck } from 'lucide-react';
+import { Download, ShieldCheck } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { RefreshButton } from '@/components/ui/refresh-button';
 import {
   Dialog,
   DialogContent,
@@ -224,10 +225,7 @@ export function PrivacyRequestsConsole() {
         title="Privacy requests"
         description="Identity-verified access, export, correction, restriction, and anonymization work with immutable audit evidence."
         actions={
-          <Button variant="outline" onClick={() => void load()}>
-            <RefreshCw className="size-4" />
-            Refresh
-          </Button>
+          <RefreshButton onRefresh={() => void load()} tooltip="Refresh privacy requests" />
         }
       />
       <CrmNav />

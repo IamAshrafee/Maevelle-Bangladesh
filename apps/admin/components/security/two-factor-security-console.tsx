@@ -8,7 +8,6 @@ import {
   HelpCircle,
   KeyRound,
   Lock,
-  RefreshCw,
   Shield,
   ShieldAlert,
   ShieldCheck,
@@ -19,6 +18,7 @@ import {
 import type { ApiEnvelope, TwoFactorStatusDto } from '@maevelle/contracts';
 import { apiRequest, ApiRequestError } from '@/lib/api';
 import { Button } from '@/components/ui/button';
+import { RefreshButton } from '@/components/ui/refresh-button';
 import {
   AdminPage,
   ErrorState,
@@ -107,6 +107,11 @@ export function TwoFactorSecurityConsole() {
         description="Manage your authentication credentials, authenticator app protection, and recovery codes."
         actions={
           <div className="flex items-center gap-2">
+            <RefreshButton
+              loading={loading}
+              onRefresh={() => void loadStatus()}
+              tooltip="Refresh security status"
+            />
             <StatusBadge
               status={
                 isEnabled

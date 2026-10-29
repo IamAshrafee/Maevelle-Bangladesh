@@ -6,13 +6,13 @@ import {
   ChevronLeft,
   ChevronRight,
   Filter,
-  RefreshCw,
   Search,
   SlidersHorizontal,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { AdminPage, PageActions, PageDescription, PageHeader, PageTitle } from '@/components/ui/page-shell';
 import { Button } from '@/components/ui/button';
+import { RefreshButton } from '@/components/ui/refresh-button';
 import { Input } from '@/components/ui/input';
 import { NativeSelect } from '@/components/ui/native-select';
 import { ReviewsStatsStrip, type ReviewQueueCounts } from './reviews-stats-strip';
@@ -125,16 +125,11 @@ export function ReviewsWorkspace() {
         actions={
           <>
             <RebuildSummaryDialog />
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => void loadReviews()}
-              disabled={loading}
-              className="h-9 gap-1.5 text-xs"
-            >
-              <RefreshCw className={cn('size-3.5', loading && 'animate-spin')} />
-              Refresh
-            </Button>
+            <RefreshButton
+              loading={loading}
+              onRefresh={() => void loadReviews()}
+              tooltip="Refresh reviews"
+            />
           </>
         }
       />

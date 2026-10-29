@@ -10,7 +10,6 @@ import {
   Clock,
   Layers,
   Play,
-  RefreshCw,
   Search,
   Shield,
   ShieldAlert,
@@ -19,6 +18,7 @@ import {
   Wrench,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { RefreshButton } from '@/components/ui/refresh-button';
 import { AdminPage, PageHeader } from '@/components/ui/page-shell';
 import { useAdminCapability } from '@/components/admin-capabilities';
 import { cn } from '@/lib/utils';
@@ -300,20 +300,15 @@ export function IntegrityCenter() {
         description="Authoritative platform diagnostics, cross-domain consistency verification, anomaly investigations, and controlled projection recovery."
         actions={
           <div className="flex items-center gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => {
+            <RefreshButton
+              loading={loadingOverview}
+              onRefresh={() => {
                 loadOverview();
                 if (activeTab === 'findings') loadFindings();
                 if (activeTab === 'scans') loadRuns();
               }}
-              disabled={loadingOverview}
-              className="h-9 cursor-pointer"
-            >
-              <RefreshCw className={`size-3.5 mr-1.5 ${loadingOverview ? 'animate-spin' : ''}`} />
-              Refresh
-            </Button>
+              tooltip="Refresh integrity center"
+            />
             {canRunChecks && (
               <Button
                 size="sm"

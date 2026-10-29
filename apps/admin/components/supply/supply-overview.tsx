@@ -10,7 +10,6 @@ import {
   ClipboardCheck,
   PackageCheck,
   Plus,
-  RefreshCw,
   Ship,
   Truck,
 } from 'lucide-react';
@@ -30,6 +29,7 @@ import { QuantityProgress } from '@/components/supply/supply-entity-ui';
 import { SupplyWorkspaceNav } from '@/components/supply/supply-workspace-nav';
 import { StatusBadge } from '@/components/status-badge';
 import { Button } from '@/components/ui/button';
+import { RefreshButton } from '@/components/ui/refresh-button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Stats, StatsCard, StatsDescription, StatsTitle, StatsValue } from '@/components/ui/stats';
 import { formatSupplyDate, supplyRequest } from '@/lib/supply/api';
@@ -127,9 +127,11 @@ export function SupplyOverview() {
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <Button variant="outline" disabled={state === 'loading'} onClick={() => void load()}>
-            <RefreshCw className={state === 'loading' ? 'animate-spin' : ''} /> Refresh
-          </Button>
+          <RefreshButton
+            loading={state === 'loading'}
+            onRefresh={() => void load()}
+            tooltip="Refresh supply overview"
+          />
           {canManageProcurement ? (
             <Button render={<Link href="/purchases?create=purchase" />}>
               <Plus /> New purchase

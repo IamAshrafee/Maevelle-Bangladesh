@@ -6,13 +6,14 @@ import type {
   CategorySizeGuideDefaultDto,
   SizeGuideSummaryDto,
 } from '@maevelle/contracts';
-import { ExternalLink, Link2, RefreshCw } from 'lucide-react';
+import { ExternalLink, Link2 } from 'lucide-react';
 import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { StatusBadge } from '@/components/status-badge';
 import { useAdminCapability } from '@/components/admin-capabilities';
 import { Button } from '@/components/ui/button';
+import { RefreshButton } from '@/components/ui/refresh-button';
 import {
   Dialog,
   DialogContent,
@@ -125,9 +126,11 @@ export default function SizingAssignmentsPage() {
         title="Guide Assignments"
         description="Set reusable Category defaults and inspect deliberate Product overrides. Products inherit only from their primary Category."
         actions={
-          <Button variant="outline" onClick={() => void load()} disabled={loading}>
-            <RefreshCw aria-hidden="true" /> Refresh
-          </Button>
+          <RefreshButton
+            loading={loading}
+            onRefresh={() => void load()}
+            tooltip="Refresh guide assignments"
+          />
         }
       />
 

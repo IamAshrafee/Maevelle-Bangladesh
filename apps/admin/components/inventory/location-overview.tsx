@@ -2,13 +2,14 @@
 
 import { useDeferredValue, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { ArrowRight, MapPin, Plus, RefreshCw, Search, Warehouse } from 'lucide-react';
+import { ArrowRight, MapPin, Plus, Search, Warehouse } from 'lucide-react';
 
 import type { LocationCapability, WarehouseLocationListItemDto } from '@maevelle/contracts';
 
 import { useAdminCapability, useAdminContext } from '@/components/admin-capabilities';
 import { StatusBadge } from '@/components/status-badge';
 import { Button } from '@/components/ui/button';
+import { RefreshButton } from '@/components/ui/refresh-button';
 import { Input } from '@/components/ui/input';
 import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select';
 import { AdminPage, EmptyState, ErrorState, LoadingState, PageHeader, PagePanel, PageSection } from '@/components/ui/page-shell';
@@ -105,7 +106,11 @@ export function LocationOverview() {
           <label className="space-y-1.5 text-sm font-medium"><span>Search locations</span><span className="relative block"><Search className="pointer-events-none absolute left-3 top-2.5 size-4 text-muted-foreground" /><Input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Name, code, or type" className="pl-9" /></span></label>
           <label className="space-y-1.5 text-sm font-medium"><span>Status</span><NativeSelect value={status} onChange={(event) => setStatus(event.target.value)} className="w-full"><NativeSelectOption value="">All statuses</NativeSelectOption>{['ACTIVE', 'DRAFT', 'INACTIVE', 'ARCHIVED'].map((value) => <NativeSelectOption key={value} value={value}>{readable(value)}</NativeSelectOption>)}</NativeSelect></label>
           <label className="space-y-1.5 text-sm font-medium"><span>Capability</span><NativeSelect value={capability} onChange={(event) => setCapability(event.target.value)} className="w-full"><NativeSelectOption value="">All capabilities</NativeSelectOption>{capabilities.map((value) => <NativeSelectOption key={value} value={value}>{readable(value)}</NativeSelectOption>)}</NativeSelect></label>
-          <Button variant="outline" onClick={() => setReload((value) => value + 1)}><RefreshCw className="size-4" />Refresh</Button>
+          <RefreshButton
+            loading={loading}
+            onRefresh={() => setReload((value) => value + 1)}
+            tooltip="Refresh locations"
+          />
         </div>
       </PagePanel>
 

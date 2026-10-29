@@ -8,7 +8,6 @@ import {
   ChevronRight,
   GitCompareArrows,
   Loader2,
-  RefreshCw,
   Save,
   Search,
   Sparkles,
@@ -33,6 +32,7 @@ import {
 
 import { StatusBadge } from '@/components/status-badge';
 import { Button } from '@/components/ui/button';
+import { RefreshButton } from '@/components/ui/refresh-button';
 import { Input } from '@/components/ui/input';
 import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select';
 import {
@@ -216,17 +216,11 @@ export default function SizeOptionMappingsPage() {
           </PageDescription>
         </div>
         <PageActions className="flex flex-wrap items-center gap-2">
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={() => void load()}
-            disabled={loading}
-            className="min-h-11 sm:min-h-9"
-          >
-            <RefreshCw className={`size-3.5 ${loading ? 'animate-spin' : ''}`} />
-            Refresh
-          </Button>
+          <RefreshButton
+            loading={loading}
+            onRefresh={() => void load()}
+            tooltip="Refresh mappings"
+          />
           <Button
             type="button"
             variant="secondary"

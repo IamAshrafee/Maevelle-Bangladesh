@@ -6,6 +6,7 @@ import { Plus, UsersRound } from 'lucide-react';
 import type { CustomerSegmentDto } from '@maevelle/contracts';
 import { fetchApiData } from '@/lib/api';
 import { Button } from '@/components/ui/button';
+import { RefreshButton } from '@/components/ui/refresh-button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select';
@@ -72,6 +73,9 @@ export function SegmentsConsole() {
         eyebrow="Customer 360"
         title="Customer segments"
         description="Build reusable static groups and validated rule-based audiences. Segment membership never grants messaging consent."
+        actions={
+          <RefreshButton onRefresh={() => void load()} tooltip="Refresh segments" />
+        }
       />
       <CrmNav />
       {error ? <ErrorState message={error} onRetry={() => void load()} /> : null}

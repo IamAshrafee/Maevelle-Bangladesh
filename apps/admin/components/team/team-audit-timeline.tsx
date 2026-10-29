@@ -8,7 +8,6 @@ import {
   ChevronRight,
   Clock,
   Filter,
-  RefreshCw,
   Search,
   Shield,
   User,
@@ -16,6 +15,7 @@ import {
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { RefreshButton } from '@/components/ui/refresh-button';
 import { Input } from '@/components/ui/input';
 
 import { useTeam } from './team-context';
@@ -128,15 +128,11 @@ export function TeamAuditTimeline({
             ))}
           </select>
 
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="h-9 px-2 text-xs"
-            onClick={() => void loadEvents()}
-          >
-            <RefreshCw className={`size-3.5 ${loading ? 'animate-spin' : ''}`} />
-          </Button>
+          <RefreshButton
+            loading={loading}
+            onRefresh={() => void loadEvents()}
+            tooltip="Refresh audit timeline"
+          />
         </div>
       </div>
 

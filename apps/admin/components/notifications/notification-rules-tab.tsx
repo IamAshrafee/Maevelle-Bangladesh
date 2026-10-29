@@ -12,7 +12,6 @@ import {
   Lock,
   Mail,
   MessageSquare,
-  RefreshCw,
   Search,
   ShieldAlert,
   ShieldCheck,
@@ -22,6 +21,7 @@ import {
 } from 'lucide-react';
 import type { NotificationEventCatalogItemDto } from '@maevelle/contracts';
 import { Button } from '@/components/ui/button';
+import { RefreshButton } from '@/components/ui/refresh-button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { NativeSelect } from '@/components/ui/native-select';
@@ -259,15 +259,13 @@ export function NotificationRulesTab() {
             />
           </div>
 
-          <Button
+          <RefreshButton
             variant="ghost"
-            size="icon"
-            onClick={() => void loadData()}
-            className="size-8 text-muted-foreground hover:text-foreground shrink-0"
-            title="Refresh rules"
-          >
-            <RefreshCw className={cn('size-3.5', loading && 'animate-spin')} />
-          </Button>
+            size="icon-sm"
+            loading={loading}
+            onRefresh={() => void loadData()}
+            tooltip="Refresh rules"
+          />
         </div>
       </div>
 

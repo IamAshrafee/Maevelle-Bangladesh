@@ -27,6 +27,7 @@ import {
 } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
+import { RefreshButton } from '@/components/ui/refresh-button';
 import { Input } from '@/components/ui/input';
 import { NativeSelect } from '@/components/ui/native-select';
 import { Textarea } from '@/components/ui/textarea';
@@ -365,6 +366,59 @@ export function DesignSystemView({ hideHeader }: { hideHeader?: boolean } = {}) 
               <Button variant="outline" className="gap-2">
                 <Download className="size-4" /> Export CSV
               </Button>
+            </div>
+          </PageSection>
+
+          <PageSection title="Smart Animated RefreshButton" description="Production-grade refresh interaction: SVG path morphing (Refresh → Emerald Checkmark / Red Error X), smooth deceleration, rapid click queueing, independent timelines, and tooltip state awareness.">
+            <div className="flex flex-wrap items-center gap-6">
+              <div className="flex items-center gap-2">
+                <RefreshButton
+                  onRefresh={async () => {
+                    await new Promise((resolve) => setTimeout(resolve, 800));
+                  }}
+                  tooltip="Normal refresh (morphs to checkmark)"
+                />
+                <span className="text-xs text-muted-foreground">Standard (800ms)</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <RefreshButton
+                  onRefresh={async () => {
+                    await new Promise((resolve) => setTimeout(resolve, 80));
+                  }}
+                  tooltip="Fast 80ms refresh (anti-flicker timeline)"
+                />
+                <span className="text-xs text-muted-foreground">Fast (80ms + min spin)</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <RefreshButton
+                  onRefresh={async () => {
+                    await new Promise((resolve) => setTimeout(resolve, 600));
+                    throw new Error('Simulated network failure');
+                  }}
+                  tooltip="Simulate failure (morphs to Error X)"
+                />
+                <span className="text-xs text-muted-foreground">Error Outcome (Red X)</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <RefreshButton
+                  size="icon-sm"
+                  onRefresh={async () => {
+                    await new Promise((resolve) => setTimeout(resolve, 800));
+                  }}
+                  tooltip="Compact refresh"
+                />
+                <span className="text-xs text-muted-foreground">Compact (icon-sm, 32px)</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <RefreshButton
+                  variant="ghost"
+                  onRefresh={async () => {
+                    await new Promise((resolve) => setTimeout(resolve, 800));
+                  }}
+                  tooltip="Ghost refresh"
+                />
+                <span className="text-xs text-muted-foreground">Ghost Variant</span>
+              </div>
             </div>
           </PageSection>
 

@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { BookmarkCheck, History, RefreshCw, RotateCcw, Search, SlidersHorizontal, TrendingDown } from 'lucide-react';
+import { BookmarkCheck, History, RotateCcw, Search, SlidersHorizontal, TrendingDown } from 'lucide-react';
 import { useDeferredValue, useEffect, useState } from 'react';
 
 import type {
@@ -14,6 +14,7 @@ import type {
 } from '@maevelle/contracts';
 
 import { Button } from '@/components/ui/button';
+import { RefreshButton } from '@/components/ui/refresh-button';
 import { Input } from '@/components/ui/input';
 import {
   Select,
@@ -170,9 +171,11 @@ export function StockOverview() {
           <Button variant="outline" render={<Link href="/inventory/history" />} nativeButton={false}>
             <History aria-hidden="true" /> Movements
           </Button>
-          <Button variant="outline" disabled={state === 'loading'} onClick={() => void load()}>
-            <RefreshCw aria-hidden="true" /> Refresh
-          </Button>
+          <RefreshButton
+            loading={state === 'loading'}
+            onRefresh={() => void load()}
+            tooltip="Refresh inventory stock"
+          />
           {canAdjust ? (
             <Button render={<Link href="/inventory/adjustments" />} nativeButton={false}>
               <SlidersHorizontal aria-hidden="true" /> Adjust Stock

@@ -5,6 +5,7 @@ import { Plus, SlidersHorizontal } from 'lucide-react';
 import type { CustomerCustomFieldDefinitionDto } from '@maevelle/contracts';
 import { fetchApiData } from '@/lib/api';
 import { Button } from '@/components/ui/button';
+import { RefreshButton } from '@/components/ui/refresh-button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select';
@@ -104,6 +105,9 @@ export function CrmSettingsConsole() {
         eyebrow="Customer 360"
         title="CRM settings"
         description="Govern lifecycle thresholds, typed profile attributes, and protected CRM behavior."
+        actions={
+          <RefreshButton onRefresh={() => void load()} tooltip="Refresh CRM settings" />
+        }
       />
       <CrmNav />
       {error ? <ErrorState message={error} onRetry={() => void load()} /> : null}

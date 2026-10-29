@@ -12,7 +12,6 @@ import {
   ExternalLink,
   Filter,
   Loader2,
-  RefreshCw,
   Search,
   ShieldAlert,
   ShoppingBag,
@@ -22,6 +21,7 @@ import {
 } from 'lucide-react';
 import type { NotificationInboxItemDto } from '@maevelle/contracts';
 import { Button } from '@/components/ui/button';
+import { RefreshButton } from '@/components/ui/refresh-button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { NativeSelect } from '@/components/ui/native-select';
@@ -226,15 +226,13 @@ export function NotificationInboxTab({ onUnreadCountChanged }: NotificationInbox
             </Button>
           )}
 
-          <Button
+          <RefreshButton
             variant="ghost"
-            size="icon"
-            onClick={() => void loadInbox()}
-            className="size-8 text-muted-foreground hover:text-foreground shrink-0"
-            title="Refresh inbox"
-          >
-            <RefreshCw className={cn('size-3.5', loading && 'animate-spin')} />
-          </Button>
+            size="icon-sm"
+            loading={loading}
+            onRefresh={() => void loadInbox()}
+            tooltip="Refresh inbox"
+          />
         </div>
       </div>
 

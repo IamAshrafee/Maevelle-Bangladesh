@@ -17,7 +17,6 @@ import {
   LayoutDashboard,
   Megaphone,
   PackageSearch,
-  RefreshCw,
   RotateCcw,
   Settings,
   ShoppingBag,
@@ -28,6 +27,7 @@ import {
 
 import { useAdminCapability } from '@/components/admin-capabilities';
 import { Button } from '@/components/ui/button';
+import { RefreshButton } from '@/components/ui/refresh-button';
 import { AdminPage, PageActions, PageHeader, PageSection } from '@/components/ui/page-shell';
 import { AnalyticsFilterToolbar } from './analytics-filter-toolbar';
 import { CustomersView } from './views/customers-view';
@@ -153,6 +153,9 @@ export function AnalyticsWorkspace() {
         eyebrow="Operations & Intelligence"
         title="Analytics & Business Intelligence"
         description="Comprehensive commercial reporting, period-over-period comparisons, and cross-domain operational intelligence. Derived from authoritative transactional source facts."
+        actions={
+          <RefreshButton tooltip="Refresh analytics data" />
+        }
       />
 
       {/* Local Workspace Subnavigation */}

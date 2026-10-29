@@ -20,7 +20,6 @@ import {
   Mail,
   MessageSquare,
   Radio,
-  RefreshCw,
   RotateCw,
   Search,
   Server,
@@ -29,6 +28,7 @@ import {
 } from 'lucide-react';
 import type { NotificationHistoryRowDto } from '@maevelle/contracts';
 import { Button } from '@/components/ui/button';
+import { RefreshButton } from '@/components/ui/refresh-button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { NativeSelect } from '@/components/ui/native-select';
@@ -178,16 +178,12 @@ export function NotificationOperationsTab() {
           <span className="text-xs text-muted-foreground hidden md:inline tabular-nums font-mono">
             Updated {lastRefreshed.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
           </span>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={refreshAll}
-            disabled={loadingDiagnostics || loadingFailures}
-            className="h-8 gap-1.5"
-          >
-            <RefreshCw className={cn('size-3.5', (loadingDiagnostics || loadingFailures) && 'animate-spin')} />
-            Refresh
-          </Button>
+          <RefreshButton
+            size="icon-sm"
+            loading={loadingDiagnostics || loadingFailures}
+            onRefresh={refreshAll}
+            tooltip="Refresh operations vitals"
+          />
         </div>
       </div>
 

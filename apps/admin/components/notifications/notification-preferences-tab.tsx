@@ -10,7 +10,6 @@ import {
   Loader2,
   Lock,
   Mail,
-  RefreshCw,
   Search,
   Shield,
   ShieldAlert,
@@ -20,6 +19,7 @@ import {
 } from 'lucide-react';
 import type { NotificationEventCatalogItemDto, NotificationPreferenceDto } from '@maevelle/contracts';
 import { Button } from '@/components/ui/button';
+import { RefreshButton } from '@/components/ui/refresh-button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
@@ -154,16 +154,12 @@ export function NotificationPreferencesTab() {
             Configure which operational events trigger alerts for your account across In-App staff inbox and your work email.
           </p>
         </div>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => void loadPreferences()}
-          disabled={loading}
-          className="h-8 gap-1.5 self-start sm:self-auto"
-        >
-          <RefreshCw className={cn('size-3.5', loading && 'animate-spin')} />
-          Refresh
-        </Button>
+        <RefreshButton
+          size="icon-sm"
+          loading={loading}
+          onRefresh={() => void loadPreferences()}
+          tooltip="Refresh notification preferences"
+        />
       </div>
 
       {/* Distinction Callout */}

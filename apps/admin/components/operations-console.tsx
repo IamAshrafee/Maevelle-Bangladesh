@@ -1,6 +1,6 @@
 'use client';
 
-import { Download, RefreshCw, Upload } from 'lucide-react';
+import { Download, Upload } from 'lucide-react';
 import Link from 'next/link';
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import type { ApiEnvelope } from '@maevelle/contracts';
@@ -8,6 +8,7 @@ import type { ApiEnvelope } from '@maevelle/contracts';
 import { OperationalFeedback, OperationalPageHeader } from './operational-worklist';
 import { StatusBadge } from './status-badge';
 import { Button } from '@/components/ui/button';
+import { RefreshButton } from '@/components/ui/refresh-button';
 import {
   Table,
   TableBody,
@@ -246,9 +247,7 @@ export function OperationsConsole() {
           title="Operations center"
           description="Review action queues, search business records, manage personal views, and run permission-safe data tools."
           actions={
-            <Button variant="outline" size="sm" onClick={() => void reload()}>
-            <RefreshCw className="size-3.5 mr-1.5" /> Refresh
-          </Button>
+            <RefreshButton onRefresh={() => void reload()} tooltip="Refresh operations" />
           }
         />
         {message ? <OperationalFeedback tone={tone}>{message}</OperationalFeedback> : null}

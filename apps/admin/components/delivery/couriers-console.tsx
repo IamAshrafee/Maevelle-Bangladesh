@@ -29,6 +29,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { RefreshButton } from '@/components/ui/refresh-button';
 import {
   Card,
   CardContent,
@@ -309,16 +310,11 @@ export function CouriersConsole() {
           </p>
         </div>
 
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => void loadData()}
-          disabled={loading}
-          className="h-9"
-        >
-          <RefreshCw className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
-          Refresh
-        </Button>
+        <RefreshButton
+          loading={loading}
+          onRefresh={() => void loadData()}
+          tooltip="Refresh couriers"
+        />
       </div>
 
       {/* Notifications */}

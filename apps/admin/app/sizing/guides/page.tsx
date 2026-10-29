@@ -43,6 +43,7 @@ import {
   PagePanel,
 } from '@/components/ui/page-shell';
 import { Button } from '@/components/ui/button';
+import { RefreshButton } from '@/components/ui/refresh-button';
 import { Badge } from '@/components/ui/badge';
 import { StatusBadge } from '@/components/status-badge';
 import { useAdminCapability } from '@/components/admin-capabilities';
@@ -294,6 +295,11 @@ function SizeGuidesListContent() {
         description="Create reusable customer guides, enter authentic measurements, preview the experience, publish safely, and see where each guide is used."
         actions={
           <div className="flex flex-wrap items-center gap-2">
+            <RefreshButton
+              loading={loading}
+              onRefresh={() => void load()}
+              tooltip="Refresh size guides"
+            />
             <Button
               variant="outline"
               size="sm"

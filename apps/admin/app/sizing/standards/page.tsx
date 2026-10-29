@@ -10,7 +10,6 @@ import {
   Loader2,
   Pencil,
   Plus,
-  RefreshCw,
   RotateCcw,
   Ruler,
   Search,
@@ -62,6 +61,7 @@ import {
   PageTitle,
 } from '@/components/ui/page-shell';
 import { Button } from '@/components/ui/button';
+import { RefreshButton } from '@/components/ui/refresh-button';
 import { Badge } from '@/components/ui/badge';
 import { StatusBadge } from '@/components/status-badge';
 import { Input } from '@/components/ui/input';
@@ -385,15 +385,11 @@ function SizingStandardsContent() {
         description="Configure authoritative sizing domains, regional size standards (Alpha, EU, UK), canonical size items, and reusable measurement dimensions."
         actions={
           <div className="flex flex-wrap items-center gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => void load()}
-              className="min-h-10 sm:min-h-9 touch-manipulation gap-1.5"
-            >
-              <RefreshCw className="size-3.5" />
-              <span>Refresh</span>
-            </Button>
+            <RefreshButton
+              loading={loading}
+              onRefresh={() => void load()}
+              tooltip="Refresh sizing standards"
+            />
             {activeTab === 'domains' ? (
               <Button
                 size="sm"

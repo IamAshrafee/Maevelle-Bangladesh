@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import type { CustomerSummaryDto } from '@maevelle/contracts';
 import { fetchApiData } from '@/lib/api';
 import { Button } from '@/components/ui/button';
+import { RefreshButton } from '@/components/ui/refresh-button';
 import {
   AdminPage,
   EmptyState,
@@ -47,13 +48,16 @@ export function SegmentMembersConsole({ segmentId }: { segmentId: string }) {
         title="Segment members"
         description="A paginated, explainable view of the customers included by this segment."
         actions={
-          <Button
-            variant="outline"
-            render={<Link href="/customers/segments" />}
-            nativeButton={false}
-          >
-            Back to segments
-          </Button>
+          <div className="flex items-center gap-2">
+            <RefreshButton onRefresh={() => void load()} tooltip="Refresh segment members" />
+            <Button
+              variant="outline"
+              render={<Link href="/customers/segments" />}
+              nativeButton={false}
+            >
+              Back to segments
+            </Button>
+          </div>
         }
       />
       <CrmNav />

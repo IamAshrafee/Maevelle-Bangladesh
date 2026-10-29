@@ -7,7 +7,6 @@ import {
   Eye,
   CheckCircle2,
   AlertTriangle,
-  RotateCw,
   Radio,
   ShieldCheck,
   Server,
@@ -16,6 +15,7 @@ import {
 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { RefreshButton } from '@/components/ui/refresh-button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -310,9 +310,7 @@ export function EmailTestLabTab({
             <CardHeader className="pb-3 border-b bg-muted/20">
               <div className="flex items-center justify-between">
                 <CardTitle className="text-sm font-semibold">Recent Test Sends Log</CardTitle>
-                <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={onRefresh}>
-                  <RotateCw className="size-3" />
-                </Button>
+                <RefreshButton size="icon-xs" variant="ghost" onRefresh={onRefresh} tooltip="Refresh test sends" />
               </div>
             </CardHeader>
             <CardContent className="p-0">

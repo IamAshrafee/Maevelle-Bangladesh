@@ -10,13 +10,13 @@ import {
   Sliders,
   Ban,
   ShieldCheck,
-  RotateCw,
   Mail,
   AlertTriangle,
   Settings,
 } from 'lucide-react';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
+import { RefreshButton } from '@/components/ui/refresh-button';
 import { Badge } from '@/components/ui/badge';
 import { EmailOverviewTab } from './email-overview-tab';
 import { EmailActivityTab } from './email-activity-tab';
@@ -205,16 +205,11 @@ export function EmailOperationsConsole() {
         </div>
 
         <div className="flex items-center gap-2">
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={reload}
-            disabled={loading || isPending}
-            className="h-8 text-xs"
-          >
-            <RotateCw className={`mr-1.5 size-3.5 ${loading ? 'animate-spin' : ''}`} />
-            Refresh Data
-          </Button>
+          <RefreshButton
+            loading={loading || isPending}
+            onRefresh={reload}
+            tooltip="Refresh email operations"
+          />
         </div>
       </header>
 

@@ -14,6 +14,7 @@ import {
   X,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { RefreshButton } from '@/components/ui/refresh-button';
 import { StatusBadge } from '@/components/status-badge';
 import {
   Table,
@@ -171,10 +172,12 @@ export function ScansTab({
         </div>
 
         <div className="flex items-center gap-2 shrink-0">
-          <Button variant="outline" size="sm" onClick={onRefresh} disabled={loading} className="h-8 text-xs">
-            <RefreshCw className={`size-3.5 mr-1.5 ${loading ? 'animate-spin' : ''}`} />
-            Refresh History
-          </Button>
+          <RefreshButton
+            size="icon-sm"
+            loading={loading}
+            onRefresh={onRefresh}
+            tooltip="Refresh scan history"
+          />
           {canRunChecks && (
             <Button size="sm" onClick={onOpenLauncher} className="h-8 text-xs cursor-pointer">
               <Play className="size-3.5 mr-1.5" />

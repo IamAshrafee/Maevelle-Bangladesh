@@ -33,6 +33,7 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { Breadcrumb } from '@/components/ui/breadcrumb';
 import { Button } from '@/components/ui/button';
+import { RefreshButton } from '@/components/ui/refresh-button';
 import {
   Dialog,
   DialogContent,
@@ -422,16 +423,12 @@ function TeamMemberDetailContent({ memberId }: { readonly memberId: string }) {
         </div>
 
         <div className="flex items-center gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            className="h-8 px-2.5 text-xs gap-1.5"
-            onClick={() => void loadMemberData()}
-            disabled={loading}
-          >
-            <RefreshCw className={`size-3.5 ${loading ? 'animate-spin' : ''}`} />
-            Refresh
-          </Button>
+          <RefreshButton
+            size="icon-sm"
+            loading={loading}
+            onRefresh={() => void loadMemberData()}
+            tooltip="Refresh team member"
+          />
 
           {canEditTargetLifecycle ? (
             <DropdownMenu>
