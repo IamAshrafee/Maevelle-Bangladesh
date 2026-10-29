@@ -8,10 +8,14 @@ import {
   cancelOrder,
   cancelOrderLine,
   createCheckout,
+  createDeliveryPricingRule,
   getOrderForCheckout,
+  listDeliveryPricingRules,
   placeOrder,
+  simulateDeliveryPricingRuleQuote,
   updateCheckoutAddress,
   updateCheckoutContact,
+  updateDeliveryPricingRule,
   updateOrderStatus,
   updateOrderDeliveryAddress,
   recordOrderVerification,
@@ -1327,6 +1331,107 @@ describe('atomic guest checkout and COD Orders', () => {
         recommendation: expect.any(String),
         signalCount: expect.any(Number),
       });
+    });
+  });
+
+  describe('Delivery Pricing Management & Simulation', () => {
+    it('manages delivery pricing rules, joins geographic metadata, and simulates quotes', async () => {
+      const input = await fixture('1');
+      const actorId = crypto.randomUUID();
+
+      // Create a geography node fixture for Dhaka Division
+      const geoResult = await sql<{ id: string }>`
+        insert into geography.nodes (node_type, canonical_name, local_name, status)
+        values ('DIVISION', 'Dhaka Division Test', 'ঢাকা বিভাগ', 'ACTIVE')
+        returning id
+      `.execute(database.db);
+      const dhakaNodeId = geoResult.rows[0]!.id;
+
+      // Create nationwide standard rule (P0, 120 BDT)
+      const nationwideRule = await createDeliveryPricingRule(database.db, {
+        organizationId: input.organizationId,
+        actorId,
+        name: 'Test Nationwide Standard',
+        countryCode: 'BD',
+        flatAmount: '120.00',
+        currency: 'BDT',
+        priority: 0,
+      });
+      expect(nationwideRule.id).toBeDefined();
+
+      // Create Dhaka regional override (P10, 60 BDT)
+      const dhakaRule = await createDeliveryPricingRule(database.db, {
+        organizationId: input.organizationId,
+        actorId,
+        name: 'Test Inside Dhaka',
+        countryCode: 'BD',
+        geographyNodeId: dhakaNodeId,
+        flatAmount: '60.00',
+        currency: 'BDT',
+        priority: 10,
+      });
+      expect(dhakaRule.id).toBeDefined();
+
+      // List rules: should return both rules with joined geography metadata
+      const rules = await listDeliveryPricingRules(database.db, input.organizationId);
+      const foundDhaka = rules.find((r) => r.id === dhakaRule.id);
+      expect(foundDhaka).toBeDefined();
+      expect(foundDhaka?.geography_node_name).toBe('Dhaka Division Test');
+      expect(foundDhaka?.geography_node_type).toBe('DIVISION');
+      expect(foundDhaka?.flat_amount).toBe('60.0000');
+
+      const foundNationwide = rules.find((r) => r.id === nationwideRule.id);
+      expect(foundNationwide).toBeDefined();
+      expect(foundNationwide?.geography_node_name).toBeNull();
+
+      // Simulate quote for Dhaka: should match Dhaka rule (60 BDT, P10)
+      const dhakaSim = await simulateDeliveryPricingRuleQuote(database.db, {
+        organizationId: input.organizationId,
+        currency: 'BDT',
+        countryCode: 'BD',
+        geographyNodeId: dhakaNodeId,
+      });
+      expect(dhakaSim.matched).toBe(true);
+      expect(dhakaSim.quote?.ruleName).toBe('Test Inside Dhaka');
+      expect(dhakaSim.quote?.amount).toBe('60.0000');
+      expect(dhakaSim.quote?.priority).toBe(10);
+      expect(dhakaSim.quote?.geographyNodeName).toBe('Dhaka Division Test');
+
+      // Simulate quote without geography: should match nationwide rule (120 BDT, P0)
+      const nationwideSim = await simulateDeliveryPricingRuleQuote(database.db, {
+        organizationId: input.organizationId,
+        currency: 'BDT',
+        countryCode: 'BD',
+      });
+      expect(nationwideSim.matched).toBe(true);
+      expect(nationwideSim.quote?.ruleName).toBe('Test Nationwide Standard');
+      expect(nationwideSim.quote?.amount).toBe('120.0000');
+      expect(nationwideSim.quote?.priority).toBe(0);
+
+      // Update Dhaka rule: change rate and status
+      const updated = await updateDeliveryPricingRule(database.db, {
+        organizationId: input.organizationId,
+        actorId,
+        ruleId: dhakaRule.id,
+        expectedVersion: dhakaRule.version,
+        name: 'Test Inside Dhaka Updated',
+        countryCode: 'BD',
+        geographyNodeId: dhakaNodeId,
+        flatAmount: '70.00',
+        currency: 'BDT',
+        priority: 10,
+        status: 'ACTIVE',
+      });
+      expect(updated.version).toBe(dhakaRule.version + 1);
+
+      // Verify updated rate simulation
+      const dhakaSim2 = await simulateDeliveryPricingRuleQuote(database.db, {
+        organizationId: input.organizationId,
+        currency: 'BDT',
+        countryCode: 'BD',
+        geographyNodeId: dhakaNodeId,
+      });
+      expect(dhakaSim2.quote?.amount).toBe('70.0000');
     });
   });
 });

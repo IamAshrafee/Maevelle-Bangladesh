@@ -19,6 +19,7 @@ import {
   OrderDomainError,
   placeOrder,
   refreshCheckout,
+  simulateDeliveryPricingRuleQuote,
   updateCheckoutAddress,
   updateCheckoutContact,
   updateCheckoutPaymentMethod,
@@ -339,7 +340,7 @@ export function registerOrderRoutes(
           version: Type.Integer({ minimum: 1 }),
           name: Type.String({ minLength: 1, maxLength: 160 }),
           countryCode: Type.String({ pattern: '^[A-Z]{2}$' }),
-          geographyNodeId: Type.Optional(Type.String()),
+          geographyNodeId: Type.Optional(Type.Union([Type.String(), Type.Null()])),
           flatAmount: Type.String({ pattern: '^(?:0|[1-9]\\d*)(?:\\.\\d{1,4})?$' }),
           currency: Type.String({ pattern: '^[A-Z]{3}$' }),
           priority: Type.Integer(),
@@ -552,10 +553,46 @@ export function registerOrderRoutes(
     },
   );
   app.get('/admin/orders/delivery-pricing-rules', async (request, reply) => {
-    const active = await admin(database, auth, request.headers, 'orders.manage');
+    const active =
+      (await admin(database, auth, request.headers, 'orders.manage')) ??
+      (await admin(database, auth, request.headers, 'orders.view'));
     if (!active) return reply.code(403).send({ error: 'FORBIDDEN' });
     return { data: await listDeliveryPricingRules(database.db, active.organizationId) };
   });
+  app.post(
+    '/admin/orders/delivery-pricing-rules/simulate',
+    {
+      schema: {
+        body: Type.Object({
+          countryCode: Type.String({ pattern: '^[A-Z]{2}$' }),
+          currency: Type.String({ pattern: '^[A-Z]{3}$' }),
+          geographyNodeId: Type.Optional(Type.Union([Type.String(), Type.Null()])),
+        }),
+      },
+    },
+    async (request, reply) => {
+      const active =
+        (await admin(database, auth, request.headers, 'orders.view')) ??
+        (await admin(database, auth, request.headers, 'orders.manage'));
+      if (!active) return reply.code(403).send({ error: 'FORBIDDEN' });
+      try {
+        const body = request.body as {
+          countryCode: string;
+          currency: string;
+          geographyNodeId?: string;
+        };
+        const result = await simulateDeliveryPricingRuleQuote(database.db, {
+          organizationId: active.organizationId,
+          currency: body.currency,
+          countryCode: body.countryCode,
+          ...(body.geographyNodeId ? { geographyNodeId: body.geographyNodeId } : {}),
+        });
+        return { data: result };
+      } catch (caught) {
+        return sendError(reply, caught);
+      }
+    },
+  );
   app.post(
     '/admin/orders/delivery-pricing-rules',
     {
@@ -563,7 +600,7 @@ export function registerOrderRoutes(
         body: Type.Object({
           name: Type.String({ minLength: 1, maxLength: 160 }),
           countryCode: Type.String({ pattern: '^[A-Z]{2}$' }),
-          geographyNodeId: Type.Optional(Type.String()),
+          geographyNodeId: Type.Optional(Type.Union([Type.String(), Type.Null()])),
           flatAmount: Type.String({ pattern: '^(?:0|[1-9]\\d*)(?:\\.\\d{1,4})?$' }),
           currency: Type.String({ pattern: '^[A-Z]{3}$' }),
           priority: Type.Optional(Type.Integer()),

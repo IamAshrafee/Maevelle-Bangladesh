@@ -62,25 +62,122 @@ export async function quoteForCheckout(
   });
 }
 
+export interface DeliveryPricingRuleRecord {
+  readonly id: string;
+  readonly name: string;
+  readonly country_code: string;
+  readonly geography_node_id: string | null;
+  readonly geography_node_name: string | null;
+  readonly geography_node_type: string | null;
+  readonly geography_parent_name: string | null;
+  readonly flat_amount: string;
+  readonly currency_code: string;
+  readonly priority: number;
+  readonly status: 'ACTIVE' | 'INACTIVE';
+  readonly version: number;
+  readonly created_at: string;
+  readonly updated_at: string;
+}
+
+export interface DeliveryQuoteSimulationResult {
+  readonly matched: boolean;
+  readonly quote?: DeliveryQuote & {
+    readonly priority: number | null;
+    readonly geographyNodeName: string | null;
+    readonly geographyNodeType: string | null;
+    readonly geographyParentName: string | null;
+  };
+  readonly reason?: string;
+}
+
 export async function listDeliveryPricingRules(
   db: Kysely<DatabaseSchema>,
   organizationId: string,
-) {
-  return (
-    await sql<{
-      id: string;
-      name: string;
-      country_code: string;
-      geography_node_id: string | null;
-      flat_amount: string;
-      currency_code: string;
+): Promise<readonly DeliveryPricingRuleRecord[]> {
+  const result = await sql<{
+    id: string;
+    name: string;
+    country_code: string;
+    geography_node_id: string | null;
+    geography_node_name: string | null;
+    geography_node_type: string | null;
+    geography_parent_name: string | null;
+    flat_amount: string;
+    currency_code: string;
+    priority: number;
+    status: 'ACTIVE' | 'INACTIVE';
+    version: string;
+    created_at: string;
+    updated_at: string;
+  }>`
+    select
+      rule.id,
+      rule.name,
+      rule.country_code,
+      rule.geography_node_id,
+      node.canonical_name as geography_node_name,
+      node.node_type as geography_node_type,
+      parent.canonical_name as geography_parent_name,
+      rule.flat_amount::text,
+      rule.currency_code,
+      rule.priority,
+      rule.status,
+      rule.version::text,
+      rule.created_at::text,
+      rule.updated_at::text
+    from orders.delivery_pricing_rules rule
+    left join geography.nodes node on node.id = rule.geography_node_id
+    left join geography.nodes parent on parent.id = node.parent_id
+    where rule.organization_id = ${organizationId}
+    order by rule.status, rule.priority desc, rule.name, rule.id
+  `.execute(db);
+
+  return result.rows.map((row) => ({ ...row, version: Number(row.version) }));
+}
+
+export async function simulateDeliveryPricingRuleQuote(
+  db: Kysely<DatabaseSchema>,
+  input: { organizationId: string; currency: string; countryCode: string; geographyNodeId?: string },
+): Promise<DeliveryQuoteSimulationResult> {
+  try {
+    const quote = await resolveDeliveryQuote(db, input);
+    const ruleDetails = await sql<{
       priority: number;
-      status: 'ACTIVE' | 'INACTIVE';
-      version: string;
-    }>`select id,name,country_code,geography_node_id,flat_amount::text,currency_code,priority,status,version::text from orders.delivery_pricing_rules where organization_id=${organizationId} order by status,priority desc,name,id`.execute(
-      db,
-    )
-  ).rows.map((row) => ({ ...row, version: Number(row.version) }));
+      geography_node_name: string | null;
+      geography_node_type: string | null;
+      geography_parent_name: string | null;
+    }>`
+      select
+        rule.priority,
+        node.canonical_name as geography_node_name,
+        node.node_type as geography_node_type,
+        parent.canonical_name as geography_parent_name
+      from orders.delivery_pricing_rules rule
+      left join geography.nodes node on node.id = rule.geography_node_id
+      left join geography.nodes parent on parent.id = node.parent_id
+      where rule.id = ${quote.ruleId} and rule.organization_id = ${input.organizationId}
+    `.execute(db);
+
+    const row = ruleDetails.rows[0];
+    return {
+      matched: true,
+      quote: {
+        ...quote,
+        priority: row?.priority ?? null,
+        geographyNodeName: row?.geography_node_name ?? null,
+        geographyNodeType: row?.geography_node_type ?? null,
+        geographyParentName: row?.geography_parent_name ?? null,
+      },
+    };
+  } catch (caught) {
+    if (caught instanceof OrderDomainError) {
+      return {
+        matched: false,
+        reason: caught.message,
+      };
+    }
+    throw caught;
+  }
 }
 
 export async function createDeliveryPricingRule(

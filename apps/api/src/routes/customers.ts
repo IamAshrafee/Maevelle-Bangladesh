@@ -131,11 +131,16 @@ export function registerCustomerRoutes(
 ): void {
   app.get(
     '/admin/geography/search',
-    { schema: { querystring: Type.Object({ q: Type.String({ minLength: 1 }) }) } },
+    { schema: { querystring: Type.Object({ q: Type.Optional(Type.String()) }) } },
     async (request, reply) => {
-      if (!(await customerRouteContext(database, auth, request.headers, 'customers.view')))
+      const allowed =
+        (await customerRouteContext(database, auth, request.headers, 'customers.view')) ??
+        (await customerRouteContext(database, auth, request.headers, 'orders.view')) ??
+        (await customerRouteContext(database, auth, request.headers, 'orders.manage'));
+      if (!allowed)
         return reply.code(403).send({ error: 'FORBIDDEN' });
-      return { data: await searchGeography(database.db, (request.query as { q: string }).q) };
+      const query = (request.query as { q?: string }).q ?? '';
+      return { data: await searchGeography(database.db, query) };
     },
   );
 
