@@ -452,6 +452,14 @@ describe('media tenant ownership', () => {
         role: 'THUMBNAIL',
       }),
     ]);
+    const usedPage = await listMediaLibrary(database.db, {
+      organizationId: owner.id, page: 1, pageSize: 1, usage: 'USED', sort: 'NAME',
+    });
+    expect(usedPage.pagination.totalItems).toBe(1);
+    expect(usedPage.items.map((item) => item.id)).toEqual([asset.id]);
+    expect((await listMediaLibrary(database.db, {
+      organizationId: owner.id, page: 1, pageSize: 10, usage: 'UNUSED',
+    })).items.some((item) => item.id === asset.id)).toBe(false);
     expect(
       (await listMediaLibrary(database.db, other.id)).some((item) => item.id === asset.id),
     ).toBe(false);
@@ -472,6 +480,9 @@ describe('media tenant ownership', () => {
     expect(
       (await listMediaLibrary(database.db, owner.id)).find((item) => item.id === asset.id)?.usages,
     ).toEqual([]);
+    expect((await listMediaLibrary(database.db, {
+      organizationId: owner.id, page: 1, pageSize: 10, usage: 'UNUSED',
+    })).items.some((item) => item.id === asset.id)).toBe(true);
   });
 
   it('shares a primary gallery through an option value and keeps one primary per scope', async () => {

@@ -128,6 +128,8 @@ export function listMediaLibrary(
     assetType?: MediaAssetType;
     visibility?: MediaVisibility;
     unused?: boolean;
+    usage?: 'USED' | 'UNUSED';
+    sort?: 'NEWEST' | 'OLDEST' | 'NAME' | 'SIZE';
     folderId?: string | null;
     tagId?: string;
   },
@@ -148,6 +150,8 @@ export async function listMediaLibrary(
         assetType?: MediaAssetType;
         visibility?: MediaVisibility;
         unused?: boolean;
+        usage?: 'USED' | 'UNUSED';
+        sort?: 'NEWEST' | 'OLDEST' | 'NAME' | 'SIZE';
         folderId?: string | null;
         tagId?: string;
       },
@@ -169,6 +173,11 @@ export async function listMediaLibrary(
     : inputOrOrganizationId;
   const offset = (input.page - 1) * input.pageSize;
   const query = input.query?.trim() ? `%${input.query.trim()}%` : undefined;
+  const usageFilter = input.usage ?? (input.unused ? 'UNUSED' : undefined);
+  const sort = input.sort ?? 'NEWEST';
+  const hasUsage = sql`(exists(select 1 from catalog.product_media product_usage where product_usage.organization_id=asset.organization_id and product_usage.asset_id=asset.id)
+    or exists(select 1 from reviews.review_media review_usage where review_usage.organization_id=asset.organization_id and review_usage.media_asset_id=asset.id)
+    or exists(select 1 from messaging.message_attachments message_usage where message_usage.organization_id=asset.organization_id and message_usage.media_asset_id=asset.id))`;
   const filter = sql`
     asset.organization_id=${input.organizationId}
     ${input.status ? sql`and asset.status=${input.status}` : sql`and asset.status not in ('TRASHED','PURGING')`}
@@ -177,13 +186,7 @@ export async function listMediaLibrary(
     ${input.folderId === undefined ? sql`` : input.folderId === null ? sql`and asset.folder_id is null` : sql`and asset.folder_id=${input.folderId}::uuid`}
     ${input.tagId ? sql`and exists(select 1 from media.media_asset_tags filter_tag where filter_tag.organization_id=asset.organization_id and filter_tag.asset_id=asset.id and filter_tag.tag_id=${input.tagId}::uuid)` : sql``}
     ${query ? sql`and (asset.title ilike ${query} or asset.alt_text ilike ${query} or asset.original_filename ilike ${query} or asset.id::text ilike ${query})` : sql``}
-    ${
-      input.unused
-        ? sql`and not exists(select 1 from catalog.product_media product_usage where product_usage.organization_id=asset.organization_id and product_usage.asset_id=asset.id)
-      and not exists(select 1 from reviews.review_media review_usage where review_usage.organization_id=asset.organization_id and review_usage.media_asset_id=asset.id)
-      and not exists(select 1 from messaging.message_attachments message_usage where message_usage.organization_id=asset.organization_id and message_usage.media_asset_id=asset.id)`
-        : sql``
-    }
+    ${usageFilter === 'USED' ? sql`and ${hasUsage}` : usageFilter === 'UNUSED' ? sql`and not ${hasUsage}` : sql``}
   `;
   const [count, assets] = await Promise.all([
     sql<{
@@ -252,7 +255,12 @@ export async function listMediaLibrary(
       left join media.external_image_imports import_job
         on import_job.organization_id=asset.organization_id and import_job.asset_id=asset.id
       where ${filter}
-      order by asset.created_at desc,asset.id desc
+      order by
+        case when ${sort}='NAME' then lower(coalesce(nullif(asset.title,''),asset.original_filename)) end asc nulls last,
+        case when ${sort}='SIZE' then object.byte_size end desc nulls last,
+        case when ${sort}='OLDEST' then asset.created_at end asc nulls last,
+        case when ${sort}='NEWEST' then asset.created_at end desc nulls last,
+        asset.id desc
       limit ${input.pageSize} offset ${offset}
     `.execute(db),
   ]);

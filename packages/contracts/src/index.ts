@@ -4017,6 +4017,11 @@ export type MediaVisibilityDto = 'PUBLIC' | 'PRIVATE';
 
 export type MediaAssetTypeDto = 'IMAGE' | 'DOCUMENT';
 
+export interface MediaUploadPolicyDto {
+  readonly maxUploadBytes: number;
+  readonly acceptedMimeTypes: readonly ('image/jpeg' | 'image/png' | 'image/webp' | 'application/pdf')[];
+}
+
 export interface MediaLibraryItemDto {
   readonly id: string;
   readonly originalFilename: string;
@@ -4045,11 +4050,13 @@ export interface MediaFolderDto {
   readonly name: string;
   readonly parentId: string | null;
   readonly version: number;
+  readonly assetCount?: number;
 }
 
 export interface MediaTagDto {
   readonly id: string;
   readonly name: string;
+  readonly assetCount?: number;
 }
 
 export interface ProductMediaPlacementInputDto {

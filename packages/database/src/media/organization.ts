@@ -202,6 +202,8 @@ export async function bulkOrganizeMediaAssets(
     assetIds: readonly string[];
     folderId?: string | null;
     tagIds?: readonly string[];
+    addTagIds?: readonly string[];
+    removeTagIds?: readonly string[];
     actorId?: string;
   },
 ): Promise<{ updatedCount: number }> {
@@ -218,8 +220,12 @@ export async function bulkOrganizeMediaAssets(
       if (!folder.rows[0]) throw new MediaDomainError('NOT_FOUND', 'Media folder was not found.');
     }
 
-    if (input.tagIds && input.tagIds.length > 0) {
-      const uniqueTagIds = [...new Set(input.tagIds)];
+    const checkTags = [
+      ...(input.tagIds ?? []),
+      ...(input.addTagIds ?? []),
+    ];
+    if (checkTags.length > 0) {
+      const uniqueTagIds = [...new Set(checkTags)];
       const ids = sql.join(uniqueTagIds.map((id) => sql`${id}::uuid`));
       const tags = await sql<{ count: number }>`select count(*)::int count from media.media_tags
         where organization_id=${input.organizationId} and id in (${ids})`.execute(transaction);
@@ -254,6 +260,22 @@ export async function bulkOrganizeMediaAssets(
           await sql`insert into media.media_asset_tags(organization_id,asset_id,tag_id)
             values (${input.organizationId},${assetId}::uuid,${tagId}::uuid)
             on conflict do nothing`.execute(transaction);
+        }
+      }
+    } else {
+      if (input.removeTagIds && input.removeTagIds.length > 0) {
+        const removeIds = sql.join([...new Set(input.removeTagIds)].map((id) => sql`${id}::uuid`));
+        await sql`delete from media.media_asset_tags where organization_id=${input.organizationId}
+          and asset_id in (${assetIdList}) and tag_id in (${removeIds})`.execute(transaction);
+      }
+      if (input.addTagIds && input.addTagIds.length > 0) {
+        const uniqueAddTagIds = [...new Set(input.addTagIds)];
+        for (const assetId of uniqueAssetIds) {
+          for (const tagId of uniqueAddTagIds) {
+            await sql`insert into media.media_asset_tags(organization_id,asset_id,tag_id)
+              values (${input.organizationId},${assetId}::uuid,${tagId}::uuid)
+              on conflict do nothing`.execute(transaction);
+          }
         }
       }
     }

@@ -2,6 +2,7 @@ import type {
   ApiEnvelope,
   MediaFolderDto,
   MediaLibraryItemDto,
+  MediaUploadPolicyDto,
   MediaTagDto,
   ProductMediaPlacementInputDto,
 } from '@maevelle/contracts';
@@ -10,6 +11,11 @@ import { catalogRequest } from '../catalog/api';
 
 export type MediaProcessingStatus =
   'PENDING_UPLOAD' | 'UPLOADED' | 'PROCESSING' | 'READY' | 'FAILED' | 'QUARANTINED';
+
+export async function getMediaUploadPolicy(): Promise<MediaUploadPolicyDto> {
+  const response = await catalogRequest<ApiEnvelope<MediaUploadPolicyDto>>('/admin/media/upload-policy');
+  return response.data;
+}
 
 interface UploadSessionResponse {
   readonly sessionId: string;
@@ -121,19 +127,21 @@ export async function waitForMediaReady(
 }
 
 export interface ListMediaParams {
-  readonly page?: number;
-  readonly pageSize?: number;
-  readonly query?: string;
-  readonly status?: string;
-  readonly assetType?: 'IMAGE' | 'DOCUMENT';
-  readonly visibility?: 'PUBLIC' | 'PRIVATE';
-  readonly unused?: boolean;
-  readonly folderId?: string;
-  readonly tagId?: string;
+  readonly page?: number | undefined;
+  readonly pageSize?: number | undefined;
+  readonly query?: string | undefined;
+  readonly status?: string | undefined;
+  readonly assetType?: 'IMAGE' | 'DOCUMENT' | undefined;
+  readonly visibility?: 'PUBLIC' | 'PRIVATE' | undefined;
+  readonly unused?: boolean | undefined;
+  readonly usage?: 'USED' | 'UNUSED' | undefined;
+  readonly sort?: 'NEWEST' | 'OLDEST' | 'NAME' | 'SIZE' | undefined;
+  readonly folderId?: string | undefined;
+  readonly tagId?: string | undefined;
 }
 
-export interface MediaLibraryResponse {
-  readonly data: readonly MediaLibraryItemDto[];
+export interface MediaLibraryResponse<T = MediaLibraryItemDto> {
+  readonly data: readonly T[];
   readonly pagination: {
     readonly page: number;
     readonly pageSize: number;
@@ -142,9 +150,9 @@ export interface MediaLibraryResponse {
   };
 }
 
-export async function listMediaLibrary(
+export async function listMediaLibrary<T = MediaLibraryItemDto>(
   params: ListMediaParams = {},
-): Promise<MediaLibraryResponse> {
+): Promise<MediaLibraryResponse<T>> {
   const query = new URLSearchParams();
   if (params.page) query.set('page', String(params.page));
   if (params.pageSize) query.set('pageSize', String(params.pageSize));
@@ -153,11 +161,13 @@ export async function listMediaLibrary(
   if (params.assetType) query.set('assetType', params.assetType);
   if (params.visibility) query.set('visibility', params.visibility);
   if (params.unused !== undefined) query.set('unused', String(params.unused));
+  if (params.usage) query.set('usage', params.usage);
+  if (params.sort) query.set('sort', params.sort);
   if (params.folderId) query.set('folderId', params.folderId);
   if (params.tagId) query.set('tagId', params.tagId);
 
   const qs = query.toString();
-  return catalogRequest<MediaLibraryResponse>(`/admin/media${qs ? `?${qs}` : ''}`);
+  return catalogRequest<MediaLibraryResponse<T>>(`/admin/media${qs ? `?${qs}` : ''}`);
 }
 
 export async function listMediaFolders(): Promise<readonly MediaFolderDto[]> {
@@ -180,6 +190,122 @@ export async function createMediaFolder(input: {
 export async function listMediaTags(): Promise<readonly MediaTagDto[]> {
   const response = await catalogRequest<ApiEnvelope<readonly MediaTagDto[]>>('/admin/media/tags');
   return response.data;
+}
+
+export async function createMediaTag(input: {
+  readonly name: string;
+}): Promise<MediaTagDto> {
+  const response = await catalogRequest<ApiEnvelope<MediaTagDto>>('/admin/media/tags', {
+    method: 'POST',
+    body: JSON.stringify(input),
+  });
+  return response.data;
+}
+
+export async function deleteMediaTag(tagId: string): Promise<void> {
+  await catalogRequest(`/admin/media/tags/${encodeURIComponent(tagId)}`, {
+    method: 'DELETE',
+  });
+}
+
+export async function updateMediaFolder(
+  folderId: string,
+  input: {
+    readonly version: number;
+    readonly name: string;
+    readonly parentId?: string | null;
+  },
+): Promise<MediaFolderDto> {
+  const response = await catalogRequest<ApiEnvelope<MediaFolderDto>>(
+    `/admin/media/folders/${encodeURIComponent(folderId)}`,
+    {
+      method: 'PATCH',
+      body: JSON.stringify(input),
+    },
+  );
+  return response.data;
+}
+
+export async function deleteMediaFolder(folderId: string): Promise<void> {
+  await catalogRequest(`/admin/media/folders/${encodeURIComponent(folderId)}`, {
+    method: 'DELETE',
+  });
+}
+
+export async function updateMediaMetadata(
+  assetId: string,
+  input: {
+    readonly version: number;
+    readonly title?: string | null;
+    readonly altText?: string | null;
+    readonly caption?: string | null;
+    readonly internalDescription?: string | null;
+    readonly visibility?: 'PUBLIC' | 'PRIVATE';
+  },
+): Promise<void> {
+  await catalogRequest(`/admin/media/${encodeURIComponent(assetId)}`, {
+    method: 'PATCH',
+    body: JSON.stringify(input),
+  });
+}
+
+export async function updateMediaOrganization(
+  assetId: string,
+  input: {
+    readonly version: number;
+    readonly folderId?: string | null;
+    readonly tagIds: readonly string[];
+  },
+): Promise<void> {
+  await catalogRequest(`/admin/media/${encodeURIComponent(assetId)}/organization`, {
+    method: 'PATCH',
+    body: JSON.stringify(input),
+  });
+}
+
+export async function trashMediaAsset(assetId: string): Promise<void> {
+  await catalogRequest(`/admin/media/${encodeURIComponent(assetId)}`, {
+    method: 'DELETE',
+  });
+}
+
+export async function runMediaLifecycleAction(
+  assetId: string,
+  action: 'retry' | 'retry-import' | 'repair-renditions' | 'retry-purge' | 'archive' | 'restore',
+): Promise<void> {
+  await catalogRequest(`/admin/media/${encodeURIComponent(assetId)}/${action}`, {
+    method: 'POST',
+  });
+}
+
+export async function attachProductMedia(
+  productId: string,
+  input: {
+    readonly assetId: string;
+    readonly role: 'GALLERY' | 'THUMBNAIL' | 'COLOR_GALLERY' | 'SIZE_DIAGRAM';
+    readonly position?: number;
+    readonly variantId?: string;
+    readonly optionValueId?: string;
+    readonly isPrimary?: boolean;
+    readonly altTextOverride?: string | null;
+  },
+): Promise<void> {
+  await catalogRequest(`/admin/catalog/products/${encodeURIComponent(productId)}/media`, {
+    method: 'POST',
+    body: JSON.stringify(input),
+  });
+}
+
+export async function detachProductMedia(
+  productId: string,
+  placementId: string,
+): Promise<void> {
+  await catalogRequest(
+    `/admin/catalog/products/${encodeURIComponent(productId)}/media/${encodeURIComponent(placementId)}`,
+    {
+      method: 'DELETE',
+    },
+  );
 }
 
 export async function syncProductMediaPlacements(

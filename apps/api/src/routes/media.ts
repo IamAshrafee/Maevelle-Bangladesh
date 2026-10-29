@@ -32,6 +32,7 @@ import {
   retryFailedMediaPurge,
   restoreTrashedMediaAsset,
   syncProductMediaPlacements,
+  SUPPORTED_MEDIA_UPLOAD_MIME_TYPES,
   trashUnusedMediaAsset,
   updateMediaAssetMetadata,
   updateMediaFolder,
@@ -121,6 +122,18 @@ export function registerMediaRoutes(
   storage: ObjectStoragePort,
   options: { readonly maxUploadBytes: number; readonly uploadExpirySeconds: number },
 ): void {
+  app.get('/admin/media/upload-policy', async (request, reply) => {
+    const context = await requireCapability(database, auth, request.headers, 'media.manage');
+    if (!context) return sendForbidden(reply);
+    const settings = await resolveMediaSettings(database.db, context.organizationId, {
+      mediaDefaultMaxUploadBytes: options.maxUploadBytes,
+      mediaDefaultUploadExpirySeconds: options.uploadExpirySeconds,
+    });
+    return { data: {
+      maxUploadBytes: settings.maxUploadBytes,
+      acceptedMimeTypes: SUPPORTED_MEDIA_UPLOAD_MIME_TYPES,
+    } };
+  });
   app.post(
     '/reviews/media/uploads',
     {
@@ -330,6 +343,10 @@ export function registerMediaRoutes(
           assetType: Type.Optional(Type.Union([Type.Literal('IMAGE'), Type.Literal('DOCUMENT')])),
           visibility: Type.Optional(Type.Union([Type.Literal('PUBLIC'), Type.Literal('PRIVATE')])),
           unused: Type.Optional(Type.Boolean()),
+          usage: Type.Optional(Type.Union([Type.Literal('USED'), Type.Literal('UNUSED')])),
+          sort: Type.Optional(Type.Union([
+            Type.Literal('NEWEST'), Type.Literal('OLDEST'), Type.Literal('NAME'), Type.Literal('SIZE'),
+          ])),
           folderId: Type.Optional(Type.Union([UUID, Type.Literal('unfiled')])),
           tagId: Type.Optional(UUID),
         }),
@@ -346,6 +363,8 @@ export function registerMediaRoutes(
         assetType?: 'IMAGE' | 'DOCUMENT';
         visibility?: 'PUBLIC' | 'PRIVATE';
         unused?: boolean;
+        usage?: 'USED' | 'UNUSED';
+        sort?: 'NEWEST' | 'OLDEST' | 'NAME' | 'SIZE';
         folderId?: string;
         tagId?: string;
       };
@@ -358,6 +377,8 @@ export function registerMediaRoutes(
         ...(query.assetType ? { assetType: query.assetType } : {}),
         ...(query.visibility ? { visibility: query.visibility } : {}),
         ...(query.unused !== undefined ? { unused: query.unused } : {}),
+        ...(query.usage ? { usage: query.usage } : {}),
+        ...(query.sort ? { sort: query.sort } : {}),
         ...(query.folderId
           ? { folderId: query.folderId === 'unfiled' ? null : query.folderId }
           : {}),
@@ -567,6 +588,7 @@ export function registerMediaRoutes(
         body: Type.Object({
           assetIds: Type.Array(UUID, { minItems: 1, maxItems: 100, uniqueItems: true }),
           folderId: Type.Optional(Type.Union([UUID, Type.Null()])),
+          tagIds: Type.Optional(Type.Array(UUID, { maxItems: 50, uniqueItems: true })),
           addTagIds: Type.Optional(Type.Array(UUID, { maxItems: 50, uniqueItems: true })),
           removeTagIds: Type.Optional(Type.Array(UUID, { maxItems: 50, uniqueItems: true })),
         }),
@@ -579,6 +601,7 @@ export function registerMediaRoutes(
         const body = request.body as {
           assetIds: string[];
           folderId?: string | null;
+          tagIds?: string[];
           addTagIds?: string[];
           removeTagIds?: string[];
         };
@@ -586,6 +609,7 @@ export function registerMediaRoutes(
           organizationId: context.organizationId,
           assetIds: body.assetIds,
           ...(body.folderId !== undefined ? { folderId: body.folderId } : {}),
+          ...(body.tagIds !== undefined ? { tagIds: body.tagIds } : {}),
           ...(body.addTagIds ? { addTagIds: body.addTagIds } : {}),
           ...(body.removeTagIds ? { removeTagIds: body.removeTagIds } : {}),
         });
