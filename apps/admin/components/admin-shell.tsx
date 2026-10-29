@@ -86,6 +86,13 @@ const navigation: readonly NavGroup[] = [
     label: 'Commerce',
     items: [
       { label: 'Orders', href: '/orders', icon: ShoppingBag, capability: 'orders.view' },
+      {
+        label: 'Delivery pricing',
+        href: '/orders/delivery-pricing',
+        icon: CircleDollarSign,
+        capability: 'orders.view',
+        keywords: 'delivery pricing rules shipping rates charges fees zones bangladesh',
+      },
       { label: 'Customers', href: '/customers', icon: Users, capability: 'customers.view' },
       { label: 'Reviews', href: '/reviews', icon: HeartHandshake, capability: 'reviews.view' },
     ],

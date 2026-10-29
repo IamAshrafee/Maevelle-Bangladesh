@@ -1,7 +1,7 @@
-import { DeliveryPricingRulesConsole } from '@/components/orders/delivery-pricing-rules-console';
+import { DeliveryPricingWorkspace } from '@/components/orders/delivery-pricing/delivery-pricing-workspace';
 
 export const metadata = { title: 'Delivery pricing | Maevelle' };
 
 export default function DeliveryPricingPage() {
-  return <DeliveryPricingRulesConsole />;
+  return <DeliveryPricingWorkspace />;
 }
