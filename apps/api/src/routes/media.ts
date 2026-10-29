@@ -47,6 +47,7 @@ import {
 } from '@maevelle/media';
 
 import type { createAuth } from '../auth/auth.js';
+import { inspectMediaStoragePage } from './media-health.js';
 
 type Auth = ReturnType<typeof createAuth>;
 
@@ -405,52 +406,40 @@ export function registerMediaRoutes(
     return { data: await listMediaFolders(database.db, context.organizationId) };
   });
 
-  app.get('/admin/media/health', async (request, reply) => {
+  app.get('/admin/media/health', {
+    schema: { querystring: Type.Object({
+      cursor: Type.Optional(Type.String({ minLength: 1, maxLength: 2000 })),
+      pageSize: Type.Optional(Type.Integer({ minimum: 1, maximum: 100 })),
+    }) },
+  }, async (request, reply) => {
     const context = await requireCapability(database, auth, request.headers, 'media.view');
     if (!context) return sendForbidden(reply);
-    const [domainIssues, inventory] = await Promise.all([
-      listMediaHealthIssues(database.db, context.organizationId),
-      listMediaStorageInventory(database.db, context.organizationId),
-    ]);
-    const storageIssues: Array<{
-      code: 'MISSING_STORED_OBJECT' | 'PROVIDER_NOT_CONFIGURED';
-      assetId: string;
-      detail: string;
-    }> = [];
-    for (let offset = 0; offset < inventory.length; offset += 20) {
-      const batch = inventory.slice(offset, offset + 20);
-      const inspected = await Promise.all(
-        batch.map(async (object) => {
-          if (object.provider === 'url') return undefined;
-          if (object.provider !== storage.provider)
-            return {
-              code: 'PROVIDER_NOT_CONFIGURED' as const,
-              assetId: object.assetId,
-              detail: `${object.kind} uses unconfigured provider ${object.provider}.`,
-            };
-          const found = await storage.head({
-            provider: object.provider,
-            bucket: object.bucket,
-            key: object.objectKey,
-          });
-          return found
-            ? undefined
-            : {
-                code: 'MISSING_STORED_OBJECT' as const,
-                assetId: object.assetId,
-                detail: `${object.kind} object is missing from storage.`,
-              };
-        }),
-      );
-      storageIssues.push(...inspected.filter((issue) => issue !== undefined));
+    const query = request.query as { cursor?: string; pageSize?: number };
+    let inventory;
+    try {
+      inventory = await listMediaStorageInventory(database.db, {
+        organizationId: context.organizationId,
+        pageSize: query.pageSize ?? 100,
+        ...(query.cursor ? { cursor: query.cursor } : {}),
+      });
+    } catch (error) {
+      return mediaError(reply, error);
     }
+    const domainIssues = query.cursor ? [] : await listMediaHealthIssues(database.db, context.organizationId);
+    const { verifiedObjectCount, issues: storageIssues } =
+      await inspectMediaStoragePage(storage, inventory.items);
     const issues = [...domainIssues, ...storageIssues];
     return {
       data: {
-        status: issues.length ? 'DEGRADED' : 'HEALTHY',
-        checkedObjectCount: inventory.length,
+        status: inventory.hasMore || query.cursor ? 'PARTIAL' : issues.length ? 'DEGRADED' : 'HEALTHY',
+        checkedObjectCount: inventory.items.length,
+        verifiedObjectCount,
         issueCount: issues.length,
-        issues,
+        issues: issues.slice(0, 200),
+        issuesTruncated: issues.length > 200,
+        hasMore: inventory.hasMore,
+        nextCursor: inventory.nextCursor,
+        checkMethod: 'EXISTENCE_AND_BYTE_SIZE',
       },
     };
   });

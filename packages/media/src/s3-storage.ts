@@ -162,6 +162,11 @@ export class S3ObjectStorage implements ObjectStoragePort {
     }
   }
 
+  public async probe(locator: StoredObjectLocator): Promise<{ byteSize: number } | undefined> {
+    const found = await this.head(locator);
+    return found ? { byteSize: found.byteSize } : undefined;
+  }
+
   public async delete(locator: StoredObjectLocator): Promise<void> {
     this.assertLocator(locator);
     await this.client.send(new DeleteObjectCommand({ Bucket: locator.bucket, Key: locator.key }));

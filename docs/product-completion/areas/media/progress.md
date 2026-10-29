@@ -27,6 +27,11 @@
   and request an immediate retry of an unclaimed failure. Health reports failed and stale
   purges. Purge selection checks customer profile and business asset references; the final
   transaction removes messaging upload ledger rows before deleting their media records.
+- Storage health inventory now uses cursor pages of up to 100 records instead of silently
+  stopping at 2,000. Admin continues until every page succeeds and distinguishes scanning,
+  complete, degraded, and failed results. The scan checks storage presence and recorded byte
+  size; external URL objects are explicitly unverified, and the UI does not claim checksum
+  or image-property integrity. Issue counts remain exact when displayed details are capped.
 
 For an upgrade, stop the old worker, apply migrations `3203` and `3204` once, then deploy
 the new Worker, API, and Admin together. Check Media Library's Purging filter and Media

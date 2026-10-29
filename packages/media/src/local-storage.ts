@@ -83,6 +83,15 @@ export class LocalObjectStorage implements ObjectStoragePort {
     }
   }
 
+  public async probe(locator: StoredObjectLocator): Promise<{ byteSize: number } | undefined> {
+    try {
+      return { byteSize: (await stat(this.resolveLocator(locator))).size };
+    } catch (error) {
+      if (missing(error)) return undefined;
+      throw error;
+    }
+  }
+
   public async delete(locator: StoredObjectLocator): Promise<void> {
     try {
       await unlink(this.resolveLocator(locator));

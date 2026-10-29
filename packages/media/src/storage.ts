@@ -50,6 +50,8 @@ export interface ObjectStoragePort {
   ): Promise<void>;
   get(locator: StoredObjectLocator): Promise<Buffer | undefined>;
   head(locator: StoredObjectLocator): Promise<StoredObjectHead | undefined>;
+  /** Lightweight existence and size check; unlike head, it need not hash local bytes. */
+  probe(locator: StoredObjectLocator): Promise<Pick<StoredObjectHead, 'byteSize'> | undefined>;
   delete(locator: StoredObjectLocator): Promise<void>;
 }
 

@@ -38,6 +38,7 @@ describe('Media storage and image processing', () => {
         byteSize: content.length,
         checksumSha256: sha256(content),
       });
+      expect(await storage.probe(locator)).toEqual({ byteSize: content.length });
       await expect(
         storage.put(locator, Buffer.from('different bytes'), { contentType: 'image/jpeg' }),
       ).rejects.toThrow('different content');

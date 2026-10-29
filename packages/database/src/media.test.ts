@@ -22,6 +22,7 @@ import {
   findMediaAsset,
   failMediaPurge,
   listMediaHealthIssues,
+  listMediaStorageInventory,
   listMediaLibrary,
   organizeMediaAsset,
   registerUploadedMedia,
@@ -40,6 +41,43 @@ const database = createDatabase({
 afterAll(async () => database.close());
 
 describe('media tenant ownership', () => {
+  it('pages through more than 2,000 storage records without truncation or duplicates', async () => {
+    const owner = await createOrganization(database.db, {
+      code: `media-inventory-${crypto.randomUUID().slice(0, 8)}`,
+      displayName: 'Media inventory test', timezone: 'UTC', defaultLocale: 'en', defaultCurrency: 'USD',
+    });
+    await sql`insert into media.media_assets
+      (organization_id,asset_type,visibility_class,status,original_filename,normalized_extension,upload_source)
+      select ${owner.id},'IMAGE','PRIVATE','READY',
+        'scan-' || number::text || '.webp','webp','MIGRATION'
+      from generate_series(1,2005) number`.execute(database.db);
+    await sql`insert into media.media_objects
+      (organization_id,asset_id,object_role,storage_provider,bucket_name,object_key,mime_type,
+        byte_size,checksum_sha256,file_format)
+      select ${owner.id},asset.id,'ORIGINAL','local','private',
+        'organizations/' || ${owner.id} || '/assets/' || asset.id::text || '/source.webp',
+        'image/webp',10,${'a'.repeat(64)},'webp'
+      from media.media_assets asset where asset.organization_id=${owner.id}`.execute(database.db);
+
+    const seen = new Set<string>();
+    let cursor: string | undefined;
+    let pages = 0;
+    for (;;) {
+      const page = await listMediaStorageInventory(database.db, {
+        organizationId: owner.id, pageSize: 100, ...(cursor ? { cursor } : {}),
+      });
+      pages += 1;
+      for (const item of page.items) seen.add(item.objectKey);
+      if (!page.hasMore) break;
+      expect(page.nextCursor).toBeTruthy();
+      cursor = page.nextCursor!;
+    }
+    expect(seen.size).toBe(2005);
+    expect(pages).toBe(21);
+    await expect(listMediaStorageInventory(database.db, {
+      organizationId: owner.id, pageSize: 100, cursor: 'not-a-cursor',
+    })).rejects.toMatchObject({ code: 'VALIDATION_FAILED' });
+  });
   it('retries failed and stale purge claims with fencing, then removes the asset', async () => {
     const owner = await createOrganization(database.db, {
       code: `media-purge-${crypto.randomUUID().slice(0, 8)}`,

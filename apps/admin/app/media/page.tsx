@@ -7,6 +7,7 @@ import {
   useDeferredValue,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from 'react';
 import Image from 'next/image';
@@ -69,6 +70,11 @@ import {
   getAdminMediaUrl,
   uploadMediaFile,
 } from '../../lib/media/api';
+import {
+  emptyHealthSummary,
+  scanMediaHealth,
+  type MediaHealthSummary,
+} from '../../lib/media/health-scan';
 
 type MediaUsage = {
   readonly id: string;
@@ -183,17 +189,13 @@ export default function MediaPage() {
 
   // Modals
   const [isHealthOpen, setIsHealthOpen] = useState(false);
+  const healthAbort = useRef<AbortController | null>(null);
   const [isBulkFolderOpen, setIsBulkFolderOpen] = useState(false);
   const [isNewFolderOpen, setIsNewFolderOpen] = useState(false);
   const [isNewTagOpen, setIsNewTagOpen] = useState(false);
   const [bulkTargetFolderId, setBulkTargetFolderId] = useState('');
 
-  const [health, setHealth] = useState<{
-    status: 'HEALTHY' | 'DEGRADED';
-    checkedObjectCount: number;
-    issueCount: number;
-    issues: readonly { code: string; assetId: string; detail: string }[];
-  } | null>(null);
+  const [health, setHealth] = useState<MediaHealthSummary | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -271,27 +273,27 @@ export default function MediaPage() {
   );
 
   async function checkHealth() {
+    const controller = new AbortController();
+    healthAbort.current = controller;
     setBusy(true);
+    setIsHealthOpen(true);
+    setHealth(emptyHealthSummary);
     try {
-      const response = await fetch('/api/admin/media/health', {
-        credentials: 'include',
-        cache: 'no-store',
-      });
-      if (!response.ok)
-        throw new Error(await errorMessage(response, 'Media health check could not run.'));
-      const result = (await response.json()) as { data: NonNullable<typeof health> };
-      setHealth(result.data);
-      setIsHealthOpen(true);
+      const result = await scanMediaHealth(fetch, controller.signal, setHealth);
       setMessage(
-        result.data.status === 'HEALTHY'
-          ? `Media storage is healthy across ${result.data.checkedObjectCount} stored objects.`
-          : `Storage diagnostics found ${result.data.issueCount} issue${result.data.issueCount === 1 ? '' : 's'}.`,
+        result.status === 'HEALTHY'
+          ? `Media scan completed: ${result.verifiedObjectCount} objects found with matching byte sizes.`
+          : `Media scan completed with ${result.issueCount} issue${result.issueCount === 1 ? '' : 's'}.`,
       );
-      setTone(result.data.status === 'HEALTHY' ? 'success' : 'warning');
+      setTone(result.status === 'HEALTHY' ? 'success' : 'warning');
     } catch (error) {
+      if (controller.signal.aborted) return;
+      setHealth((previous) => ({ ...(previous ?? emptyHealthSummary), status: 'FAILED',
+        error: error instanceof Error ? error.message : 'Media health scan failed.' }));
       setMessage(error instanceof Error ? error.message : 'Media health check could not run.');
       setTone('danger');
     } finally {
+      if (healthAbort.current === controller) healthAbort.current = null;
       setBusy(false);
     }
   }
@@ -1741,33 +1743,58 @@ export default function MediaPage() {
       </div>
 
       {/* Health Check Modal */}
-      <Dialog open={isHealthOpen} onOpenChange={setIsHealthOpen}>
+      <Dialog open={isHealthOpen} onOpenChange={(open) => {
+        if (!open) healthAbort.current?.abort();
+        setIsHealthOpen(open);
+      }}>
         <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <ShieldCheck className="size-5 text-primary" /> Storage Health Diagnostics
             </DialogTitle>
             <DialogDescription className="text-xs">
-              Verified {health?.checkedObjectCount ?? 0} physical storage objects and metadata
-              integrity.
+              Inspected {health?.checkedObjectCount ?? 0} storage records. Found{' '}
+              {health?.verifiedObjectCount ?? 0} objects with matching recorded byte sizes.
+              This scan does not check checksums or image properties.
             </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-3 py-2">
             <div
+              role="status"
+              aria-live="polite"
               className={`rounded-lg p-3 text-xs font-medium border ${
                 health?.status === 'HEALTHY'
-                  ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-700 dark:text-emerald-400'
-                  : 'bg-amber-500/10 border-amber-500/30 text-amber-700 dark:text-amber-400'
+                  ? 'bg-success/10 border-success/30 text-success'
+                  : health?.status === 'SCANNING'
+                    ? 'bg-info/10 border-info/30 text-info'
+                    : 'bg-warning/10 border-warning/30 text-warning'
               }`}
             >
               Status:{' '}
               <strong className="uppercase">
                 {health?.status === 'HEALTHY'
-                  ? 'Healthy — All Storage Verified'
-                  : 'Degraded — Issues Detected'}
+                  ? 'Complete — no issues found'
+                  : health?.status === 'SCANNING'
+                    ? 'Scanning — result is incomplete'
+                    : health?.status === 'FAILED'
+                      ? 'Scan failed — result is incomplete'
+                      : 'Complete — issues found'}
               </strong>
+              {health?.status === 'SCANNING' && (
+                <p className="mt-1 font-normal">
+                  {health.checkedObjectCount} records inspected so far.
+                </p>
+              )}
+              {health?.error && <p className="mt-1 font-normal">{health.error}</p>}
             </div>
+
+            {health && health.issueCount > 0 && (
+              <p className="text-xs text-muted-foreground">
+                {health.issueCount} issue{health.issueCount === 1 ? '' : 's'} found.
+                {health.issuesTruncated && ` Showing the first ${health.issues.length}.`}
+              </p>
+            )}
 
             {health?.issues && health.issues.length > 0 && (
               <ScrollArea className="max-h-60 rounded border p-2">

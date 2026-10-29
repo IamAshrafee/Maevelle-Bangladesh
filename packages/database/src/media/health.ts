@@ -1,6 +1,7 @@
 import { sql, type Kysely } from 'kysely';
 
 import type { DatabaseSchema } from '../index.js';
+import { MediaDomainError } from './types.js';
 
 export interface MediaHealthIssue {
   readonly code:
@@ -90,7 +91,7 @@ export async function listMediaHealthIssues(
         and projection.asset_id=authoritative.asset_id
         and projection.domain=authoritative.domain
         and projection.relationship_id=authoritative.relationship_id)
-    order by code,asset_id limit 500
+    order by code,asset_id
   `.execute(db);
   return result.rows.map((row) => ({
     code: row.code,
@@ -101,31 +102,64 @@ export async function listMediaHealthIssues(
 
 export async function listMediaStorageInventory(
   db: Kysely<DatabaseSchema>,
-  organizationId: string,
+  input: { organizationId: string; pageSize: number; cursor?: string },
 ) {
+  type Cursor = { assetId: string; kind: 'ORIGINAL' | 'RENDITION'; objectKey: string; recordId: string };
+  let cursor: Cursor | undefined;
+  if (input.cursor) {
+    try {
+      const parsed = JSON.parse(Buffer.from(input.cursor, 'base64url').toString('utf8')) as Cursor;
+      if (!/^[0-9a-f-]{36}$/i.test(parsed.assetId) ||
+        !/^[0-9a-f-]{36}$/i.test(parsed.recordId) ||
+        !['ORIGINAL', 'RENDITION'].includes(parsed.kind) ||
+        typeof parsed.objectKey !== 'string' || parsed.objectKey.length > 1000)
+        throw new Error('Invalid cursor');
+      cursor = parsed;
+    } catch {
+      throw new MediaDomainError('VALIDATION_FAILED', 'Invalid media health scan cursor.');
+    }
+  }
   const result = await sql<{
     asset_id: string;
     kind: 'ORIGINAL' | 'RENDITION';
+    record_id: string;
     provider: string;
     bucket: string;
     object_key: string;
-  }>`select object.asset_id::text,'ORIGINAL' kind,object.storage_provider provider,
-      object.bucket_name bucket,object.object_key
-    from media.media_objects object join media.media_assets asset
-      on asset.organization_id=object.organization_id and asset.id=object.asset_id
-    where object.organization_id=${organizationId} and asset.status<>'PURGING'
-    union all
-    select rendition.asset_id::text,'RENDITION',rendition.storage_provider,
-      rendition.bucket_name,rendition.object_key
-    from media.media_renditions rendition join media.media_assets asset
-      on asset.organization_id=rendition.organization_id and asset.id=rendition.asset_id
-    where rendition.organization_id=${organizationId} and asset.status<>'PURGING'
-    order by asset_id,kind,object_key limit 2000`.execute(db);
-  return result.rows.map((row) => ({
-    assetId: row.asset_id,
-    kind: row.kind,
-    provider: row.provider,
-    bucket: row.bucket,
-    objectKey: row.object_key,
-  }));
+    byte_size: string;
+  }>`select * from (
+      select object.asset_id::text asset_id,'ORIGINAL'::text kind,object.id::text record_id,
+        object.storage_provider provider,object.bucket_name bucket,object.object_key,
+        object.byte_size::text byte_size
+      from media.media_objects object join media.media_assets asset
+        on asset.organization_id=object.organization_id and asset.id=object.asset_id
+      where object.organization_id=${input.organizationId} and asset.status<>'PURGING'
+      union all
+      select rendition.asset_id::text,'RENDITION'::text,rendition.id::text,
+        rendition.storage_provider,rendition.bucket_name,rendition.object_key,
+        rendition.byte_size::text
+      from media.media_renditions rendition join media.media_assets asset
+        on asset.organization_id=rendition.organization_id and asset.id=rendition.asset_id
+      where rendition.organization_id=${input.organizationId} and asset.status<>'PURGING'
+    ) inventory
+    where ${cursor ? sql`(asset_id,kind,object_key,record_id) >
+      (${cursor.assetId},${cursor.kind},${cursor.objectKey},${cursor.recordId})` : sql`true`}
+    order by asset_id,kind,object_key,record_id limit ${input.pageSize + 1}`.execute(db);
+  const page = result.rows.slice(0, input.pageSize);
+  const last = page.at(-1);
+  return {
+    items: page.map((row) => ({
+      assetId: row.asset_id,
+      kind: row.kind,
+      provider: row.provider,
+      bucket: row.bucket,
+      objectKey: row.object_key,
+      byteSize: Number(row.byte_size),
+    })),
+    hasMore: result.rows.length > input.pageSize,
+    nextCursor: result.rows.length > input.pageSize && last
+      ? Buffer.from(JSON.stringify({ assetId: last.asset_id, kind: last.kind,
+        objectKey: last.object_key, recordId: last.record_id })).toString('base64url')
+      : null,
+  };
 }
