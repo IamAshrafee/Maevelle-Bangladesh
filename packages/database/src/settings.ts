@@ -217,7 +217,7 @@ export interface SystemStatusDto {
   };
   readonly worker: {
     readonly status: 'HEALTHY' | 'UNKNOWN';
-    readonly isRunning: boolean;
+    readonly isRunning: boolean | null;
   };
   readonly storage: {
     readonly provider: string;
@@ -762,6 +762,7 @@ export interface DeploymentSettingsFallback {
   readonly storefrontBaseUrl?: string;
   readonly mediaDefaultMaxUploadBytes?: number;
   readonly mediaDefaultUploadExpirySeconds?: number;
+  readonly mediaStorageProvider?: 'local' | 's3';
 }
 
 export function resolveSettingEntry(
@@ -811,6 +812,9 @@ export function resolveSettingEntry(
   if (key === 'email.testRecipientOverride' && env === 'production') {
     // Production strictly prohibits test recipient overrides
     effectiveValue = null;
+  }
+  if (key === 'media.maxUploadBytes' && deployment?.mediaDefaultMaxUploadBytes) {
+    effectiveValue = Math.min(Number(value), deployment.mediaDefaultMaxUploadBytes);
   }
 
   // Coerce if defined
@@ -1102,6 +1106,14 @@ export interface UpdateModuleSettingsInput {
   readonly deployment?: DeploymentSettingsFallback;
 }
 
+function validateDeploymentMediaLimit(key: string, value: unknown, deployment?: DeploymentSettingsFallback): void {
+  if (key === 'media.maxUploadBytes' && deployment?.mediaDefaultMaxUploadBytes &&
+      typeof value === 'number' && value > deployment.mediaDefaultMaxUploadBytes) {
+    throw new SettingsDomainError('SETTING_INVALID',
+      `Maximum upload size cannot exceed the deployment limit of ${deployment.mediaDefaultMaxUploadBytes} bytes.`);
+  }
+}
+
 export async function updateSingleSetting(
   db: Kysely<DatabaseSchema>,
   input: UpdateSettingInput,
@@ -1122,6 +1134,7 @@ export async function updateSingleSetting(
   if (!validation.valid) {
     throw new SettingsDomainError('SETTING_INVALID', validation.error ?? `Invalid value for ${input.key}`);
   }
+  validateDeploymentMediaLimit(input.key, input.value, input.deployment);
 
   const finalValue = def.coerce ? def.coerce(input.value) : input.value;
 
@@ -1218,6 +1231,7 @@ export async function updateModuleSettings(
     if (!validation.valid) {
       throw new SettingsDomainError('SETTING_INVALID', validation.error ?? `Invalid value for ${key}`);
     }
+    validateDeploymentMediaLimit(key, val, input.deployment);
     const finalVal = def.coerce ? def.coerce(val) : val;
     updates.push({ def, value: finalVal });
   }
@@ -1641,39 +1655,43 @@ export async function listIntegrationSummaries(
     docsUrl: 'https://merchant.pathao.com',
   };
 
-  // 3. Cloudflare R2
+  // 3. Deployment-managed S3-compatible storage option
   const r2Summary: IntegrationSummaryDto = {
-    providerCode: 'CLOUDFLARE_R2',
-    name: 'Cloudflare R2 Storage',
+    providerCode: 'S3_STORAGE',
+    name: 'S3-compatible Storage',
     category: 'STORAGE',
-    status: 'DEPLOYMENT_MANAGED',
+    status: deployment?.mediaStorageProvider === 's3' ? 'DEPLOYMENT_MANAGED' : 'NEEDS_CONFIGURATION',
     usedByModules: ['media'],
-    description: 'Object storage for catalog imagery, product media assets, and legal attachments.',
+    description: deployment?.mediaStorageProvider === 's3'
+      ? 'S3-compatible storage is active. This entry does not verify the vendor or connectivity.'
+      : 'Optional storage provider. The active media backend is the local persistent volume.',
     secrets: [
       {
         keyName: 'access_key_id',
         label: 'Access Key ID',
-        configured: true,
+        configured: deployment?.mediaStorageProvider === 's3',
         source: 'DEPLOYMENT',
         updatedAt: null,
       },
       {
         keyName: 'secret_access_key',
         label: 'Secret Access Key',
-        configured: true,
+        configured: deployment?.mediaStorageProvider === 's3',
         source: 'DEPLOYMENT',
         updatedAt: null,
       },
     ],
     isDeploymentManaged: true,
     details: {
-      publicBucket: 'Configured',
-      privateBucket: 'Configured',
-      managedNotice: 'Credentials and buckets are provisioned by infrastructure and cannot be edited in the browser.',
+      publicBucket: deployment?.mediaStorageProvider === 's3' ? 'Deployment configured' : 'Inactive',
+      privateBucket: deployment?.mediaStorageProvider === 's3' ? 'Deployment configured' : 'Inactive',
+      managedNotice: 'The active storage provider is selected by deployment configuration. This status is not a live connection test.',
     },
   };
 
-  return [resendSummary, pathaoSummary, r2Summary];
+  return deployment?.mediaStorageProvider === 's3'
+    ? [resendSummary, pathaoSummary, r2Summary]
+    : [resendSummary, pathaoSummary];
 }
 
 // ---------------------------------------------------------------------------
@@ -1947,11 +1965,10 @@ export async function testIntegrationConnection(
     };
   }
 
-  if (provider === 'CLOUDFLARE_R2') {
+  if (provider === 'S3_STORAGE' || provider === 'CLOUDFLARE_R2') {
     return {
-      success: true,
-      message: 'Cloudflare R2 storage credentials verified (Deployment managed).',
-      latencyMs: 25,
+      success: false,
+      message: 'No storage connection test is implemented here. Check the active media backend and run Media Health verification.',
       checkedAt: new Date().toISOString(),
     };
   }
@@ -2002,12 +2019,12 @@ export async function getSystemStatus(
       version: '1.0.0',
     },
     worker: {
-      status: 'HEALTHY',
-      isRunning: true,
+      status: 'UNKNOWN',
+      isRunning: null,
     },
     storage: {
-      provider: 'Cloudflare R2',
-      status: 'CONNECTED',
+      provider: deployment?.mediaStorageProvider === 's3' ? 'S3-compatible object storage' : 'Local persistent media volume',
+      status: 'CONFIGURED',
       managedBy: 'DEPLOYMENT',
     },
     email: {

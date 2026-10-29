@@ -5023,6 +5023,19 @@ export interface MediaSettingsDto {
   readonly uploadExpirySeconds: number;
 }
 
+export interface MediaRuntimeDto {
+  readonly storageProvider: 'local' | 's3';
+  readonly storageLabel: string;
+  readonly deploymentMaxUploadBytes: number;
+  readonly acceptedMimeTypes: readonly ('image/jpeg' | 'image/png' | 'image/webp' | 'application/pdf')[];
+  readonly reviewMaxUploadBytes: number;
+}
+
+export interface MediaModuleSettingsDto {
+  readonly 'media.maxUploadBytes': number;
+  readonly 'media.uploadExpirySeconds': number;
+}
+
 export interface StorefrontSettingsDto {
   readonly publicBaseUrl: string;
   readonly storeName: string;
@@ -5177,7 +5190,7 @@ export interface SystemStatusDto {
   };
   readonly worker: {
     readonly status: 'HEALTHY' | 'UNKNOWN';
-    readonly isRunning: boolean;
+    readonly isRunning: boolean | null;
   };
   readonly storage: {
     readonly provider: string;

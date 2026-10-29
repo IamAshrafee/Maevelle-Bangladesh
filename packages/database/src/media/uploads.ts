@@ -16,6 +16,8 @@ const MIME_POLICY: Record<SupportedMediaMime, { type: 'IMAGE' | 'DOCUMENT'; exte
   'application/pdf': { type: 'DOCUMENT', extension: 'pdf' },
 };
 
+export const SUPPORTED_MEDIA_UPLOAD_MIME_TYPES = Object.freeze(Object.keys(MIME_POLICY) as SupportedMediaMime[]);
+
 function safeFilename(value: string): string {
   // This intentionally strips ASCII control characters from untrusted filenames.
   const normalized = value

@@ -4,28 +4,22 @@ import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import {
   ArrowRight,
-  CheckCircle2,
   CreditCard,
-  ExternalLink,
-  Globe,
   HardDrive,
   Lock,
   Mail,
-  Plug,
   RefreshCw,
-  Shield,
   Truck,
-  Zap,
 } from 'lucide-react';
 import { Button, buttonVariants } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
 import { SettingsNav } from '@/components/settings/settings-nav';
 import { SettingStatusBadge } from '@/components/settings/setting-status-badge';
 import { fetchApiData } from '@/lib/api';
-import type { IntegrationSummaryDto } from '@maevelle/contracts';
+import type { IntegrationSummaryDto, MediaRuntimeDto } from '@maevelle/contracts';
 
 export function IntegrationsHub() {
   const [integrations, setIntegrations] = useState<readonly IntegrationSummaryDto[]>([]);
+  const [mediaRuntime, setMediaRuntime] = useState<MediaRuntimeDto>();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
@@ -33,8 +27,12 @@ export function IntegrationsHub() {
     setLoading(true);
     setError('');
     try {
-      const res = await fetchApiData<readonly IntegrationSummaryDto[]>('/admin/settings/integrations');
+      const [res, runtime] = await Promise.all([
+        fetchApiData<readonly IntegrationSummaryDto[]>('/admin/settings/integrations'),
+        fetchApiData<MediaRuntimeDto>('/admin/settings/media/runtime'),
+      ]);
       if (res) setIntegrations(res);
+      if (runtime) setMediaRuntime(runtime);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not load integrations list.');
     } finally {
@@ -57,7 +55,6 @@ export function IntegrationsHub() {
 
   const resend = integrations.find((i) => i.providerCode === 'RESEND');
   const pathao = integrations.find((i) => i.providerCode === 'PATHAO');
-  const r2 = integrations.find((i) => i.providerCode === 'CLOUDFLARE_R2');
 
   return (
     <div className="space-y-6 pb-20 max-w-5xl">
@@ -68,7 +65,7 @@ export function IntegrationsHub() {
         <div>
           <h1 className="text-xl font-semibold tracking-tight text-foreground">Integrations</h1>
           <p className="text-xs text-muted-foreground mt-1">
-            Connected external providers, courier APIs, email dispatchers, and object storage credentials.
+            External provider configuration and the active media storage backend.
           </p>
         </div>
 
@@ -94,7 +91,7 @@ export function IntegrationsHub() {
       {/* Primary Integration Cards Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
         {/* 1. Resend */}
-        <div className="flex flex-col justify-between p-5 rounded-xl border border-border bg-card shadow-xs hover:border-primary/40 transition-all space-y-4">
+        <div className="flex flex-col justify-between p-5 rounded-xl border border-border bg-card shadow-xs hover:border-primary/40 transition-colors space-y-4">
           <div className="space-y-3">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2.5">
@@ -137,7 +134,7 @@ export function IntegrationsHub() {
         </div>
 
         {/* 2. Pathao Courier */}
-        <div className="flex flex-col justify-between p-5 rounded-xl border border-border bg-card shadow-xs hover:border-primary/40 transition-all space-y-4">
+        <div className="flex flex-col justify-between p-5 rounded-xl border border-border bg-card shadow-xs hover:border-primary/40 transition-colors space-y-4">
           <div className="space-y-3">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2.5">
@@ -163,7 +160,7 @@ export function IntegrationsHub() {
               </div>
               <div className="flex items-center justify-between text-[11px] text-muted-foreground">
                 <span>Webhook Integration:</span>
-                <span className="font-mono text-emerald-600 dark:text-emerald-400 font-medium">Active</span>
+                <span className="font-mono text-success font-medium">Active</span>
               </div>
             </div>
           </div>
@@ -177,27 +174,27 @@ export function IntegrationsHub() {
           </Link>
         </div>
 
-        {/* 3. Cloudflare R2 Storage */}
-        <div className="flex flex-col justify-between p-5 rounded-xl border border-border bg-card shadow-xs hover:border-primary/40 transition-all space-y-4">
+        {/* 3. Active storage backend */}
+        <div className="flex flex-col justify-between p-5 rounded-xl border border-border bg-card shadow-xs hover:border-primary/40 transition-colors space-y-4">
           <div className="space-y-3">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2.5">
-                <div className="flex size-9 items-center justify-center rounded-lg bg-orange-500/10 text-orange-600">
+                <div className="flex size-9 items-center justify-center rounded-lg bg-warning/10 text-warning">
                   <HardDrive className="size-5" />
                 </div>
                 <div>
-                  <h2 className="text-sm font-semibold text-foreground">Cloudflare R2</h2>
+                  <h2 className="text-sm font-semibold text-foreground">{mediaRuntime?.storageLabel ?? 'Storage backend'}</h2>
                   <span className="text-[11px] text-muted-foreground">Object Storage</span>
                 </div>
               </div>
-              <span className="inline-flex items-center gap-1 text-[11px] font-medium text-slate-700 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded border border-slate-200 dark:border-slate-700">
+              <span className="inline-flex items-center gap-1 text-[11px] font-medium text-muted-foreground bg-muted px-2 py-0.5 rounded border border-border">
                 <Lock className="size-2.5" />
                 Deployment Managed
               </span>
             </div>
 
             <p className="text-xs text-muted-foreground leading-relaxed">
-              Global S3-compatible asset storage for product photography, lookbooks, and operational invoice archives.
+              Active media storage backend selected by deployment configuration. Live connectivity is checked in the Media Library.
             </p>
 
             <div className="pt-2 border-t space-y-1 text-xs">
@@ -206,8 +203,8 @@ export function IntegrationsHub() {
                 <span className="font-medium text-foreground">Media Library</span>
               </div>
               <div className="flex items-center justify-between text-[11px] text-muted-foreground">
-                <span>Buckets:</span>
-                <span className="font-mono text-emerald-600 dark:text-emerald-400 font-medium">Public & Private</span>
+                <span>Backend:</span>
+                <span className="font-mono text-foreground font-medium">{mediaRuntime?.storageProvider === 'local' ? 'Local volume' : 'S3-compatible'}</span>
               </div>
             </div>
           </div>
@@ -222,11 +219,11 @@ export function IntegrationsHub() {
         </div>
 
         {/* 4. Payment Gateways */}
-        <div className="flex flex-col justify-between p-5 rounded-xl border border-border bg-card shadow-xs hover:border-primary/40 transition-all space-y-4">
+        <div className="flex flex-col justify-between p-5 rounded-xl border border-border bg-card shadow-xs hover:border-primary/40 transition-colors space-y-4">
           <div className="space-y-3">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2.5">
-                <div className="flex size-9 items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-600">
+                <div className="flex size-9 items-center justify-center rounded-lg bg-success/10 text-success">
                   <CreditCard className="size-5" />
                 </div>
                 <div>

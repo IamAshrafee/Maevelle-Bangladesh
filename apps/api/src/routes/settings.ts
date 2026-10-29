@@ -4,6 +4,7 @@ import { Type } from 'typebox';
 import type { RuntimeConfig } from '@maevelle/config';
 import type { DatabaseClient } from '@maevelle/database';
 import { findActiveAdminContext } from '@maevelle/database/platform';
+import { SUPPORTED_MEDIA_UPLOAD_MIME_TYPES } from '@maevelle/database/media';
 import {
   deleteIntegrationSecret,
   getConfigurationHealth,
@@ -18,7 +19,6 @@ import {
   SettingsDomainError,
   testIntegrationConnection,
   updateModuleSettings,
-  updateSingleSetting,
 } from '@maevelle/database/settings';
 
 import type { createAuth } from '../auth/auth.js';
@@ -89,10 +89,27 @@ export function registerSettingsRoutes(
   auth: Auth,
   config: RuntimeConfig,
 ): void {
+  const deployment = {
+    ...config,
+    mediaDefaultMaxUploadBytes: config.mediaMaxUploadBytes,
+    mediaDefaultUploadExpirySeconds: config.mediaUploadExpirySeconds,
+  };
   const encryptionKey = {
     id: 'runtime-auth-key',
     value: Buffer.from(config.authEncryptionKey, 'base64'),
   };
+
+  app.get('/admin/settings/media/runtime', async (request, reply) => {
+    const active = await context(database, auth, request.headers, 'settings.view');
+    if (!active) return reply.code(403).send({ error: { code: 'FORBIDDEN', message: 'Forbidden.' } });
+    return { data: {
+      storageProvider: config.mediaStorageProvider,
+      storageLabel: config.mediaStorageProvider === 'local' ? 'Local persistent media volume' : 'S3-compatible object storage',
+      deploymentMaxUploadBytes: config.mediaMaxUploadBytes,
+      acceptedMimeTypes: SUPPORTED_MEDIA_UPLOAD_MIME_TYPES,
+      reviewMaxUploadBytes: Math.min(config.mediaMaxUploadBytes, 5 * 1024 * 1024),
+    } };
+  });
 
   // GET /admin/settings - List all modules and settings metadata + effective values
   app.get('/admin/settings', async (request, reply) => {
@@ -102,7 +119,7 @@ export function registerSettingsRoutes(
     }
 
     try {
-      const data = await listAllSettings(database.db, active.organizationId, config);
+      const data = await listAllSettings(database.db, active.organizationId, deployment);
       return { data };
     } catch (error) {
       return failure(reply, error);
@@ -117,7 +134,7 @@ export function registerSettingsRoutes(
     }
 
     try {
-      const data = await getConfigurationHealth(database.db, active.organizationId, config);
+      const data = await getConfigurationHealth(database.db, active.organizationId, deployment);
       return { data };
     } catch (error) {
       return failure(reply, error);
@@ -132,7 +149,7 @@ export function registerSettingsRoutes(
     }
 
     try {
-      const data = await listIntegrationSummaries(database.db, active.organizationId, config);
+      const data = await listIntegrationSummaries(database.db, active.organizationId, deployment);
       return { data };
     } catch (error) {
       return failure(reply, error);
@@ -157,7 +174,7 @@ export function registerSettingsRoutes(
 
       const { provider } = request.params as { provider: string };
       try {
-        const integrations = await listIntegrationSummaries(database.db, active.organizationId, config);
+        const integrations = await listIntegrationSummaries(database.db, active.organizationId, deployment);
         const item = integrations.find((i) => i.providerCode.toLowerCase() === provider.toLowerCase());
         if (!item) {
           return reply.code(404).send({ error: { code: 'NOT_FOUND', message: `Integration provider not found: ${provider}` } });
@@ -190,7 +207,7 @@ export function registerSettingsRoutes(
         const data = await testIntegrationConnection(database.db, {
           organizationId: active.organizationId,
           providerCode: provider,
-          deployment: config,
+          deployment,
           encryptionKey,
         });
         return { data };
@@ -237,7 +254,7 @@ export function registerSettingsRoutes(
     }
 
     try {
-      const data = await getSystemStatus(database.db, active.organizationId, config);
+      const data = await getSystemStatus(database.db, active.organizationId, deployment);
       return { data };
     } catch (error) {
       return failure(reply, error);
@@ -263,7 +280,7 @@ export function registerSettingsRoutes(
       const { module } = request.params as { module: string };
 
       try {
-        const data = await getModuleSettings(database.db, active.organizationId, module, config);
+        const data = await getModuleSettings(database.db, active.organizationId, module, deployment);
         return { data };
       } catch (error) {
         return failure(reply, error);
@@ -308,7 +325,7 @@ export function registerSettingsRoutes(
           settings: body.settings,
           ...(body.reason !== undefined ? { reason: body.reason } : {}),
           ...(body.expectedVersion !== undefined ? { expectedVersion: body.expectedVersion } : {}),
-          deployment: config,
+          deployment,
         });
         return { data };
       } catch (error) {
@@ -350,7 +367,7 @@ export function registerSettingsRoutes(
             actorId: active.actorId,
             key: body.key,
             ...(body.reason !== undefined ? { reason: body.reason } : {}),
-            deployment: config,
+            deployment,
           });
           return { data };
         }
@@ -360,7 +377,7 @@ export function registerSettingsRoutes(
           actorId: active.actorId,
           module,
           ...(body.reason !== undefined ? { reason: body.reason } : {}),
-          deployment: config,
+          deployment,
         });
         return { data };
       } catch (error) {

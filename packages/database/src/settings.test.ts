@@ -6,6 +6,9 @@ import { createOrganization } from './platform.js';
 import {
   SETTING_DEFINITIONS,
   getSettingMetadataList,
+  getModuleSettings,
+  getSystemStatus,
+  listIntegrationSummaries,
   resolveEmailSettings,
   resolveMediaSettings,
   resolveStorefrontSettings,
@@ -133,6 +136,43 @@ describe('Typed Module Setting Resolution & Precedence', () => {
 
     const updated = await resolveMediaSettings(database.db, orgId);
     expect(updated.maxUploadBytes).toBe(20 * 1024 * 1024);
+  });
+
+  it('enforces the deployment upload ceiling for writes and existing overrides', async () => {
+    const orgId = await createTestOrg('media-ceiling');
+    const deployment = { mediaDefaultMaxUploadBytes: 10 * 1024 * 1024 };
+    await expect(updateModuleSettings(database.db, {
+      organizationId: orgId, actorId: testActorId, module: 'media',
+      settings: { 'media.maxUploadBytes': 20 * 1024 * 1024 }, deployment,
+    })).rejects.toThrow(SettingsDomainError);
+    await expect(updateSingleSetting(database.db, {
+      organizationId: orgId, actorId: testActorId, key: 'media.maxUploadBytes',
+      value: 20 * 1024 * 1024, deployment,
+    })).rejects.toThrow(SettingsDomainError);
+
+    // A deployment may lower its ceiling after an override was saved.
+    await updateSingleSetting(database.db, {
+      organizationId: orgId, actorId: testActorId, key: 'media.maxUploadBytes',
+      value: 20 * 1024 * 1024,
+    });
+    const module = await getModuleSettings(database.db, orgId, 'media', deployment);
+    expect(module.settings['media.maxUploadBytes']).toBe(20 * 1024 * 1024);
+    expect(module.effective['media.maxUploadBytes']).toBe(10 * 1024 * 1024);
+    expect((await resolveMediaSettings(database.db, orgId, deployment)).maxUploadBytes).toBe(10 * 1024 * 1024);
+  });
+
+  it('reports the configured storage backend without claiming a live connection', async () => {
+    const orgId = await createTestOrg('media-backend');
+    const local = await getSystemStatus(database.db, orgId, { mediaStorageProvider: 'local' });
+    expect(local.storage).toMatchObject({ provider: 'Local persistent media volume', status: 'CONFIGURED' });
+    expect(local.worker).toEqual({ status: 'UNKNOWN', isRunning: null });
+    expect((await listIntegrationSummaries(database.db, orgId, { mediaStorageProvider: 'local' }))
+      .some((item) => item.category === 'STORAGE')).toBe(false);
+
+    const s3 = await getSystemStatus(database.db, orgId, { mediaStorageProvider: 's3' });
+    expect(s3.storage).toMatchObject({ provider: 'S3-compatible object storage', status: 'CONFIGURED' });
+    expect((await listIntegrationSummaries(database.db, orgId, { mediaStorageProvider: 's3' }))
+      .find((item) => item.category === 'STORAGE')?.name).toBe('S3-compatible Storage');
   });
 
   it('resolves storefront settings and general operational thresholds', async () => {

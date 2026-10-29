@@ -5,10 +5,11 @@ import type { DatabaseClient } from '@maevelle/database';
 import { parseConfig } from '@maevelle/config';
 
 import { registerSettingsRoutes } from './settings.js';
+import type { createAuth } from '../auth/auth.js';
 
 function createMockDatabase(): DatabaseClient {
   return {
-    db: {} as any,
+    db: {} as DatabaseClient['db'],
     ping: vi.fn().mockResolvedValue(undefined),
     close: vi.fn().mockResolvedValue(undefined),
   };
@@ -22,7 +23,7 @@ describe('Settings API route authentication and RBAC', () => {
       api: {
         getSession: vi.fn().mockResolvedValue(null),
       },
-    } as any;
+    } as unknown as ReturnType<typeof createAuth>;
     const config = parseConfig({
       ...process.env,
       DATABASE_URL: 'postgresql://maevelle_dev:maevelle_dev_password@localhost:5434/maevelle_dev',
@@ -38,6 +39,8 @@ describe('Settings API route authentication and RBAC', () => {
     });
 
     expect(response.statusCode).toBe(403);
+    const runtimeResponse = await app.inject({ method: 'GET', url: '/admin/settings/media/runtime' });
+    expect(runtimeResponse.statusCode).toBe(403);
     await app.close();
   });
 
@@ -48,7 +51,7 @@ describe('Settings API route authentication and RBAC', () => {
       api: {
         getSession: vi.fn().mockResolvedValue(null),
       },
-    } as any;
+    } as unknown as ReturnType<typeof createAuth>;
     const config = parseConfig({
       ...process.env,
       DATABASE_URL: 'postgresql://maevelle_dev:maevelle_dev_password@localhost:5434/maevelle_dev',
@@ -79,7 +82,7 @@ describe('Settings API route authentication and RBAC', () => {
       api: {
         getSession: vi.fn().mockResolvedValue(null),
       },
-    } as any;
+    } as unknown as ReturnType<typeof createAuth>;
     const config = parseConfig({
       ...process.env,
       DATABASE_URL: 'postgresql://maevelle_dev:maevelle_dev_password@localhost:5434/maevelle_dev',
@@ -105,7 +108,7 @@ describe('Settings API route authentication and RBAC', () => {
       api: {
         getSession: vi.fn().mockResolvedValue(null),
       },
-    } as any;
+    } as unknown as ReturnType<typeof createAuth>;
     const config = parseConfig({
       ...process.env,
       DATABASE_URL: 'postgresql://maevelle_dev:maevelle_dev_password@localhost:5434/maevelle_dev',
@@ -131,7 +134,7 @@ describe('Settings API route authentication and RBAC', () => {
       api: {
         getSession: vi.fn().mockResolvedValue(null),
       },
-    } as any;
+    } as unknown as ReturnType<typeof createAuth>;
     const config = parseConfig({
       ...process.env,
       DATABASE_URL: 'postgresql://maevelle_dev:maevelle_dev_password@localhost:5434/maevelle_dev',

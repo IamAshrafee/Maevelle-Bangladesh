@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import {
-  CheckCircle2,
   Clock,
   Cpu,
   Database,
@@ -14,10 +13,9 @@ import {
   Shield,
   Zap,
 } from 'lucide-react';
-import { Button } from '@/components/ui/button';
 import { RefreshButton } from '@/components/ui/refresh-button';
 import { Badge } from '@/components/ui/badge';
-import { SettingsCard, SettingsSection } from '@/components/settings/settings-card';
+import { SettingsSection } from '@/components/settings/settings-card';
 import { SettingsNav } from '@/components/settings/settings-nav';
 import { SettingStatusBadge } from '@/components/settings/setting-status-badge';
 import { fetchApiData } from '@/lib/api';
@@ -138,7 +136,7 @@ export function SystemSettingsConsole() {
       {/* Services Health Matrix */}
       <SettingsSection
         title="Services & Infrastructure Health"
-        description="Live operational readiness of core system services."
+        description="Runtime status and deployment configuration of core services."
       >
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           <div className="p-4 rounded-xl border border-border bg-card space-y-2">
@@ -147,7 +145,7 @@ export function SystemSettingsConsole() {
                 <Database className="size-4 text-primary" />
                 <span className="text-xs font-semibold text-foreground">PostgreSQL Database</span>
               </div>
-              <SettingStatusBadge status="CONNECTED" />
+              <Badge variant="outline" className="text-[10px]">{data?.database.status ?? 'Unknown'}</Badge>
             </div>
             <p className="text-[11px] text-muted-foreground leading-relaxed">
               Transactional data storage, isolation levels, row-level concurrency, and event outbox.
@@ -160,10 +158,10 @@ export function SystemSettingsConsole() {
                 <Cpu className="size-4 text-primary" />
                 <span className="text-xs font-semibold text-foreground">Background Worker</span>
               </div>
-              <SettingStatusBadge status="ready" label="Running" />
+              <Badge variant="outline" className="text-[10px]">{data?.worker.status === 'HEALTHY' ? 'Running' : 'Unverified'}</Badge>
             </div>
             <p className="text-[11px] text-muted-foreground leading-relaxed">
-              Asynchronous job processor for transactional outbox dispatches, email delivery, and metrics aggregations.
+              Asynchronous job processor. This endpoint has no worker liveness probe, so its status is unverified.
             </p>
           </div>
 
@@ -171,12 +169,12 @@ export function SystemSettingsConsole() {
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <HardDrive className="size-4 text-primary" />
-                <span className="text-xs font-semibold text-foreground">Cloudflare R2 Storage</span>
+                <span className="text-xs font-semibold text-foreground">{data?.storage.provider ?? 'Storage backend'}</span>
               </div>
-              <SettingStatusBadge status="CONNECTED" />
+              <Badge variant="outline" className="text-[10px]">{data?.storage.status === 'CONNECTED' ? 'Connected' : 'Deployment configured'}</Badge>
             </div>
             <p className="text-[11px] text-muted-foreground leading-relaxed">
-              S3-compatible asset store configured with public product lookbooks and private attachments.
+              Active backend selected by deployment configuration. This indicator does not test file read or write access.
             </p>
           </div>
 
@@ -246,7 +244,7 @@ export function SystemSettingsConsole() {
                 <p className="text-[11px] text-muted-foreground">256-bit AES-GCM root encryption key for third-party secrets</p>
               </div>
               <div className="flex items-center gap-2">
-                <span className="text-[11px] text-emerald-600 dark:text-emerald-400 font-medium">Configured</span>
+                <span className="text-[11px] text-success font-medium">Configured</span>
                 <Badge variant="outline" className="text-[10px] font-mono">
                   <Lock className="size-2.5 mr-1" />
                   Deployment Managed
@@ -260,7 +258,7 @@ export function SystemSettingsConsole() {
                 <p className="text-[11px] text-muted-foreground">Session token signing and cookie cryptographic key</p>
               </div>
               <div className="flex items-center gap-2">
-                <span className="text-[11px] text-emerald-600 dark:text-emerald-400 font-medium">Configured</span>
+                <span className="text-[11px] text-success font-medium">Configured</span>
                 <Badge variant="outline" className="text-[10px] font-mono">
                   <Lock className="size-2.5 mr-1" />
                   Deployment Managed
@@ -270,11 +268,11 @@ export function SystemSettingsConsole() {
 
             <div className="p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
               <div>
-                <span className="font-semibold text-foreground">Cloudflare R2 Object Storage Keys</span>
-                <p className="text-[11px] text-muted-foreground">Access Key ID and Secret Access Key for bucket read/write</p>
+                <span className="font-semibold text-foreground">Media Storage Configuration</span>
+                <p className="text-[11px] text-muted-foreground">Storage path or object-store credentials, depending on the active backend</p>
               </div>
               <div className="flex items-center gap-2">
-                <span className="text-[11px] text-emerald-600 dark:text-emerald-400 font-medium">Configured</span>
+                <span className="text-[11px] text-muted-foreground font-medium">{data?.storage.provider ?? 'Loading…'}</span>
                 <Badge variant="outline" className="text-[10px] font-mono">
                   <Lock className="size-2.5 mr-1" />
                   Deployment Managed

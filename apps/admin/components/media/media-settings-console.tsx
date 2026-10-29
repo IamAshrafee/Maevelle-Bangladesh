@@ -4,34 +4,37 @@ import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import {
   AlertCircle,
-  ArrowLeft,
   CheckCircle2,
   FileCheck,
   HardDrive,
   History,
   Image as ImageIcon,
-  Lock,
   RefreshCw,
   RotateCcw,
-  Server,
-  Shield,
   Upload,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Badge } from '@/components/ui/badge';
 import { SettingsCard, SettingsSection } from '@/components/settings/settings-card';
 import { SettingField } from '@/components/settings/setting-field';
 import { SettingsSaveBar } from '@/components/settings/settings-save-bar';
 import { SettingsConfirmationDialog } from '@/components/settings/settings-confirmation-dialog';
 import { SettingsAuditDrawer } from '@/components/settings/settings-audit-drawer';
-import { SettingStatusBadge, RuntimeEffectBadge } from '@/components/settings/setting-status-badge';
+import { RuntimeEffectBadge } from '@/components/settings/setting-status-badge';
 import { fetchApiData } from '@/lib/api';
-import type { MediaSettingsDto, ModuleSettingsResponseDto } from '@maevelle/contracts';
+import type { MediaModuleSettingsDto, MediaRuntimeDto, ModuleSettingsResponseDto } from '@maevelle/contracts';
+
+const MIB = 1024 * 1024;
+const formatMiB = (bytes: number) => `${Number((bytes / MIB).toFixed(3))} MiB`;
+const formatInputMiB = (bytes: number) => Number((bytes / MIB).toFixed(6));
+const acceptedFormatLabels: Record<MediaRuntimeDto['acceptedMimeTypes'][number], string> = {
+  'image/jpeg': 'JPEG', 'image/png': 'PNG', 'image/webp': 'WebP', 'application/pdf': 'PDF',
+};
 
 export function MediaSettingsConsole() {
-  const [initialData, setInitialData] = useState<ModuleSettingsResponseDto<MediaSettingsDto>>();
-  const [maxUploadMb, setMaxUploadMb] = useState<number>(10);
+  const [initialData, setInitialData] = useState<ModuleSettingsResponseDto<MediaModuleSettingsDto>>();
+  const [runtime, setRuntime] = useState<MediaRuntimeDto>();
+  const [maxUploadBytes, setMaxUploadBytes] = useState<number>(10 * MIB);
   const [expiryMinutes, setExpiryMinutes] = useState<number>(15);
 
   const [loading, setLoading] = useState(true);
@@ -45,14 +48,16 @@ export function MediaSettingsConsole() {
     setLoading(true);
     setFeedback(null);
     try {
-      const res = await fetchApiData<ModuleSettingsResponseDto<MediaSettingsDto>>(
-        '/admin/settings/media',
-      );
+      const [res, runtimeRes] = await Promise.all([
+        fetchApiData<ModuleSettingsResponseDto<MediaModuleSettingsDto>>('/admin/settings/media'),
+        fetchApiData<MediaRuntimeDto>('/admin/settings/media/runtime'),
+      ]);
+      if (runtimeRes) setRuntime(runtimeRes);
       if (res) {
         setInitialData(res);
-        const bytes = res.settings.maxUploadBytes || 10485760;
-        const seconds = res.settings.uploadExpirySeconds || 900;
-        setMaxUploadMb(Math.round(bytes / (1024 * 1024)));
+        const bytes = res.effective['media.maxUploadBytes'];
+        const seconds = res.settings['media.uploadExpirySeconds'];
+        setMaxUploadBytes(bytes);
         setExpiryMinutes(Math.round(seconds / 60));
       }
     } catch (err) {
@@ -70,12 +75,12 @@ export function MediaSettingsConsole() {
   }, [loadData]);
 
   // Dirty state calculation
-  const initialMb = initialData ? Math.round((initialData.settings.maxUploadBytes || 10485760) / (1024 * 1024)) : 10;
-  const initialMin = initialData ? Math.round((initialData.settings.uploadExpirySeconds || 900) / 60) : 15;
-  const isDirty = maxUploadMb !== initialMb || expiryMinutes !== initialMin;
+  const initialBytes = initialData?.effective['media.maxUploadBytes'] ?? 10 * MIB;
+  const initialMin = initialData ? Math.round(initialData.settings['media.uploadExpirySeconds'] / 60) : 15;
+  const isDirty = maxUploadBytes !== initialBytes || expiryMinutes !== initialMin;
 
   const handleDiscard = () => {
-    setMaxUploadMb(initialMb);
+    setMaxUploadBytes(initialBytes);
     setExpiryMinutes(initialMin);
     setFeedback(null);
   };
@@ -85,9 +90,9 @@ export function MediaSettingsConsole() {
     setSaving(true);
     setFeedback(null);
 
-    // Validation: 1MB to 50MB
-    if (maxUploadMb < 1 || maxUploadMb > 50) {
-      setFeedback({ type: 'error', message: 'Maximum upload size must be between 1 MB and 50 MB.' });
+    if (!Number.isSafeInteger(maxUploadBytes) || maxUploadBytes < 1024 ||
+        maxUploadBytes > Math.min(runtime?.deploymentMaxUploadBytes ?? 0, 50 * MIB)) {
+      setFeedback({ type: 'error', message: `Maximum upload size must be between 1 KiB and ${formatMiB(runtime?.deploymentMaxUploadBytes ?? 0)}.` });
       setSaving(false);
       return;
     }
@@ -99,10 +104,10 @@ export function MediaSettingsConsole() {
     }
 
     try {
-      const bytes = maxUploadMb * 1024 * 1024;
+      const bytes = maxUploadBytes;
       const seconds = expiryMinutes * 60;
 
-      const updated = await fetchApiData<ModuleSettingsResponseDto<MediaSettingsDto>>(
+      const updated = await fetchApiData<ModuleSettingsResponseDto<MediaModuleSettingsDto>>(
         '/admin/settings/media',
         {
           method: 'PATCH',
@@ -112,13 +117,15 @@ export function MediaSettingsConsole() {
               'media.uploadExpirySeconds': seconds,
             },
             expectedVersion: initialData.version,
-            reason: `Updated media upload limit to ${maxUploadMb} MB and expiry to ${expiryMinutes} minutes`,
+            reason: `Updated media upload limit to ${formatMiB(maxUploadBytes)} and expiry to ${expiryMinutes} minutes`,
           }),
         },
       );
 
       if (updated) {
         setInitialData(updated);
+        setMaxUploadBytes(updated.effective['media.maxUploadBytes']);
+        setExpiryMinutes(Math.round(updated.settings['media.uploadExpirySeconds'] / 60));
         setFeedback({
           type: 'success',
           message: 'Media settings saved successfully. Upload policies updated.',
@@ -137,7 +144,7 @@ export function MediaSettingsConsole() {
   const handleConfirmReset = async () => {
     setSaving(true);
     try {
-      const resetRes = await fetchApiData<ModuleSettingsResponseDto<MediaSettingsDto>>(
+      const resetRes = await fetchApiData<ModuleSettingsResponseDto<MediaModuleSettingsDto>>(
         '/admin/settings/media/reset',
         {
           method: 'POST',
@@ -146,12 +153,12 @@ export function MediaSettingsConsole() {
       );
       if (resetRes) {
         setInitialData(resetRes);
-        const bytes = resetRes.settings.maxUploadBytes || 10485760;
-        const seconds = resetRes.settings.uploadExpirySeconds || 900;
-        setMaxUploadMb(Math.round(bytes / (1024 * 1024)));
+        const bytes = resetRes.effective['media.maxUploadBytes'];
+        const seconds = resetRes.settings['media.uploadExpirySeconds'];
+        setMaxUploadBytes(bytes);
         setExpiryMinutes(Math.round(seconds / 60));
         setResetConfirmOpen(false);
-        setFeedback({ type: 'success', message: 'Media settings restored to Maevelle defaults (10 MB).' });
+        setFeedback({ type: 'success', message: 'Media settings reset. The effective upload limit follows the deployment ceiling.' });
       }
     } catch (err) {
       setFeedback({
@@ -172,6 +179,17 @@ export function MediaSettingsConsole() {
     );
   }
 
+  if (!initialData || !runtime) {
+    return (
+      <div className="rounded-lg border border-destructive/20 bg-card p-5 text-sm">
+        <p className="text-destructive">{feedback?.message ?? 'Media settings could not be loaded.'}</p>
+        <Button type="button" variant="outline" className="mt-3" onClick={() => void loadData()}>
+          Retry
+        </Button>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6 pb-20 max-w-4xl">
       {/* Header */}
@@ -187,11 +205,10 @@ export function MediaSettingsConsole() {
           </div>
           <div className="flex flex-wrap items-center gap-2.5">
             <h1 className="text-xl font-semibold tracking-tight text-foreground">Media Settings</h1>
-            <SettingStatusBadge status="ready" label="Ready" />
             <RuntimeEffectBadge runtimeMutable requiresRestart={false} />
           </div>
           <p className="text-xs text-muted-foreground mt-1">
-            Manage file upload policies, upload session expiration, and review cloud storage readiness.
+            Manage upload limits and session expiry, and inspect the active storage configuration.
           </p>
         </div>
 
@@ -224,13 +241,13 @@ export function MediaSettingsConsole() {
         <div
           className={`p-3.5 rounded-lg text-xs flex items-center justify-between border ${
             feedback.type === 'success'
-              ? 'bg-emerald-50 dark:bg-emerald-950/30 text-emerald-800 dark:text-emerald-300 border-emerald-500/20'
+              ? 'bg-success/10 text-success border-success/20'
               : 'bg-destructive/10 text-destructive border-destructive/20'
           }`}
         >
           <div className="flex items-center gap-2">
             {feedback.type === 'success' ? (
-              <CheckCircle2 className="size-4 text-emerald-600 shrink-0" />
+              <CheckCircle2 className="size-4 text-success shrink-0" />
             ) : (
               <AlertCircle className="size-4 shrink-0" />
             )}
@@ -266,17 +283,24 @@ export function MediaSettingsConsole() {
                 <Input
                   id="upload-size-input"
                   type="number"
-                  min={1}
-                  max={50}
-                  value={maxUploadMb}
-                  onChange={(e) => setMaxUploadMb(Number(e.target.value))}
+                  min={1024 / MIB}
+                  max={runtime ? formatInputMiB(runtime.deploymentMaxUploadBytes) : undefined}
+                  step="any"
+                  value={formatInputMiB(maxUploadBytes)}
+                  disabled={!runtime || runtime.deploymentMaxUploadBytes < 1024}
+                  onChange={(e) => setMaxUploadBytes(Math.round(Number(e.target.value) * MIB))}
                   className="text-xs h-9 max-w-[120px]"
                 />
-                <span className="text-xs font-semibold text-muted-foreground">Megabytes (MB)</span>
+                <span className="text-xs font-semibold text-muted-foreground">Mebibytes (MiB)</span>
               </div>
               <p className="text-[11px] text-muted-foreground mt-1">
-                Converted to byte representation: {(maxUploadMb * 1024 * 1024).toLocaleString()} bytes
+                Active deployment ceiling: {runtime ? formatMiB(runtime.deploymentMaxUploadBytes) : "Loading…"}. Effective limit: {initialData ? formatMiB(initialData.effective['media.maxUploadBytes']) : "Loading…"}.
               </p>
+              {initialData && initialData.settings['media.maxUploadBytes'] !== initialData.effective['media.maxUploadBytes'] && (
+                <p className="mt-1 text-xs text-warning" role="status">
+                  A saved override of {formatMiB(initialData.settings['media.maxUploadBytes'])} exceeds the current deployment ceiling. New uploads use {formatMiB(initialData.effective['media.maxUploadBytes'])}.
+                </p>
+              )}
             </SettingField>
 
             <SettingField
@@ -306,55 +330,22 @@ export function MediaSettingsConsole() {
 
           <div className="mt-5 pt-4 border-t flex flex-wrap items-center justify-between gap-3 text-xs text-muted-foreground">
             <div className="flex items-center gap-2">
-              <FileCheck className="size-4 text-emerald-600" />
-              <span>Accepted Media Formats: JPEG, PNG, WebP, AVIF, MP4, PDF</span>
+              <FileCheck className="size-4 text-success" />
+              <span>Accepted Media Formats: {runtime?.acceptedMimeTypes.map((mime) => acceptedFormatLabels[mime]).join(', ') ?? 'Loading…'}</span>
             </div>
             <span className="text-[11px] bg-muted px-2 py-0.5 rounded font-mono">
-              Maevelle Default: 10 MB / 15 Minutes
+              Review uploads: up to {runtime ? formatMiB(Math.min(runtime.reviewMaxUploadBytes, initialData?.effective['media.maxUploadBytes'] ?? runtime.reviewMaxUploadBytes)) : "Loading…"}
             </span>
           </div>
         </SettingsCard>
       </SettingsSection>
 
-      {/* Storage Backend (Deployment Managed) */}
-      <SettingsSection
-        title="Storage Infrastructure"
-        description="Active object storage engine connected for media asset retention."
-      >
-        <SettingsCard
-          title="Cloudflare R2 Object Storage"
-          description="High-availability S3-compatible cloud storage for product imagery and attachments."
-          icon={HardDrive}
-          badge={<SettingStatusBadge status="CONNECTED" label="Connected" />}
-        >
-          <div className="space-y-4">
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              <div className="p-3 rounded-lg border border-border bg-muted/20 space-y-1">
-                <span className="text-xs text-muted-foreground font-medium">Public Bucket</span>
-                <p className="font-semibold text-foreground text-xs font-mono">Configured</p>
-              </div>
-
-              <div className="p-3 rounded-lg border border-border bg-muted/20 space-y-1">
-                <span className="text-xs text-muted-foreground font-medium">Private Bucket</span>
-                <p className="font-semibold text-foreground text-xs font-mono">Configured</p>
-              </div>
-
-              <div className="p-3 rounded-lg border border-border bg-muted/20 space-y-1">
-                <span className="text-xs text-muted-foreground font-medium">Configuration Source</span>
-                <div className="pt-0.5">
-                  <span className="inline-flex items-center gap-1 text-[11px] font-medium text-slate-700 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded border border-slate-200 dark:border-slate-700">
-                    <Lock className="size-2.5" />
-                    Deployment managed
-                  </span>
-                </div>
-              </div>
-            </div>
-
-            <div className="p-3.5 rounded-lg bg-muted/30 border border-border/70 text-xs text-muted-foreground leading-relaxed">
-              <strong className="text-foreground">Why are storage credentials read-only?</strong> Cloudflare R2
-              endpoint URLs, bucket names, and AWS S3 signature keys are provisioned directly by server infrastructure
-              and container environment files. They cannot be edited through the browser to safeguard master asset buckets.
-            </div>
+      <SettingsSection title="Storage Infrastructure" description="Backend selected by deployment configuration; live storage health is checked separately.">
+        <SettingsCard title={runtime?.storageLabel ?? 'Storage backend'} icon={HardDrive}>
+          <div className="space-y-3 text-xs text-muted-foreground">
+            <p>Active backend: <strong className="text-foreground">{runtime?.storageLabel ?? 'Loading…'}</strong></p>
+            <p>Storage credentials and paths are managed on the server. This configuration does not establish live connectivity.</p>
+            <Link href="/media" className="inline-flex min-h-10 items-center text-primary underline-offset-2 hover:underline">Open Media Library to run a health check</Link>
           </div>
         </SettingsCard>
       </SettingsSection>
@@ -372,7 +363,7 @@ export function MediaSettingsConsole() {
         open={resetConfirmOpen}
         onOpenChange={setResetConfirmOpen}
         title="Reset Media Settings to Defaults?"
-        description="This will restore the maximum file upload size to 10 MB and upload session timeout to 15 minutes."
+        description="This will clear the saved media overrides. The deployment upload ceiling will still apply."
         confirmLabel="Reset to defaults"
         variant="destructive"
         loading={saving}

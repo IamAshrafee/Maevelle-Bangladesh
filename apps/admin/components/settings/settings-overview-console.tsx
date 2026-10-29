@@ -3,31 +3,20 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import {
-  AlertTriangle,
   ArrowRight,
   Boxes,
   Building2,
-  CheckCircle2,
   CreditCard,
   HardDrive,
   HeartPulse,
-  Image as ImageIcon,
-  LayoutDashboard,
-  Lock,
   Mail,
-  Palette,
   Plug,
-  RefreshCw,
-  Ruler,
   Search,
-  Server,
   Shield,
   SlidersHorizontal,
   Sparkles,
   Store,
   Truck,
-  Users,
-  Zap,
 } from 'lucide-react';
 import { Button, buttonVariants } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -37,7 +26,7 @@ import { SettingStatusBadge } from '@/components/settings/setting-status-badge';
 import { fetchApiData } from '@/lib/api';
 import type {
   ConfigurationHealthResponseDto,
-  SettingsListResponseDto,
+  MediaRuntimeDto,
 } from '@maevelle/contracts';
 
 interface SearchableItem {
@@ -50,24 +39,20 @@ interface SearchableItem {
 }
 
 export function SettingsOverviewConsole() {
-  const [settingsData, setSettingsData] = useState<SettingsListResponseDto>();
+  const [mediaRuntime, setMediaRuntime] = useState<MediaRuntimeDto>();
   const [healthData, setHealthData] = useState<ConfigurationHealthResponseDto>();
-  const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
 
   const loadData = useCallback(async () => {
-    setLoading(true);
     try {
-      const [listRes, healthRes] = await Promise.all([
-        fetchApiData<SettingsListResponseDto>('/admin/settings'),
+      const [healthRes, mediaRes] = await Promise.all([
         fetchApiData<ConfigurationHealthResponseDto>('/admin/settings/health').catch(() => undefined),
+        fetchApiData<MediaRuntimeDto>('/admin/settings/media/runtime').catch(() => undefined),
       ]);
-      if (listRes) setSettingsData(listRes);
       if (healthRes) setHealthData(healthRes);
+      if (mediaRes) setMediaRuntime(mediaRes);
     } catch {
       // Handled silently for offline or initial load
-    } finally {
-      setLoading(false);
     }
   }, []);
 
@@ -262,7 +247,7 @@ export function SettingsOverviewConsole() {
       {/* Configuration Health Summary Banner */}
       <div className="p-4 rounded-xl border border-border bg-card flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-xs">
         <div className="flex items-start gap-3">
-          <div className="flex size-9 items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-600 shrink-0">
+          <div className="flex size-9 items-center justify-center rounded-lg bg-success/10 text-success shrink-0">
             <HeartPulse className="size-5" />
           </div>
           <div className="space-y-0.5">
@@ -272,7 +257,7 @@ export function SettingsOverviewConsole() {
             </div>
             <p className="text-xs text-muted-foreground leading-relaxed">
               {healthData?.overallStatus === 'HEALTHY'
-                ? 'All transactional providers, storage buckets, and sender domains are configured normally.'
+                ? 'No configuration issues were reported by the settings audit.'
                 : '1 or more configuration items require attention to ensure continuous deliverability.'}
             </p>
           </div>
@@ -295,7 +280,7 @@ export function SettingsOverviewConsole() {
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           <Link
             href="/settings/general"
-            className="p-4 rounded-xl border border-border bg-card hover:border-primary/40 transition-all space-y-2 group shadow-2xs"
+            className="p-4 rounded-xl border border-border bg-card hover:border-primary/40 transition-colors space-y-2 group shadow-2xs"
           >
             <div className="flex size-8 items-center justify-center rounded-lg bg-primary/10 text-primary group-hover:scale-105 transition-transform">
               <SlidersHorizontal className="size-4" />
@@ -312,9 +297,9 @@ export function SettingsOverviewConsole() {
 
           <Link
             href="/settings/organization"
-            className="p-4 rounded-xl border border-border bg-card hover:border-primary/40 transition-all space-y-2 group shadow-2xs"
+            className="p-4 rounded-xl border border-border bg-card hover:border-primary/40 transition-colors space-y-2 group shadow-2xs"
           >
-            <div className="flex size-8 items-center justify-center rounded-lg bg-blue-500/10 text-blue-600 group-hover:scale-105 transition-transform">
+            <div className="flex size-8 items-center justify-center rounded-lg bg-info/10 text-info group-hover:scale-105 transition-transform">
               <Building2 className="size-4" />
             </div>
             <div className="space-y-0.5">
@@ -329,9 +314,9 @@ export function SettingsOverviewConsole() {
 
           <Link
             href="/settings/security"
-            className="p-4 rounded-xl border border-border bg-card hover:border-primary/40 transition-all space-y-2 group shadow-2xs"
+            className="p-4 rounded-xl border border-border bg-card hover:border-primary/40 transition-colors space-y-2 group shadow-2xs"
           >
-            <div className="flex size-8 items-center justify-center rounded-lg bg-purple-500/10 text-purple-600 group-hover:scale-105 transition-transform">
+            <div className="flex size-8 items-center justify-center rounded-lg bg-secondary text-secondary-foreground group-hover:scale-105 transition-transform">
               <Shield className="size-4" />
             </div>
             <div className="space-y-0.5">
@@ -346,9 +331,9 @@ export function SettingsOverviewConsole() {
 
           <Link
             href="/settings/integrations"
-            className="p-4 rounded-xl border border-border bg-card hover:border-primary/40 transition-all space-y-2 group shadow-2xs"
+            className="p-4 rounded-xl border border-border bg-card hover:border-primary/40 transition-colors space-y-2 group shadow-2xs"
           >
-            <div className="flex size-8 items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-600 group-hover:scale-105 transition-transform">
+            <div className="flex size-8 items-center justify-center rounded-lg bg-success/10 text-success group-hover:scale-105 transition-transform">
               <Plug className="size-4" />
             </div>
             <div className="space-y-0.5">
@@ -356,16 +341,16 @@ export function SettingsOverviewConsole() {
                 Integrations
               </h3>
               <p className="text-xs text-muted-foreground leading-relaxed">
-                Resend email delivery, Pathao courier, Cloudflare R2, and payment gateways.
+                Email, courier, and payment provider configuration.
               </p>
             </div>
           </Link>
 
           <Link
             href="/settings/design-system"
-            className="p-4 rounded-xl border border-border bg-card hover:border-primary/40 transition-all space-y-2 group shadow-2xs"
+            className="p-4 rounded-xl border border-border bg-card hover:border-primary/40 transition-colors space-y-2 group shadow-2xs"
           >
-            <div className="flex size-8 items-center justify-center rounded-lg bg-teal-500/10 text-teal-600 group-hover:scale-105 transition-transform">
+            <div className="flex size-8 items-center justify-center rounded-lg bg-primary-subtle text-primary group-hover:scale-105 transition-transform">
               <Sparkles className="size-4" />
             </div>
             <div className="space-y-0.5">
@@ -407,7 +392,7 @@ export function SettingsOverviewConsole() {
               </p>
               <div className="pt-2 border-t text-[11px] text-muted-foreground space-y-0.5 font-mono">
                 <div>Provider: <strong className="text-foreground">Resend</strong></div>
-                <div>Transactional Email: <strong className="text-emerald-600">Enabled</strong></div>
+                <div>Transactional Email: <strong className="text-success">Enabled</strong></div>
               </div>
             </div>
             <Link
@@ -430,11 +415,11 @@ export function SettingsOverviewConsole() {
                 <SettingStatusBadge status="ready" label="Ready" />
               </div>
               <p className="text-xs text-muted-foreground leading-relaxed">
-                Maximum file upload size, upload session duration, and Cloudflare R2 bucket connectivity.
+                Upload size, session duration, and the active storage backend.
               </p>
               <div className="pt-2 border-t text-[11px] text-muted-foreground space-y-0.5 font-mono">
-                <div>Max Upload: <strong className="text-foreground">10 MB</strong></div>
-                <div>Storage: <strong className="text-foreground">Cloudflare R2</strong></div>
+                <div>Deployment ceiling: <strong className="text-foreground">{mediaRuntime ? `${Number((mediaRuntime.deploymentMaxUploadBytes / (1024 * 1024)).toFixed(3))} MiB` : 'Loading…'}</strong></div>
+                <div>Storage: <strong className="text-foreground">{mediaRuntime?.storageLabel ?? 'Loading…'}</strong></div>
               </div>
             </div>
             <Link
@@ -488,7 +473,7 @@ export function SettingsOverviewConsole() {
               </p>
               <div className="pt-2 border-t text-[11px] text-muted-foreground space-y-0.5 font-mono">
                 <div>Primary Courier: <strong className="text-foreground">Pathao</strong></div>
-                <div>Webhook Ingestion: <strong className="text-emerald-600">Active</strong></div>
+                <div>Webhook Ingestion: <strong className="text-success">Active</strong></div>
               </div>
             </div>
             <Link

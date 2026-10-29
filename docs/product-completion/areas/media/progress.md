@@ -2,6 +2,14 @@
 
 ## Implemented
 
+- Media settings now read the actual keyed API values and show the active local or
+  S3-compatible backend without claiming a live connection. Accepted upload formats
+  come from the server policy. The deployment upload limit is returned by an
+  authenticated runtime endpoint, caps effective organization settings, and rejects
+  overrides above it; existing larger overrides remain stored but cannot authorize
+  larger uploads. The System and Integrations views use deployment-backed storage
+  labels. No schema or Worker change is needed for these settings corrections.
+  The System diagnostics page marks worker liveness unverified until a real probe exists.
 - Added `@maevelle/media` with local and S3/R2-compatible object storage ports and adapters.
 - Replaced request-buffered immediate-ready uploads with authorized upload sessions,
   object head confirmation, explicit lifecycle states, and worker-driven image processing.
