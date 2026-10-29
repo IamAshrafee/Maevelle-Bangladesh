@@ -2,6 +2,15 @@
 
 ## Implemented
 
+- Media Library grid and list inspection now use semantic, keyboard-accessible controls
+  with separate bulk checkboxes. The page and picker split results, inspector, and
+  dialogs into focused components, use shared Admin primitives, and expose clearer
+  loading, empty, error, and mobile states. Both library surfaces apply used/unused
+  filters and sorting on the server before pagination; usage includes Product, Review, and
+  conversation attachments. The authenticated upload-policy endpoint returns the
+  effective deployment-capped limit and supported MIME types so both Admin upload
+  surfaces validate files before transfer. The picker accepts PDF uploads when its
+  caller permits documents and previews documents without trying to render them as images.
 - Media settings now read the actual keyed API values and show the active local or
   S3-compatible backend without claiming a live connection. Accepted upload formats
   come from the server policy. The deployment upload limit is returned by an
@@ -84,10 +93,18 @@ the new Worker, API, and Admin together. Check Media Library's Purging filter an
 Health for previously stranded assets; an unclaimed legacy `PURGING` row is eligible for
 automatic recovery after migration. File deletion is safe to repeat when a previous
 attempt removed some objects before failing.
-- Upgraded Admin Media Library (`apps/admin/app/media/page.tsx`) to production-grade shadcn/ui
-  and Tailwind CSS, featuring Grid and List views, multi-select checkboxes, sticky bulk action
-  bar (Move to Folder, Trash Unused), taxonomy creation, search/filter toolbar (including unused
-  filter), storage health diagnostics modal, and clipboard paste (`Ctrl+V`) direct upload.
+- Upgraded Admin Media Library (`apps/admin/app/media/page.tsx`) to production-grade shadcn/Base UI
+  and Tailwind CSS v4, featuring Grid and List views, multi-select checkboxes, sticky floating bulk action
+  bar (`motion/react`), taxonomy folder pills, search and format/usage/status filters, storage health diagnostics,
+  full-screen drag-and-drop file ingestion, and clipboard paste (`Ctrl+V`) direct upload.
+- Transformed Asset Inspector (`apps/admin/components/media/media-asset-inspector.tsx`) into an organized
+  4-tab workspace (`Details`, `Taxonomy`, `Catalog`, `Activity`) with an interactive multi-rendition switcher
+  (`PDP`, `Card`, `Thumbnail`, `Zoom`, `Original`), one-click public CDN URL copy with feedback, and complete
+  lifecycle controls.
+- Added complete taxonomy management: folder renaming and deletion (safely unfiling contained assets), tag
+  creation and deletion, and bulk tag management (`addTagIds`, `removeTagIds`).
+- Aligned backend and contract schemas: updated `bulkOrganizeMediaAssets` and `POST /admin/media/bulk/organize`
+  to support `tagIds`, `addTagIds`, and `removeTagIds`, and added `assetCount` to `MediaFolderDto` and `MediaTagDto`.
 - Created reusable `AssetPickerDialog` (`apps/admin/components/media/asset-picker-dialog.tsx`)
   for choosing library assets or uploading new photography inline from any catalog or content form.
 - Enhanced Product Creator & Editor (`apps/admin/components/products/creator/*`) with Media Library

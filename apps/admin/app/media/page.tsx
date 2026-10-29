@@ -2,6 +2,7 @@
 
 import {
   type ClipboardEvent,
+  type DragEvent,
   type FormEvent,
   useCallback,
   useDeferredValue,
@@ -10,170 +11,99 @@ import {
   useRef,
   useState,
 } from 'react';
-import Image from 'next/image';
-import Link from 'next/link';
+import { AnimatePresence, motion } from 'motion/react';
 import {
-  Archive,
-  Copy,
-  Download,
-  FileIcon,
-  FileImage,
   FolderIcon,
   FolderPlus,
   LayoutGrid,
   List,
   LoaderCircle,
   Plus,
-  RotateCw,
   Search,
   ShieldCheck,
   TagIcon,
   Trash2,
+  UploadCloud,
   X,
 } from 'lucide-react';
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { RefreshButton } from '@/components/ui/refresh-button';
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardFooter,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card';
+import { Card, CardContent, CardFooter, CardHeader } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
-import { ScrollArea } from '@/components/ui/scroll-area';
+import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select';
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
-import { Textarea } from '@/components/ui/textarea';
-import { StatusBadge } from '../../components/status-badge';
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
+import { AdminPage, ErrorState, PageHeader } from '@/components/ui/page-shell';
+
 import {
+  attachProductMedia,
   bulkOrganizeMedia,
   bulkTrashMedia,
-  getAdminMediaUrl,
+  createMediaFolder,
+  createMediaTag,
+  deleteMediaFolder,
+  deleteMediaTag,
+  detachProductMedia,
+  getMediaUploadPolicy,
+  listMediaFolders,
+  listMediaLibrary,
+  listMediaTags,
+  runMediaLifecycleAction,
+  trashMediaAsset,
+  updateMediaFolder,
+  updateMediaMetadata,
+  updateMediaOrganization,
   uploadMediaFile,
-} from '../../lib/media/api';
-import { mapSettledLimited } from '../../lib/media/concurrency';
+} from '@/lib/media/api';
+import { catalogData, catalogRequest, CatalogRequestError } from '@/lib/catalog/api';
+import type { ApiEnvelope } from '@maevelle/contracts';
+import { mapSettledLimited } from '@/lib/media/concurrency';
 import {
   emptyHealthSummary,
   scanMediaHealth,
   type MediaHealthSummary,
-} from '../../lib/media/health-scan';
+} from '@/lib/media/health-scan';
 
-type MediaUsage = {
-  readonly id: string;
-  readonly domain: string;
-  readonly label: string | null;
-  readonly productId?: string;
-  readonly productTitle?: string;
-  readonly conversationId?: string;
-  readonly variantId?: string | null;
-  readonly variantSku?: string | null;
-  readonly role?: 'GALLERY' | 'THUMBNAIL' | 'COLOR_GALLERY' | 'SIZE_DIAGRAM';
-  readonly position?: number;
-};
-
-type MediaAsset = {
-  readonly id: string;
-  readonly assetType: 'IMAGE' | 'DOCUMENT';
-  readonly originalFilename: string;
-  readonly uploadSource: string;
-  readonly uploadedBy: { id: string; name: string } | null;
-  readonly folderId: string | null;
-  readonly tags: readonly { id: string; name: string }[];
-  readonly title: string | null;
-  readonly altText: string | null;
-  readonly caption: string | null;
-  readonly internalDescription: string | null;
-  readonly mimeType: string | null;
-  readonly byteSize: number | null;
-  readonly widthPx: number | null;
-  readonly heightPx: number | null;
-  readonly visibility: 'PUBLIC' | 'PRIVATE';
-  readonly status:
-    | 'PENDING_UPLOAD'
-    | 'UPLOADED'
-    | 'PROCESSING'
-    | 'READY'
-    | 'FAILED'
-    | 'QUARANTINED'
-    | 'ARCHIVED'
-    | 'TRASHED'
-    | 'PURGING';
-  readonly createdAt: string;
-  readonly version: number;
-  readonly processingErrorCode: string | null;
-  readonly processingErrorMessage: string | null;
-  readonly missingPublicRenditions: boolean;
-  readonly externalImport: {
-    readonly status: 'PENDING' | 'PROCESSING' | 'RETRY_WAIT' | 'COMPLETE' | 'FAILED';
-    readonly attempts: number;
-    readonly nextAttemptAt: string | null;
-  } | null;
-  readonly purgeAttempts: number;
-  readonly purgeRetryAfter: string | null;
-  readonly purgeLeaseUntil: string | null;
-  readonly purgeLastError: string | null;
-  readonly usages: readonly MediaUsage[];
-};
-
-type ProductSummary = { readonly id: string; readonly title: string; readonly handle: string };
-type MediaFolder = {
-  readonly id: string;
-  readonly parentId: string | null;
-  readonly name: string;
-  readonly version: number;
-  readonly assetCount: number;
-};
-type MediaTag = { readonly id: string; readonly name: string; readonly assetCount: number };
-type Pagination = { page: number; pageSize: number; totalItems: number; totalPages: number };
-type ProductWorkspace = ProductSummary & {
-  readonly variants: readonly { id: string; sku: string; status: string }[];
-  readonly options: readonly {
-    id: string;
-    name: string;
-    values: readonly { id: string; label: string; status: string }[];
-  }[];
-};
-type PlacementScope = 'PRODUCT' | 'VARIANT' | 'OPTION';
-
-async function errorMessage(response: Response, fallback: string) {
-  const body = (await response.json().catch(() => ({}))) as {
-    error?: { message?: string } | string;
-  };
-  return typeof body.error === 'string' ? body.error : (body.error?.message ?? fallback);
-}
+import { MediaAssetResults } from '@/components/media/media-asset-results';
+import { MediaAssetInspector } from '@/components/media/media-asset-inspector';
+import { MediaWorkspaceDialogs } from '@/components/media/media-workspace-dialogs';
+import type {
+  AssetTypeFilter,
+  MediaAsset,
+  MediaFolder,
+  MediaTag,
+  MediaUsage,
+  Pagination,
+  PlacementScope,
+  ProductSummary,
+  ProductWorkspace,
+  SortOption,
+  UsageFilter,
+} from '@/components/media/media-workspace-types';
 
 export default function MediaPage() {
   const [assets, setAssets] = useState<readonly MediaAsset[]>([]);
   const [products, setProducts] = useState<readonly ProductSummary[]>([]);
+  const [productLoadError, setProductLoadError] = useState<string | null>(null);
   const [folders, setFolders] = useState<readonly MediaFolder[]>([]);
   const [tags, setTags] = useState<readonly MediaTag[]>([]);
+
+  // Filters & State
   const [page, setPage] = useState(1);
   const [searchQuery, setSearchQuery] = useState('');
   const [lifecycleFilter, setLifecycleFilter] = useState('');
   const [visibilityFilter, setVisibilityFilter] = useState('');
-  const [assetTypeFilter] = useState('');
+  const [assetTypeFilter, setAssetTypeFilter] = useState<AssetTypeFilter>('');
   const [selectedFolderId, setSelectedFolderId] = useState('');
-  const [selectedTagId] = useState('');
-  const [unusedOnly, setUnusedOnly] = useState(false);
+  const [usageFilter, setUsageFilter] = useState<UsageFilter>('ALL');
+  const [sort, setSort] = useState<SortOption>('NEWEST');
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
 
   const deferredSearchQuery = useDeferredValue(searchQuery);
@@ -189,76 +119,98 @@ export default function MediaPage() {
   const [selectedAssetId, setSelectedAssetId] = useState('');
   const [selectedForBulk, setSelectedForBulk] = useState<Set<string>>(new Set());
 
+  // Feedback, Progress & Loading
   const [message, setMessage] = useState('');
   const [tone, setTone] = useState<'success' | 'warning' | 'danger'>('success');
   const [busy, setBusy] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<number | null>(null);
+  const [isDraggingOver, setIsDraggingOver] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const loadRequestId = useRef(0);
 
-  // Modals
+  // Dialog States
   const [isHealthOpen, setIsHealthOpen] = useState(false);
   const healthAbort = useRef<AbortController | null>(null);
-  const [isBulkFolderOpen, setIsBulkFolderOpen] = useState(false);
-  const [isNewFolderOpen, setIsNewFolderOpen] = useState(false);
-  const [isNewTagOpen, setIsNewTagOpen] = useState(false);
-  const [bulkTargetFolderId, setBulkTargetFolderId] = useState('');
-
   const [health, setHealth] = useState<MediaHealthSummary | null>(null);
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    try {
-      const queryParams = new URLSearchParams();
-      queryParams.set('page', String(page));
-      queryParams.set('pageSize', '32');
-      if (deferredSearchQuery.trim()) queryParams.set('query', deferredSearchQuery.trim());
-      if (lifecycleFilter) queryParams.set('status', lifecycleFilter);
-      if (visibilityFilter) queryParams.set('visibility', visibilityFilter);
-      if (assetTypeFilter) queryParams.set('assetType', assetTypeFilter);
-      if (selectedFolderId) queryParams.set('folderId', selectedFolderId);
-      if (selectedTagId) queryParams.set('tagId', selectedTagId);
-      if (unusedOnly) queryParams.set('unused', 'true');
+  const [isBulkFolderOpen, setIsBulkFolderOpen] = useState(false);
+  const [isBulkTagOpen, setIsBulkTagOpen] = useState(false);
+  const [bulkTargetFolderId, setBulkTargetFolderId] = useState('');
 
-      const [mediaResponse, productsResponse, foldersResponse, tagsResponse] = await Promise.all([
-        fetch(`/api/admin/media?${queryParams.toString()}`, {
-          credentials: 'include',
-          cache: 'no-store',
-        }),
-        fetch('/api/admin/catalog/products', { credentials: 'include', cache: 'no-store' }),
-        fetch('/api/admin/media/folders', { credentials: 'include', cache: 'no-store' }),
-        fetch('/api/admin/media/tags', { credentials: 'include', cache: 'no-store' }),
+  const [isNewFolderOpen, setIsNewFolderOpen] = useState(false);
+  const [editingFolder, setEditingFolder] = useState<MediaFolder | null>(null);
+  const [deletingFolder, setDeletingFolder] = useState<MediaFolder | null>(null);
+
+  const [isNewTagOpen, setIsNewTagOpen] = useState(false);
+  const [deletingTag, setDeletingTag] = useState<MediaTag | null>(null);
+
+  const loadSupportingData = useCallback(async () => {
+    try {
+      const [productsResult, foldersData, tagsData] = await Promise.all([
+        catalogRequest<ApiEnvelope<readonly ProductSummary[]>>('/admin/catalog/products')
+          .then((res) => ({ ok: true as const, data: res.data }))
+          .catch((err: unknown) => {
+            const isForbidden = err instanceof CatalogRequestError && err.status === 403;
+            return {
+              ok: false as const,
+              error: isForbidden
+                ? 'Catalog access is required to attach media to products.'
+                : 'Products could not be loaded. Refresh the library to retry.',
+              data: [] as readonly ProductSummary[],
+            };
+          }),
+        listMediaFolders(),
+        listMediaTags(),
       ]);
 
-      if (!mediaResponse.ok)
-        throw new Error(await errorMessage(mediaResponse, 'Media library could not be loaded.'));
-      if (!productsResponse.ok)
-        throw new Error(await errorMessage(productsResponse, 'Products could not be loaded.'));
-      if (!foldersResponse.ok || !tagsResponse.ok)
-        throw new Error('Media organization could not be loaded.');
+      setProducts(productsResult.data);
+      setProductLoadError(productsResult.ok ? null : productsResult.error);
+      setFolders(foldersData);
+      setTags(tagsData);
+    } catch {
+      setFolders([]);
+      setTags([]);
+    }
+  }, []);
 
-      const mediaPayload = (await mediaResponse.json()) as {
-        data: readonly MediaAsset[];
-        pagination: Pagination;
-      };
-      const productsPayload = (await productsResponse.json()) as {
-        data: readonly ProductSummary[];
-      };
+  const refreshSupportingData = useCallback(() => {
+    void loadSupportingData();
+  }, [loadSupportingData]);
 
+  const load = useCallback(async () => {
+    const requestId = ++loadRequestId.current;
+    setLoading(true);
+    setLoadError(null);
+    try {
+      const mediaPayload = await listMediaLibrary<MediaAsset>({
+        page,
+        pageSize: 32,
+        sort,
+        ...(deferredSearchQuery.trim() ? { query: deferredSearchQuery.trim() } : {}),
+        ...(lifecycleFilter ? { status: lifecycleFilter } : {}),
+        ...(visibilityFilter ? { visibility: visibilityFilter as 'PUBLIC' | 'PRIVATE' } : {}),
+        ...(assetTypeFilter ? { assetType: assetTypeFilter } : {}),
+        ...(selectedFolderId ? { folderId: selectedFolderId } : {}),
+        ...(usageFilter !== 'ALL' ? { usage: usageFilter } : {}),
+      });
+
+      if (requestId !== loadRequestId.current) return;
       setAssets(mediaPayload.data);
       setPagination(mediaPayload.pagination);
-      setProducts(productsPayload.data);
-      setFolders(((await foldersResponse.json()) as { data: readonly MediaFolder[] }).data);
-      setTags(((await tagsResponse.json()) as { data: readonly MediaTag[] }).data);
       setSelectedAssetId((current) =>
         mediaPayload.data.some((asset) => asset.id === current)
           ? current
           : (mediaPayload.data[0]?.id ?? ''),
       );
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : 'Media library could not be loaded.');
-      setTone('danger');
+      if (requestId === loadRequestId.current) {
+        setLoadError(error instanceof Error ? error.message : 'Media library could not be loaded.');
+        setAssets([]);
+        setSelectedAssetId('');
+      }
     } finally {
-      setLoading(false);
+      if (requestId === loadRequestId.current) setLoading(false);
     }
   }, [
     deferredSearchQuery,
@@ -266,8 +218,8 @@ export default function MediaPage() {
     visibilityFilter,
     assetTypeFilter,
     selectedFolderId,
-    selectedTagId,
-    unusedOnly,
+    usageFilter,
+    sort,
     page,
   ]);
 
@@ -275,10 +227,19 @@ export default function MediaPage() {
     void load();
   }, [load]);
 
+  useEffect(() => {
+    refreshSupportingData();
+  }, [refreshSupportingData]);
+
   const selectedAsset = useMemo(
     () => assets.find((asset) => asset.id === selectedAssetId),
     [assets, selectedAssetId],
   );
+
+  useEffect(() => {
+    setProduct(null);
+    setPlacementScope('PRODUCT');
+  }, [selectedAssetId]);
 
   async function checkHealth() {
     const controller = new AbortController();
@@ -290,14 +251,17 @@ export default function MediaPage() {
       const result = await scanMediaHealth(fetch, controller.signal, setHealth);
       setMessage(
         result.status === 'HEALTHY'
-          ? `Media scan completed: ${result.verifiedObjectCount} objects found with matching byte sizes.`
+          ? `Media scan completed: ${result.verifiedObjectCount} storage records verified without issues.`
           : `Media scan completed with ${result.issueCount} issue${result.issueCount === 1 ? '' : 's'}.`,
       );
       setTone(result.status === 'HEALTHY' ? 'success' : 'warning');
     } catch (error) {
       if (controller.signal.aborted) return;
-      setHealth((previous) => ({ ...(previous ?? emptyHealthSummary), status: 'FAILED',
-        error: error instanceof Error ? error.message : 'Media health scan failed.' }));
+      setHealth((prev) => ({
+        ...(prev ?? emptyHealthSummary),
+        status: 'FAILED',
+        error: error instanceof Error ? error.message : 'Media health scan failed.',
+      }));
       setMessage(error instanceof Error ? error.message : 'Media health check could not run.');
       setTone('danger');
     } finally {
@@ -314,13 +278,10 @@ export default function MediaPage() {
     }
     setBusy(true);
     try {
-      const response = await fetch(`/api/admin/catalog/products/${productId}`, {
-        credentials: 'include',
-        cache: 'no-store',
-      });
-      if (!response.ok)
-        throw new Error(await errorMessage(response, 'Product could not be loaded.'));
-      setProduct(((await response.json()) as { data: ProductWorkspace }).data);
+      const productWorkspace = await catalogData<ProductWorkspace>(
+        `/admin/catalog/products/${encodeURIComponent(productId)}`,
+      );
+      setProduct(productWorkspace);
       setPlacementScope('PRODUCT');
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Product could not be loaded.');
@@ -331,44 +292,60 @@ export default function MediaPage() {
   }
 
   async function handleFilesUpload(
-    files: FileList | null,
-    initialVisibility: 'PUBLIC' | 'PRIVATE' = 'PRIVATE',
+    files: FileList | readonly File[] | null,
+    initialVisibility: 'PUBLIC' | 'PRIVATE' = 'PUBLIC',
   ) {
     if (!files || files.length === 0) return;
     const fileList = Array.from(files);
     setBusy(true);
     setMessage('');
     try {
+      const policy = await getMediaUploadPolicy();
+      const validFiles = fileList.filter(
+        (file) =>
+          policy.acceptedMimeTypes.includes(file.type as (typeof policy.acceptedMimeTypes)[number]) &&
+          file.size > 0 &&
+          file.size <= policy.maxUploadBytes,
+      );
+      const skipped = fileList.length - validFiles.length;
+      if (validFiles.length === 0) {
+        throw new Error(
+          `Supported formats: JPEG, PNG, WebP, PDF up to ${Math.ceil(policy.maxUploadBytes / 1024 / 1024)} MB each.`,
+        );
+      }
+
       const progress = new Map<number, number>();
-      const results = await mapSettledLimited(
-        fileList, 3, (file, index) =>
-          uploadMediaFile(file, {
-            visibility: initialVisibility,
-            title: file.name.replace(/\.[^.]+$/, '').replaceAll('-', ' '),
-            altText: null,
-            onProgress: (value) => {
-              progress.set(index, value);
-              setUploadProgress(
-                Math.round(
-                  Array.from(
-                    { length: fileList.length },
-                    (_, fileIndex) => progress.get(fileIndex) ?? 0,
-                  ).reduce((sum, current) => sum + current, 0) / fileList.length,
-                ),
-              );
-            },
-          }),
+      const results = await mapSettledLimited(validFiles, 3, (file, index) =>
+        uploadMediaFile(file, {
+          visibility: initialVisibility,
+          title: file.name.replace(/\.[^.]+$/, '').replaceAll('-', ' '),
+          altText: null,
+          onProgress: (val) => {
+            progress.set(index, val);
+            setUploadProgress(
+              Math.round(
+                Array.from(
+                  { length: validFiles.length },
+                  (_, fileIndex) => progress.get(fileIndex) ?? 0,
+                ).reduce((sum, curr) => sum + curr, 0) / validFiles.length,
+              ),
+            );
+          },
+        }),
       );
-      const uploaded = results.flatMap((result) =>
-        result.status === 'fulfilled' ? [result.value] : [],
-      );
+
+      const uploaded = results.flatMap((r) => (r.status === 'fulfilled' ? [r.value] : []));
       const failed = results.length - uploaded.length;
+
       setMessage(
-        `${uploaded.length} asset${uploaded.length === 1 ? '' : 's'} uploaded and queued for processing${failed ? `; ${failed} failed` : ''}.`,
+        `${uploaded.length} asset${uploaded.length === 1 ? '' : 's'} uploaded and queued for processing${
+          failed ? `; ${failed} failed` : ''
+        }${skipped ? `; ${skipped} skipped (unsupported format or over limit)` : ''}.`,
       );
-      setTone(failed ? 'warning' : 'success');
+      setTone(failed || skipped ? 'warning' : 'success');
       if (uploaded[0]) setSelectedAssetId(uploaded[0].assetId);
       await load();
+      refreshSupportingData();
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Upload failed.');
       setTone('danger');
@@ -378,7 +355,33 @@ export default function MediaPage() {
     }
   }
 
-  const handlePaste = (e: ClipboardEvent<HTMLDivElement>) => {
+  // Drag and Drop handlers
+  const handleDragOver = (e: DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!isDraggingOver) setIsDraggingOver(true);
+  };
+
+  const handleDragLeave = (e: DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (e.currentTarget.contains(e.relatedTarget as Node)) return;
+    setIsDraggingOver(false);
+  };
+
+  const handleDrop = (e: DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDraggingOver(false);
+    const files = e.dataTransfer?.files;
+    if (files && files.length > 0) {
+      void handleFilesUpload(files);
+    }
+  };
+
+  const handlePaste = (e: ClipboardEvent<HTMLElement>) => {
+    if (e.target instanceof HTMLElement && e.target.closest('input, textarea, [contenteditable="true"]'))
+      return;
     const items = e.clipboardData?.items;
     if (!items) return;
     const files: File[] = [];
@@ -390,9 +393,7 @@ export default function MediaPage() {
       }
     }
     if (files.length > 0) {
-      const dt = new DataTransfer();
-      for (const f of files) dt.items.add(f);
-      void handleFilesUpload(dt.files);
+      void handleFilesUpload(files);
     }
   };
 
@@ -402,80 +403,20 @@ export default function MediaPage() {
     const data = new FormData(event.currentTarget);
     setBusy(true);
     try {
-      const response = await fetch(`/api/admin/media/${selectedAsset.id}`, {
-        method: 'PATCH',
-        credentials: 'include',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({
-          title: String(data.get('title') ?? '').trim() || null,
-          altText: String(data.get('altText') ?? '').trim() || null,
-          caption: String(data.get('caption') ?? '').trim() || null,
-          internalDescription: String(data.get('internalDescription') ?? '').trim() || null,
-          visibility: data.get('visibility'),
-          version: selectedAsset.version,
-        }),
+      await updateMediaMetadata(selectedAsset.id, {
+        version: selectedAsset.version,
+        title: String(data.get('title') ?? '').trim() || null,
+        altText: String(data.get('altText') ?? '').trim() || null,
+        caption: String(data.get('caption') ?? '').trim() || null,
+        internalDescription: String(data.get('internalDescription') ?? '').trim() || null,
+        visibility: (data.get('visibility') as 'PUBLIC' | 'PRIVATE') || 'PUBLIC',
       });
-      if (!response.ok)
-        throw new Error(await errorMessage(response, 'Media metadata could not be saved.'));
-      setMessage('Media metadata and visibility updated.');
+      setMessage('Media metadata and visibility updated successfully.');
       setTone('success');
       await load();
+      refreshSupportingData();
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Media metadata could not be saved.');
-      setTone('danger');
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function createLibraryFolder(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const form = new FormData(event.currentTarget);
-    const name = String(form.get('name') ?? '').trim();
-    const parentId = String(form.get('parentId') ?? '');
-    if (!name) return;
-    setBusy(true);
-    try {
-      const response = await fetch('/api/admin/media/folders', {
-        method: 'POST',
-        credentials: 'include',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ name, ...(parentId ? { parentId } : {}) }),
-      });
-      if (!response.ok)
-        throw new Error(await errorMessage(response, 'Folder could not be created.'));
-      setIsNewFolderOpen(false);
-      setMessage(`Folder "${name}" created.`);
-      setTone('success');
-      await load();
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : 'Folder could not be created.');
-      setTone('danger');
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function createLibraryTag(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const form = new FormData(event.currentTarget);
-    const name = String(form.get('name') ?? '').trim();
-    if (!name) return;
-    setBusy(true);
-    try {
-      const response = await fetch('/api/admin/media/tags', {
-        method: 'POST',
-        credentials: 'include',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ name }),
-      });
-      if (!response.ok) throw new Error(await errorMessage(response, 'Tag could not be created.'));
-      setIsNewTagOpen(false);
-      setMessage(`Tag "${name}" created.`);
-      setTone('success');
-      await load();
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : 'Tag could not be created.');
       setTone('danger');
     } finally {
       setBusy(false);
@@ -489,21 +430,15 @@ export default function MediaPage() {
     const folderId = String(data.get('folderId') ?? '');
     setBusy(true);
     try {
-      const response = await fetch(`/api/admin/media/${selectedAsset.id}/organization`, {
-        method: 'PATCH',
-        credentials: 'include',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({
-          version: selectedAsset.version,
-          folderId: folderId || null,
-          tagIds: data.getAll('tagIds').map(String),
-        }),
+      await updateMediaOrganization(selectedAsset.id, {
+        version: selectedAsset.version,
+        folderId: folderId || null,
+        tagIds: data.getAll('tagIds').map(String),
       });
-      if (!response.ok)
-        throw new Error(await errorMessage(response, 'Media organization could not be saved.'));
-      setMessage('Folder and tags updated.');
+      setMessage('Folder and taxonomy tags updated.');
       setTone('success');
       await load();
+      refreshSupportingData();
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Media organization could not be saved.');
       setTone('danger');
@@ -519,29 +454,21 @@ export default function MediaPage() {
     const scopedId = String(data.get('scopedId') ?? '');
     setBusy(true);
     try {
-      const response = await fetch(`/api/admin/catalog/products/${product.id}/media`, {
-        method: 'POST',
-        credentials: 'include',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({
-          assetId: selectedAsset.id,
-          role: data.get('role'),
-          position: Number(data.get('position') ?? 0),
-          ...(placementScope === 'VARIANT' && scopedId ? { variantId: scopedId } : {}),
-          ...(placementScope === 'OPTION' && scopedId ? { optionValueId: scopedId } : {}),
-          isPrimary: data.get('isPrimary') === 'on',
-          altTextOverride: String(data.get('altTextOverride') ?? '').trim() || null,
-        }),
+      await attachProductMedia(product.id, {
+        assetId: selectedAsset.id,
+        role: (data.get('role') as 'GALLERY' | 'THUMBNAIL' | 'COLOR_GALLERY' | 'SIZE_DIAGRAM') || 'GALLERY',
+        position: Number(data.get('position') ?? 0),
+        ...(placementScope === 'VARIANT' && scopedId ? { variantId: scopedId } : {}),
+        ...(placementScope === 'OPTION' && scopedId ? { optionValueId: scopedId } : {}),
+        isPrimary: data.get('isPrimary') === 'on',
+        altTextOverride: String(data.get('altTextOverride') ?? '').trim() || null,
       });
-      if (!response.ok)
-        throw new Error(
-          await errorMessage(response, 'Media could not be attached to the Product.'),
-        );
-      setMessage(`Image attached to ${product.title}.`);
+      setMessage(`Asset attached to "${product.title}".`);
       setTone('success');
       await load();
+      refreshSupportingData();
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : 'Media attachment failed.');
+      setMessage(error instanceof Error ? error.message : 'Media placement failed.');
       setTone('danger');
     } finally {
       setBusy(false);
@@ -550,19 +477,15 @@ export default function MediaPage() {
 
   async function detach(usage: MediaUsage) {
     if (!usage.productId) return;
-    if (!window.confirm(`Remove placement from ${usage.productTitle ?? usage.label ?? 'product'}?`))
+    if (!window.confirm(`Detach placement from ${usage.productTitle ?? usage.label ?? 'product'}?`))
       return;
     setBusy(true);
     try {
-      const response = await fetch(
-        `/api/admin/catalog/products/${usage.productId}/media/${usage.id}`,
-        { method: 'DELETE', credentials: 'include' },
-      );
-      if (!response.ok)
-        throw new Error(await errorMessage(response, 'Media placement could not be removed.'));
+      await detachProductMedia(usage.productId, usage.id);
       setMessage('Media placement detached safely.');
       setTone('success');
       await load();
+      refreshSupportingData();
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Media placement could not be removed.');
       setTone('danger');
@@ -571,40 +494,48 @@ export default function MediaPage() {
     }
   }
 
-  async function runAssetAction(action: 'retry' | 'retry-import' | 'repair-renditions' | 'retry-purge' | 'archive' | 'trash' | 'restore') {
+  async function runAssetAction(
+    action:
+      | 'retry'
+      | 'retry-import'
+      | 'repair-renditions'
+      | 'retry-purge'
+      | 'archive'
+      | 'trash'
+      | 'restore',
+  ) {
     if (!selectedAsset) return;
     if (
       action === 'trash' &&
-      !window.confirm(`Move ${selectedAsset.title || selectedAsset.originalFilename} to trash?`)
-    )
+      !window.confirm(`Move "${selectedAsset.title || selectedAsset.originalFilename}" to trash?`)
+    ) {
       return;
+    }
     setBusy(true);
     try {
-      const response = await fetch(
-        action === 'trash'
-          ? `/api/admin/media/${selectedAsset.id}`
-          : `/api/admin/media/${selectedAsset.id}/${action}`,
-        { method: action === 'trash' ? 'DELETE' : 'POST', credentials: 'include' },
-      );
-      if (!response.ok)
-        throw new Error(await errorMessage(response, `Asset ${action} could not be completed.`));
+      if (action === 'trash') {
+        await trashMediaAsset(selectedAsset.id);
+      } else {
+        await runMediaLifecycleAction(selectedAsset.id, action);
+      }
       setMessage(
         action === 'retry'
           ? 'Media processing queued for retry.'
           : action === 'retry-import'
             ? 'External image import queued for retry.'
-          : action === 'repair-renditions'
-            ? 'Missing public image sizes queued for regeneration.'
-          : action === 'retry-purge'
-            ? 'Media purge queued for retry.'
-          : action === 'archive'
-            ? 'Asset archived.'
-            : action === 'restore'
-              ? 'Asset restored from trash.'
-              : 'Unused asset moved to trash.',
+            : action === 'repair-renditions'
+              ? 'Missing public image renditions queued for regeneration.'
+              : action === 'retry-purge'
+                ? 'Media purge queued for retry.'
+                : action === 'archive'
+                  ? 'Asset archived.'
+                  : action === 'restore'
+                    ? 'Asset restored from trash.'
+                    : 'Unused asset moved to trash.',
       );
       setTone('success');
       await load();
+      refreshSupportingData();
     } catch (error) {
       setMessage(error instanceof Error ? error.message : `Asset ${action} failed.`);
       setTone('danger');
@@ -613,13 +544,114 @@ export default function MediaPage() {
     }
   }
 
-  // Bulk operations
-  const handleToggleSelectAll = () => {
-    if (selectedForBulk.size === assets.length) {
-      setSelectedForBulk(new Set());
-    } else {
-      setSelectedForBulk(new Set(assets.map((a) => a.id)));
+  // Folder CRUD
+  async function createLibraryFolder(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    const name = String(form.get('name') ?? '').trim();
+    const parentId = String(form.get('parentId') ?? '') || null;
+    if (!name) return;
+    setBusy(true);
+    try {
+      await createMediaFolder({ name, parentId });
+      setIsNewFolderOpen(false);
+      setMessage(`Folder "${name}" created.`);
+      setTone('success');
+      await load();
+      refreshSupportingData();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Folder could not be created.');
+      setTone('danger');
+    } finally {
+      setBusy(false);
     }
+  }
+
+  async function handleUpdateFolder(folderId: string, version: number, name: string) {
+    setBusy(true);
+    try {
+      await updateMediaFolder(folderId, { version, name });
+      setEditingFolder(null);
+      setMessage(`Folder renamed to "${name}".`);
+      setTone('success');
+      await load();
+      refreshSupportingData();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Folder could not be renamed.');
+      setTone('danger');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleDeleteFolder(folderId: string) {
+    setBusy(true);
+    try {
+      await deleteMediaFolder(folderId);
+      setDeletingFolder(null);
+      if (selectedFolderId === folderId) setSelectedFolderId('');
+      setMessage('Folder deleted. Contained assets are now unfiled.');
+      setTone('success');
+      await load();
+      refreshSupportingData();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Folder could not be deleted.');
+      setTone('danger');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  // Tag CRUD
+  async function createLibraryTag(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    const name = String(form.get('name') ?? '').trim();
+    if (!name) return;
+    setBusy(true);
+    try {
+      await createMediaTag({ name });
+      setIsNewTagOpen(false);
+      setMessage(`Tag "#${name}" created.`);
+      setTone('success');
+      await load();
+      refreshSupportingData();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Tag could not be created.');
+      setTone('danger');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleDeleteTag(tagId: string) {
+    setBusy(true);
+    try {
+      await deleteMediaTag(tagId);
+      setDeletingTag(null);
+      setMessage('Tag deleted.');
+      setTone('success');
+      await load();
+      refreshSupportingData();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Tag could not be deleted.');
+      setTone('danger');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  // Bulk Operations
+  const handleToggleSelectAll = () => {
+    setSelectedForBulk((current) => {
+      const next = new Set(current);
+      if (assets.every((asset) => next.has(asset.id))) {
+        for (const asset of assets) next.delete(asset.id);
+      } else {
+        for (const asset of assets) next.add(asset.id);
+      }
+      return next;
+    });
   };
 
   const handleToggleSelectItem = (id: string) => {
@@ -635,19 +667,25 @@ export default function MediaPage() {
     if (selectedForBulk.size === 0) return;
     if (
       !window.confirm(
-        `Move ${selectedForBulk.size} selected assets to trash? Unused assets will be trashed; in-use assets will be safely skipped.`,
+        `Move ${selectedForBulk.size} selected asset(s) to trash? Unused assets will be trashed; in-use assets will be safely skipped.`,
       )
-    )
+    ) {
       return;
+    }
     setBusy(true);
     try {
       const result = await bulkTrashMedia(Array.from(selectedForBulk));
       setMessage(
-        `Bulk trash complete: ${result.trashedCount} trashed${result.skippedInUseCount > 0 ? `, ${result.skippedInUseCount} skipped because they are in use` : ''}.`,
+        `Bulk trash complete: ${result.trashedCount} trashed${
+          result.skippedInUseCount > 0
+            ? `, ${result.skippedInUseCount} skipped because they are attached to products/conversations`
+            : ''
+        }.`,
       );
       setTone(result.skippedInUseCount > 0 ? 'warning' : 'success');
       setSelectedForBulk(new Set());
       await load();
+      refreshSupportingData();
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Bulk trash failed.');
       setTone('danger');
@@ -664,11 +702,12 @@ export default function MediaPage() {
         assetIds: Array.from(selectedForBulk),
         folderId: bulkTargetFolderId === 'unfiled' ? null : bulkTargetFolderId || null,
       });
-      setMessage(`Moved ${result.updatedCount} assets to target folder.`);
+      setMessage(`Moved ${result.updatedCount} asset(s) to destination folder.`);
       setTone('success');
       setIsBulkFolderOpen(false);
       setSelectedForBulk(new Set());
       await load();
+      refreshSupportingData();
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Bulk move failed.');
       setTone('danger');
@@ -677,1311 +716,680 @@ export default function MediaPage() {
     }
   };
 
+  const handleBulkManageTags = async (addTagIds: string[], removeTagIds: string[]) => {
+    if (selectedForBulk.size === 0) return;
+    setBusy(true);
+    try {
+      const result = await bulkOrganizeMedia({
+        assetIds: Array.from(selectedForBulk),
+        ...(addTagIds.length > 0 ? { addTagIds } : {}),
+        ...(removeTagIds.length > 0 ? { removeTagIds } : {}),
+      });
+      setMessage(`Updated taxonomy tags across ${result.updatedCount} asset(s).`);
+      setTone('success');
+      setIsBulkTagOpen(false);
+      setSelectedForBulk(new Set());
+      await load();
+      refreshSupportingData();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Bulk tag update failed.');
+      setTone('danger');
+    } finally {
+      setBusy(false);
+    }
+  };
+
   return (
-    <div className="min-h-screen bg-muted/10 p-4 sm:p-6 lg:p-8 space-y-6" onPaste={handlePaste}>
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-2">
-            <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-foreground">
-              Media Library
-            </h1>
-            <Badge variant="outline" className="text-xs">
-              Platform Asset Hub
-            </Badge>
-          </div>
-          <p className="text-xs sm:text-sm text-muted-foreground mt-0.5">
-            Deterministic WebP delivery, EXIF normalization, tenant isolation, and atomic placement
-            syncing.
-          </p>
-        </div>
+    <TooltipProvider delay={200}>
+      <AdminPage
+        className="min-h-screen relative"
+        onPaste={handlePaste}
+        onDragOver={handleDragOver}
+        onDragLeave={handleDragLeave}
+        onDrop={handleDrop}
+      >
+        {/* Full-screen Drag and Drop Overlay */}
+        <AnimatePresence>
+          {isDraggingOver && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.15 }}
+              className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-background/85 backdrop-blur-sm border-2 border-dashed border-primary pointer-events-none"
+            >
+              <div className="flex flex-col items-center gap-3 p-8 text-center bg-card rounded-2xl shadow-lg border border-border">
+                <div className="size-16 rounded-full bg-primary/10 flex items-center justify-center text-primary">
+                  <UploadCloud className="size-8" />
+                </div>
+                <h3 className="text-lg font-bold text-foreground">Drop files to upload</h3>
+                <p className="text-xs text-muted-foreground max-w-sm">
+                  Upload JPEG, PNG, WebP, or PDF files. Images will be processed into multi-size WebP
+                  derivatives.
+                </p>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
 
-        <div className="flex flex-wrap items-center gap-2">
-          <RefreshButton
-            size="icon-sm"
-            loading={loading}
-            onRefresh={() => void load()}
-            tooltip="Refresh media library"
-          />
-
-          <Button
-            variant="outline"
-            size="sm"
-            className="h-8 gap-1.5 text-xs"
-            onClick={() => void checkHealth()}
-            disabled={busy}
-          >
-            <ShieldCheck className="size-3.5 text-primary" />
-            Storage Health
-          </Button>
-
-          <Button
-            size="sm"
-            className="h-8 gap-1.5 text-xs"
-            onClick={() => document.getElementById('main-media-upload-input')?.click()}
-            disabled={busy}
-          >
-            <Plus className="size-3.5" />
-            Upload Assets
-          </Button>
-          <input
-            id="main-media-upload-input"
-            type="file"
-            accept="image/jpeg,image/png,image/webp,application/pdf"
-            multiple
-            className="hidden"
-            onChange={(e) => void handleFilesUpload(e.target.files)}
-          />
-        </div>
-      </div>
-
-      {/* Notification banner */}
-      {message && (
-        <div
-          className={`flex items-center justify-between rounded-lg p-3 text-xs font-medium border ${
-            tone === 'danger'
-              ? 'bg-destructive/10 border-destructive/30 text-destructive'
-              : tone === 'warning'
-                ? 'bg-amber-500/10 border-amber-500/30 text-amber-700 dark:text-amber-400'
-                : 'bg-emerald-500/10 border-emerald-500/30 text-emerald-700 dark:text-emerald-400'
-          }`}
-        >
-          <span>{message}</span>
-          <button
-            type="button"
-            className="hover:opacity-75"
-            onClick={() => setMessage('')}
-            aria-label="Dismiss feedback"
-          >
-            <X className="size-4" />
-          </button>
-        </div>
-      )}
-
-      {/* Uploading progress banner */}
-      {uploadProgress !== null && (
-        <Card className="border-primary/30 bg-primary/5 shadow-xs">
-          <CardContent className="flex items-center gap-3 p-3">
-            <LoaderCircle className="size-4 animate-spin text-primary shrink-0" />
-            <div className="flex-1 text-xs">
-              <span className="font-semibold text-foreground">
-                Streaming and processing uploads… ({uploadProgress}%)
-              </span>
-              <p className="text-[11px] text-muted-foreground mt-0.5">
-                Validating file signatures, stripping EXIF tags, and generating WebP renditions.
-              </p>
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Bulk Action Bar */}
-      {selectedForBulk.size > 0 && (
-        <Card className="border-primary bg-primary/10 shadow-sm sticky top-4 z-20">
-          <CardContent className="flex flex-wrap items-center justify-between gap-3 p-3">
-            <div className="flex items-center gap-2">
-              <Badge className="bg-primary text-primary-foreground font-semibold text-xs">
-                {selectedForBulk.size} selected
+        {/* Header */}
+        <PageHeader className="flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div>
+            <div className="flex items-center gap-2.5">
+              <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-foreground">
+                Media Library
+              </h1>
+              <Badge variant="outline" className="font-mono text-xs tabular-nums text-muted-foreground">
+                {pagination.totalItems} assets
               </Badge>
-              <span className="text-xs text-muted-foreground">across current filter</span>
             </div>
+            <p className="mt-0.5 text-xs sm:text-sm text-muted-foreground">
+              Centralized digital asset management, multi-rendition delivery, and product catalog
+              attachments.
+            </p>
+          </div>
 
-            <div className="flex items-center gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                className="h-7 text-xs gap-1.5"
-                onClick={() => setIsBulkFolderOpen(true)}
-              >
-                <FolderIcon className="size-3.5" />
-                Move to Folder
-              </Button>
-
-              <Button
-                variant="destructive"
-                size="sm"
-                className="h-7 text-xs gap-1.5"
-                onClick={() => void handleBulkTrash()}
-              >
-                <Trash2 className="size-3.5" />
-                Trash Unused
-              </Button>
-
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-7 text-xs"
-                onClick={() => setSelectedForBulk(new Set())}
-              >
-                Clear
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Search and Filters Toolbar */}
-      <Card className="shadow-xs">
-        <CardContent className="p-3 sm:p-4 space-y-3">
-          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5">
-            {/* Search */}
-            <div className="relative flex-1">
-              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground" />
-              <Input
-                placeholder="Search filenames, alt text, internal titles, or asset IDs…"
-                value={searchQuery}
-                onChange={(e) => {
-                  setSearchQuery(e.target.value);
-                  setPage(1);
-                }}
-                className="h-8 pl-8 text-xs bg-background"
-              />
-            </div>
-
-            {/* Folder filter */}
-            <select
-              value={selectedFolderId}
-              onChange={(e) => {
-                setSelectedFolderId(e.target.value);
-                setPage(1);
+          <div className="flex flex-wrap items-center gap-2">
+            <RefreshButton
+              size="icon-sm"
+              loading={loading}
+              onRefresh={() => {
+                void load();
+                refreshSupportingData();
               }}
-              aria-label="Filter by folder"
-              className="h-8 rounded-md border border-input bg-background px-2.5 text-xs text-foreground outline-none"
-            >
-              <option value="">All Folders</option>
-              <option value="unfiled">Unfiled Only</option>
-              {folders.map((f) => (
-                <option key={f.id} value={f.id}>
-                  {f.name} ({f.assetCount})
-                </option>
-              ))}
-            </select>
+              tooltip="Refresh media library"
+            />
 
-            {/* Status filter */}
-            <select
-              value={lifecycleFilter}
-              onChange={(e) => {
-                setLifecycleFilter(e.target.value);
-                setPage(1);
-              }}
-              aria-label="Filter by lifecycle status"
-              className="h-8 rounded-md border border-input bg-background px-2.5 text-xs text-foreground outline-none"
-            >
-              <option value="">All Lifecycles</option>
-              <option value="READY">Ready</option>
-              <option value="PROCESSING">Processing</option>
-              <option value="PENDING_UPLOAD">Pending</option>
-              <option value="FAILED">Failed</option>
-              <option value="QUARANTINED">Quarantined</option>
-              <option value="ARCHIVED">Archived</option>
-              <option value="TRASHED">Trash</option>
-              <option value="PURGING">Purging</option>
-            </select>
+            <Tooltip>
+              <TooltipTrigger>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-9 gap-1.5 text-xs"
+                  onClick={() => void checkHealth()}
+                  disabled={busy}
+                >
+                  <ShieldCheck className="size-3.5 text-primary" />
+                  Storage Health
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="bottom" className="text-xs max-w-xs">
+                Inspect physical storage objects, verify byte sizes, and identify stale purge claims.
+              </TooltipContent>
+            </Tooltip>
 
-            {/* Visibility filter */}
-            <select
-              value={visibilityFilter}
-              onChange={(e) => {
-                setVisibilityFilter(e.target.value);
-                setPage(1);
-              }}
-              aria-label="Filter by visibility"
-              className="h-8 rounded-md border border-input bg-background px-2.5 text-xs text-foreground outline-none"
-            >
-              <option value="">All Visibility</option>
-              <option value="PUBLIC">Public</option>
-              <option value="PRIVATE">Private</option>
-            </select>
-
-            {/* Unused filter button */}
             <Button
-              variant={unusedOnly ? 'default' : 'outline'}
               size="sm"
-              className="h-8 text-xs gap-1.5 shrink-0"
-              onClick={() => {
-                setUnusedOnly(!unusedOnly);
-                setPage(1);
-              }}
+              className="h-9 gap-1.5 text-xs shadow-xs"
+              onClick={() => document.getElementById('main-media-upload-input')?.click()}
+              disabled={busy}
             >
-              {unusedOnly ? 'Showing Unused' : 'Filter Unused'}
+              <Plus className="size-3.5" />
+              Upload Assets
             </Button>
-
-            {/* View Mode Toggle */}
-            <div className="flex items-center rounded-md border bg-muted/40 p-0.5 shrink-0">
-              <button
-                type="button"
-                className={`p-1.5 rounded text-xs ${viewMode === 'grid' ? 'bg-background shadow-xs text-foreground' : 'text-muted-foreground hover:text-foreground'}`}
-                onClick={() => setViewMode('grid')}
-                title="Grid view"
-                aria-label="Grid view"
-              >
-                <LayoutGrid className="size-3.5" />
-              </button>
-              <button
-                type="button"
-                className={`p-1.5 rounded text-xs ${viewMode === 'list' ? 'bg-background shadow-xs text-foreground' : 'text-muted-foreground hover:text-foreground'}`}
-                onClick={() => setViewMode('list')}
-                title="List view"
-                aria-label="List view"
-              >
-                <List className="size-3.5" />
-              </button>
-            </div>
+            <input
+              id="main-media-upload-input"
+              type="file"
+              accept="image/jpeg,image/png,image/webp,application/pdf"
+              multiple
+              className="hidden"
+              onChange={(e) => {
+                void handleFilesUpload(e.target.files);
+                e.currentTarget.value = '';
+              }}
+            />
           </div>
+        </PageHeader>
 
-          {/* Secondary bar: Folders & Tags management buttons */}
-          <div className="flex flex-wrap items-center justify-between gap-2 pt-1 border-t text-xs text-muted-foreground">
-            <div className="flex items-center gap-3">
-              <span className="font-medium text-foreground">Taxonomy:</span>
+        {/* Notification Banner */}
+        <AnimatePresence>
+          {message && (
+            <motion.div
+              initial={{ opacity: 0, y: -8 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -8 }}
+              transition={{ duration: 0.15 }}
+              role={tone === 'danger' ? 'alert' : 'status'}
+              aria-live="polite"
+              className={`flex items-center justify-between rounded-xl p-3 text-xs font-medium border shadow-2xs ${
+                tone === 'danger'
+                  ? 'bg-destructive/10 border-destructive/30 text-destructive'
+                  : tone === 'warning'
+                    ? 'bg-warning/10 border-warning/30 text-warning'
+                    : 'bg-success/10 border-success/30 text-success'
+              }`}
+            >
+              <span>{message}</span>
               <button
                 type="button"
-                className="hover:text-primary transition-colors flex items-center gap-1"
-                onClick={() => setIsNewFolderOpen(true)}
+                className="hover:opacity-75 p-0.5 rounded"
+                onClick={() => setMessage('')}
+                aria-label="Dismiss feedback"
               >
-                <FolderPlus className="size-3.5 text-primary" /> + New Folder
+                <X className="size-4" />
               </button>
-              <button
-                type="button"
-                className="hover:text-primary transition-colors flex items-center gap-1"
-                onClick={() => setIsNewTagOpen(true)}
-              >
-                <TagIcon className="size-3.5 text-primary" /> + New Tag
-              </button>
-            </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
 
-            <div className="text-[11px]">
-              Showing {assets.length} of {pagination.totalItems} assets (Page {pagination.page} of{' '}
-              {Math.max(1, pagination.totalPages)})
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+        {/* Upload Progress Banner */}
+        <AnimatePresence>
+          {uploadProgress !== null && (
+            <motion.div
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: 'auto' }}
+              exit={{ opacity: 0, height: 0 }}
+              transition={{ duration: 0.15 }}
+            >
+              <Card className="border-primary/30 bg-primary-subtle shadow-xs">
+                <CardContent className="flex items-center gap-3 p-3">
+                  <LoaderCircle className="size-4 animate-spin text-primary shrink-0" />
+                  <div className="flex-1 text-xs">
+                    <div className="flex items-center justify-between">
+                      <span className="font-semibold text-foreground">
+                        Uploading files… ({uploadProgress}%)
+                      </span>
+                      <span className="font-mono text-muted-foreground">{uploadProgress}%</span>
+                    </div>
+                    <div className="w-full bg-border/50 h-1.5 rounded-full overflow-hidden mt-1.5">
+                      <div
+                        className="bg-primary h-full transition-[width] duration-150"
+                        style={{ width: `${uploadProgress}%` }}
+                      />
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </motion.div>
+          )}
+        </AnimatePresence>
 
-      {/* Main Workspace: 2-column layout on large screens */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-        {/* Left Column: Asset Gallery (Grid or List) */}
-        <div className="lg:col-span-8 space-y-4">
-          <Card className="shadow-xs overflow-hidden">
-            <CardHeader className="p-4 border-b flex flex-row items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Checkbox
-                  checked={assets.length > 0 && selectedForBulk.size === assets.length}
-                  onCheckedChange={handleToggleSelectAll}
-                  aria-label="Select all assets on this page"
+        {/* Folder Pills Strip */}
+        <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
+          <Button
+            type="button"
+            variant={selectedFolderId === '' ? 'default' : 'outline'}
+            size="sm"
+            className="h-8 text-xs shrink-0 rounded-lg gap-1.5"
+            onClick={() => {
+              setSelectedFolderId('');
+              setPage(1);
+            }}
+          >
+            <FolderIcon className="size-3" />
+            All Media
+            <span className="font-mono text-[10px] opacity-75">({pagination.totalItems})</span>
+          </Button>
+
+          <Button
+            type="button"
+            variant={selectedFolderId === 'unfiled' ? 'default' : 'outline'}
+            size="sm"
+            className="h-8 text-xs shrink-0 rounded-lg gap-1.5"
+            onClick={() => {
+              setSelectedFolderId('unfiled');
+              setPage(1);
+            }}
+          >
+            Unfiled
+          </Button>
+
+          {folders.map((folder) => {
+            const isSelected = selectedFolderId === folder.id;
+            return (
+              <div key={folder.id} className="inline-flex items-center shrink-0">
+                <Button
+                  type="button"
+                  variant={isSelected ? 'default' : 'outline'}
+                  size="sm"
+                  className="h-8 text-xs rounded-l-lg rounded-r-none border-r-0 gap-1.5"
+                  onClick={() => {
+                    setSelectedFolderId(folder.id);
+                    setPage(1);
+                  }}
+                >
+                  <FolderIcon className="size-3" />
+                  {folder.name}
+                  <span className="font-mono text-[10px] opacity-75">({folder.assetCount})</span>
+                </Button>
+                <Button
+                  type="button"
+                  variant={isSelected ? 'default' : 'outline'}
+                  size="sm"
+                  className="h-8 px-1.5 text-xs rounded-r-lg rounded-l-none"
+                  onClick={() => setEditingFolder(folder)}
+                  title={`Rename "${folder.name}"`}
+                  aria-label={`Rename "${folder.name}"`}
+                >
+                  <span className="sr-only">Edit</span>
+                  ···
+                </Button>
+              </div>
+            );
+          })}
+
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="h-8 text-xs shrink-0 gap-1 text-primary hover:text-primary"
+            onClick={() => setIsNewFolderOpen(true)}
+          >
+            <FolderPlus className="size-3.5" />
+            New Folder
+          </Button>
+        </div>
+
+        {/* Search & Filter Toolbar */}
+        <Card className="shadow-xs border-border bg-card">
+          <CardContent className="p-3 sm:p-4 space-y-3">
+            <div className="flex flex-col gap-2.5 lg:flex-row lg:items-center">
+              {/* Search */}
+              <div className="relative flex-1">
+                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground" />
+                <Input
+                  aria-label="Search media assets"
+                  placeholder="Search filenames, alt text, internal titles, or asset IDs… (Press /)"
+                  value={searchQuery}
+                  onChange={(e) => {
+                    setSearchQuery(e.target.value);
+                    setPage(1);
+                  }}
+                  className="h-9 bg-card pl-8 text-xs pr-8"
                 />
-                <span className="text-xs font-semibold text-foreground">Select All on Page</span>
+                {searchQuery && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSearchQuery('');
+                      setPage(1);
+                    }}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                    aria-label="Clear search"
+                  >
+                    <X className="size-3.5" />
+                  </button>
+                )}
               </div>
 
-              <span className="text-xs text-muted-foreground">
-                Paste anywhere (Ctrl+V) to upload
-              </span>
-            </CardHeader>
-
-            <CardContent className="p-4 min-h-[400px]">
-              {loading ? (
-                <div className="flex h-72 flex-col items-center justify-center gap-2 text-muted-foreground">
-                  <LoaderCircle className="size-6 animate-spin text-primary" />
-                  <span className="text-xs">Loading media assets…</span>
-                </div>
-              ) : assets.length === 0 ? (
-                <div className="flex h-72 flex-col items-center justify-center gap-2 text-center text-muted-foreground">
-                  <FileImage className="size-10 text-muted-foreground/30" />
-                  <p className="text-sm font-semibold text-foreground">No media assets found</p>
-                  <p className="text-xs text-muted-foreground max-w-sm">
-                    No files match the active filters. Upload an asset above or clear filters to
-                    view library files.
-                  </p>
-                </div>
-              ) : viewMode === 'grid' ? (
-                /* Grid View */
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3.5">
-                  {assets.map((asset) => {
-                    const isSelected = selectedAssetId === asset.id;
-                    const isBulkChecked = selectedForBulk.has(asset.id);
-
-                    return (
-                      <div
-                        key={asset.id}
-                        role="button"
-                        tabIndex={0}
-                        onClick={() => setSelectedAssetId(asset.id)}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter' || e.key === ' ') {
-                            e.preventDefault();
-                            setSelectedAssetId(asset.id);
-                          }
-                        }}
-                        className={`group relative flex flex-col overflow-hidden rounded-lg border text-left transition-all cursor-pointer ${
-                          isSelected
-                            ? 'ring-2 ring-primary ring-offset-1 border-primary bg-primary/5'
-                            : 'hover:border-primary/50 bg-background'
-                        }`}
-                      >
-                        {/* Thumbnail Container */}
-                        <div className="aspect-square relative w-full overflow-hidden bg-muted">
-                          {asset.assetType === 'IMAGE' && asset.status === 'READY' ? (
-                            <Image
-                              src={getAdminMediaUrl(asset.id, { rendition: 'card' })}
-                              alt={asset.altText || asset.title || asset.originalFilename}
-                              fill
-                              unoptimized
-                              className="object-cover transition-transform group-hover:scale-105"
-                              sizes="(max-width: 768px) 50vw, 25vw"
-                            />
-                          ) : (
-                            <div className="flex h-full w-full flex-col items-center justify-center gap-1.5 p-3 text-muted-foreground">
-                              {asset.assetType === 'DOCUMENT' ? (
-                                <FileIcon className="size-8 text-primary/70" />
-                              ) : (
-                                <FileImage className="size-8 text-muted-foreground/50" />
-                              )}
-                              <span className="text-[10px] uppercase font-semibold">
-                                {asset.status}
-                              </span>
-                            </div>
-                          )}
-
-                          {/* Checkbox for bulk actions */}
-                          <div
-                            className="absolute top-2 left-2 z-10"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleToggleSelectItem(asset.id);
-                            }}
-                          >
-                            <Checkbox
-                              checked={isBulkChecked}
-                              className="bg-background/90 backdrop-blur-xs"
-                            />
-                          </div>
-
-                          {/* Visibility badge */}
-                          <div className="absolute top-2 right-2">
-                            <Badge
-                              variant="outline"
-                              className={`text-[9px] px-1 py-0 backdrop-blur-xs ${asset.visibility === 'PUBLIC' ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/30' : 'bg-background/90 text-foreground'}`}
-                            >
-                              {asset.visibility}
-                            </Badge>
-                          </div>
-
-                          {/* Dimensions & size overlay */}
-                          {asset.widthPx && asset.heightPx && (
-                            <span className="absolute bottom-1 left-1 rounded bg-black/70 px-1 py-0.5 text-[9px] font-medium text-white">
-                              {asset.widthPx}×{asset.heightPx}
-                            </span>
-                          )}
-                        </div>
-
-                        {/* Card metadata */}
-                        <div className="p-2 space-y-1">
-                          <p className="truncate text-xs font-semibold text-foreground">
-                            {asset.title || asset.originalFilename}
-                          </p>
-                          <div className="flex items-center justify-between text-[10px] text-muted-foreground">
-                            <span>
-                              {asset.byteSize ? `${Math.ceil(asset.byteSize / 1024)} KB` : '—'}
-                            </span>
-                            <span>
-                              {asset.usages.length} use{asset.usages.length === 1 ? '' : 's'}
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              ) : (
-                /* List View */
-                <Table>
-                  <TableHeader>
-                    <TableRow className="text-xs">
-                      <TableHead className="w-10"></TableHead>
-                      <TableHead className="w-14">Preview</TableHead>
-                      <TableHead>Filename / Title</TableHead>
-                      <TableHead>Size</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead>Visibility</TableHead>
-                      <TableHead>Placements</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {assets.map((asset) => {
-                      const isSelected = selectedAssetId === asset.id;
-                      const isBulkChecked = selectedForBulk.has(asset.id);
-
-                      return (
-                        <TableRow
-                          key={asset.id}
-                          className={`cursor-pointer text-xs ${isSelected ? 'bg-primary/5' : ''}`}
-                          onClick={() => setSelectedAssetId(asset.id)}
-                        >
-                          <TableCell onClick={(e) => e.stopPropagation()}>
-                            <Checkbox
-                              checked={isBulkChecked}
-                              onCheckedChange={() => handleToggleSelectItem(asset.id)}
-                            />
-                          </TableCell>
-                          <TableCell>
-                            <div className="size-10 relative rounded border overflow-hidden bg-muted">
-                              {asset.assetType === 'IMAGE' && asset.status === 'READY' ? (
-                                <Image
-                                  src={getAdminMediaUrl(asset.id, { rendition: 'thumbnail' })}
-                                  alt=""
-                                  fill
-                                  unoptimized
-                                  className="object-cover"
-                                />
-                              ) : (
-                                <FileIcon className="size-5 m-auto text-muted-foreground" />
-                              )}
-                            </div>
-                          </TableCell>
-                          <TableCell>
-                            <p className="font-semibold text-foreground truncate max-w-xs">
-                              {asset.title || asset.originalFilename}
-                            </p>
-                            <p className="text-[10px] text-muted-foreground truncate">{asset.id}</p>
-                          </TableCell>
-                          <TableCell className="text-muted-foreground">
-                            {asset.widthPx && asset.heightPx
-                              ? `${asset.widthPx}×${asset.heightPx} · `
-                              : ''}
-                            {asset.byteSize ? `${Math.ceil(asset.byteSize / 1024)} KB` : '—'}
-                          </TableCell>
-                          <TableCell>
-                            <StatusBadge status={asset.status} />
-                          </TableCell>
-                          <TableCell>
-                            <Badge
-                              variant="outline"
-                              className={`text-[10px] ${asset.visibility === 'PUBLIC' ? 'text-emerald-600' : ''}`}
-                            >
-                              {asset.visibility}
-                            </Badge>
-                          </TableCell>
-                          <TableCell>
-                            <span className="text-muted-foreground font-medium">
-                              {asset.usages.length}
-                            </span>
-                          </TableCell>
-                        </TableRow>
-                      );
-                    })}
-                  </TableBody>
-                </Table>
-              )}
-            </CardContent>
-
-            {/* Pagination footer */}
-            <CardFooter className="p-4 border-t flex flex-row items-center justify-between bg-muted/10">
-              <Button
-                variant="outline"
-                size="sm"
-                className="h-8 text-xs"
-                disabled={loading || page <= 1}
-                onClick={() => setPage((c) => Math.max(1, c - 1))}
+              {/* Asset Type Filter */}
+              <NativeSelect
+                value={assetTypeFilter}
+                onChange={(e) => {
+                  setAssetTypeFilter(e.target.value as AssetTypeFilter);
+                  setPage(1);
+                }}
+                aria-label="Filter by asset format"
+                className="w-full text-xs sm:w-auto"
               >
-                Previous
-              </Button>
+                <NativeSelectOption value="">All Formats</NativeSelectOption>
+                <NativeSelectOption value="IMAGE">Images Only</NativeSelectOption>
+                <NativeSelectOption value="DOCUMENT">Documents (PDF)</NativeSelectOption>
+              </NativeSelect>
 
-              <span className="text-xs text-muted-foreground">
-                Page {pagination.page} of {Math.max(1, pagination.totalPages)}
-              </span>
-
-              <Button
-                variant="outline"
-                size="sm"
-                className="h-8 text-xs"
-                disabled={loading || page >= pagination.totalPages}
-                onClick={() => setPage((c) => c + 1)}
+              {/* Status filter */}
+              <NativeSelect
+                value={lifecycleFilter}
+                onChange={(e) => {
+                  setLifecycleFilter(e.target.value);
+                  setPage(1);
+                }}
+                aria-label="Filter by lifecycle status"
+                className="w-full text-xs sm:w-auto"
               >
-                Next
-              </Button>
-            </CardFooter>
-          </Card>
-        </div>
+                <NativeSelectOption value="">All Lifecycles</NativeSelectOption>
+                <NativeSelectOption value="READY">Ready</NativeSelectOption>
+                <NativeSelectOption value="PROCESSING">Processing</NativeSelectOption>
+                <NativeSelectOption value="PENDING_UPLOAD">Pending</NativeSelectOption>
+                <NativeSelectOption value="FAILED">Failed</NativeSelectOption>
+                <NativeSelectOption value="QUARANTINED">Quarantined</NativeSelectOption>
+                <NativeSelectOption value="ARCHIVED">Archived</NativeSelectOption>
+                <NativeSelectOption value="TRASHED">Trash</NativeSelectOption>
+                <NativeSelectOption value="PURGING">Purging</NativeSelectOption>
+              </NativeSelect>
 
-        {/* Right Column: Asset Inspector / Details & Actions */}
-        <div className="lg:col-span-4 space-y-4">
-          {selectedAsset ? (
-            <Card className="shadow-xs sticky top-4">
-              <CardHeader className="p-4 border-b pb-3">
-                <div className="flex items-center justify-between gap-2">
-                  <div className="truncate">
-                    <CardTitle className="text-sm font-semibold truncate">
-                      {selectedAsset.title || selectedAsset.originalFilename}
-                    </CardTitle>
-                    <CardDescription className="text-[11px] truncate">
-                      {selectedAsset.id}
-                    </CardDescription>
-                  </div>
-                  <Badge variant="outline" className="text-xs">
-                    {selectedAsset.visibility}
-                  </Badge>
-                </div>
-              </CardHeader>
+              {/* Visibility filter */}
+              <NativeSelect
+                value={visibilityFilter}
+                onChange={(e) => {
+                  setVisibilityFilter(e.target.value);
+                  setPage(1);
+                }}
+                aria-label="Filter by visibility"
+                className="w-full text-xs sm:w-auto"
+              >
+                <NativeSelectOption value="">All Visibility</NativeSelectOption>
+                <NativeSelectOption value="PUBLIC">Public</NativeSelectOption>
+                <NativeSelectOption value="PRIVATE">Private</NativeSelectOption>
+              </NativeSelect>
 
-              <CardContent className="p-4 space-y-4 max-h-[75vh] overflow-y-auto">
-                {/* Large Preview */}
-                <div className="aspect-4/3 relative w-full overflow-hidden rounded-lg border bg-muted">
-                  {selectedAsset.assetType === 'IMAGE' && selectedAsset.status === 'READY' ? (
-                    <Image
-                      src={getAdminMediaUrl(selectedAsset.id, { rendition: 'pdp' })}
-                      alt={selectedAsset.altText || ''}
-                      fill
-                      unoptimized
-                      className="object-contain"
-                    />
-                  ) : (
-                    <div className="flex h-full w-full flex-col items-center justify-center gap-2 text-muted-foreground">
-                      <FileIcon className="size-10 text-primary" />
-                      <span className="text-xs font-semibold">{selectedAsset.mimeType}</span>
-                    </div>
-                  )}
-                </div>
+              {/* Usage filter */}
+              <NativeSelect
+                value={usageFilter}
+                onChange={(e) => {
+                  setUsageFilter(e.target.value as UsageFilter);
+                  setPage(1);
+                }}
+                aria-label="Filter by use"
+                className="w-full text-xs sm:w-auto"
+              >
+                <NativeSelectOption value="ALL">All Uses</NativeSelectOption>
+                <NativeSelectOption value="USED">Attached (In Use)</NativeSelectOption>
+                <NativeSelectOption value="UNUSED">Unattached (Unused)</NativeSelectOption>
+              </NativeSelect>
 
-                {/* Quick Action Toolbar: Download, Copy URL */}
-                <div className="flex items-center gap-2">
-                  <a
-                    href={getAdminMediaUrl(selectedAsset.id, {
-                      rendition: 'original',
-                      download: true,
-                    })}
-                    download={selectedAsset.originalFilename}
-                    className="flex-1"
-                  >
-                    <Button variant="outline" size="sm" className="w-full h-8 text-xs gap-1.5">
-                      <Download className="size-3.5" />
-                      Download Original
+              {/* Sort filter */}
+              <NativeSelect
+                value={sort}
+                onChange={(e) => {
+                  setSort(e.target.value as SortOption);
+                  setPage(1);
+                }}
+                aria-label="Sort media assets"
+                className="w-full text-xs sm:w-auto"
+              >
+                <NativeSelectOption value="NEWEST">Newest First</NativeSelectOption>
+                <NativeSelectOption value="OLDEST">Oldest First</NativeSelectOption>
+                <NativeSelectOption value="NAME">Name A–Z</NativeSelectOption>
+                <NativeSelectOption value="SIZE">Size (Largest)</NativeSelectOption>
+              </NativeSelect>
+
+              {/* View Mode Toggle */}
+              <div className="flex items-center rounded-lg border border-border bg-muted/40 p-0.5 shrink-0">
+                <Tooltip>
+                  <TooltipTrigger>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className={`size-8 rounded-md transition-colors ${
+                        viewMode === 'grid'
+                          ? 'bg-card text-foreground shadow-2xs'
+                          : 'text-muted-foreground hover:text-foreground'
+                      }`}
+                      onClick={() => setViewMode('grid')}
+                      aria-label="Grid view"
+                      aria-pressed={viewMode === 'grid'}
+                    >
+                      <LayoutGrid className="size-3.5" />
                     </Button>
-                  </a>
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom">Grid View</TooltipContent>
+                </Tooltip>
 
-                  {selectedAsset.visibility === 'PUBLIC' && (
+                <Tooltip>
+                  <TooltipTrigger>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className={`size-8 rounded-md transition-colors ${
+                        viewMode === 'list'
+                          ? 'bg-card text-foreground shadow-2xs'
+                          : 'text-muted-foreground hover:text-foreground'
+                      }`}
+                      onClick={() => setViewMode('list')}
+                      aria-label="List view"
+                      aria-pressed={viewMode === 'list'}
+                    >
+                      <List className="size-3.5" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom">List View</TooltipContent>
+                </Tooltip>
+              </div>
+            </div>
+
+            {/* Sub-bar: Tag filters and active summary */}
+            <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-border/60 text-xs text-muted-foreground">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="font-medium text-foreground">Tags:</span>
+                {tags.length > 0 ? (
+                  tags.slice(0, 8).map((tag) => (
+                    <Badge
+                      key={tag.id}
+                      variant="outline"
+                      className="cursor-pointer hover:border-primary/50 text-[11px]"
+                      onClick={() => {
+                        setSearchQuery(tag.name);
+                        setPage(1);
+                      }}
+                    >
+                      #{tag.name}
+                    </Badge>
+                  ))
+                ) : (
+                  <span className="text-[11px] text-muted-foreground">No tags defined</span>
+                )}
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="h-6 px-1.5 text-[11px] text-primary"
+                  onClick={() => setIsNewTagOpen(true)}
+                >
+                  <TagIcon className="size-3 mr-1" />
+                  New Tag
+                </Button>
+              </div>
+
+              <div className="font-mono tabular-nums text-[11px]">
+                Showing {assets.length} of {pagination.totalItems} assets (Page {pagination.page} of{' '}
+                {Math.max(1, pagination.totalPages)})
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Floating Bulk Action Bar */}
+        <AnimatePresence>
+          {selectedForBulk.size > 0 && (
+            <motion.div
+              initial={{ y: 60, opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              exit={{ y: 60, opacity: 0 }}
+              transition={{ duration: 0.15 }}
+              className="sticky bottom-6 z-30 mx-auto max-w-xl"
+            >
+              <Card className="border-primary bg-background/95 backdrop-blur-md shadow-lg rounded-2xl overflow-hidden ring-1 ring-primary/20">
+                <CardContent className="flex flex-wrap items-center justify-between gap-3 p-3">
+                  <div className="flex items-center gap-2">
+                    <Badge className="bg-primary text-primary-foreground font-semibold text-xs px-2.5 py-0.5">
+                      {selectedForBulk.size} selected
+                    </Badge>
+                    <span className="text-xs text-muted-foreground hidden sm:inline">across library</span>
+                  </div>
+
+                  <div className="flex items-center gap-2">
                     <Button
                       variant="outline"
                       size="sm"
                       className="h-8 text-xs gap-1.5"
-                      onClick={() => {
-                        const url = `${window.location.origin}/api/media/public/${selectedAsset.id}`;
-                        void navigator.clipboard.writeText(url);
-                        setMessage('Public media URL copied to clipboard.');
-                        setTone('success');
-                      }}
-                      title="Copy Public URL"
+                      onClick={() => setIsBulkFolderOpen(true)}
                     >
-                      <Copy className="size-3.5" />
+                      <FolderIcon className="size-3.5" />
+                      Move to Folder
                     </Button>
-                  )}
-                </div>
 
-                {selectedAsset.status === 'PURGING' ? (
-                  <div className="rounded-md border border-border bg-muted p-3 text-xs">
-                    <p className="font-semibold text-foreground">Purge attempt {selectedAsset.purgeAttempts}</p>
-                    <p className="mt-1 text-muted-foreground">
-                      {selectedAsset.purgeLeaseUntil
-                        ? 'File removal is in progress. An interrupted attempt will be reclaimed automatically.'
-                        : selectedAsset.purgeRetryAfter
-                          ? `Next retry: ${new Date(selectedAsset.purgeRetryAfter).toLocaleString()}`
-                          : 'Waiting for the purge worker.'}
-                    </p>
-                    {selectedAsset.purgeLastError && (
-                      <p className="mt-2 break-words text-destructive">Last error: {selectedAsset.purgeLastError}</p>
-                    )}
-                  </div>
-                ) : selectedAsset.status !== 'READY' && (
-                  <div className="rounded-md bg-amber-500/10 border border-amber-500/30 p-2.5 text-xs text-amber-700 dark:text-amber-400">
-                    <p className="font-semibold">Processing: {selectedAsset.status}</p>
-                    <p className="text-[11px] mt-0.5">
-                      {selectedAsset.processingErrorMessage || (selectedAsset.externalImport?.status === 'RETRY_WAIT'
-                        ? `Import retry ${selectedAsset.externalImport.attempts} scheduled for ${selectedAsset.externalImport.nextAttemptAt ? new Date(selectedAsset.externalImport.nextAttemptAt).toLocaleString() : 'soon'}.`
-                        : selectedAsset.externalImport?.status === 'PROCESSING'
-                          ? 'Importing and validating the source image.'
-                          : selectedAsset.externalImport?.status === 'PENDING'
-                            ? 'Waiting for the image import worker.'
-                            : 'Derivatives are not yet available for storefront delivery.')}
-                    </p>
-                  </div>
-                )}
-
-                {/* Action Buttons: Retry, Archive, Restore, Trash */}
-                <div className="flex flex-wrap items-center gap-2">
-                  {selectedAsset.status === 'FAILED' && selectedAsset.processingErrorCode !== 'EXTERNAL_IMPORT_FAILED' && (
                     <Button
-                      size="sm"
                       variant="outline"
-                      className="h-7 text-xs gap-1"
-                      onClick={() => void runAssetAction('retry')}
-                      disabled={busy}
+                      size="sm"
+                      className="h-8 text-xs gap-1.5"
+                      onClick={() => setIsBulkTagOpen(true)}
                     >
-                      <RotateCw className="size-3" /> Retry Processing
+                      <TagIcon className="size-3.5" />
+                      Manage Tags
                     </Button>
-                  )}
 
-                  {selectedAsset.status === 'FAILED' && selectedAsset.processingErrorCode === 'EXTERNAL_IMPORT_FAILED' && (
-                    <Button size="sm" variant="outline" onClick={() => void runAssetAction('retry-import')} disabled={busy}>
-                      <RotateCw className="size-3" /> Retry Import
-                    </Button>
-                  )}
-
-                  {selectedAsset.missingPublicRenditions && ['READY', 'ARCHIVED'].includes(selectedAsset.status) && (
-                    <Button size="sm" variant="outline" onClick={() => void runAssetAction('repair-renditions')} disabled={busy}>
-                      <RotateCw className="size-3" /> Generate Missing Sizes
-                    </Button>
-                  )}
-
-                  {selectedAsset.status === 'PURGING' && selectedAsset.purgeLastError &&
-                    !selectedAsset.purgeLeaseUntil && (
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => void runAssetAction('retry-purge')}
-                        disabled={busy}
-                      >
-                        <RotateCw className="size-3" /> Retry Purge Now
-                      </Button>
-                    )}
-
-                  {selectedAsset.status === 'READY' && (
                     <Button
+                      variant="destructive"
                       size="sm"
-                      variant="outline"
-                      className="h-7 text-xs gap-1"
-                      onClick={() => void runAssetAction('archive')}
-                      disabled={busy}
+                      className="h-8 text-xs gap-1.5"
+                      onClick={() => void handleBulkTrash()}
                     >
-                      <Archive className="size-3" /> Archive
+                      <Trash2 className="size-3.5" />
+                      Trash Unused
                     </Button>
-                  )}
 
-                  {selectedAsset.status === 'TRASHED' && (
                     <Button
+                      variant="ghost"
                       size="sm"
-                      variant="outline"
-                      className="h-7 text-xs gap-1"
-                      onClick={() => void runAssetAction('restore')}
-                      disabled={busy}
-                    >
-                      <RotateCw className="size-3" /> Restore
-                    </Button>
-                  )}
-
-                  {selectedAsset.usages.length === 0 &&
-                    ['READY', 'ARCHIVED', 'FAILED'].includes(selectedAsset.status) && (
-                      <Button
-                        size="sm"
-                        variant="destructive"
-                        className="h-7 text-xs gap-1"
-                        onClick={() => void runAssetAction('trash')}
-                        disabled={busy}
-                      >
-                        <Trash2 className="size-3" /> Trash Asset
-                      </Button>
-                    )}
-                </div>
-
-                {/* Metadata Form */}
-                <form
-                  key={`metadata-${selectedAsset.id}`}
-                  className="space-y-3 border-t pt-3"
-                  onSubmit={(event) => void saveMetadata(event)}
-                >
-                  <h3 className="text-xs font-semibold text-foreground">Asset Metadata</h3>
-
-                  <div>
-                    <label className="text-[11px] font-medium text-muted-foreground block mb-1">
-                      Internal Title
-                    </label>
-                    <Input
-                      name="title"
-                      defaultValue={selectedAsset.title ?? ''}
-                      maxLength={160}
                       className="h-8 text-xs"
-                      placeholder="e.g. Lawn Embroidered Kurti — Front"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="text-[11px] font-medium text-muted-foreground block mb-1">
-                      Alternative Text (Alt Text)
-                    </label>
-                    <Textarea
-                      name="altText"
-                      defaultValue={selectedAsset.altText ?? ''}
-                      rows={2}
-                      maxLength={500}
-                      className="text-xs"
-                      placeholder="Contextual description for accessibility and search"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="text-[11px] font-medium text-muted-foreground block mb-1">
-                      Caption
-                    </label>
-                    <Textarea
-                      name="caption"
-                      defaultValue={selectedAsset.caption ?? ''}
-                      rows={2}
-                      maxLength={1000}
-                      className="text-xs"
-                      placeholder="Optional customer-facing supporting copy"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="text-[11px] font-medium text-muted-foreground block mb-1">
-                      Internal Notes
-                    </label>
-                    <Textarea
-                      name="internalDescription"
-                      defaultValue={selectedAsset.internalDescription ?? ''}
-                      rows={3}
-                      maxLength={4000}
-                      className="text-xs"
-                      placeholder="Production, rights, or operational notes"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="text-[11px] font-medium text-muted-foreground block mb-1">
-                      Visibility Class
-                    </label>
-                    <select
-                      name="visibility"
-                      defaultValue={selectedAsset.visibility}
-                      className="w-full h-8 rounded-md border border-input bg-background px-2.5 text-xs text-foreground outline-none"
+                      onClick={() => setSelectedForBulk(new Set())}
                     >
-                      <option
-                        value="PRIVATE"
-                        disabled={
-                          selectedAsset.visibility === 'PUBLIC' &&
-                          ['PROCESSING', 'READY', 'ARCHIVED'].includes(selectedAsset.status)
-                        }
-                      >
-                        Private — internal admin access only
-                      </option>
-                      <option value="PUBLIC">Public — storefront delivery enabled</option>
-                    </select>
+                      Clear
+                    </Button>
                   </div>
-
-                  <Button
-                    type="submit"
-                    size="sm"
-                    variant="secondary"
-                    className="w-full h-8 text-xs"
-                    disabled={busy}
-                  >
-                    Save Metadata
-                  </Button>
-                </form>
-
-                {/* Organization Form: Folder & Tags */}
-                <form
-                  key={`org-${selectedAsset.id}`}
-                  className="space-y-3 border-t pt-3"
-                  onSubmit={(event) => void saveOrganization(event)}
-                >
-                  <h3 className="text-xs font-semibold text-foreground">Folder & Taxonomy</h3>
-
-                  <div>
-                    <label className="text-[11px] font-medium text-muted-foreground block mb-1">
-                      Folder
-                    </label>
-                    <select
-                      name="folderId"
-                      defaultValue={selectedAsset.folderId ?? ''}
-                      className="w-full h-8 rounded-md border border-input bg-background px-2.5 text-xs text-foreground outline-none"
-                    >
-                      <option value="">Unfiled</option>
-                      {folders.map((f) => (
-                        <option key={f.id} value={f.id}>
-                          {f.name} ({f.assetCount})
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-
-                  {tags.length > 0 && (
-                    <div className="space-y-1.5">
-                      <label className="text-[11px] font-medium text-muted-foreground block">
-                        Tags
-                      </label>
-                      <div className="flex flex-wrap gap-2">
-                        {tags.map((tag) => (
-                          <label
-                            key={tag.id}
-                            className="flex items-center gap-1.5 text-xs text-foreground cursor-pointer"
-                          >
-                            <input
-                              type="checkbox"
-                              name="tagIds"
-                              value={tag.id}
-                              defaultChecked={selectedAsset.tags.some((t) => t.id === tag.id)}
-                              className="rounded border-input text-primary"
-                            />
-                            <span>{tag.name}</span>
-                          </label>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  <Button
-                    type="submit"
-                    size="sm"
-                    variant="secondary"
-                    className="w-full h-8 text-xs"
-                    disabled={busy}
-                  >
-                    Save Organization
-                  </Button>
-                </form>
-
-                {/* Product Placement */}
-                <form
-                  key={`placement-${selectedAsset.id}`}
-                  className="space-y-3 border-t pt-3"
-                  onSubmit={(event) => void attach(event)}
-                >
-                  <h3 className="text-xs font-semibold text-foreground">Attach to Product</h3>
-
-                  <div>
-                    <label className="text-[11px] font-medium text-muted-foreground block mb-1">
-                      Target Product
-                    </label>
-                    <select
-                      defaultValue=""
-                      onChange={(e) => void selectProduct(e.target.value)}
-                      className="w-full h-8 rounded-md border border-input bg-background px-2.5 text-xs text-foreground outline-none"
-                      required
-                    >
-                      <option value="" disabled>
-                        Select a catalog product…
-                      </option>
-                      {products.map((p) => (
-                        <option key={p.id} value={p.id}>
-                          {p.title}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-
-                  {product && (
-                    <div>
-                      <label className="text-[11px] font-medium text-muted-foreground block mb-1">
-                        Placement Scope
-                      </label>
-                      <select
-                        value={placementScope}
-                        onChange={(event) =>
-                          setPlacementScope(event.target.value as PlacementScope)
-                        }
-                        className="w-full h-8 rounded-md border border-input bg-background px-2.5 text-xs text-foreground outline-none"
-                      >
-                        <option value="PRODUCT">Product-level (all variants)</option>
-                        <option value="VARIANT">Specific variant</option>
-                        <option value="OPTION">Option value gallery</option>
-                      </select>
-                    </div>
-                  )}
-
-                  {product && placementScope === 'VARIANT' && (
-                    <div>
-                      <label className="text-[11px] font-medium text-muted-foreground block mb-1">
-                        Variant
-                      </label>
-                      <select
-                        name="scopedId"
-                        defaultValue=""
-                        required
-                        className="w-full h-8 rounded-md border border-input bg-background px-2.5 text-xs text-foreground outline-none"
-                      >
-                        <option value="">Choose a variant…</option>
-                        {product.variants.map((variant) => (
-                          <option key={variant.id} value={variant.id}>
-                            {variant.sku}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                  )}
-
-                  {product && placementScope === 'OPTION' && (
-                    <div>
-                      <label className="text-[11px] font-medium text-muted-foreground block mb-1">
-                        Option Value
-                      </label>
-                      <select
-                        name="scopedId"
-                        defaultValue=""
-                        required
-                        className="w-full h-8 rounded-md border border-input bg-background px-2.5 text-xs text-foreground outline-none"
-                      >
-                        <option value="">Choose an option value…</option>
-                        {product.options.map((axis) => (
-                          <optgroup key={axis.id} label={axis.name}>
-                            {axis.values
-                              .filter((value) => value.status === 'ACTIVE')
-                              .map((value) => (
-                                <option key={value.id} value={value.id}>
-                                  {value.label}
-                                </option>
-                              ))}
-                          </optgroup>
-                        ))}
-                      </select>
-                    </div>
-                  )}
-
-                  <div className="grid grid-cols-2 gap-2">
-                    <div>
-                      <label className="text-[11px] font-medium text-muted-foreground block mb-1">
-                        Role
-                      </label>
-                      <select
-                        name="role"
-                        defaultValue="GALLERY"
-                        className="w-full h-8 rounded-md border border-input bg-background px-2.5 text-xs text-foreground outline-none"
-                      >
-                        <option value="GALLERY">Gallery</option>
-                        <option value="THUMBNAIL">Cover</option>
-                        <option value="COLOR_GALLERY">Color Gallery</option>
-                        <option value="SIZE_DIAGRAM">Size Diagram</option>
-                      </select>
-                    </div>
-
-                    <div>
-                      <label className="text-[11px] font-medium text-muted-foreground block mb-1">
-                        Position
-                      </label>
-                      <Input
-                        name="position"
-                        type="number"
-                        min={0}
-                        defaultValue={0}
-                        className="h-8 text-xs"
-                      />
-                    </div>
-                  </div>
-
-                  <label className="flex items-center gap-2 text-xs text-foreground">
-                    <input
-                      name="isPrimary"
-                      type="checkbox"
-                      className="rounded border-input text-primary"
-                    />
-                    Make primary for this scope
-                  </label>
-
-                  <div>
-                    <label className="text-[11px] font-medium text-muted-foreground block mb-1">
-                      Placement-specific alternative text
-                    </label>
-                    <Textarea
-                      name="altTextOverride"
-                      rows={2}
-                      maxLength={500}
-                      className="text-xs"
-                      placeholder="Optional override for this product placement"
-                    />
-                  </div>
-
-                  <Button
-                    type="submit"
-                    size="sm"
-                    className="w-full h-8 text-xs"
-                    disabled={
-                      busy ||
-                      !product ||
-                      selectedAsset.status !== 'READY' ||
-                      selectedAsset.visibility !== 'PUBLIC'
-                    }
-                  >
-                    Attach Placement
-                  </Button>
-                </form>
-
-                {/* Existing asset uses */}
-                <div className="space-y-2 border-t pt-3">
-                  <h3 className="text-xs font-semibold text-foreground">Active Uses</h3>
-                  {selectedAsset.usages.length === 0 ? (
-                    <p className="text-xs text-muted-foreground">
-                      This asset is currently unattached (can be safely trashed).
-                    </p>
-                  ) : (
-                    <div className="space-y-2">
-                      {selectedAsset.usages.map((u) => (
-                        <div
-                          key={u.id}
-                          className="flex items-center justify-between rounded-md border p-2 text-xs bg-muted/20"
-                        >
-                          <div>
-                            <p className="font-semibold text-foreground">
-                              {u.productTitle ?? u.label ?? u.domain}
-                            </p>
-                            <p className="text-[10px] text-muted-foreground">
-                              {u.domain === 'messaging'
-                                ? 'Message attachment'
-                                : `${u.role ?? 'MEDIA'}${u.position === undefined ? '' : ` · Position ${u.position}`}`}
-                              {u.variantSku ? ` · SKU: ${u.variantSku}` : ''}
-                            </p>
-                            {u.conversationId && (
-                              <Link
-                                href={`/messaging?conversation=${encodeURIComponent(u.conversationId)}`}
-                                className="text-primary underline-offset-2 hover:underline"
-                              >
-                                Open conversation
-                              </Link>
-                            )}
-                          </div>
-                          {u.productId && (
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="size-7 p-0 text-destructive hover:bg-destructive/10"
-                              onClick={() => void detach(u)}
-                              title="Detach placement"
-                            >
-                              <Trash2 className="size-3.5" />
-                            </Button>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
-          ) : (
-            <Card className="shadow-xs p-6 text-center text-muted-foreground">
-              <FileImage className="size-8 mx-auto mb-2 text-muted-foreground/40" />
-              <p className="text-xs font-semibold text-foreground">Select an asset</p>
-              <p className="text-[11px] text-muted-foreground mt-0.5">
-                Click any image in the gallery to inspect renditions, manage placements, or update
-                metadata.
-              </p>
-            </Card>
+                </CardContent>
+              </Card>
+            </motion.div>
           )}
-        </div>
-      </div>
+        </AnimatePresence>
 
-      {/* Health Check Modal */}
-      <Dialog open={isHealthOpen} onOpenChange={(open) => {
-        if (!open) healthAbort.current?.abort();
-        setIsHealthOpen(open);
-      }}>
-        <DialogContent className="max-w-lg">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <ShieldCheck className="size-5 text-primary" /> Storage Health Diagnostics
-            </DialogTitle>
-            <DialogDescription className="text-xs">
-              Inspected {health?.checkedObjectCount ?? 0} storage records. Found{' '}
-              {health?.verifiedObjectCount ?? 0} objects with matching recorded byte sizes.
-              This scan does not check checksums or image properties.
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="space-y-3 py-2">
-            <div
-              role="status"
-              aria-live="polite"
-              className={`rounded-lg p-3 text-xs font-medium border ${
-                health?.status === 'HEALTHY'
-                  ? 'bg-success/10 border-success/30 text-success'
-                  : health?.status === 'SCANNING'
-                    ? 'bg-info/10 border-info/30 text-info'
-                    : 'bg-warning/10 border-warning/30 text-warning'
-              }`}
-            >
-              Status:{' '}
-              <strong className="uppercase">
-                {health?.status === 'HEALTHY'
-                  ? 'Complete — no issues found'
-                  : health?.status === 'SCANNING'
-                    ? 'Scanning — result is incomplete'
-                    : health?.status === 'FAILED'
-                      ? 'Scan failed — result is incomplete'
-                      : 'Complete — issues found'}
-              </strong>
-              {health?.status === 'SCANNING' && (
-                <p className="mt-1 font-normal">
-                  {health.checkedObjectCount} records inspected so far.
-                </p>
-              )}
-              {health?.error && <p className="mt-1 font-normal">{health.error}</p>}
-            </div>
-
-            {health && health.issueCount > 0 && (
-              <p className="text-xs text-muted-foreground">
-                {health.issueCount} issue{health.issueCount === 1 ? '' : 's'} found.
-                {health.issuesTruncated && ` Showing the first ${health.issues.length}.`}
-              </p>
-            )}
-
-            {health?.issues && health.issues.length > 0 && (
-              <ScrollArea className="max-h-60 rounded border p-2">
-                <div className="space-y-2 text-xs">
-                  {health.issues.map((issue, idx) => (
-                    <div key={idx} className="border-b pb-2 last:border-b-0">
-                      <p className="font-semibold text-destructive">{issue.code}</p>
-                      <p className="text-muted-foreground text-[11px]">{issue.detail}</p>
-                      <p className="text-[10px] text-muted-foreground/80 font-mono mt-0.5">
-                        Asset: {issue.assetId}
-                      </p>
-                    </div>
-                  ))}
+        {/* Main Workspace Grid (Left: Assets, Right: Inspector) */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+          {/* Left Column: Asset Gallery */}
+          <div className="lg:col-span-8 space-y-4">
+            <Card className="shadow-xs overflow-hidden border-border bg-card">
+              <CardHeader className="p-3 sm:p-4 border-b border-border flex flex-row items-center justify-between">
+                <div className="flex items-center gap-2.5">
+                  <Checkbox
+                    checked={assets.length > 0 && assets.every((asset) => selectedForBulk.has(asset.id))}
+                    onCheckedChange={handleToggleSelectAll}
+                    aria-label="Select all assets on this page"
+                  />
+                  <span className="text-xs font-semibold text-foreground">Select All on Page</span>
                 </div>
-              </ScrollArea>
-            )}
-          </div>
 
-          <DialogFooter>
-            <Button size="sm" onClick={() => setIsHealthOpen(false)}>
-              Close
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+                <div className="text-[11px] text-muted-foreground flex items-center gap-2">
+                  <span>Drag & drop or paste (Ctrl+V) anywhere</span>
+                </div>
+              </CardHeader>
 
-      {/* Bulk Move To Folder Modal */}
-      <Dialog open={isBulkFolderOpen} onOpenChange={setIsBulkFolderOpen}>
-        <DialogContent className="max-w-sm">
-          <DialogHeader>
-            <DialogTitle className="text-sm">Move Selected Assets</DialogTitle>
-            <DialogDescription className="text-xs">
-              Assign {selectedForBulk.size} assets to a destination folder.
-            </DialogDescription>
-          </DialogHeader>
+              <CardContent className="min-h-[420px] p-4">
+                {loadError ? (
+                  <ErrorState message={loadError} onRetry={() => void load()} />
+                ) : (
+                  <MediaAssetResults
+                    assets={assets}
+                    loading={loading}
+                    viewMode={viewMode}
+                    selectedAssetId={selectedAssetId}
+                    selectedForBulk={selectedForBulk}
+                    onInspect={(assetId) => {
+                      setSelectedAssetId(assetId);
+                      if (window.matchMedia('(max-width: 1023px)').matches) {
+                        window.requestAnimationFrame(() =>
+                          document.getElementById('media-inspector')?.focus(),
+                        );
+                      }
+                    }}
+                    onToggleBulk={handleToggleSelectItem}
+                  />
+                )}
+              </CardContent>
 
-          <div className="py-2">
-            <label className="text-xs font-medium block mb-1">Destination Folder</label>
-            <select
-              value={bulkTargetFolderId}
-              onChange={(e) => setBulkTargetFolderId(e.target.value)}
-              className="w-full h-8 rounded-md border border-input bg-background px-2.5 text-xs text-foreground outline-none"
-            >
-              <option value="">Choose a folder…</option>
-              <option value="unfiled">Unfiled (Root)</option>
-              {folders.map((f) => (
-                <option key={f.id} value={f.id}>
-                  {f.name}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <DialogFooter className="gap-2">
-            <Button variant="outline" size="sm" onClick={() => setIsBulkFolderOpen(false)}>
-              Cancel
-            </Button>
-            <Button
-              size="sm"
-              onClick={() => void handleBulkMoveToFolder()}
-              disabled={!bulkTargetFolderId}
-            >
-              Move Assets
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* New Folder Modal */}
-      <Dialog open={isNewFolderOpen} onOpenChange={setIsNewFolderOpen}>
-        <DialogContent className="max-w-sm">
-          <form onSubmit={(e) => void createLibraryFolder(e)}>
-            <DialogHeader>
-              <DialogTitle className="text-sm">Create New Folder</DialogTitle>
-              <DialogDescription className="text-xs">
-                Organize images and documents hierarchically.
-              </DialogDescription>
-            </DialogHeader>
-
-            <div className="space-y-3 py-3">
-              <div>
-                <label className="text-xs font-medium block mb-1">Folder Name</label>
-                <Input
-                  name="name"
-                  placeholder="e.g. Eid 2026 Collection"
-                  maxLength={120}
-                  required
+              {/* Pagination footer */}
+              <CardFooter className="p-3.5 border-t border-border flex flex-row items-center justify-between bg-muted/10">
+                <Button
+                  variant="outline"
+                  size="sm"
                   className="h-8 text-xs"
-                />
-              </div>
-
-              <div>
-                <label className="text-xs font-medium block mb-1">Parent Folder (optional)</label>
-                <select
-                  name="parentId"
-                  defaultValue=""
-                  className="w-full h-8 rounded-md border border-input bg-background px-2.5 text-xs text-foreground outline-none"
+                  disabled={loading || page <= 1}
+                  onClick={() => setPage((c) => Math.max(1, c - 1))}
                 >
-                  <option value="">Top Level (Root)</option>
-                  {folders.map((f) => (
-                    <option key={f.id} value={f.id}>
-                      {f.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </div>
+                  Previous
+                </Button>
 
-            <DialogFooter className="gap-2">
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => setIsNewFolderOpen(false)}
-              >
-                Cancel
-              </Button>
-              <Button type="submit" size="sm">
-                Create Folder
-              </Button>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
+                <span className="text-xs font-mono tabular-nums text-muted-foreground">
+                  Page {pagination.page} of {Math.max(1, pagination.totalPages)}
+                </span>
 
-      {/* New Tag Modal */}
-      <Dialog open={isNewTagOpen} onOpenChange={setIsNewTagOpen}>
-        <DialogContent className="max-w-sm">
-          <form onSubmit={(e) => void createLibraryTag(e)}>
-            <DialogHeader>
-              <DialogTitle className="text-sm">Create New Tag</DialogTitle>
-              <DialogDescription className="text-xs">
-                Add a classification tag across multiple assets.
-              </DialogDescription>
-            </DialogHeader>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-8 text-xs"
+                  disabled={loading || page >= pagination.totalPages}
+                  onClick={() => setPage((c) => c + 1)}
+                >
+                  Next
+                </Button>
+              </CardFooter>
+            </Card>
+          </div>
 
-            <div className="py-3">
-              <label className="text-xs font-medium block mb-1">Tag Name</label>
-              <Input
-                name="name"
-                placeholder="e.g. Silk, Lookbook, Studio"
-                maxLength={80}
-                required
-                className="h-8 text-xs"
-              />
-            </div>
+          {/* Right Column: Asset Inspector */}
+          <MediaAssetInspector
+            selectedAsset={selectedAsset}
+            busy={busy}
+            folders={folders}
+            tags={tags}
+            products={products}
+            productLoadError={productLoadError}
+            product={product}
+            placementScope={placementScope}
+            setPlacementScope={setPlacementScope}
+            selectProduct={selectProduct}
+            saveMetadata={saveMetadata}
+            saveOrganization={saveOrganization}
+            attach={attach}
+            detach={detach}
+            runAssetAction={runAssetAction}
+            onOpenNewFolder={() => setIsNewFolderOpen(true)}
+            onOpenNewTag={() => setIsNewTagOpen(true)}
+            onCopyPublicUrl={() => {
+              if (!selectedAsset) return;
+              const url = `${window.location.origin}/api/media/public/${selectedAsset.id}?rendition=pdp`;
+              void navigator.clipboard
+                .writeText(url)
+                .then(() => {
+                  setMessage('Public CDN delivery URL copied to clipboard.');
+                  setTone('success');
+                })
+                .catch(() => {
+                  setMessage('Could not copy the public URL.');
+                  setTone('danger');
+                });
+            }}
+          />
+        </div>
 
-            <DialogFooter className="gap-2">
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => setIsNewTagOpen(false)}
-              >
-                Cancel
-              </Button>
-              <Button type="submit" size="sm">
-                Create Tag
-              </Button>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
-    </div>
+        {/* Dialogs */}
+        <MediaWorkspaceDialogs
+          health={health}
+          isHealthOpen={isHealthOpen}
+          onHealthOpenChange={(open) => {
+            if (!open) healthAbort.current?.abort();
+            setIsHealthOpen(open);
+          }}
+          isBulkFolderOpen={isBulkFolderOpen}
+          setIsBulkFolderOpen={setIsBulkFolderOpen}
+          isBulkTagOpen={isBulkTagOpen}
+          setIsBulkTagOpen={setIsBulkTagOpen}
+          isNewFolderOpen={isNewFolderOpen}
+          setIsNewFolderOpen={setIsNewFolderOpen}
+          isNewTagOpen={isNewTagOpen}
+          setIsNewTagOpen={setIsNewTagOpen}
+          editingFolder={editingFolder}
+          setEditingFolder={setEditingFolder}
+          deletingFolder={deletingFolder}
+          setDeletingFolder={setDeletingFolder}
+          deletingTag={deletingTag}
+          setDeletingTag={setDeletingTag}
+          bulkTargetFolderId={bulkTargetFolderId}
+          setBulkTargetFolderId={setBulkTargetFolderId}
+          selectedCount={selectedForBulk.size}
+          folders={folders}
+          tags={tags}
+          handleBulkMoveToFolder={handleBulkMoveToFolder}
+          handleBulkManageTags={handleBulkManageTags}
+          createLibraryFolder={createLibraryFolder}
+          updateLibraryFolder={handleUpdateFolder}
+          deleteLibraryFolder={handleDeleteFolder}
+          createLibraryTag={createLibraryTag}
+          deleteLibraryTag={handleDeleteTag}
+        />
+      </AdminPage>
+    </TooltipProvider>
   );
 }
