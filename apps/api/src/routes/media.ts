@@ -1101,19 +1101,40 @@ export function registerMediaRoutes(
       params: Type.Object({ assetId: UUID }),
       querystring: Type.Object({ rendition: Type.Optional(Type.Union([
         Type.Literal('thumbnail'),Type.Literal('card'),Type.Literal('pdp'),Type.Literal('zoom'),
-      ])) }),
+      ])), v: Type.Optional(Type.String({ pattern: '^[0-9a-f]{64}$' })) }),
     },
   }, async (request, reply) => {
-    const requested = (request.query as { rendition?: MediaRenditionKey }).rendition ?? 'pdp';
+    const query = request.query as { rendition?: MediaRenditionKey; v?: string };
+    const requested = query.rendition ?? 'pdp';
     const asset = await findPublicMediaRendition(
       database.db,
       (request.params as { assetId: string }).assetId,
       requested,
     );
-    if (!asset || asset.visibility !== 'PUBLIC')
+    if (!asset || asset.visibility !== 'PUBLIC') {
+      reply.header('cache-control', 'no-store');
       return reply
         .code(404)
         .send({ error: { code: 'NOT_FOUND', message: 'Media was not found.' } });
+    }
+    if (!query.v) {
+      // The stable URL is only a discovery address. Browsers must re-resolve it
+      // after a replacement or rendition repair.
+      reply.header('cache-control', 'no-store');
+      return reply.redirect(`?rendition=${requested}&v=${asset.contentVersion}`, 302);
+    }
+    if (query.v !== asset.contentVersion) {
+      reply.header('cache-control', 'no-store');
+      return reply.code(404).send({ error: { code: 'NOT_FOUND', message: 'Media version was not found.' } });
+    }
+    if (storage.provider === 'local' && asset.provider === 'local') {
+      const etag = `"${asset.contentVersion}"`;
+      reply.header('etag', etag);
+      if (request.headers['if-none-match'] === etag) {
+        reply.header('cache-control', 'public, max-age=300');
+        return reply.code(304).send();
+      }
+    }
     return deliverObject(reply, storage, asset, true);
   });
 
@@ -1189,26 +1210,30 @@ export async function deliverObject(
   const downloadName = options?.download ? asset.originalFilename : undefined;
   if (storage.provider !== 'local') {
     const url = await storage.createSignedRead(locator, {
-      expiresInSeconds: isPublic ? 3_600 : 300,
+      expiresInSeconds: 300,
+      cacheControl: isPublic ? 'public, max-age=300' : 'private, no-store',
       ...(downloadName ? { downloadName } : {}),
     });
     if (url) {
-      reply.header('cache-control', isPublic ? 'public, max-age=300' : 'private, no-store');
+      // The redirect must expire before the signed target does.
+      reply.header('cache-control', isPublic ? 'public, max-age=60' : 'private, no-store');
       return reply.redirect(url, 302);
     }
   }
   const local = storage.provider === 'local' ? await storage.openRead?.(locator) : undefined;
   const content = local ? undefined : await storage.get(locator);
-  if (!local && !content)
+  if (!local && !content) {
+    reply.header('cache-control', 'no-store');
     return reply
       .code(404)
       .send({ error: { code: 'MEDIA_OBJECT_MISSING', message: 'Media file is unavailable.' } });
+  }
   reply
     .header('content-type', asset.mimeType)
     .header('content-length', String(local?.byteSize ?? content!.length))
     .header(
       'cache-control',
-      isPublic ? 'public, max-age=3600' : 'private, no-store',
+      isPublic ? 'public, max-age=300' : 'private, no-store',
     );
   if (options?.download) {
     reply.header(

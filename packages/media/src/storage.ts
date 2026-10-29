@@ -42,7 +42,7 @@ export interface ObjectStoragePort {
   ): Promise<UploadAuthorization>;
   createSignedRead(
     locator: StoredObjectLocator,
-    input: { readonly expiresInSeconds: number; readonly downloadName?: string },
+    input: { readonly expiresInSeconds: number; readonly downloadName?: string; readonly cacheControl?: string },
   ): Promise<string | null>;
   put(
     locator: StoredObjectLocator,

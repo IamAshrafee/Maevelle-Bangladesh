@@ -44,7 +44,12 @@
   of the current original. Missing variants return 404; public requests cannot fall back
   to an original or another size. The Media Library identifies incomplete public rendition
   sets and offers an audited regeneration action; archived assets return to Archived after
-  repair. The stable URL uses a bounded one-hour cache lifetime.
+  repair. Public asset URLs now issue an uncached redirect to a URL containing the
+  rendition SHA-256 fingerprint. The versioned response has a five-minute cache
+  lifetime and an ETag; an old or withdrawn version returns 404 when revalidated.
+  S3 signed reads expire within five minutes and request a five-minute Cache-Control
+  response from the object store. Previously issued unversioned browser cache
+  entries can persist until their original advertised expiration.
   Migration `3206` records whether an Archived asset must return to that state after repair;
   apply it before deploying the updated API and Worker.
 - Local API-proxy uploads for Admin, Reviews, staff messaging, and storefront chat stream

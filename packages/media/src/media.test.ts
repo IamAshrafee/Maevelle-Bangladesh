@@ -8,9 +8,23 @@ import { Readable } from 'node:stream';
 
 import { inspectAndProcessImage, validateMediaSignature } from './image-processing.js';
 import { LocalObjectStorage } from './local-storage.js';
+import { S3ObjectStorage } from './s3-storage.js';
 import { createMediaObjectKey, sha256 } from './storage.js';
 
 describe('Media storage and image processing', () => {
+  it('signs a bounded cache policy into S3 public read URLs', async () => {
+    const storage = new S3ObjectStorage({
+      endpoint: 'https://storage.example', region: 'auto', accessKeyId: 'test',
+      secretAccessKey: 'test', privateBucket: 'private', publicBucket: 'public',
+      forcePathStyle: true,
+    });
+    const signed = await storage.createSignedRead({
+      provider: 's3', bucket: 'public', key: 'organizations/org/assets/asset/card.webp',
+    }, { expiresInSeconds: 300, cacheControl: 'public, max-age=300' });
+    const url = new URL(signed);
+    expect(url.searchParams.get('response-cache-control')).toBe('public, max-age=300');
+    expect(url.searchParams.get('X-Amz-Expires')).toBe('300');
+  });
   it('streams bounded uploads atomically and reads local objects as streams', async () => {
     const root = await mkdtemp(join(tmpdir(), 'maevelle-stream-'));
     const locator = { provider: 'local', bucket: 'private', key:

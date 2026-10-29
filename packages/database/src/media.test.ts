@@ -70,6 +70,7 @@ describe('media tenant ownership', () => {
     expect(await findPublicMediaRendition(database.db, asset.id, 'pdp')).toBeUndefined();
     expect(await findPublicMediaRendition(database.db, asset.id, 'thumbnail')).toMatchObject({
       renditionKey: 'thumbnail',mimeType: 'image/webp',byteSize: 20,
+      contentVersion: 'b'.repeat(64),
     });
     expect((await listMediaLibrary(database.db, owner.id)).find((item) => item.id === asset.id))
       .toMatchObject({ missingPublicRenditions: true });

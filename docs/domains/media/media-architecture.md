@@ -3708,23 +3708,21 @@ for resized/optimized file representation.
 
 # 205. CDN Cache
 
-Public image delivery should support long-lived caching for immutable rendition URLs.
-
-If content changes, use:
-
-```text
-new version/content address
-```
-
-or proper cache invalidation.
+The stable asset-and-rendition URL is a discovery address. It returns an uncached
+redirect to a URL with the current rendition checksum. The versioned route checks
+the current public asset and exact rendition before delivery; old versions return
+404. Browsers may cache a versioned response for five minutes. This deliberately
+bounds the withdrawal window because a browser cannot be forced to evict bytes
+already cached under a long-lived immutable response.
 
 ---
 
 # 206. Original Asset Replacement and Cache
 
-Replacing underlying file should not leave old image permanently cached at same immutable URL.
-
-Therefore delivery/versioning strategy must support cache-busting or new rendition identity.
+Replacing or reprocessing the current rendition changes its checksum URL. A stable
+URL always resolves again, so previously cached Storefront data can still discover
+the newest file. Withdrawal stops new discovery and rejects versioned requests
+after their bounded browser cache expires.
 
 ---
 

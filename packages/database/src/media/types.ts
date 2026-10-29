@@ -52,6 +52,11 @@ export interface MediaAssetDelivery extends MediaObjectLocation {
   readonly renditionKey: MediaRenditionKey | 'original';
 }
 
+export interface PublicMediaRenditionDelivery extends MediaAssetDelivery {
+  /** Fingerprint of the exact rendition bytes selected for public delivery. */
+  readonly contentVersion: string;
+}
+
 export interface MediaUsage {
   readonly id: string;
   readonly domain: string;

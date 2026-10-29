@@ -94,7 +94,7 @@ export class S3ObjectStorage implements ObjectStoragePort {
 
   public async createSignedRead(
     locator: StoredObjectLocator,
-    input: { readonly expiresInSeconds: number; readonly downloadName?: string },
+    input: { readonly expiresInSeconds: number; readonly downloadName?: string; readonly cacheControl?: string },
   ): Promise<string> {
     this.assertLocator(locator);
     return getSignedUrl(
@@ -102,6 +102,7 @@ export class S3ObjectStorage implements ObjectStoragePort {
       new GetObjectCommand({
         Bucket: locator.bucket,
         Key: locator.key,
+        ...(input.cacheControl ? { ResponseCacheControl: input.cacheControl } : {}),
         ...(input.downloadName
           ? {
               ResponseContentDisposition: `attachment; filename*=UTF-8''${encodeURIComponent(input.downloadName)}`,

@@ -5,6 +5,7 @@ import { appendAuditEvent } from '../platform.js';
 import {
   MediaDomainError,
   type MediaAssetDelivery,
+  type PublicMediaRenditionDelivery,
   type MediaAssetType,
   type MediaLibraryAsset,
   type MediaRenditionKey,
@@ -84,14 +85,15 @@ export async function findPublicMediaRendition(
   db: Kysely<DatabaseSchema>,
   assetId: string,
   renditionKey: MediaRenditionKey,
-): Promise<MediaAssetDelivery | undefined> {
+): Promise<PublicMediaRenditionDelivery | undefined> {
   const result = await sql<{
     asset_id: string; status: MediaStatus; original_filename: string; alt_text: string | null;
     storage_provider: string; bucket_name: string; object_key: string; mime_type: string;
-    byte_size: string; width_px: number; height_px: number;
+    byte_size: string; width_px: number; height_px: number; checksum_sha256: string;
   }>`select asset.id::text asset_id,asset.status,asset.original_filename,asset.alt_text,
       rendition.storage_provider,rendition.bucket_name,rendition.object_key,
-      rendition.mime_type,rendition.byte_size::text,rendition.width_px,rendition.height_px
+      rendition.mime_type,rendition.byte_size::text,rendition.width_px,rendition.height_px,
+      rendition.checksum_sha256
     from media.media_assets asset
     join media.media_renditions rendition on rendition.organization_id=asset.organization_id
       and rendition.asset_id=asset.id and rendition.source_object_id=asset.current_object_id
@@ -107,6 +109,7 @@ export async function findPublicMediaRendition(
     provider: row.storage_provider, bucket: row.bucket_name, objectKey: row.object_key,
     mimeType: row.mime_type, byteSize: Number(row.byte_size), widthPx: row.width_px,
     heightPx: row.height_px, renditionKey,
+    contentVersion: row.checksum_sha256,
   } : undefined;
 }
 
