@@ -5,6 +5,7 @@ import { type FormEvent, useState } from 'react';
 
 import { cx } from '@/components/ui/classnames';
 import { ArrowRightIcon, ArrowUpIcon, CheckIcon } from '@/components/ui/icons';
+import { PrivacyChoices } from './privacy-choices';
 
 export type DesktopFooterProps = {
   className?: string | undefined;
@@ -253,6 +254,8 @@ export function DesktopFooter({
               </Link>
             </nav>
 
+            <span className="h-3 w-px bg-border/60" />
+            <PrivacyChoices />
             <span className="h-3 w-px bg-border/60" />
 
             <button

@@ -1033,6 +1033,74 @@ export interface StorefrontSearchResultDto {
   };
 }
 
+export type RecommendationPlacementCodeDto = 'pdp_similar' | 'pdp_complementary';
+export type RecommendationModeDto = 'AUTOMATIC' | 'HYBRID' | 'MANUAL';
+export type RecommendationActionDto = 'PIN' | 'BOOST' | 'EXCLUDE';
+
+export interface RecommendationCardDto {
+  readonly productId: string;
+  readonly handle: string;
+  readonly title: string;
+  readonly price: { readonly amount: string; readonly currency: string };
+  readonly mediaAssetId: string;
+  readonly imageAlt: string;
+  readonly presentationVariantId: string;
+  readonly sku: string;
+  readonly position: number;
+  readonly reason?: string;
+}
+
+export interface RecommendationSectionDto {
+  readonly placement: RecommendationPlacementCodeDto;
+  readonly strategy: string;
+  readonly strategyVersion: number;
+  readonly items: readonly RecommendationCardDto[];
+}
+
+export interface ProductRecommendationsDto {
+  readonly productId: string;
+  readonly recommendationRequestId: string;
+  readonly sections: readonly RecommendationSectionDto[];
+}
+
+export interface RecommendationPlacementSettingsDto {
+  readonly code: RecommendationPlacementCodeDto;
+  readonly enabled: boolean;
+  readonly targetCount: number;
+  readonly candidateLimit: number;
+  readonly minimumScore: number;
+  readonly strategy: string;
+  readonly strategyVersion: number;
+  readonly version: number;
+}
+
+export interface ProductRecommendationActionDto {
+  readonly targetProductId: string;
+  readonly action: RecommendationActionDto;
+  readonly pinPosition: number | null;
+  readonly boost: number | null;
+}
+
+export interface ProductRecommendationSettingsDto {
+  readonly placement: RecommendationPlacementCodeDto;
+  readonly mode: RecommendationModeDto;
+  readonly enabled: boolean | null;
+  readonly targetCount: number | null;
+  readonly minimumScore: number | null;
+  readonly version: number;
+  readonly actions: readonly ProductRecommendationActionDto[];
+}
+
+export interface RecommendationPreviewDto extends ProductRecommendationsDto {
+  readonly explanations: readonly {
+    readonly placement: RecommendationPlacementCodeDto;
+    readonly productId: string;
+    readonly score: number;
+    readonly reasons: readonly string[];
+    readonly outcome: 'SELECTED' | 'INELIGIBLE' | 'EXCLUDED' | 'LOW_RELEVANCE' | 'DUPLICATE';
+  }[];
+}
+
 export const commerceEventNames = [
   'PRODUCT_VIEWED',
   'PRODUCT_LIST_VIEWED',
@@ -1096,6 +1164,9 @@ interface CommerceListEventDataDto {
   readonly listId: string;
   readonly listName: string;
   readonly items: readonly CommerceItemDto[];
+  readonly recommendationRequestId?: string;
+  readonly placement?: RecommendationPlacementCodeDto;
+  readonly strategyVersion?: number;
 }
 
 interface CommerceCartEventDataDto {
@@ -1125,6 +1196,9 @@ export interface CommerceEventDataMapDto {
   readonly PRODUCT_SELECTED: CommerceProductEventDataDto & {
     readonly listId?: string;
     readonly position?: number;
+    readonly recommendationRequestId?: string;
+    readonly placement?: RecommendationPlacementCodeDto;
+    readonly strategyVersion?: number;
   };
   readonly VARIANT_SELECTED: CommerceProductEventDataDto;
   readonly SIZE_GUIDE_OPENED: Pick<CommerceItemDto, 'productId' | 'productGroupId'>;

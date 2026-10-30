@@ -21,8 +21,6 @@ import { PdpVariantSelector } from './pdp-variant-selector';
 import { PdpTrustGrid } from './pdp-trust-grid';
 import { PdpProductDetails } from './pdp-product-details';
 import { PdpStickyBar } from './pdp-sticky-bar';
-import { PdpCrossSells } from './pdp-cross-sells';
-import type { CrossSellProduct } from './pdp-cross-sells';
 import type { PriceDisplay } from './pdp-commercial-header';
 import { formatTaka } from './pdp-money';
 
@@ -33,7 +31,6 @@ export interface PdpViewProps {
   readonly currency: string;
   readonly initialReviews?: readonly PublicReviewDto[] | undefined;
   readonly initialSummary?: ProductRatingSummaryDto | undefined;
-  readonly crossSells?: readonly CrossSellProduct[] | undefined;
   readonly breadcrumbs?: readonly BreadcrumbItemDef[] | undefined;
   readonly wishlisted?: boolean;
   readonly onWishlistToggle?: () => void;
@@ -49,7 +46,6 @@ export function PdpView({
   currency,
   initialReviews,
   initialSummary,
-  crossSells,
   breadcrumbs,
   wishlisted = false,
   onWishlistToggle,
@@ -472,14 +468,6 @@ export function PdpView({
           />
         </section>
 
-        {/* Cross-sells (Mobile) */}
-        <div className="px-4 pt-10 pb-6 border-t border-border/40">
-          <PdpCrossSells
-            products={crossSells}
-            title="Complete Your Look"
-            subtitle="Curated Recommendations"
-          />
-        </div>
 
         {/* Sticky bottom bar */}
         <PdpStickyBar
@@ -753,14 +741,6 @@ export function PdpView({
           </section>
           {/* Core of the product details page ends here */}
 
-          {/* ─── RECOMMENDATIONS SECTION (Full Width Multi-Column) ─── */}
-          <div className="w-full pt-16 pb-16 border-t border-border/40 mt-14">
-            <PdpCrossSells
-              products={crossSells}
-              title="Complete Your Look"
-              subtitle="Curated Recommendations"
-            />
-          </div>
         </div>
       </div>
 

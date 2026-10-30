@@ -56,6 +56,8 @@ export interface ProductCardProps {
   imageUrl: string;
   /** Initial wishlist toggle state */
   initialWishlist?: boolean | undefined;
+  /** Hide the control when this surface has no working wishlist action. */
+  showWishlist?: boolean | undefined;
   /** Whether the product is currently sold out */
   isSoldOut?: boolean | undefined;
   /** Button label for sold-out restock notification (defaults to "Notify Me") */
@@ -139,6 +141,7 @@ export function ProductCard({
   imageAlt,
   imageUrl,
   initialWishlist = false,
+  showWishlist = true,
   isSoldOut = false,
   notifyMeLabel = 'Notify Me',
   onAddToCart,
@@ -231,7 +234,7 @@ export function ProductCard({
         ) : null}
 
         {/* Top-Right Frosted Wishlist Toggle */}
-        <div className="absolute top-2.5 right-2.5 z-10">
+        {showWishlist ? <div className="absolute top-2.5 right-2.5 z-10">
           <WishlistButton
             active={isWishlisted}
             className="shadow-sm active:scale-90"
@@ -240,7 +243,7 @@ export function ProductCard({
             size="xs"
             variant="floating"
           />
-        </div>
+        </div> : null}
 
         {/* Floating Bottom Reassurance / Rating Pill */}
         {!isSoldOut && activeDeliveryPill ? (

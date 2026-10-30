@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { Suspense } from 'react';
 import { notFound, permanentRedirect } from 'next/navigation';
 
 import { ProductPageClient } from '@/components/product-page-client';
@@ -11,9 +12,10 @@ import {
   loadPublicProductReviews,
   loadPublicSizeGuide,
   loadPublicStorefrontContext,
-  searchPublicCatalog,
 } from '@/lib/api/server/catalog';
 import { buildProductBreadcrumbs } from '@/lib/navigation/breadcrumbs';
+import { PdpRecommendations } from '@/features/pdp/pdp-recommendations';
+import { PdpViewTracker } from '@/features/pdp/pdp-view-tracker';
 
 type ProductRoute = { readonly params: Promise<{ handle: string }> };
 
@@ -60,31 +62,11 @@ export default async function ProductPage({ params }: ProductRoute) {
   if (!product) notFound();
   if (product.handle !== handle) permanentRedirect(`/products/${product.handle}`);
 
-  const [reviewsData, sizeGuide, searchResult, categories] = await Promise.all([
+  const [reviewsData, sizeGuide, categories] = await Promise.all([
     loadPublicProductReviews(product.id, context.organizationId, 5),
     loadPublicSizeGuide(product.handle, context.organizationId),
-    searchPublicCatalog(context.organizationId, {
-      sort: 'RELEVANCE',
-      page: 1,
-    }).catch(() => null),
     loadPublicCategories(context.organizationId).catch(() => []),
   ]);
-
-  const crossSells = (searchResult?.items ?? [])
-    .filter((item) => item.id !== product.id)
-    .slice(0, 6)
-    .map((item) => ({
-      id: item.id,
-      handle: item.handle,
-      title: item.title,
-      price: item.minimumPrice ?? '0',
-      currency: item.currency ?? context.currency,
-      imageUrl: item.primaryMediaAssetId
-        ? publicMediaPath(item.primaryMediaAssetId, 'thumbnail')
-        : '',
-      imageAlt: item.title,
-      badge: 'Curated',
-    }));
 
   const canonical = absoluteStorefrontUrl(`/products/${encodeURIComponent(product.handle)}`);
 
@@ -97,6 +79,9 @@ export default async function ProductPage({ params }: ProductRoute) {
   }));
 
   const breadcrumbItems = buildProductBreadcrumbs(product, categories);
+  const viewVariant =
+    product.variants.find((variant) => variant.available && variant.price) ??
+    product.variants.find((variant) => variant.price);
 
   const breadcrumb = breadcrumbJsonLd(
     breadcrumbItems.map((item) => ({
@@ -130,9 +115,28 @@ export default async function ProductPage({ params }: ProductRoute) {
         currency={context.currency}
         initialReviews={reviewsData?.reviews}
         initialSummary={reviewsData?.summary ?? product?.ratingSummary ?? undefined}
-        crossSells={crossSells}
         breadcrumbs={breadcrumbItems}
       />
+      {viewVariant && (
+        <PdpViewTracker
+          item={{
+            productId: product.id,
+            skuId: viewVariant.id,
+            sku: viewVariant.sku,
+            itemName: product.title,
+            ...(viewVariant.price
+              ? { price: viewVariant.price.amount, currency: viewVariant.price.currency }
+              : {}),
+          }}
+        />
+      )}
+      <Suspense fallback={null}>
+        <PdpRecommendations
+          handle={product.handle}
+          organizationId={context.organizationId}
+          currency={context.currency}
+        />
+      </Suspense>
     </>
   );
 }

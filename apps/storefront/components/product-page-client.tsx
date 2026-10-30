@@ -11,7 +11,6 @@ import { notifyCartChanged } from '@/features/cart/cart-events';
 import { useWishlist } from '@/features/wishlist/use-wishlist';
 import { requestStorefrontClient, StorefrontClientApiError } from '@/lib/api/client/http';
 import { PdpView } from '@/features/pdp';
-import type { CrossSellProduct } from '@/features/pdp';
 import type { BreadcrumbItemDef } from '@/components/ui/breadcrumb';
 
 interface CartView {
@@ -27,7 +26,6 @@ export interface ProductPageClientProps {
   readonly currency: string;
   readonly initialReviews?: readonly PublicReviewDto[] | undefined;
   readonly initialSummary?: ProductRatingSummaryDto | undefined;
-  readonly crossSells?: readonly CrossSellProduct[] | undefined;
   readonly breadcrumbs?: readonly BreadcrumbItemDef[] | undefined;
 }
 
@@ -38,7 +36,6 @@ export function ProductPageClient({
   currency,
   initialReviews,
   initialSummary,
-  crossSells,
   breadcrumbs,
 }: ProductPageClientProps) {
   const [cart, setCart] = useState<CartView>();
@@ -111,7 +108,6 @@ export function ProductPageClient({
       currency={currency}
       initialReviews={initialReviews}
       initialSummary={initialSummary}
-      crossSells={crossSells}
       breadcrumbs={breadcrumbs}
       wishlisted={wishlisted}
       onWishlistToggle={handleWishlistToggle}

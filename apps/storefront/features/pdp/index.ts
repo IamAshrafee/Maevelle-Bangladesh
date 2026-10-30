@@ -6,6 +6,4 @@ export { PdpTrustGrid } from './pdp-trust-grid';
 export { PdpEditorialAccordions } from './pdp-editorial-accordions';
 export { PdpProductDetails } from './pdp-product-details';
 export { PdpStickyBar } from './pdp-sticky-bar';
-export { PdpCrossSells } from './pdp-cross-sells';
-export type { CrossSellProduct } from './pdp-cross-sells';
 export { formatTaka } from './pdp-money';

@@ -42,6 +42,7 @@ import { registerSettingsRoutes } from './settings.js';
 import { registerInventoryReplenishmentRoutes } from './inventory-replenishment.js';
 import { registerMessagingRoutes } from './messaging.js';
 import { registerStorefrontMessagingRoutes } from './storefront-messaging.js';
+import { registerRecommendationRoutes } from './recommendations.js';
 import { registerFacebookMessagingRoutes } from './facebook-messaging.js';
 import { registerInstagramMessagingRoutes } from './instagram-messaging.js';
 
@@ -187,6 +188,7 @@ export function registerAuthRoutes(
   registerAdminContextRoute(app, database, auth);
   registerAccountRoutes(app, database, auth, config, objectStorage);
   registerCatalogRoutes(app, database, auth, config.storefrontOrganizationCode);
+  registerRecommendationRoutes(app, database, auth, config.storefrontOrganizationCode);
   registerMediaRoutes(app, database, auth, objectStorage, {
     maxUploadBytes: config.mediaMaxUploadBytes,
     uploadExpirySeconds: config.mediaUploadExpirySeconds,

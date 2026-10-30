@@ -172,6 +172,10 @@
       "types": "./src/storefront.ts",
       "default": "./dist/src/storefront.js"
     },
+    "./recommendations": {
+      "types": "./src/recommendations.ts",
+      "default": "./dist/src/recommendations.js"
+    },
     "./messaging": {
       "types": "./src/messaging/index.ts",
       "default": "./dist/src/messaging/index.js"

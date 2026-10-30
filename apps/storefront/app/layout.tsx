@@ -6,6 +6,7 @@ import { StorefrontFooter } from '@/components/layout/storefront-footer';
 import { StorefrontHeader } from '@/components/layout/storefront-header';
 import { SkipLink } from '@/components/ui/skip-link';
 import { StorefrontChat } from '@/features/chat/chat-root';
+import { AnalyticsConsent } from '@/components/layout/analytics-consent';
 import { storefrontPublicBaseUrl } from '@/lib/env/storefront';
 
 // Fastify is a runtime service in the standalone deployment, so routes must not
@@ -57,6 +58,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
         </div>
         <StorefrontFooter />
         <StorefrontChat />
+        <AnalyticsConsent />
       </body>
     </html>
   );

@@ -101,6 +101,7 @@ const navigation: readonly NavGroup[] = [
     label: 'Catalog',
     items: [
       { label: 'Products', href: '/products', icon: PackageSearch, capability: 'catalog.view' },
+      { label: 'Recommendations', href: '/recommendations', icon: ChartNoAxesCombined, capability: 'recommendations.view' },
       {
         label: 'Product organization',
         href: '/categories',

@@ -55,6 +55,7 @@ import * as mediaPurgeRecovery from './3203_media_purge_recovery.js';
 import * as mediaPurgeReferenceIndexes from './3204_media_purge_reference_indexes.js';
 import * as externalMediaImports from './3205_external_media_imports.js';
 import * as mediaRenditionRepair from './3206_media_rendition_repair.js';
+import * as productRecommendations from './3207_product_recommendations.js';
 
 /**
  * The migration list is deliberately explicit. Migration files are reviewed
@@ -116,6 +117,7 @@ export const migrations = {
   '3204_media_purge_reference_indexes': mediaPurgeReferenceIndexes,
   '3205_external_media_imports': externalMediaImports,
   '3206_media_rendition_repair': mediaRenditionRepair,
+  '3207_product_recommendations': productRecommendations,
 } satisfies Record<string, Migration>;
 
 export const migrationProvider: MigrationProvider = {

@@ -18,6 +18,7 @@ export const PRODUCT_CREATOR_SECTIONS: readonly SectionItem[] = [
   { id: 'content', label: 'Customer Details', sectionId: 'section-content' },
   { id: 'seo', label: 'SEO & Search', sectionId: 'section-seo' },
   { id: 'merchandising', label: 'Organization', sectionId: 'section-merchandising' },
+  { id: 'recommendations', label: 'Recommendations', sectionId: 'section-recommendations' },
 ] as const;
 
 export function SectionNavStrip() {

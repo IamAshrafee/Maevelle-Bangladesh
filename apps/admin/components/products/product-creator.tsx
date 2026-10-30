@@ -18,6 +18,7 @@ import { SeoContentCard } from './creator/seo-content-card';
 import { ShippingCard } from './creator/shipping-card';
 import { useProductCreatorState } from './creator/use-product-creator-state';
 import { VariantsCard } from './creator/variants-card';
+import { ProductRecommendations } from '@/components/recommendations/product-recommendations';
 
 export interface ProductCreatorProps {
   readonly productId?: string | undefined;
@@ -330,6 +331,9 @@ export function ProductCreator({ productId }: ProductCreatorProps = {}) {
                   state.setIsDirty(true);
                 }}
               />
+            </section>
+            <section id="section-recommendations" className="scroll-mt-28" aria-label="Product recommendations">
+              <ProductRecommendations productId={state.productId || undefined} />
             </section>
           </div>
 

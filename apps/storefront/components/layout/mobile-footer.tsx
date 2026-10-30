@@ -5,6 +5,7 @@ import { usePathname } from 'next/navigation';
 
 import { cx } from '@/components/ui/classnames';
 import { ArrowUpIcon } from '@/components/ui/icons';
+import { PrivacyChoices } from './privacy-choices';
 
 export type MobileFooterProps = {
   className?: string | undefined;
@@ -107,6 +108,7 @@ export function MobileFooter({
             >
               Privacy
             </Link>
+            <PrivacyChoices />
             <span aria-hidden="true" className="text-border/60 text-[10px] select-none">•</span>
             <Link
               className="px-2 py-1.5 transition-colors duration-150 hover:text-primary active:scale-95"
@@ -228,6 +230,7 @@ export function MobileFooter({
             <Link className="hover:text-primary transition-colors duration-150" href="/policies/privacy">
               Privacy
             </Link>
+            <PrivacyChoices />
             <span>•</span>
             <Link className="hover:text-primary transition-colors duration-150" href="/policies/terms">
               Terms
