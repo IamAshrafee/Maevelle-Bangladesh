@@ -20,6 +20,7 @@ import { processCatalogImports } from '@maevelle/database/admin-operations';
 import { processIntegrityRuns, scheduleDueIntegrityRuns } from '@maevelle/database/integrity';
 import { deliverPendingInvitationEmails } from '@maevelle/database/iam';
 import { processStorefrontSearchOutbox } from '@maevelle/database/storefront';
+import { cleanupWishlistShares } from '@maevelle/database/wishlist-share-lifecycle';
 import { processExpiredPaymentOrders, processOrderOutbox } from '@maevelle/database/orders';
 import { expireInventoryReservations } from '@maevelle/database/inventory';
 import { dispatchPostDeliveryReviewInvitations } from '@maevelle/database/reviews';
@@ -176,6 +177,7 @@ export function createWorker(options: WorkerOptions): WorkerRuntime {
         analyticsExports,
         imports,
         search,
+        wishlistSharesCleaned,
         orders,
         expiredReservations,
         expiredPaymentOrders,
@@ -254,6 +256,7 @@ export function createWorker(options: WorkerOptions): WorkerRuntime {
         runJob(() => processAnalyticsExports(options.database.db, `worker:${process.pid}`, 1)),
         runJob(() => processCatalogImports(options.database.db)),
         runJob(() => processStorefrontSearchOutbox(options.database.db)),
+        runJob(() => cleanupWishlistShares(options.database.db)),
         runJob(() => processOrderOutbox(options.database.db)),
         runJob(() => expireInventoryReservations(options.database.db)),
         runJob(() => processExpiredPaymentOrders(options.database.db)),
@@ -354,6 +357,7 @@ export function createWorker(options: WorkerOptions): WorkerRuntime {
           analyticsExports,
           imports,
           search,
+          wishlistSharesCleaned,
           orders,
           expiredReservations,
           expiredPaymentOrders,

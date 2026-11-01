@@ -38,6 +38,7 @@ export default defineConfig({
       'apps/**/lib/**/*.{test,spec}.tsx',
       'apps/**/features/**/*.{test,spec}.ts',
       'apps/**/features/**/*.{test,spec}.tsx',
+      'apps/**/components/**/*.{test,spec}.tsx',
       'packages/**/src/**/*.{test,spec}.ts',
       'packages/**/src/**/*.{test,spec}.tsx',
       'tooling/**/*.test.ts',

@@ -16,6 +16,7 @@ import {
   TruckIcon,
 } from '@/components/ui/icons';
 import { useCartCount } from '@/features/cart/use-cart-count';
+import { useWishlist } from '@/features/wishlist/use-wishlist';
 import { SEARCH_PLACEHOLDER } from './search-constants';
 import { SearchDropdownPanel } from './search-dropdown-panel';
 import { useRecentSearches } from './use-recent-searches';
@@ -142,12 +143,15 @@ export function DesktopNavbar({
   onOpenCart,
   responsive = true,
   storeName = 'Maevelle',
-  wishlistCount = 5,
 }: DesktopNavbarProps) {
   const router = useRouter();
   const pathname = usePathname();
   const liveCount = useCartCount(initialCartCount ?? 0);
   const cartCount = initialCartCount !== undefined ? initialCartCount : liveCount;
+  const wishlist = useWishlist();
+  const wishlistCount = wishlist.count;
+  const wishlistLabel = wishlist.mode === 'resolving' || wishlist.mode === 'expired'
+    ? 'View Wishlist (count unavailable)' : `View Wishlist (${wishlistCount} items)`;
 
   const { addRecentSearch } = useRecentSearches();
 
@@ -394,7 +398,11 @@ export function DesktopNavbar({
 
               {/* Favorite / Wishlist Button with Badge */}
               <Link
-                aria-label={`View Wishlist (${wishlistCount} items)`}
+                className="flex min-h-10 items-center rounded-xl px-3 text-xs font-semibold text-on-surface transition-colors hover:bg-surface-container-low hover:text-primary"
+                href="/account"
+              >Account</Link>
+              <Link
+                aria-label={wishlistLabel}
                 className="group relative flex items-center gap-2 rounded-xl px-3 py-2 text-on-surface transition-[background-color,color] hover:bg-surface-container-low hover:text-primary cursor-pointer select-none"
                 href="/wishlist"
               >
@@ -402,7 +410,7 @@ export function DesktopNavbar({
                   <HeartIcon className="transition-transform group-hover:scale-105" size={20} />
                   {wishlistCount > 0 && (
                     <span className="absolute -top-1.5 -right-2 flex h-4 min-w-[16px] items-center justify-center rounded-full bg-secondary-fixed px-1 font-label-sm text-[10px] font-bold font-mono tabular-nums text-on-secondary-fixed shadow-xs">
-                      {wishlistCount}
+                      {wishlistCount > 99 ? '99+' : wishlistCount}
                     </span>
                   )}
                 </div>
@@ -516,7 +524,11 @@ export function DesktopNavbar({
               >
                 {/* Wishlist Link */}
                 <Link
-                  aria-label={`View Wishlist (${wishlistCount} items)`}
+                  className="flex min-h-9 items-center rounded-lg px-2.5 text-xs font-semibold text-on-surface transition-colors hover:bg-surface-container-low hover:text-primary"
+                  href="/account"
+                >Account</Link>
+                <Link
+                  aria-label={wishlistLabel}
                   className="group relative flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-on-surface transition-[background-color,color] hover:bg-surface-container-low hover:text-primary cursor-pointer select-none"
                   href="/wishlist"
                 >
@@ -524,7 +536,7 @@ export function DesktopNavbar({
                     <HeartIcon className="transition-transform group-hover:scale-105" size={18} />
                     {wishlistCount > 0 && (
                       <span className="absolute -top-1.5 -right-2 flex h-4 min-w-[16px] items-center justify-center rounded-full bg-secondary-fixed px-1 font-label-sm text-[10px] font-bold font-mono tabular-nums text-on-secondary-fixed shadow-xs">
-                        {wishlistCount}
+                        {wishlistCount > 99 ? '99+' : wishlistCount}
                       </span>
                     )}
                   </div>

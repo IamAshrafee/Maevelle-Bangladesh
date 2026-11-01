@@ -3,6 +3,7 @@
 import { useEffect, useRef } from 'react';
 import type { CommerceItemDto, RecommendationSectionDto } from '@maevelle/contracts';
 import { ProductCard } from '@/components/commerce/product-card';
+import { WishlistMembershipHydrator } from '@/features/wishlist/wishlist-membership-hydrator';
 import { publicMediaPath } from '@/lib/media/url';
 import {
   createBrowserCommerceEvent,
@@ -98,6 +99,7 @@ export function RecommendationSection({
       aria-labelledby={`recommendation-${section.placement}`}
       className="space-y-5"
     >
+      <WishlistMembershipHydrator productIds={section.items.map((item) => item.productId)} />
       <div className="space-y-1">
         <h2
           id={`recommendation-${section.placement}`}
@@ -121,7 +123,6 @@ export function RecommendationSection({
             price={item.price.amount}
             imageUrl={publicMediaPath(item.mediaAssetId, 'card')}
             imageAlt={item.imageAlt}
-            showWishlist={false}
             onClick={() => selected(item)}
             variant="auto"
           />

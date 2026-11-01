@@ -36,6 +36,10 @@
       "types": "./src/migrations/index.ts",
       "default": "./dist/src/migrations/index.js"
     },
+    "./migrate": {
+      "types": "./src/migrate.ts",
+      "default": "./dist/src/migrate.js"
+    },
     "./platform": {
       "types": "./src/platform.ts",
       "default": "./dist/src/platform.js"
@@ -83,6 +87,26 @@
     "./cart": {
       "types": "./src/cart.ts",
       "default": "./dist/src/cart.js"
+    },
+    "./wishlist-sharing": {
+      "types": "./src/wishlist-sharing.ts",
+      "default": "./dist/src/wishlist-sharing.js"
+    },
+    "./wishlist-share-lifecycle": {
+      "types": "./src/wishlist/share-lifecycle.ts",
+      "default": "./dist/src/wishlist/share-lifecycle.js"
+    },
+    "./wishlist-share-crypto": {
+      "types": "./src/wishlist/share-crypto.ts",
+      "default": "./dist/src/wishlist/share-crypto.js"
+    },
+    "./wishlist-account": {
+      "types": "./src/wishlist/account.ts",
+      "default": "./dist/src/wishlist/account.js"
+    },
+    "./shopper": {
+      "types": "./src/shopper.ts",
+      "default": "./dist/src/shopper.js"
     },
     "./orders": {
       "types": "./src/orders.ts",

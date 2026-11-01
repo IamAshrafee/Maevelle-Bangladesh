@@ -1,9 +1,13 @@
+import { analyticsAdmin } from './analytics-admin.js';
+import { registerWishlistAnalyticsRoutes } from './wishlist-analytics.js';
 import type { FastifyInstance } from 'fastify';
 import { Type } from 'typebox';
 
 import type { DatabaseClient } from '@maevelle/database';
 import {
   AnalyticsQueryError,
+  WishlistObservationError,
+  validateWishlistObservation,
   AnalyticsIngestionError,
   analyticsDrilldown,
   analyticsReportKeys,
@@ -24,41 +28,11 @@ import {
   type AnalyticsReportKey,
   type StorefrontEventInput,
 } from '@maevelle/database/analytics';
-import { appendAuditEvent, findActiveAdminContext } from '@maevelle/database/platform';
+import { appendAuditEvent } from '@maevelle/database/platform';
 import { resolveStorefrontContext } from '@maevelle/database/storefront';
 import type { createAuth } from '../auth/auth.js';
 
 type Auth = ReturnType<typeof createAuth>;
-type AnalyticsCapability =
-  | 'analytics.view'
-  | 'analytics.manage'
-  | 'analytics.financial.view'
-  | 'analytics.export';
-
-function headers(source: Record<string, string | string[] | undefined>): Headers {
-  return new Headers(
-    Object.entries(source).flatMap(([name, value]) =>
-      typeof value === 'string' ? [[name, value]] : [],
-    ),
-  );
-}
-
-async function admin(
-  database: DatabaseClient,
-  auth: Auth,
-  source: Record<string, string | string[] | undefined>,
-  capability: AnalyticsCapability,
-) {
-  const session = await auth.api.getSession({ headers: headers(source) });
-  if (!session?.user?.id) return undefined;
-  const context = await findActiveAdminContext(database.db, session.user.id, {
-    requiredCapability: capability,
-    ...(typeof source['x-organization-id'] === 'string'
-      ? { organizationId: source['x-organization-id'] }
-      : {}),
-  });
-  return context ? { ...context, actorId: session.user.id } : undefined;
-}
 
 const reportQuerySchema = Type.Object({
   from: Type.String({ pattern: '^\\d{4}-\\d{2}-\\d{2}$' }),
@@ -92,6 +66,14 @@ export function registerAnalyticsRoutes(
   app.post(
     '/storefront/v1/analytics/events',
     {
+      preValidation: async (request, reply) => {
+        const body = request.body as { name?: unknown } | null;
+        if (typeof body?.name === 'string' && body.name.startsWith('WISHLIST_')) {
+          if (Buffer.byteLength(JSON.stringify(body))>4096) return reply.code(413).send({ error: { code: 'PAYLOAD_TOO_LARGE', message: 'Wishlist observations are limited to 4 KiB.' } });
+          try { validateWishlistObservation(body); }
+          catch { return reply.code(422).send({ error: { code: 'INVALID_ANALYTICS_EVENT', message: 'Invalid Wishlist observation.' } }); }
+        }
+      },
       schema: {
         body: Type.Object({
           schemaVersion: Type.Literal(1),
@@ -140,7 +122,7 @@ export function registerAnalyticsRoutes(
         );
         return reply.code(202).send({ data: receipt });
       } catch (error) {
-        if (error instanceof AnalyticsIngestionError)
+        if (error instanceof AnalyticsIngestionError || error instanceof WishlistObservationError)
           return reply.code(422).send({
             error: { code: error.code, message: error.message },
           });
@@ -149,20 +131,22 @@ export function registerAnalyticsRoutes(
     },
   );
 
+  registerWishlistAnalyticsRoutes(app, database, auth);
+
   app.get('/admin/analytics/overview', async (request, reply) => {
-    const active = await admin(database, auth, request.headers, 'analytics.financial.view');
+    const active = await analyticsAdmin(database, auth, request.headers, 'analytics.financial.view');
     if (!active)
       return reply.code(403).send({ error: { code: 'FORBIDDEN', message: 'Access denied.' } });
     return { data: await getAnalyticsOverview(database.db, active.organizationId) };
   });
   app.get('/admin/analytics/dashboards', async (request, reply) => {
-    const active = await admin(database, auth, request.headers, 'analytics.financial.view');
+    const active = await analyticsAdmin(database, auth, request.headers, 'analytics.financial.view');
     if (!active)
       return reply.code(403).send({ error: { code: 'FORBIDDEN', message: 'Access denied.' } });
     return { data: await getAnalyticsDashboards(database.db, active.organizationId) };
   });
   app.get('/admin/analytics/metrics', async (request, reply) => {
-    const active = await admin(database, auth, request.headers, 'analytics.view');
+    const active = await analyticsAdmin(database, auth, request.headers, 'analytics.view');
     if (!active)
       return reply.code(403).send({ error: { code: 'FORBIDDEN', message: 'Access denied.' } });
     return { data: await listMetricCatalog(database.db) };
@@ -178,7 +162,7 @@ export function registerAnalyticsRoutes(
         });
       const capability =
         report === 'FINANCE' ? 'analytics.financial.view' : 'analytics.view';
-      const active = await admin(database, auth, request.headers, capability);
+      const active = await analyticsAdmin(database, auth, request.headers, capability);
       if (!active)
         return reply.code(403).send({ error: { code: 'FORBIDDEN', message: 'Access denied.' } });
       const query = request.query as {
@@ -220,7 +204,7 @@ export function registerAnalyticsRoutes(
       return reply.code(422).send({
         error: { code: 'INVALID_METRIC', message: 'Unsupported drill-down metric.' },
       });
-    const active = await admin(
+    const active = await analyticsAdmin(
       database,
       auth,
       request.headers,
@@ -239,13 +223,13 @@ export function registerAnalyticsRoutes(
     };
   });
   app.get('/admin/analytics/inventory-snapshots', async (request, reply) => {
-    const active = await admin(database, auth, request.headers, 'analytics.view');
+    const active = await analyticsAdmin(database, auth, request.headers, 'analytics.view');
     if (!active)
       return reply.code(403).send({ error: { code: 'FORBIDDEN', message: 'Access denied.' } });
     return { data: await listInventorySnapshots(database.db, active.organizationId) };
   });
   app.get('/admin/analytics/destinations', async (request, reply) => {
-    const active = await admin(database, auth, request.headers, 'analytics.view');
+    const active = await analyticsAdmin(database, auth, request.headers, 'analytics.view');
     if (!active)
       return reply.code(403).send({ error: { code: 'FORBIDDEN', message: 'Access denied.' } });
     return {
@@ -280,13 +264,13 @@ export function registerAnalyticsRoutes(
     };
   });
   app.get('/admin/analytics/integrity', async (request, reply) => {
-    const active = await admin(database, auth, request.headers, 'analytics.view');
+    const active = await analyticsAdmin(database, auth, request.headers, 'analytics.view');
     if (!active)
       return reply.code(403).send({ error: { code: 'FORBIDDEN', message: 'Access denied.' } });
     return { data: await verifyAnalyticsIntegrity(database.db, active.organizationId) };
   });
   app.post('/admin/analytics/rebuild', async (request, reply) => {
-    const active = await admin(database, auth, request.headers, 'analytics.manage');
+    const active = await analyticsAdmin(database, auth, request.headers, 'analytics.manage');
     if (!active)
       return reply.code(403).send({ error: { code: 'FORBIDDEN', message: 'Access denied.' } });
     const result = {
@@ -318,7 +302,7 @@ export function registerAnalyticsRoutes(
       },
     },
     async (request, reply) => {
-      const active = await admin(database, auth, request.headers, 'analytics.export');
+      const active = await analyticsAdmin(database, auth, request.headers, 'analytics.export');
       if (!active)
         return reply.code(403).send({ error: { code: 'FORBIDDEN', message: 'Access denied.' } });
       const body = request.body as {
@@ -327,7 +311,7 @@ export function registerAnalyticsRoutes(
       };
       try {
         if (body.report === 'FINANCE' || body.report === 'PRODUCTS') {
-          const financial = await admin(
+          const financial = await analyticsAdmin(
             database,
             auth,
             request.headers,
@@ -353,7 +337,7 @@ export function registerAnalyticsRoutes(
     },
   );
   app.get('/admin/analytics/exports', async (request, reply) => {
-    const active = await admin(database, auth, request.headers, 'analytics.export');
+    const active = await analyticsAdmin(database, auth, request.headers, 'analytics.export');
     if (!active)
       return reply.code(403).send({ error: { code: 'FORBIDDEN', message: 'Access denied.' } });
     const query = request.query as { page?: number; pageSize?: number };
@@ -367,7 +351,7 @@ export function registerAnalyticsRoutes(
     };
   });
   app.get('/admin/analytics/exports/:exportId/download', async (request, reply) => {
-    const active = await admin(database, auth, request.headers, 'analytics.export');
+    const active = await analyticsAdmin(database, auth, request.headers, 'analytics.export');
     if (!active)
       return reply.code(403).send({ error: { code: 'FORBIDDEN', message: 'Access denied.' } });
     const exported = await getAnalyticsExport(
@@ -380,7 +364,7 @@ export function registerAnalyticsRoutes(
         error: { code: 'EXPORT_NOT_FOUND', message: 'Analytics export was not found.' },
       });
     if (exported.report_key === 'FINANCE' || exported.report_key === 'PRODUCTS') {
-      const financial = await admin(
+      const financial = await analyticsAdmin(
         database,
         auth,
         request.headers,

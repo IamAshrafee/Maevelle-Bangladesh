@@ -57,7 +57,8 @@ import { MobileNavbar } from '@/components/layout/mobile-navbar';
 import { DesktopNavbar } from '@/components/layout/desktop-navbar';
 import { MobileFooter } from '@/components/layout/mobile-footer';
 import { DesktopFooter } from '@/components/layout/desktop-footer';
-import { WishlistPageShell } from '@/features/wishlist/components/wishlist-page-shell';
+import { WishlistDesignSpecimen } from '@/features/wishlist/components/wishlist-design-specimen';
+import { WishlistSharingSpecimen } from '@/features/wishlist/components/wishlist-sharing-specimen';
 import { CheckoutPageShell } from '@/features/checkout';
 import { SizeGuideDialog } from '@/components/size-guide-dialog';
 
@@ -1919,7 +1920,7 @@ export default function StorefrontDesignSystemPage() {
             </h2>
           </div>
           <p className="text-body-sm text-on-surface-variant max-w-3xl">
-            First full customer workflow screen. Mobile view is an exact 1:1 implementation of the Stitch design system (horizontal thumbnail cards, category filter pills, stock scarcity tags, online styling note, and progressive delivery bar). Desktop view elevates the experience with an editorial 2-column split, sticky order value sidebar, and direct cart transfers.
+            The original populated Wishlist design specimen remains here as the visual reference. The live mobile and tablet Wishlist opens in a bottom sheet; desktop uses an editorial two-column page. Real product state replaces the earlier simulated cart and delivery actions.
           </p>
 
           <div className="flex items-center gap-3">
@@ -1945,7 +1946,7 @@ export default function StorefrontDesignSystemPage() {
               </div>
               <div className="p-4 sm:p-6 bg-surface/50">
                 <div className="max-w-md mx-auto rounded-3xl bg-surface border border-border/60 overflow-hidden shadow-sm">
-                  <WishlistPageShell mode="mobile" />
+                  <WishlistDesignSpecimen mode="mobile" />
                 </div>
               </div>
             </div>
@@ -1961,8 +1962,12 @@ export default function StorefrontDesignSystemPage() {
                 </span>
               </div>
               <div className="bg-surface p-2 sm:p-4">
-                <WishlistPageShell mode="desktop" />
+                  <WishlistDesignSpecimen mode="desktop" />
               </div>
+            </div>
+            <div className="rounded-2xl border border-border/60 bg-surface p-4 sm:p-6">
+              <p className="mb-4 font-label-sm text-xs font-bold uppercase tracking-wider text-on-surface">Wishlist Sharing · Populated Reference</p>
+              <WishlistSharingSpecimen />
             </div>
           </div>
         </section>

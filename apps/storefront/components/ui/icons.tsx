@@ -1,6 +1,6 @@
-import type { ComponentProps } from 'react';
+import React, { type ComponentProps } from 'react';
 
-import { cx } from '@/components/ui/classnames';
+import { cx } from './classnames';
 
 export type IconProps = ComponentProps<'svg'> & {
   className?: string;

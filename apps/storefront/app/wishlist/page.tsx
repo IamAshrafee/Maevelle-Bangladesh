@@ -4,9 +4,12 @@ import { WishlistPageShell } from '@/features/wishlist/components/wishlist-page-
 
 export const metadata: Metadata = {
   title: 'Your Wishlist',
-  description:
-    'Your saved favorites, jewelry, and accessories reserved for your personal selection at Maevelle Bangladesh.',
+  description: 'Your private saved Maevelle products.',
+  robots: { index: false, follow: false },
+  referrer: 'no-referrer',
 };
+
+export const dynamic = 'force-dynamic';
 
 export default function WishlistPage() {
   return (

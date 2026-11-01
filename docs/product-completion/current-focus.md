@@ -1,20 +1,15 @@
 # Current Focus
 
-Fit & Sizing is implemented across the mutable database baseline, contracts,
-API, Admin guide/assignment/attention/settings workspaces, Product create/edit/
-details, Supply purchase evidence review, and the Storefront Product page. The
-focused sizing integration suite and repository typecheck pass on a clean local
-database. Resume with owner-led responsive/accessibility acceptance; do not
-treat local verification as production approval.
+The owner shifted work to the complete Storefront Wishlist system, including snapshot sharing. The [repository audit and implementation direction](areas/storefront-wishlist/audit-and-architecture.md) records decisions and open work. Guest and account Wishlist persistence, shared product-card/PDP hearts, header counts, a catalog-hydrated Wishlist page, durable guest merge, and the sharing backend are implemented locally. **Wishlist is not complete:** browser, staging, and remaining sharing-security acceptance gates remain open.
 
-The Customer 360 CRM and unified identity implementation remains present in the
-same working tree, and its production verdict remains **NO-GO**.
+The prior Fit & Sizing implementation remains owner-review pending. The Customer 360 CRM production verdict remains **NO-GO**, with the customer-controlled identity challenge and other acceptance gates still open. Preserve that evidence and the untracked stockout-interest notes.
 
-After the sizing owner review, resume the customer-controlled one-time identity challenge, then close the
-authenticated responsive/accessibility, live Meta, persistent migration/backup,
-legal/privacy and representative-volume gates in the
-[Phase 11 audit](../domains/customers/phase-11-audit.md). The
-[architecture](../domains/customers/phase-11-architecture.md),
-[operations guide](../domains/customers/phase-11-operations.md) and
-[privacy control map](../domains/customers/privacy-compliance.md) are the current
-design evidence. Do not treat passing local checks as production approval.
+Wishlist Phase 02 adds reference-only guest persistence with a per-operation browser journal, a shared guest/account controller, authenticated API adapter, and an exact-version transactional merge with durable receipts. Phase 03B restored an isolated disposable PostgreSQL 18 runtime and passed focused migration, database, API, Worker, and Storefront checks. It added forward migration 3211 for receipt tombstones and repaired cross-organization share capability access. See `docs/architecture/wishlist/PHASE_03B_VERIFICATION_AND_SECURITY_CLOSURE_REPORT.md` for evidence and remaining gates. Phase 03 remains **partial**; staging migration status, proxy behavior, browser acceptance, key rotation, and catalog edge coverage are unverified. The ordinary persistent local PostgreSQL container was not restarted.
+
+Phase 04 implemented and locally browser-tested the private Storefront Wishlist, including guest/account save, remove, undo, variant preference, owner switching, responsive layouts, and bounded 108-item account pagination. A PostgreSQL microsecond cursor defect was fixed with a focused regression test. See `docs/architecture/wishlist/PHASE_04_IMPLEMENTATION_REPORT.md`. Phase 04 remains **partial local acceptance** pending complete keyboard/screen-reader, real-media/desktop visual, and failure-mode browser journeys.
+
+Owner review identified that the first functional Phase 04 page discarded the approved Wishlist visual design. The follow-up restored a populated design-lab specimen and refit the live Wishlist to its warm editorial desktop split and compact mobile cards. Mobile/tablet bottom navigation now opens a modal sliding Wishlist drawer; desktop keeps the full page. Browser checks confirmed phone/tablet/desktop presentation and Escape focus return. Real media and the remaining accessibility/failure journeys are still open.
+
+Phase 05 implemented the sharing frontend across guest/account creation and management, explicit guest claim, and the public recipient Save One/All experience. Local browser verification covered ordinary guest/account creation, a 107-item account with cross-page selection, link recovery, rotation, expiry, revocation, claim, recipient saves, and a 320 px drawer. The recipient uses the shared editorial product card. See `docs/architecture/wishlist/PHASE_05_IMPLEMENTATION_REPORT.md`. Phase 05 remains **partial local acceptance**; real media, full accessibility, failure/legacy cases, account recipient/owner-switch/history pagination, catalog edge cases, and staging/security gates remain open. No staging deployment occurred. These gates remain open independently of the subsequently authorized Phase 06A backend assignment.
+
+The owner explicitly authorized Phase 06A backend-only work. Transactional account/share outcome events, bounded outbox projection and retries, current/historical aggregate reports, Analytics-authorized Admin APIs, minimal consented ingestion, retention and operational counters are implemented and locally tested. See `docs/architecture/wishlist/PHASE_06A_BACKEND_IMPLEMENTATION_REPORT.md` and its metric dictionary for exact verification, API/Phase 06B handoff and limitations. Phase 06A production acceptance remains partial: privacy approval, staging/recovery, missing pre-existing generic upgrade cases and broader volume gates remain open. No frontend work or deployment occurred. Stop here; Phase 06B needs a separate assignment.

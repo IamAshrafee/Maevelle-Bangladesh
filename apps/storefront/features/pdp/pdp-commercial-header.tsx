@@ -93,15 +93,15 @@ export function PdpCommercialHeader({
       ) : null}
 
       {/* Dispatch status banner */}
-      {(isAvailable || unselectedAxesCount === 0) && (
+      {unselectedAxesCount === 0 && (
         <div className="flex items-center gap-2.5 mt-1 p-3 rounded-2xl bg-[#faf2ee] border border-border/40 text-on-surface">
           <div className="w-7 h-7 rounded-full bg-[#eee7e3] flex items-center justify-center text-primary shrink-0">
             <TruckIcon size={16} />
           </div>
           <div className="flex flex-col">
-            <span className="text-[13px] font-semibold text-[#1e1b19]">In Stock &amp; Ready to Ship</span>
+            <span className="text-[13px] font-semibold text-[#1e1b19]">{isAvailable ? 'In Stock & Ready to Ship' : 'Currently out of stock'}</span>
             <span className="text-[12px] text-[#574144] leading-snug">
-              Online Exclusive &middot; Dispatches within 24 hours across Bangladesh
+              {isAvailable ? 'Online Exclusive · Dispatches within 24 hours across Bangladesh' : 'Save this piece to revisit it later.'}
             </span>
           </div>
         </div>

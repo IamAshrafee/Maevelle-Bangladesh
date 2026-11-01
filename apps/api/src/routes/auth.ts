@@ -43,6 +43,11 @@ import { registerInventoryReplenishmentRoutes } from './inventory-replenishment.
 import { registerMessagingRoutes } from './messaging.js';
 import { registerStorefrontMessagingRoutes } from './storefront-messaging.js';
 import { registerRecommendationRoutes } from './recommendations.js';
+import { registerWishlistRoutes } from './wishlist.js';
+import { registerAccountWishlistRoutes } from './account-wishlist.js';
+import { registerAccountWishlistShareRoutes } from './account-wishlist-shares.js';
+import { registerShopperAuthRoutes } from './shopper-auth.js';
+import { createShopperAuthEmailSender, type ShopperAuthEmailSender } from '../auth/shopper-auth.js';
 import { registerFacebookMessagingRoutes } from './facebook-messaging.js';
 import { registerInstagramMessagingRoutes } from './instagram-messaging.js';
 
@@ -50,6 +55,7 @@ export function registerAuthRoutes(
   app: FastifyInstance,
   config: RuntimeConfig,
   database: DatabaseClient,
+  shopperAuthEmailSender?: ShopperAuthEmailSender,
 ): void {
   const auth = createAuth(config, database);
 
@@ -189,6 +195,13 @@ export function registerAuthRoutes(
   registerAccountRoutes(app, database, auth, config, objectStorage);
   registerCatalogRoutes(app, database, auth, config.storefrontOrganizationCode);
   registerRecommendationRoutes(app, database, auth, config.storefrontOrganizationCode);
+  registerWishlistRoutes(app, database, config.storefrontOrganizationCode, config.authEncryptionKey);
+  const shopperSender = shopperAuthEmailSender ?? createShopperAuthEmailSender(config);
+  const resolveShopper = registerShopperAuthRoutes(app, config, database, shopperSender);
+  if (shopperSender) {
+    registerAccountWishlistRoutes(app, database, resolveShopper);
+    registerAccountWishlistShareRoutes(app, database, resolveShopper, config.authEncryptionKey);
+  }
   registerMediaRoutes(app, database, auth, objectStorage, {
     maxUploadBytes: config.mediaMaxUploadBytes,
     uploadExpirySeconds: config.mediaUploadExpirySeconds,

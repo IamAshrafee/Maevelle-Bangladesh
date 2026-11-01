@@ -6,9 +6,10 @@ import type {
   PublicSizeGuideDto,
   StorefrontProductDto,
 } from '@maevelle/contracts';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { notifyCartChanged } from '@/features/cart/cart-events';
 import { useWishlist } from '@/features/wishlist/use-wishlist';
+import { wishlistStore } from '@/features/wishlist/wishlist-store';
 import { requestStorefrontClient, StorefrontClientApiError } from '@/lib/api/client/http';
 import { PdpView } from '@/features/pdp';
 import type { BreadcrumbItemDef } from '@/components/ui/breadcrumb';
@@ -42,8 +43,11 @@ export function ProductPageClient({
   const [cartMessage, setCartMessage] = useState('');
   const [busy, setBusy] = useState(false);
 
-  const { isInWishlist, toggleWishlist } = useWishlist();
-  const wishlisted = isInWishlist(initialProduct.id);
+  const { membership, toggleWishlist, pendingIds, mode, listVersion, ownerGeneration } = useWishlist();
+  const wishlisted = membership(initialProduct.id);
+  useEffect(() => {
+    if (mode === 'account') void wishlistStore.hydrateSavedState([initialProduct.id]);
+  }, [mode, listVersion, ownerGeneration, initialProduct.id]);
 
   async function loadOrCreateCart(): Promise<CartView> {
     try {
@@ -83,7 +87,7 @@ export function ProductPageClient({
     }
   }
 
-  function handleWishlistToggle() {
+  function handleWishlistToggle(preferredVariantId: string | null) {
     // Build a lightweight WishlistItem from the product for toggle
     const primaryMedia = initialProduct.media.find((m) => m.isPrimary) ?? initialProduct.media[0];
     toggleWishlist({
@@ -91,13 +95,13 @@ export function ProductPageClient({
       handle: initialProduct.handle,
       title: initialProduct.title,
       subtitle: 'Maevelle Bangladesh',
-      category: 'hair',
-      categoryLabel: 'Hair',
-      price: 0,
+      category: 'all',
+      categoryLabel: 'Saved product',
+      price: Number(initialProduct.variants.find((variant) => variant.price)?.price?.amount ?? 0),
       imageUrl: primaryMedia ? `/api/media/public/${primaryMedia.id}?rendition=thumbnail` : '',
       alt: primaryMedia?.altText ?? initialProduct.title,
       inStock: initialProduct.variants.some((v) => v.available),
-    });
+    }, preferredVariantId);
   }
 
   return (
@@ -110,6 +114,7 @@ export function ProductPageClient({
       initialSummary={initialSummary}
       breadcrumbs={breadcrumbs}
       wishlisted={wishlisted}
+      wishlistPending={pendingIds.includes(initialProduct.id)}
       onWishlistToggle={handleWishlistToggle}
       onAddToCart={handleAddToCart}
       busy={busy}

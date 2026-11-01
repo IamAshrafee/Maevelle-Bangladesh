@@ -1,10 +1,14 @@
+import { registerWishlistObservability } from './wishlist-observability.js';
 import Fastify from 'fastify';
+import { createHmac } from 'node:crypto';
 import type { TypeBoxTypeProvider } from '@fastify/type-provider-typebox';
 import type { FastifyBaseLogger } from 'fastify';
 
 import type { DatabaseClient } from '@maevelle/database';
 import type { RuntimeConfig } from '@maevelle/config';
 import { resolveCorrelationId } from '@maevelle/observability';
+import { incrementAuthStorageValue } from '@maevelle/database/platform';
+import type { ShopperAuthEmailSender } from './auth/shopper-auth.js';
 
 import { registerHealthRoutes } from './routes/health.js';
 import { registerAuthRoutes } from './routes/auth.js';
@@ -13,6 +17,8 @@ export interface BuildApiOptions {
   readonly database: DatabaseClient;
   readonly config?: RuntimeConfig;
   readonly logger?: FastifyBaseLogger | false;
+  /** Local test mailbox; production uses configured Resend delivery. */
+  readonly shopperAuthEmailSender?: ShopperAuthEmailSender;
 }
 
 function matchesExpectedOrigin(
@@ -48,6 +54,8 @@ export function buildApi(options: BuildApiOptions) {
     genReqId: (request) => resolveCorrelationId(request.headers['x-correlation-id']),
   }).withTypeProvider<TypeBoxTypeProvider>();
 
+  registerWishlistObservability(app, options.database, options.config?.storefrontOrganizationCode ?? 'maevelle');
+
   // Auth is bridged through Better Auth's Fetch handler; retaining JSON as text
   // prevents Fastify from consuming and reserializing credential payloads.
   app.removeContentTypeParser('application/json');
@@ -79,6 +87,60 @@ export function buildApi(options: BuildApiOptions) {
     });
     const method = request.method.toUpperCase();
     const origin = request.headers.origin;
+    const path = request.url.split('?', 1)[0] ?? '';
+    const shopperPrivate = path.startsWith('/shopper-auth/')
+      || path === '/storefront/v1/wishlist'
+      || path === '/storefront/v1/wishlist/saved-state'
+      || path === '/storefront/v1/wishlist/merges'
+      || path.startsWith('/storefront/v1/wishlist/account-shares')
+      || path.startsWith('/storefront/v1/wishlist/items/');
+    const sharePath = path.startsWith('/storefront/v1/wishlist/shares');
+    if (options.config && shopperPrivate && ['POST', 'PUT', 'PATCH', 'DELETE'].includes(method)) {
+      if (!origin || origin !== new URL(options.config.storefrontBaseUrl).origin
+        || (request.headers['sec-fetch-site'] && !['same-origin', 'same-site', 'none'].includes(request.headers['sec-fetch-site'])))
+        return reply.code(403).send({
+          error: { code: 'ORIGIN_REJECTED', message: 'Request origin is not trusted.' },
+        });
+      if (!request.headers['content-type']?.startsWith('application/json'))
+        return reply.code(415).send({
+          error: { code: 'UNSUPPORTED_MEDIA_TYPE', message: 'JSON is required.' },
+        });
+    }
+    if (options.config && sharePath && method === 'POST' && path !== '/storefront/v1/wishlist/shares/open') {
+      if (request.headers.origin !== new URL(options.config.storefrontBaseUrl).origin)
+        return reply.code(403).send({ error: { code: 'ORIGIN_REJECTED', message: 'Request origin is not trusted.' } });
+      if (!request.headers['content-type']?.startsWith('application/json'))
+        return reply.code(415).send({ error: { code: 'UNSUPPORTED_MEDIA_TYPE', message: 'JSON is required.' } });
+    }
+    if (options.config && (shopperPrivate || sharePath)) {
+      const policy = path.startsWith('/shopper-auth/sign-up/') ? { maximum: 5, seconds: 3600 }
+        : path.startsWith('/shopper-auth/sign-in/') ? { maximum: 12, seconds: 900 }
+        : path.startsWith('/shopper-auth/send-verification-email')
+          || path.startsWith('/shopper-auth/request-password-reset')
+          ? { maximum: 5, seconds: 3600 }
+        : sharePath ? { maximum: path.endsWith('/open') ? 120 : 30, seconds: 3600 }
+        : path.startsWith('/storefront/v1/wishlist/items/')
+          ? { maximum: 120, seconds: 60 }
+        : { maximum: 120, seconds: 60 };
+      const key = createHmac('sha256', options.config.betterAuthSecret)
+        .update(`shopper-rate:v1:${request.ip}:${path.replace(/\/[0-9a-f-]{36}$/i, '/:id')}`)
+        .digest('hex');
+      let attempts: number;
+      try {
+        attempts = await incrementAuthStorageValue(options.database.db, key, policy.seconds);
+      } catch (error) {
+        request.log.error({ err: error, path }, 'shopper rate limiter unavailable');
+        return reply.code(503).send({
+          error: { code: 'UNAVAILABLE', message: 'Request protection is temporarily unavailable.' },
+        });
+      }
+      if (attempts > policy.maximum) {
+        reply.header('retry-after', String(policy.seconds));
+        return reply.code(429).send({
+          error: { code: 'RATE_LIMITED', message: 'Too many attempts. Please try later.' },
+        });
+      }
+    }
     if (
       options.config &&
       origin &&
@@ -205,7 +267,7 @@ export function buildApi(options: BuildApiOptions) {
 
   registerHealthRoutes(app, options.database);
   if (options.config) {
-    registerAuthRoutes(app, options.config, options.database);
+    registerAuthRoutes(app, options.config, options.database, options.shopperAuthEmailSender);
   }
 
   return app;

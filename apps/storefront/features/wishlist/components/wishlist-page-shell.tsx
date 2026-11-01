@@ -1,158 +1,123 @@
 'use client';
 
+import Link from 'next/link';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { Button } from '@/components/ui/button';
 import { cx } from '@/components/ui/classnames';
-import { CheckCircleIcon } from '@/components/ui/icons';
-import { WishlistDesktopView } from '@/features/wishlist/components/wishlist-desktop-view';
-import { WishlistMobileView } from '@/features/wishlist/components/wishlist-mobile-view';
+import { requestStorefrontClient } from '@/lib/api/client/http';
 import { useWishlist } from '@/features/wishlist/use-wishlist';
+import { WishlistDesktopView } from './wishlist-desktop-view';
+import { WishlistMobileView } from './wishlist-mobile-view';
+import { WishlistSharingPanel } from './wishlist-sharing-panel';
+import type { WishlistCatalogProduct, WishlistDisplayItem, WishlistSort, WishlistViewProps } from './wishlist-view-model';
 
 export interface WishlistPageShellProps {
-  className?: string | undefined;
-  /** Force view mode: 'auto' (responsive), 'mobile', or 'desktop' */
-  mode?: 'auto' | 'mobile' | 'desktop' | undefined;
+  className?: string;
+  mode?: 'auto' | 'mobile' | 'desktop';
+  inDrawer?: boolean;
+  onNavigate?: () => void;
 }
 
-export function WishlistPageShell({ className, mode = 'auto' }: WishlistPageShellProps) {
-  const {
-    activeCategory,
-    amountNeededForFreeDelivery,
-    categoryCounts,
-    clearWishlist,
-    deliveryProgress,
-    filteredItems,
-    isTransferringAll,
-    items,
-    moveAllToBag,
-    movedItemIds,
-    moveToBag,
-    movingItemIds,
-    removeItem,
-    setActiveCategory,
-    showToast,
-    toastMessage,
-    totalPrice,
-  } = useWishlist();
+export function WishlistPageShell({ className, mode: viewMode = 'auto', inDrawer = false, onNavigate }: WishlistPageShellProps) {
+  const { items, count, nextCursor, loadingMore, loadMore, removeItem, recentlyRemoved, undoRemove, toastMessage,
+    mode, sync, syncMessage, retrySync, pendingIds, mergeReviewed, mergeConflict,
+    reviewMergeConflict, confirmMergeAfterReview, ownerGeneration, ownerPartition } = useWishlist();
+  const [catalog, setCatalog] = useState<Map<string, WishlistCatalogProduct> | null>(null);
+  const catalogCache = useRef(new Map<string, WishlistCatalogProduct>());
+  const sharingRef = useRef<HTMLDivElement>(null);
+  const [loadingCatalog, setLoadingCatalog] = useState(false);
+  const [loadError, setLoadError] = useState(false);
+  const [retryKey, setRetryKey] = useState(0);
+  const [sort, setSort] = useState<WishlistSort>('recent');
+  const [activeCategory, setActiveCategory] = useState('all');
+  const [sharingOpen, setSharingOpen] = useState(false);
+  const ids = items.map((item) => item.id).join(',');
+  useEffect(() => { setSharingOpen(false); }, [ownerGeneration]);
 
-  const handleShare = () => {
-    if (typeof navigator !== 'undefined' && navigator.share) {
-      navigator
-        .share({
-          title: 'My Maevelle Wishlist',
-          text: 'Take a look at the curated accessories I saved at Maevelle Bangladesh',
-          url: window.location.href,
-        })
-        .catch(() => {
-          // User cancelled or unsupported
-        });
-    } else if (typeof navigator !== 'undefined' && navigator.clipboard) {
-      void navigator.clipboard.writeText(window.location.href);
-      showToast('Wishlist link copied to clipboard');
-    } else {
-      showToast('Wishlist link: ' + window.location.href);
-    }
+  useEffect(() => {
+    if (!ids) { catalogCache.current.clear(); setCatalog(new Map()); setLoadError(false); setLoadingCatalog(false); return; }
+    const controller = new AbortController();
+    const requested = ids.split(',');
+    const visible = new Set(requested);
+    for (const id of catalogCache.current.keys()) if (!visible.has(id)) catalogCache.current.delete(id);
+    const missing = requested.filter((id) => !catalogCache.current.has(id));
+    if (!missing.length) { setCatalog(new Map(catalogCache.current)); setLoadError(false); setLoadingCatalog(false); return; }
+    setLoadingCatalog(true);
+    setLoadError(false);
+    const batches = missing.reduce<string[][]>((result, id, index) => {
+      if (index % 100 === 0) result.push([]);
+      result.at(-1)!.push(id);
+      return result;
+    }, []);
+    Promise.all(batches.map((productIds) => requestStorefrontClient<WishlistCatalogProduct[]>('/api/storefront/v1/wishlist/products', {
+      method: 'POST', signal: controller.signal, headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ productIds }),
+    }))).then((pages) => { if (!controller.signal.aborted) {
+      for (const product of pages.flat()) catalogCache.current.set(product.id, product);
+      setCatalog(new Map(catalogCache.current));
+      setLoadingCatalog(false);
+    } }).catch(() => { if (!controller.signal.aborted) { setLoadError(true); setLoadingCatalog(false); } });
+    return () => controller.abort();
+  }, [ids, retryKey]);
+
+  const categories = useMemo(() => mode === 'guest'
+    ? [...new Set(items.map((item) => catalog?.get(item.id)?.categoryName).filter((value): value is string => Boolean(value)))].sort()
+    : [], [items, catalog, mode]);
+  const displayItems = useMemo(() => {
+    const mapped: WishlistDisplayItem[] = items.map((entry) => ({ entry, product: catalog?.get(entry.id) ?? null }));
+    const filtered = mode === 'guest' && activeCategory !== 'all'
+      ? mapped.filter(({ product }) => product?.categoryName === activeCategory) : mapped;
+    if (mode === 'guest' && sort === 'oldest') filtered.reverse();
+    if (mode === 'guest' && (sort === 'price-asc' || sort === 'price-desc')) filtered.sort((a, b) => {
+      const aPrice = a.product?.price;
+      const bPrice = b.product?.price;
+      if (aPrice == null) return bPrice == null ? 0 : 1;
+      if (bPrice == null) return -1;
+      return (sort === 'price-asc' ? Number(aPrice) - Number(bPrice) : Number(bPrice) - Number(aPrice)) ||
+        (b.entry.savedAt ?? '').localeCompare(a.entry.savedAt ?? '');
+    });
+    return filtered;
+  }, [items, catalog, mode, activeCategory, sort]);
+  const viewProps: WishlistViewProps = {
+    count, items: displayItems, totalVisible: items.length,
+    availableVisible: items.filter((item) => catalog?.get(item.id)?.available).length,
+    mode: mode === 'account' ? 'account' : 'guest', sort, onSortChange: setSort,
+    categories, activeCategory, onCategoryChange: setActiveCategory,
+    onRemove: ({ entry, product }) => removeItem(entry.id, product ? {
+      ...entry, title: product.title, handle: product.handle, price: Number(product.price ?? 0),
+      inStock: product.available,
+    } : entry),
+    pendingIds, nextCursor, loadingMore, onLoadMore: () => void loadMore(),
+    onShare: () => { setSharingOpen(true); requestAnimationFrame(() => sharingRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })); },
+    showSharing: true, onNavigate,
   };
-
-  return (
-    <div className={cx('relative min-h-[calc(100vh-8rem)] w-full', className)}>
-      {/* Responsive View Presentation */}
-      {mode === 'mobile' ? (
-        <WishlistMobileView
-          activeCategory={activeCategory}
-          amountNeededForFreeDelivery={amountNeededForFreeDelivery}
-          categoryCounts={categoryCounts}
-          deliveryProgress={deliveryProgress}
-          filteredItems={filteredItems}
-          isTransferringAll={isTransferringAll}
-          items={items}
-          moveAllToBag={moveAllToBag}
-          movedItemIds={movedItemIds}
-          moveToBag={moveToBag}
-          movingItemIds={movingItemIds}
-          onCategoryChange={setActiveCategory}
-          onClearWishlist={clearWishlist}
-          onRemoveItem={removeItem}
-          onShare={handleShare}
-          totalPrice={totalPrice}
-        />
-      ) : mode === 'desktop' ? (
-        <WishlistDesktopView
-          activeCategory={activeCategory}
-          amountNeededForFreeDelivery={amountNeededForFreeDelivery}
-          categoryCounts={categoryCounts}
-          deliveryProgress={deliveryProgress}
-          filteredItems={filteredItems}
-          isTransferringAll={isTransferringAll}
-          items={items}
-          moveAllToBag={moveAllToBag}
-          movedItemIds={movedItemIds}
-          moveToBag={moveToBag}
-          movingItemIds={movingItemIds}
-          onCategoryChange={setActiveCategory}
-          onClearWishlist={clearWishlist}
-          onRemoveItem={removeItem}
-          onShare={handleShare}
-          totalPrice={totalPrice}
-        />
-      ) : (
-        <>
-          {/* Mobile & Tablet (< lg) */}
-          <div className="block lg:hidden">
-            <WishlistMobileView
-              activeCategory={activeCategory}
-              amountNeededForFreeDelivery={amountNeededForFreeDelivery}
-              categoryCounts={categoryCounts}
-              deliveryProgress={deliveryProgress}
-              filteredItems={filteredItems}
-              isTransferringAll={isTransferringAll}
-              items={items}
-              moveAllToBag={moveAllToBag}
-              movedItemIds={movedItemIds}
-              moveToBag={moveToBag}
-              movingItemIds={movingItemIds}
-              onCategoryChange={setActiveCategory}
-              onClearWishlist={clearWishlist}
-              onRemoveItem={removeItem}
-              onShare={handleShare}
-              totalPrice={totalPrice}
-            />
-          </div>
-
-          {/* Desktop & Larger Screens (lg+) */}
-          <div className="hidden lg:block">
-            <WishlistDesktopView
-              activeCategory={activeCategory}
-              amountNeededForFreeDelivery={amountNeededForFreeDelivery}
-              categoryCounts={categoryCounts}
-              deliveryProgress={deliveryProgress}
-              filteredItems={filteredItems}
-              isTransferringAll={isTransferringAll}
-              items={items}
-              moveAllToBag={moveAllToBag}
-              movedItemIds={movedItemIds}
-              moveToBag={moveToBag}
-              movingItemIds={movingItemIds}
-              onCategoryChange={setActiveCategory}
-              onClearWishlist={clearWishlist}
-              onRemoveItem={removeItem}
-              onShare={handleShare}
-              totalPrice={totalPrice}
-            />
-          </div>
-        </>
-      )}
-
-      {/* Floating Animated Toast Notification */}
-      {toastMessage ? (
-        <aside
-          aria-live="polite"
-          className="fixed bottom-24 inset-x-4 sm:inset-x-auto sm:left-1/2 sm:-translate-x-1/2 z-50 pointer-events-none flex items-center justify-center"
-        >
-          <div className="px-4 py-2.5 rounded-full bg-inverse-surface text-inverse-on-surface font-label-md text-xs shadow-lg flex items-center gap-2 animate-in fade-in slide-in-from-bottom-2 duration-200">
-            <CheckCircleIcon className="text-secondary-container" size={16} />
-            <span>{toastMessage}</span>
-          </div>
-        </aside>
-      ) : null}
-    </div>
-  );
+  return <div className={cx('relative min-h-[60vh] w-full bg-surface', className)}>
+    {toastMessage ? <div aria-live="polite" className="mx-auto mt-4 max-w-7xl px-4 sm:px-6"><div className="rounded-xl border border-border bg-inverse-surface px-4 py-3 font-label-md text-xs text-inverse-on-surface shadow-lg">{toastMessage} {recentlyRemoved ? <button className="ml-2 min-h-11 font-semibold underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus" onClick={undoRemove} type="button">Undo</button> : null}</div></div> : null}
+    {syncMessage ? <div className="mx-auto mt-4 max-w-7xl px-4 sm:px-6"><div className="rounded-xl border border-border bg-surface-container-lowest p-4 font-body-md text-sm text-on-surface" role={sync === 'error' || sync === 'conflicted' ? 'alert' : 'status'}>
+      {syncMessage} {mergeConflict ? <Button className="ml-2" onClick={() => void reviewMergeConflict()} variant="outline">Review current wishlist</Button>
+        : sync === 'error' || sync === 'conflicted' ? <Button className="ml-2" onClick={retrySync} variant="outline">Retry</Button> : null}
+      {mergeReviewed ? <Button className="ml-2" onClick={() => void confirmMergeAfterReview()} variant="outline">Merge guest pieces after review</Button> : null}
+    </div></div> : null}
+    {mode === 'resolving' ? <div aria-label="Loading your wishlist" className="mx-auto max-w-7xl space-y-4 px-4 py-8 sm:px-6" role="status">
+      <div className="h-10 w-44 animate-pulse rounded-lg bg-surface-container-high motion-reduce:animate-none" />
+      {[0, 1, 2].map((index) => <div className="h-40 animate-pulse rounded-xl bg-surface-container-high motion-reduce:animate-none" key={index} />)}
+    </div> : mode === 'expired' ? <section className="mx-auto my-12 max-w-lg rounded-2xl border border-border bg-surface-container-lowest px-5 py-12 text-center" role="alert">
+      <h1 className="font-headline-lg text-2xl font-semibold text-primary">Your account Wishlist is private</h1>
+      <p className="mt-2 font-body-md text-on-surface-variant">Sign in again to see your saved pieces.</p>
+      <Link className="mt-5 inline-flex min-h-12 items-center rounded-xl bg-primary px-5 font-label-md font-semibold text-on-primary" href="/account" onClick={() => onNavigate?.()}>Sign in</Link>
+    </section> : <>
+      {loadError ? <div className="mx-auto mt-4 max-w-7xl px-4 sm:px-6"><div className="rounded-xl border border-warning/30 bg-warning-subtle p-4 font-body-md text-sm text-warning-foreground" role="alert">Current product details could not be loaded. <Button className="ml-2" onClick={() => setRetryKey((value) => value + 1)} variant="outline">Retry</Button></div></div> : null}
+      {loadingCatalog || (!catalog && !loadError) ? <div aria-label="Loading current product details" className="mx-auto max-w-7xl space-y-3 px-4 py-5 sm:px-6" role="status"><p className="font-body-md text-sm text-on-surface-variant">Loading current product details…</p>{[0, 1].map((index) => <div className="h-36 animate-pulse rounded-xl bg-surface-container-high motion-reduce:animate-none" key={index} />)}</div> : null}
+      {!loadingCatalog && !loadError && catalog && !(inDrawer && sharingOpen) ? <>
+        <div className={viewMode === 'mobile' ? '' : viewMode === 'desktop' ? 'hidden' : 'lg:hidden'}><WishlistMobileView {...viewProps} inDrawer={inDrawer} /></div>
+        <div className={viewMode === 'desktop' ? '' : viewMode === 'mobile' ? 'hidden' : 'hidden lg:block'}><WishlistDesktopView {...viewProps} /></div>
+      </> : null}
+      {sharingOpen && (mode === 'guest' || mode === 'account') ? <div ref={sharingRef}><WishlistSharingPanel
+        items={items.filter((item) => catalog?.has(item.id)).map((item) => ({ ...item, title: catalog?.get(item.id)?.title ?? item.title }))}
+        key={`${mode}:${ownerPartition ?? ownerGeneration}`} mode={mode} ownerPartition={ownerPartition}
+        nextCursor={nextCursor} loadingMore={loadingMore} onLoadMore={() => void loadMore()}
+        onBack={() => setSharingOpen(false)} />
+      </div> : null}
+    </>}
+  </div>;
 }

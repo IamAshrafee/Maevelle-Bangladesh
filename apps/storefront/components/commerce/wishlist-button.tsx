@@ -1,12 +1,14 @@
 'use client';
 
-import { cx } from '@/components/ui/classnames';
-import { HeartIcon } from '@/components/ui/icons';
+import React from 'react';
+import { cx } from '../ui/classnames';
+import { HeartIcon } from '../ui/icons';
 
 export type WishlistButtonProps = {
-  active?: boolean;
+  active?: boolean | null;
   className?: string;
   disabled?: boolean;
+  pending?: boolean;
   onToggle?: (nextActive: boolean) => void;
   productTitle?: string;
   size?: 'xs' | 'sm' | 'md' | 'lg';
@@ -17,12 +19,14 @@ export function WishlistButton({
   active = false,
   className,
   disabled = false,
+  pending = false,
   onToggle,
   productTitle = 'item',
   size = 'md',
   variant = 'surface',
 }: WishlistButtonProps) {
   const handleClick = (e: React.MouseEvent) => {
+    e.preventDefault();
     e.stopPropagation();
     if (!disabled && onToggle) {
       onToggle(!active);
@@ -30,9 +34,9 @@ export function WishlistButton({
   };
 
   const sizeClasses = {
-    xs: 'size-8',
-    sm: 'size-9',
-    md: 'size-10',
+    xs: 'size-11',
+    sm: 'size-11',
+    md: 'size-11',
     lg: 'size-12',
   }[size];
 
@@ -50,13 +54,12 @@ export function WishlistButton({
 
   return (
     <button
-      aria-label={
-        active ? `Remove ${productTitle} from wishlist` : `Add ${productTitle} to wishlist`
-      }
-      aria-pressed={active}
+      aria-label={`Save ${productTitle} to wishlist`}
+      aria-pressed={active === null ? undefined : active}
+      aria-busy={pending}
       className={cx(
         'inline-flex shrink-0 aspect-square touch-manipulation items-center justify-center rounded-full',
-        'transition-[background-color,color,transform] duration-150 ease-maevelle active:scale-90',
+        'transition-colors duration-150 ease-maevelle',
         'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus',
         'disabled:cursor-not-allowed disabled:opacity-50',
         sizeClasses,
@@ -69,7 +72,7 @@ export function WishlistButton({
     >
       <HeartIcon
         className={cx(active && 'scale-110')}
-        filled={active}
+        filled={active === true}
         size={size === 'xs' ? 16 : size === 'sm' ? 18 : size === 'lg' ? 22 : 20}
       />
     </button>

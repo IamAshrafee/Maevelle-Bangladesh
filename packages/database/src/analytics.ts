@@ -1,3 +1,4 @@
+import { processWishlistAnalyticsOutbox, cleanupWishlistAnalytics } from './analytics/wishlist/processing.js';
 import { sql, type Kysely } from 'kysely';
 
 import type { DatabaseSchema } from './index.js';
@@ -272,6 +273,8 @@ export async function processAnalyticsOutbox(db: Kysely<DatabaseSchema>, limit =
     );
     processed += organizationEvents.length;
   }
+  processed += await processWishlistAnalyticsOutbox(db);
+  await cleanupWishlistAnalytics(db);
   return processed;
 }
 
@@ -369,3 +372,9 @@ export async function verifyAnalyticsIntegrity(db: Kysely<DatabaseSchema>, organ
 export * from './analytics/behavioral.js';
 export * from './analytics/reporting.js';
 export * from './analytics/exports.js';
+
+export * from './analytics/wishlist/reporting.js';
+export * from './analytics/wishlist/processing.js';
+export * from './analytics/wishlist/operations.js';
+
+export * from './analytics/wishlist/observations.js';

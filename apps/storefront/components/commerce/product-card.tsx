@@ -4,14 +4,10 @@ import { useState } from 'react';
 import Link from 'next/link';
 
 import { cx } from '@/components/ui/classnames';
-import {
-  BellIcon,
-  BoltIcon,
-  ShoppingBagIcon,
-  StarIcon,
-} from '@/components/ui/icons';
+import { BellIcon, BoltIcon, ShoppingBagIcon, StarIcon } from '@/components/ui/icons';
 import { Money } from '@/components/commerce/price';
 import { WishlistButton } from '@/components/commerce/wishlist-button';
+import { useWishlist } from '@/features/wishlist/use-wishlist';
 
 export type ProductCardFinish = {
   color: string;
@@ -24,12 +20,7 @@ export type ProductCardRating = {
   score: number;
 };
 
-export type ProductCardBadgeType =
-  | 'primary'
-  | 'secondary'
-  | 'scarcity'
-  | 'neutral'
-  | 'sale';
+export type ProductCardBadgeType = 'primary' | 'secondary' | 'scarcity' | 'neutral' | 'sale';
 
 export interface ProductCardProps {
   /** Optional craft or specification label under image (e.g. "Adjustable Fit", "18k Gold Plated") */
@@ -75,7 +66,7 @@ export interface ProductCardProps {
   /** Crossed-out original price (MSRP) */
   originalPrice?: number | string | undefined;
   /** Current retail selling price */
-  price: number | string;
+  price: number | string | null;
   /** Star rating and count */
   rating?: ProductCardRating | undefined;
   /** Secondary image URL for desktop hover crossfade */
@@ -159,7 +150,10 @@ export function ProductCard({
   title,
   variant = 'auto',
 }: ProductCardProps) {
-  const [isWishlisted, setIsWishlisted] = useState(initialWishlist);
+  const { membership, toggleWishlist, pendingIds } = useWishlist();
+  const [callbackWishlist, setCallbackWishlist] = useState(initialWishlist);
+  const saved = onWishlistToggle ? callbackWishlist : membership(id);
+  const wishlistPending = !onWishlistToggle && pendingIds.includes(id);
   const [selectedFinishIdx, setSelectedFinishIdx] = useState(0);
 
   const activeDeliveryPill = deliveryPill || shippingTag;
@@ -169,8 +163,24 @@ export function ProductCard({
       : imageUrl;
 
   const handleWishlistToggle = (active: boolean) => {
-    setIsWishlisted(active);
-    onWishlistToggle?.(active);
+    if (onWishlistToggle) {
+      setCallbackWishlist(active);
+      onWishlistToggle(active);
+      return;
+    }
+    if (!href?.startsWith('/products/')) return;
+    toggleWishlist({
+      id,
+      handle: href.slice('/products/'.length),
+      title,
+      subtitle: subtitle ?? '',
+      category: 'all',
+      categoryLabel: 'Saved product',
+      price: Number(price) || 0,
+      imageUrl,
+      alt: imageAlt ?? title,
+      inStock: !isSoldOut,
+    });
   };
 
   const handleCardClick = () => {
@@ -192,6 +202,13 @@ export function ProductCard({
     >
       {/* 3:4 Aspect Ratio Hero Container */}
       <div className="relative w-full aspect-[3/4] rounded-xl overflow-hidden bg-surface-container-low shadow-[0_4px_16px_rgba(26,22,23,0.04)]">
+        {href ? (
+          <Link
+            aria-label={`View ${title}`}
+            className="absolute inset-0 z-[1] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
+            href={href}
+          />
+        ) : null}
         {/* Primary Product Artwork */}
         {currentImage ? (
           <img
@@ -199,14 +216,16 @@ export function ProductCard({
             className={cx(
               'size-full object-cover transition-transform duration-500 ease-out group-hover:scale-105',
               isSoldOut && 'filter grayscale-[30%]',
-              secondaryImageUrl && !isSoldOut && 'group-hover:opacity-0 transition-opacity duration-300',
+              secondaryImageUrl &&
+                !isSoldOut &&
+                'group-hover:opacity-0 transition-opacity duration-300',
             )}
             loading="lazy"
             src={currentImage}
           />
         ) : (
           <div className="flex size-full items-center justify-center bg-surface-container text-on-surface-variant font-label-sm text-xs">
-            3:4 Artwork
+            Image unavailable
           </div>
         )}
 
@@ -234,16 +253,20 @@ export function ProductCard({
         ) : null}
 
         {/* Top-Right Frosted Wishlist Toggle */}
-        {showWishlist ? <div className="absolute top-2.5 right-2.5 z-10">
-          <WishlistButton
-            active={isWishlisted}
-            className="shadow-sm active:scale-90"
-            onToggle={handleWishlistToggle}
-            productTitle={title}
-            size="xs"
-            variant="floating"
-          />
-        </div> : null}
+        {showWishlist && (onWishlistToggle || href?.startsWith('/products/')) ? (
+          <div className="absolute top-2.5 right-2.5 z-10">
+            <WishlistButton
+              active={saved}
+              className="shadow-sm active:scale-90"
+              disabled={saved === null || wishlistPending}
+              pending={wishlistPending}
+              onToggle={handleWishlistToggle}
+              productTitle={title}
+              size="md"
+              variant="floating"
+            />
+          </div>
+        ) : null}
 
         {/* Floating Bottom Reassurance / Rating Pill */}
         {!isSoldOut && activeDeliveryPill ? (
@@ -278,17 +301,19 @@ export function ProductCard({
             <span className="font-label-sm text-[11px] font-bold uppercase tracking-wider text-surface-container-lowest bg-on-surface/80 px-2.5 py-1 rounded shadow-xs">
               {soldOutLabel}
             </span>
-            <button
-              className="mt-2 text-[11px] font-label-sm font-semibold text-on-primary bg-primary/95 px-3 py-1.5 rounded-lg active:scale-95 hover:bg-primary transition-[background-color,transform] duration-150 flex items-center gap-1.5 shadow-sm"
-              onClick={(e) => {
-                e.stopPropagation();
-                onNotifyMe?.();
-              }}
-              type="button"
-            >
-              <BellIcon size={14} />
-              <span>{notifyMeLabel}</span>
-            </button>
+            {onNotifyMe ? (
+              <button
+                className="mt-2 text-[11px] font-label-sm font-semibold text-on-primary bg-primary/95 px-3 py-1.5 rounded-lg active:scale-95 hover:bg-primary transition-[background-color,transform] duration-150 flex items-center gap-1.5 shadow-sm"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onNotifyMe?.();
+                }}
+                type="button"
+              >
+                <BellIcon size={14} />
+                <span>{notifyMeLabel}</span>
+              </button>
+            ) : null}
           </div>
         ) : null}
 
@@ -361,9 +386,9 @@ export function ProductCard({
                   attributeTag.toLowerCase().includes('silk')
                   ? 'text-tertiary font-semibold'
                   : attributeTag.toLowerCase().includes('soon') ||
-                    attributeTag.toLowerCase().includes('restock')
-                  ? 'text-outline'
-                  : 'text-on-surface-variant',
+                      attributeTag.toLowerCase().includes('restock')
+                    ? 'text-outline'
+                    : 'text-on-surface-variant',
               )}
             >
               {attributeTag}
@@ -395,7 +420,16 @@ export function ProductCard({
             isSoldOut ? 'text-on-surface-variant' : 'text-on-surface',
           )}
         >
-          {title}
+          {href ? (
+            <Link
+              className="focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
+              href={href}
+            >
+              {title}
+            </Link>
+          ) : (
+            title
+          )}
         </h3>
 
         {/* Row 3: Editorial Subtitle (Visible on desktop or when expanded) */}
@@ -418,7 +452,7 @@ export function ProductCard({
               isSoldOut ? 'text-on-surface-variant' : 'text-on-surface',
             )}
           >
-            <Money amount={price} />
+            {price === null ? 'Price unavailable' : <Money amount={price} />}
           </span>
 
           {originalPrice ? (
@@ -445,14 +479,6 @@ export function ProductCard({
       </div>
     </article>
   );
-
-  if (href) {
-    return (
-      <Link className="contents focus:outline-none" href={href}>
-        {content}
-      </Link>
-    );
-  }
 
   return content;
 }

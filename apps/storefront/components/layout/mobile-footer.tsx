@@ -33,9 +33,8 @@ export function MobileFooter({
       aria-label="Mobile and tablet site footer"
       className={cx(
         'border-t border-border/30 bg-surface text-on-surface select-none transition-colors duration-150',
-        // Phone: 112px bottom padding clears fixed BottomNav (h-16 + safe area).
-        // Tablet: 40px bottom padding as BottomNav is hidden (sm:hidden).
-        'px-4 pt-6 pb-28 sm:px-6 sm:pt-8 sm:pb-10',
+        // Phone and tablet padding clears the fixed BottomNav and safe area.
+        'px-4 pt-6 pb-28 sm:px-6 sm:pt-8 sm:pb-28',
         responsive && 'lg:hidden',
         className,
       )}

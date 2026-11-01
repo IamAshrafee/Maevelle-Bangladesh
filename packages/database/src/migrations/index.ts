@@ -1,3 +1,4 @@
+import * as wishlistAnalytics from './3212_wishlist_analytics.js';
 import type { Migration, MigrationProvider } from 'kysely/migration';
 
 import * as baseline from './0000_extensions_and_database_baseline.js';
@@ -56,6 +57,10 @@ import * as mediaPurgeReferenceIndexes from './3204_media_purge_reference_indexe
 import * as externalMediaImports from './3205_external_media_imports.js';
 import * as mediaRenditionRepair from './3206_media_rendition_repair.js';
 import * as productRecommendations from './3207_product_recommendations.js';
+import * as wishlistSharing from './3208_wishlist_sharing.js';
+import * as accountWishlist from './3209_account_wishlist.js';
+import * as wishlistShareLifecycle from './3210_wishlist_share_lifecycle.js';
+import * as wishlistShareReceiptTombstones from './3211_wishlist_share_receipt_tombstones.js';
 
 /**
  * The migration list is deliberately explicit. Migration files are reviewed
@@ -118,6 +123,11 @@ export const migrations = {
   '3205_external_media_imports': externalMediaImports,
   '3206_media_rendition_repair': mediaRenditionRepair,
   '3207_product_recommendations': productRecommendations,
+  '3208_wishlist_sharing': wishlistSharing,
+  '3209_account_wishlist': accountWishlist,
+  '3210_wishlist_share_lifecycle': wishlistShareLifecycle,
+  '3211_wishlist_share_receipt_tombstones': wishlistShareReceiptTombstones,
+  '3212_wishlist_analytics': wishlistAnalytics,
 } satisfies Record<string, Migration>;
 
 export const migrationProvider: MigrationProvider = {

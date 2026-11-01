@@ -1,8 +1,11 @@
+import { wishlistObservationNames } from '@maevelle/contracts';
+import { validateWishlistObservation } from './wishlist/observations.js';
 import { sql, type Kysely } from 'kysely';
 
 import type { DatabaseSchema } from '../index.js';
 
 export const storefrontEventNames = [
+  ...wishlistObservationNames,
   'PRODUCT_VIEWED',
   'PRODUCT_LIST_VIEWED',
   'PRODUCT_SELECTED',
@@ -133,6 +136,7 @@ export async function ingestStorefrontEvent(
   organizationId: string,
   input: StorefrontEventInput,
 ): Promise<StorefrontEventReceipt> {
+  if (wishlistObservationNames.includes(input.name as never)) validateWishlistObservation(input);
   if (input.origin === 'BROWSER' && input.consent.analytics !== 'GRANTED') {
     if (input.sessionId)
       await sql`update analytics.storefront_sessions set analytics_consent=${input.consent.analytics},marketing_consent=${input.consent.marketing},updated_at=now() where organization_id=${organizationId} and session_id=${input.sessionId}::uuid`.execute(

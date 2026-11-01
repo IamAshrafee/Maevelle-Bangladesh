@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 
 import { ProductCard } from '@/features/catalog/components/product-card';
+import { WishlistMembershipHydrator } from '@/features/wishlist/wishlist-membership-hydrator';
 import {
   catalogHref,
   parseCatalogSearchParams,
@@ -59,6 +60,7 @@ async function CatalogResults({
   if (featured)
     return (
       <div className="product-grid">
+        <WishlistMembershipHydrator productIds={items.map((item) => item.id)} />
         {items.map((item) => (
           <ProductCard item={item} key={item.id} />
         ))}
@@ -166,6 +168,7 @@ async function CatalogResults({
 
       {items.length ? (
         <div className="product-grid">
+          <WishlistMembershipHydrator productIds={items.map((item) => item.id)} />
           {items.map((item) => (
             <ProductCard item={item} key={item.id} />
           ))}

@@ -1,181 +1,54 @@
 'use client';
 
 import Link from 'next/link';
-
-import { cx } from '@/components/ui/classnames';
-import { CheckIcon, ShoppingBagIcon, TrashIcon } from '@/components/ui/icons';
-import { Spinner } from '@/components/ui/spinner';
 import { Money } from '@/components/commerce/price';
-import type { WishlistItem } from '@/features/wishlist/types';
+import { IconButton } from '@/components/ui/icon-button';
+import { TrashIcon } from '@/components/ui/icons';
+import { publicMediaPath } from '@/lib/media/url';
+import type { WishlistDisplayItem } from './wishlist-view-model';
 
 export interface WishlistItemCardProps {
-  className?: string | undefined;
-  isMoved?: boolean | undefined;
-  isMoving?: boolean | undefined;
-  item: WishlistItem;
-  onMoveToBag: (item: WishlistItem) => void;
-  onRemove: (id: string) => void;
-  variant?: 'mobile' | 'desktop' | undefined;
+  item: WishlistDisplayItem;
+  onRemove: (item: WishlistDisplayItem) => void;
+  pending: boolean;
+  variant?: 'mobile' | 'desktop';
+  onNavigate?: (() => void) | undefined;
 }
 
-export function WishlistItemCard({
-  className,
-  isMoved = false,
-  isMoving = false,
-  item,
-  onMoveToBag,
-  onRemove,
-  variant = 'mobile',
-}: WishlistItemCardProps) {
-  const isDesktop = variant === 'desktop';
-
-  const badgeElement = item.badge ? (
-    <span
-      className={cx(
-        'inline-flex items-center gap-1 px-1.5 py-0.5 rounded font-label-sm text-[10px] font-semibold',
-        item.badgeType === 'scarcity'
-          ? 'bg-error-container text-on-error-container'
-          : item.badgeType === 'primary-fixed'
-            ? 'bg-primary-fixed text-on-primary-fixed'
-            : item.badgeType === 'secondary-fixed'
-              ? 'bg-secondary-fixed text-on-secondary-fixed-variant'
-              : item.badgeType === 'primary-fixed-dim'
-                ? 'bg-primary-fixed-dim text-on-primary-fixed-variant'
-                : 'bg-surface-container-high text-on-surface-variant',
-      )}
-    >
-      {item.badgeType === 'scarcity' ? (
-        <span className="size-1.5 rounded-full bg-error animate-pulse" />
-      ) : null}
-      {item.badge}
-    </span>
-  ) : null;
-
-  return (
-    <article
-      aria-label={item.title}
-      className={cx(
-        'wishlist-item group w-full bg-surface-container-lowest rounded-xl p-space-sm',
-        'shadow-[0_2px_12px_rgba(158,42,75,0.04)] border border-border/30',
-        'flex gap-space-md relative overflow-hidden transition-[transform,opacity,box-shadow] duration-200 hover:shadow-md',
-        isDesktop ? 'items-center sm:p-4' : 'items-stretch',
-        className,
-      )}
-      data-category={item.category}
-      data-price={item.price}
-    >
-      {/* 3:4 Artwork Thumbnail */}
-      <Link
-        aria-label={item.title}
-        className={cx(
-          'relative flex-shrink-0 rounded-lg overflow-hidden bg-surface-container-high block',
-          isDesktop ? 'w-28 h-36 sm:w-32 sm:h-40' : 'w-28 h-36',
-        )}
-        href={`/products/${item.handle}`}
-      >
-        <img
-          alt={item.alt}
-          className="size-full object-cover object-center transition-transform duration-500 ease-out group-hover:scale-105"
-          loading="lazy"
-          src={item.imageUrl}
-        />
-        <span className="absolute top-1.5 left-1.5 px-1.5 py-0.5 rounded bg-surface-container-lowest/90 backdrop-blur-sm text-primary font-label-sm text-[9px] uppercase tracking-wider font-bold shadow-2xs">
-          {item.categoryLabel}
-        </span>
-      </Link>
-
-      {/* Details & Actions Content */}
-      <div className="flex-1 flex flex-col justify-between py-0.5 min-w-0">
-        <div>
-          {/* Top Status & Remove Action Row */}
-          <div className="flex items-center justify-between gap-1 mb-1">
-            {badgeElement || <div />}
-            <button
-              aria-label={`Remove ${item.title} from wishlist`}
-              className="remove-btn size-10 -mr-2 -mt-2 flex items-center justify-center text-on-surface-variant/70 hover:text-error transition-colors rounded-full active:scale-90"
-              onClick={() => onRemove(item.id)}
-              type="button"
-            >
-              <TrashIcon size={18} />
-            </button>
-          </div>
-
-          {/* Product Title */}
-          <h2 className="font-headline-sm text-headline-sm text-on-surface truncate font-semibold leading-snug">
-            <Link
-              className="hover:text-primary transition-colors focus:outline-none focus:underline"
-              href={`/products/${item.handle}`}
-            >
-              {item.title}
-            </Link>
-          </h2>
-
-          {/* Subtitle / Atelier Specs */}
-          <p className="font-body-sm text-body-sm text-on-surface-variant mt-0.5 truncate">
-            {item.subtitle}
-          </p>
+export function WishlistItemCard({ item, onRemove, pending, variant = 'mobile', onNavigate }: WishlistItemCardProps) {
+  const { entry, product } = item;
+  const title = product?.title ?? 'Product unavailable';
+  const image = product?.imageUrl ?? (product?.primaryMediaAssetId ? publicMediaPath(product.primaryMediaAssetId, 'card') : null);
+  const productHref = product?.handle ? `/products/${product.handle}` : null;
+  const artwork = image ? <img alt={title} className="size-full object-cover transition-transform duration-200 motion-reduce:transition-none group-hover:scale-105" loading="lazy" src={image} />
+    : <span className="flex size-full items-center justify-center px-2 text-center font-label-sm text-xs text-on-surface-variant">Image unavailable</span>;
+  return <article aria-label={title} className={`group flex min-w-0 gap-3 rounded-xl border border-border/40 bg-surface-container-lowest p-2 shadow-xs transition-[box-shadow,border-color] duration-150 hover:border-border hover:shadow-sm ${variant === 'desktop' ? 'sm:gap-4 sm:p-4' : ''}`}>
+    <div className={`relative shrink-0 overflow-hidden rounded-lg bg-surface-container-high ${variant === 'desktop' ? 'h-36 w-28 sm:h-40 sm:w-32' : 'h-32 w-24 sm:h-36 sm:w-28'}`}>
+      {productHref ? <Link aria-label={`View ${title}`} className="block size-full focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus" href={productHref} onClick={() => onNavigate?.()}>{artwork}</Link>
+        : artwork}
+      {product?.categoryName ? <span className="absolute bottom-1 left-1 right-1 truncate rounded bg-surface-container-lowest/90 px-1.5 py-0.5 text-center font-label-sm text-[10px] text-primary">{product.categoryName}</span> : null}
+    </div>
+    <div className="flex min-w-0 flex-1 flex-col justify-between gap-2 py-0.5">
+      <div>
+        <div className="flex items-start justify-between gap-1">
+          <span className={`rounded-full px-2 py-0.5 font-label-sm text-[10px] font-semibold ${!product ? 'bg-surface-container-high text-on-surface-variant' : product.available ? 'bg-success-subtle text-success-foreground' : 'bg-warning-subtle text-warning-foreground'}`}>
+            {!product ? 'Unavailable' : product.available ? 'Available' : 'Out of stock'}
+          </span>
+          <IconButton aria-label={`Remove ${title} from Wishlist`} className="-mr-1 -mt-1" disabled={pending} onClick={() => onRemove(item)} size="sm" variant="ghost"><TrashIcon size={18} /></IconButton>
         </div>
-
-        {/* Pricing & Add to Bag Row */}
-        <div className="mt-2.5 pt-1 border-t border-border/20 flex flex-wrap items-center justify-between gap-2">
-          {/* Price Block */}
-          <div className="flex flex-col">
-            <div className="flex items-baseline gap-1.5">
-              <span className="font-price-md text-price-md text-primary font-bold tabular-nums font-mono">
-                <Money amount={item.price} />
-              </span>
-              {item.originalPrice ? (
-                <span className="font-body-sm text-body-sm text-on-surface-variant/70 line-through tabular-nums font-mono">
-                  <Money amount={item.originalPrice} />
-                </span>
-              ) : null}
-            </div>
-
-            {item.discountTag ? (
-              <span className="font-label-sm text-[10px] text-secondary font-semibold">
-                {item.discountTag}
-              </span>
-            ) : item.deliveryTag ? (
-              <span className="font-label-sm text-[10px] text-tertiary font-medium">
-                {item.deliveryTag}
-              </span>
-            ) : null}
-          </div>
-
-          {/* Move to Bag Button */}
-          <button
-            aria-label={`Move ${item.title} to bag`}
-            className={cx(
-              'add-to-bag-btn h-9 px-3.5 rounded-full border border-primary/20',
-              'font-label-sm text-label-sm font-semibold inline-flex items-center gap-1.5 shadow-sm active:scale-95 cursor-pointer',
-              'transition-[background-color,color,border-color,transform] duration-150',
-              isMoved
-                ? 'bg-surface-container-high text-primary border-primary/30'
-                : 'bg-surface-container-low hover:bg-primary hover:text-on-primary text-primary',
-            )}
-            disabled={isMoving || isMoved}
-            onClick={() => onMoveToBag(item)}
-            type="button"
-          >
-            {isMoving ? (
-              <>
-                <Spinner size="xs" />
-                <span>Adding…</span>
-              </>
-            ) : isMoved ? (
-              <>
-                <CheckIcon size={16} />
-                <span>Added</span>
-              </>
-            ) : (
-              <>
-                <ShoppingBagIcon size={16} />
-                <span>Move to Bag</span>
-              </>
-            )}
-          </button>
-        </div>
+        <h2 className="mt-1 font-headline-sm text-headline-sm font-semibold leading-snug text-on-surface [overflow-wrap:anywhere]">
+          {productHref ? <Link className="focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus hover:text-primary" href={productHref} onClick={() => onNavigate?.()}>{title}</Link> : title}
+        </h2>
+        {product?.description ? <p className="mt-1 line-clamp-2 font-body-sm text-body-sm text-on-surface-variant">{product.description}</p> : null}
+        {!product ? <p className="mt-1 font-body-sm text-body-sm text-on-surface-variant">This product is no longer public.</p> : null}
       </div>
-    </article>
-  );
+      <div className="flex flex-wrap items-end justify-between gap-2 border-t border-border/30 pt-2">
+        <div>
+          <p className="font-mono text-price-md font-bold tabular-nums text-primary">{product?.price ? <Money amount={product.price} /> : 'Price unavailable'}</p>
+          {entry.preferredVariantId ? <p className="mt-0.5 font-body-sm text-[11px] text-on-surface-variant">{entry.preferredVariantAvailable === false ? 'Saved option unavailable; review on product page' : 'Preferred option saved'}</p> : null}
+        </div>
+        {productHref ? <Link className="inline-flex min-h-11 items-center rounded-lg border border-primary/30 bg-surface-container-low px-3 font-label-sm text-xs font-semibold text-primary transition-colors duration-150 hover:bg-primary hover:text-on-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus" href={productHref} onClick={() => onNavigate?.()}>View piece</Link> : null}
+      </div>
+    </div>
+  </article>;
 }

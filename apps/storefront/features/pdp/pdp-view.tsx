@@ -32,8 +32,9 @@ export interface PdpViewProps {
   readonly initialReviews?: readonly PublicReviewDto[] | undefined;
   readonly initialSummary?: ProductRatingSummaryDto | undefined;
   readonly breadcrumbs?: readonly BreadcrumbItemDef[] | undefined;
-  readonly wishlisted?: boolean;
-  readonly onWishlistToggle?: () => void;
+  readonly wishlisted?: boolean | null;
+  readonly wishlistPending?: boolean;
+  readonly onWishlistToggle?: (preferredVariantId: string | null) => void;
   readonly onAddToCart: (variantId: string, quantity: number) => Promise<void>;
   readonly busy: boolean;
   readonly cartMessage: string;
@@ -48,6 +49,7 @@ export function PdpView({
   initialSummary,
   breadcrumbs,
   wishlisted = false,
+  wishlistPending = false,
   onWishlistToggle,
   onAddToCart,
   busy,
@@ -319,7 +321,8 @@ export function PdpView({
           activeIndex={activeMedia}
           onSelect={handleMediaSelect}
           wishlisted={wishlisted}
-          {...(onWishlistToggle ? { onWishlistToggle } : {})}
+          wishlistPending={wishlistPending}
+          {...(onWishlistToggle ? { onWishlistToggle: () => onWishlistToggle(product.options.length ? selectedVariant?.id ?? null : null) } : {})}
         />
 
         {/* Commercial header */}
@@ -505,7 +508,8 @@ export function PdpView({
                   activeIndex={activeMedia}
                   onSelect={handleMediaSelect}
                   wishlisted={wishlisted}
-                  {...(onWishlistToggle ? { onWishlistToggle } : {})}
+                  wishlistPending={wishlistPending}
+                  {...(onWishlistToggle ? { onWishlistToggle: () => onWishlistToggle(product.options.length ? selectedVariant?.id ?? null : null) } : {})}
                 />
               </div>
 

@@ -7,6 +7,7 @@ export class StorefrontClientApiError extends Error {
     public readonly status: number,
     public readonly code: string,
     message: string,
+    public readonly retryAfterSeconds: number | null = null,
   ) {
     super(message);
     this.name = 'StorefrontClientApiError';
@@ -31,7 +32,12 @@ export async function requestStorefrontClient<T>(path: string, init?: RequestIni
       typeof error === 'object' && error?.message
         ? error.message
         : 'The request could not be completed.';
-    throw new StorefrontClientApiError(response.status, code, message);
+    const retryAfter = response.headers.get('retry-after');
+    const retryAfterSeconds = retryAfter
+      ? /^\d+$/.test(retryAfter) ? Number(retryAfter) : Math.max(0, Math.ceil((Date.parse(retryAfter) - Date.now()) / 1000))
+      : null;
+    throw new StorefrontClientApiError(response.status, code, message,
+      retryAfterSeconds !== null && Number.isFinite(retryAfterSeconds) ? retryAfterSeconds : null);
   }
   if (!body || !('data' in body))
     throw new StorefrontClientApiError(

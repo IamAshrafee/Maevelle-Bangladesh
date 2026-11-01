@@ -1,7 +1,8 @@
 'use client';
 
 import { useRef, useState } from 'react';
-import { CloseIcon, HeartIcon, ZoomInIcon } from '@/components/ui/icons';
+import { CloseIcon, ZoomInIcon } from '@/components/ui/icons';
+import { WishlistButton } from '@/components/commerce/wishlist-button';
 import { publicMediaPath } from '@/lib/media/url';
 
 interface MediaAsset {
@@ -17,7 +18,8 @@ export interface PdpGalleryProps {
   readonly productTitle: string;
   readonly activeIndex: number;
   readonly onSelect: (index: number) => void;
-  readonly wishlisted?: boolean;
+  readonly wishlisted?: boolean | null;
+  readonly wishlistPending?: boolean;
   readonly onWishlistToggle?: () => void;
 }
 
@@ -27,6 +29,7 @@ export function PdpGallery({
   activeIndex,
   onSelect,
   wishlisted = false,
+  wishlistPending = false,
   onWishlistToggle,
 }: PdpGalleryProps) {
   const lightboxRef = useRef<HTMLDialogElement>(null);
@@ -138,14 +141,9 @@ export function PdpGallery({
         {/* Floating pills – wishlist + zoom */}
         <div className="absolute top-4 right-4 flex flex-col gap-2 z-10">
           {onWishlistToggle ? (
-            <button
-              type="button"
-              aria-label={wishlisted ? 'Remove from wishlist' : 'Save to wishlist'}
-              onClick={onWishlistToggle}
-              className="w-10 h-10 rounded-full bg-surface-bright/90 backdrop-blur-md shadow-sm flex items-center justify-center text-on-surface hover:text-primary active:scale-90 transition-transform duration-150 border-0 cursor-pointer"
-            >
-              <HeartIcon size={20} filled={wishlisted} className={wishlisted ? 'text-primary' : ''} />
-            </button>
+            <WishlistButton active={wishlisted} disabled={wishlisted === null || wishlistPending}
+              pending={wishlistPending} onToggle={onWishlistToggle} productTitle={productTitle}
+              size="md" variant="floating" />
           ) : null}
           <button
             type="button"

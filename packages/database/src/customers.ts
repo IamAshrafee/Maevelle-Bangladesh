@@ -1803,6 +1803,16 @@ export async function mergeCustomers(
     );
 
     // Transfer or reconcile customer account links
+    const accountToDeleteCustomerId = sourceAccount?.status === 'ACTIVE' && targetAccount?.status !== 'ACTIVE'
+      ? input.targetCustomerId : input.sourceCustomerId;
+    const ownedShares = await sql<{ count: number }>`
+      select count(*)::int as count from wishlist.shares
+      where organization_id=${input.organizationId} and owner_account_id in (
+        select id from customers.customer_accounts where organization_id=${input.organizationId}
+          and customer_id=${accountToDeleteCustomerId}::uuid)
+    `.execute(transaction);
+    if (ownedShares.rows[0]!.count > 0)
+      throw new CustomerDomainError('CONFLICT', 'Resolve account-owned Wishlist shares before merging these customers.');
     if (sourceAccount?.status === 'ACTIVE') {
       if (targetAccount?.status === 'ACTIVE') {
         // Both link to the same user: delete the redundant source account row
@@ -2100,6 +2110,22 @@ export async function anonymizeCustomer(
         'CONFLICT',
         'Customer data cannot be anonymized while orders, returns, or refunds remain active.',
       );
+
+    // Private Wishlist references are personal data. Guest shares have no
+    // account owner and must not be affected by this CRM privacy operation.
+    await sql`
+      delete from wishlist.shares where organization_id=${input.organizationId}
+        and owner_account_id in (select id from customers.customer_accounts
+          where organization_id=${input.organizationId} and customer_id=${input.customerId}::uuid)
+    `.execute(transaction);
+    await sql`
+      delete from wishlist.account_lists
+      where organization_id=${input.organizationId}
+        and owner_account_id in (
+          select id from customers.customer_accounts
+          where organization_id=${input.organizationId} and customer_id=${input.customerId}::uuid
+        )
+    `.execute(transaction);
 
     await sql`delete from customers.customer_phones where organization_id = ${input.organizationId} and customer_id = ${input.customerId}`.execute(
       transaction,

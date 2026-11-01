@@ -3,6 +3,7 @@ import type { CustomerLifecycleStageDto } from './crm.js';
 
 export * from './messaging/index.js';
 export * from './pricing.js';
+export * from './wishlist.js';
 export interface ApiEnvelope<T> {
   readonly data: T;
 }
@@ -6228,3 +6229,4 @@ export type {
   ReplenishmentRecommendationListDto,
 } from './inventory/replenishment.js';
 export * from './crm.js';
+export * from './wishlist-analytics.js';
