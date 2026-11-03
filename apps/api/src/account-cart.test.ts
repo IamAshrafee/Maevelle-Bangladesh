@@ -17,6 +17,7 @@ import { runMigrations } from '@maevelle/database/migrate';
 import { createPriceDefinition, setCurrentVariantPrice } from '@maevelle/database/pricing';
 import { createCouponCode, createPromotion } from '@maevelle/database/promotions';
 import { cartFixture, isolatedCartDatabase } from '@maevelle/database/testing/cart';
+import { registerAccountWishlistRoutes } from './routes/account-wishlist.js';
 import { registerCartRoutes } from './routes/cart.js';
 import { registerShopperAuthRoutes } from './routes/shopper-auth.js';
 
@@ -27,6 +28,7 @@ let isolation: Awaited<ReturnType<typeof isolatedCartDatabase>>;
 let fixture: Awaited<ReturnType<typeof cartFixture>>;
 let app: FastifyInstance;
 let a: string, b: string;
+let testClient = 0;
 let firstShopperEmail: string;
 const password = 'synthetic-account-cart-password';
 let variant2: string;
@@ -44,6 +46,7 @@ function inject(
   return app.inject({
     method,
     url,
+    remoteAddress: `192.0.2.${testClient}`,
     headers: {
       cookie,
       origin: requestOrigin,
@@ -98,6 +101,7 @@ beforeAll(async () => {
     mailbox.push(m.text);
   });
   registerCartRoutes(app, isolation.database, config, resolver);
+  registerAccountWishlistRoutes(app, isolation.database, resolver);
   await app.ready();
   const { organizationId, actorId } = fixture;
   const product = await sql<{ id: string }>`
@@ -147,6 +151,7 @@ beforeAll(async () => {
 }, 30_000);
 
 beforeEach(async () => {
+  testClient++;
   const first = await shopper();
   firstShopperEmail = first.email;
   a = first.cookie;
@@ -750,4 +755,100 @@ it('fences CRM account replacement while allowing the original shopper to regain
   const restored = await current(a);
   expect(restored.id).toBe(cart.id);
   expect(restored.lines).toEqual(cart.lines);
+});
+
+async function savedTransfer() {
+  const cart = await establish(a);
+  const save = await inject('PUT', '/storefront/v1/wishlist/items/' + fixture.productId, a, {
+    preferredVariantId: fixture.variantId,
+  });
+  expect(save.statusCode, save.body).toBe(200);
+  return {
+    action: 'MOVE',
+    productId: fixture.productId,
+    variantId: fixture.variantId,
+    quantity: '1',
+    wishlistVersion: save.json().data.version as number,
+    ownerContext: cart.ownerContext,
+    version: cart.version,
+  };
+}
+
+const transferUrl = accountBase + '/current/wishlist-transfers';
+
+it('adds without removing, then moves once under competing requests and replays after removal', async () => {
+  const intent = await savedTransfer();
+  const key = crypto.randomUUID();
+  const added = await inject('POST', transferUrl, a, { ...intent, action: 'ADD' }, key);
+  expect(added.statusCode, added.body).toBe(200);
+  expect(added.json().data.outcome.changes[0].quantity).toBe('1');
+  const move = { ...intent, version: added.json().data.version };
+  const conflict = await inject('POST', transferUrl, a, move, key);
+  expect(conflict.json().error.code).toBe('IDEMPOTENCY_CONFLICT');
+  const moveKey = crypto.randomUUID();
+  const [first, duplicate] = await Promise.all([
+    inject('POST', transferUrl, a, move, moveKey),
+    inject('POST', transferUrl, a, move, moveKey),
+  ]);
+  expect(first.statusCode, first.body).toBe(200);
+  expect(duplicate.statusCode, duplicate.body).toBe(200);
+  const outcomes = [first, duplicate].map((response) => response.json().data.outcome);
+  expect(outcomes.map((outcome) => outcome.replayed).sort()).toEqual([false, true]);
+  expect(outcomes[0].receiptId).toBe(outcomes[1].receiptId);
+  expect((await current(a)).lines[0]?.quantity).toBe('2.000000');
+
+  const competing = await inject('POST', transferUrl, a, move);
+  expect(competing.json().error.code).toBe('STALE_VERSION');
+  const latest = await current(a);
+  const removed = await inject('POST', transferUrl, a, {
+    ...move,
+    version: latest.version,
+    wishlistVersion: move.wishlistVersion + 1,
+  });
+  expect(removed.statusCode, removed.body).toBe(404);
+});
+
+it('fences account changes, stale Wishlist revisions and rejected commerce', async () => {
+  const intent = await savedTransfer();
+  const other = await establish(b);
+  expect((await inject('POST', transferUrl, b, intent)).json().error.code).toBe('OWNER_CHANGED');
+  const foreign = await inject('POST', transferUrl, b, {
+    ...intent,
+    ownerContext: other.ownerContext,
+    version: other.version,
+  });
+  expect(foreign.statusCode, foreign.body).toBe(404);
+  const stale = await inject('POST', transferUrl, a, {
+    ...intent,
+    wishlistVersion: intent.wishlistVersion + 1,
+  });
+  expect(stale.json().error.code).toBe('WISHLIST_CHANGED');
+  const unavailable = await inject('POST', transferUrl, a, { ...intent, quantity: '99' });
+  expect(unavailable.json().error.code).toBe('UNAVAILABLE');
+  expect((await current(a)).lines).toEqual([]);
+  const moved = await inject('POST', transferUrl, a, intent);
+  expect(moved.statusCode, moved.body).toBe(200);
+});
+
+it('rolls back Wishlist deletion and Cart state when the outbox write fails', async () => {
+  const intent = await savedTransfer();
+  const cart = await current(a);
+  const key = crypto.randomUUID();
+  const db = isolation.database.db;
+  await sql`alter table platform.outbox_events add constraint test_block_cart_transfer
+    check (aggregate_id <> ${sql.lit(cart.id)}::uuid) not valid`.execute(db);
+  try {
+    const blocked = await inject('POST', transferUrl, a, intent, key);
+    expect(blocked.statusCode, blocked.body).toBe(503);
+    expect((await current(a)).lines).toEqual([]);
+    expect((await current(a)).version).toBe(intent.version);
+  } finally {
+    await sql`alter table platform.outbox_events drop constraint test_block_cart_transfer`.execute(
+      db,
+    );
+  }
+  // Same Wishlist version and exact key prove both the source deletion and receipt claim rolled back.
+  const retried = await inject('POST', transferUrl, a, intent, key);
+  expect(retried.statusCode, retried.body).toBe(200);
+  expect(retried.json().data.outcome.replayed).toBe(false);
 });

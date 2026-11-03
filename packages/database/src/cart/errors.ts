@@ -7,6 +7,7 @@ export class CartDomainError extends Error {
       | 'CONFLICT'
       | 'VALIDATION_FAILED'
       | 'STALE_VERSION'
+      | 'WISHLIST_CHANGED'
       | 'UNAVAILABLE'
       | 'UNPRICED'
       | 'OWNER_CHANGED'

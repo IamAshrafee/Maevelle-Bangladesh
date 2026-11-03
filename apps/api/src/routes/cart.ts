@@ -1,6 +1,9 @@
 import type { FastifyInstance } from 'fastify';
 import { Type } from 'typebox';
-import type { ReplaceGuestCartLineVariantRequestDto } from '@maevelle/contracts';
+import type {
+  ReplaceGuestCartLineVariantRequestDto,
+  WishlistCartTransferRequestDto,
+} from '@maevelle/contracts';
 import type { RuntimeConfig } from '@maevelle/config';
 import type { DatabaseClient } from '@maevelle/database';
 import {
@@ -16,6 +19,7 @@ import {
   removeCartLine,
   replaceCartLineVariant,
   setCartLineQuantity,
+  transferAccountWishlistItem,
 } from '@maevelle/database/cart';
 import { protectCartRoutes } from './cart-protection.js';
 import {
@@ -159,6 +163,43 @@ function registerCartFamily(
         idempotencyKey: key,
       };
     };
+    if (account)
+      cart.post(
+        `${base}/current/wishlist-transfers`,
+        {
+          bodyLimit: 65_536,
+          schema: {
+            body: Type.Object(
+              {
+                version,
+                ownerContext: uuid,
+                action: Type.Union([Type.Literal('ADD'), Type.Literal('MOVE')]),
+                productId: uuid,
+                variantId: uuid,
+                quantity: units,
+                wishlistVersion: version,
+              },
+              { additionalProperties: false },
+            ),
+          },
+        },
+        async (request) => {
+          const scope = await mutation(request);
+          if (!('account' in scope))
+            throw new CartRequestError('OWNER_CHANGED', 409, 'Account Cart authority is required.');
+          const { action, productId, variantId, quantity, wishlistVersion } =
+            request.body as WishlistCartTransferRequestDto;
+          return {
+            data: await transferAccountWishlistItem(database.db, scope, {
+              action,
+              productId,
+              variantId,
+              quantity,
+              wishlistVersion,
+            }),
+          };
+        },
+      );
     cart.delete(
       `${base}/current`,
       { bodyLimit: 65_536, schema: { body: object(common) } },

@@ -1,5 +1,5 @@
 import { recordWishlistOutcome } from '../analytics/wishlist/events.js';
-import { sql, type Kysely } from 'kysely';
+import { sql, type Kysely, type Transaction } from 'kysely';
 import { createHash } from 'node:crypto';
 import type { DatabaseSchema } from '../index.js';
 import type {
@@ -338,20 +338,31 @@ export async function removeWishlistProduct(
     const version = Number(locked.rows[0]!.version);
     if (expectedVersion !== undefined && expectedVersion !== version)
       throw new AccountWishlistError('VERSION_CONFLICT', 'Wishlist changed. Refresh and retry.');
-    const deleted = await sql<{ id: string }>`
-      delete from wishlist.account_items
-      where organization_id=${owner.organizationId} and wishlist_id=${list.id}::uuid
-        and product_id=${productId}::uuid returning id::text
-    `.execute(tx);
-    if (!deleted.rows.length) return { version };
-    await recordWishlistOutcome(tx, owner.organizationId, { name: 'wishlist.item.removed', productId });
-    const updated = await sql<{ version: string }>`
-      update wishlist.account_lists set version=version+1,updated_at=now()
-      where organization_id=${owner.organizationId} and id=${list.id}::uuid
-      returning version::text
-    `.execute(tx);
-    return { version: Number(updated.rows[0]!.version) };
+    return removeLockedWishlistProduct(tx, owner, list.id, productId, version);
   });
+}
+
+/** Caller holds the owned list row lock and has checked its revision. */
+export async function removeLockedWishlistProduct(
+  tx: Transaction<DatabaseSchema>,
+  owner: WishlistOwner,
+  listId: string,
+  productId: string,
+  version: number,
+): Promise<{ version: number }> {
+  const deleted = await sql<{ id: string }>`
+    delete from wishlist.account_items
+    where organization_id=${owner.organizationId} and wishlist_id=${listId}::uuid
+      and product_id=${productId}::uuid returning id::text
+  `.execute(tx);
+  if (!deleted.rows.length) return { version };
+  await recordWishlistOutcome(tx, owner.organizationId, { name: 'wishlist.item.removed', productId });
+  const updated = await sql<{ version: string }>`
+    update wishlist.account_lists set version=version+1,updated_at=now()
+    where organization_id=${owner.organizationId} and id=${listId}::uuid
+    returning version::text
+  `.execute(tx);
+  return { version: Number(updated.rows[0]!.version) };
 }
 
 export async function getWishlistSavedState(

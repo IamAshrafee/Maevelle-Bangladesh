@@ -2,7 +2,7 @@ import { sql, type Kysely, type Transaction } from 'kysely';
 import type { DatabaseSchema } from '../index.js';
 import type { CartMutationScope } from './types.js';
 import { CartDomainError } from './errors.js';
-import { checkedVersion } from './context.js';
+import { checkedVersion, type ResolvedCart } from './context.js';
 import { availableToSell, assertSellableVariant } from './availability.js';
 import { quantity, availableWholeUnits } from './value.js';
 import { evaluateCart } from './queries.js';
@@ -33,52 +33,61 @@ export async function addCartLine<Scope extends CartMutationScope>(
     idempotencyKey?: string;
   },
 ) {
+  return mutateCart(db, input, 'add_line', (transaction, cart) =>
+    applyCartLineAddition(transaction, cart, input),
+  );
+}
+
+/** Apply an exact addition inside the authorized Cart command transaction. */
+export async function applyCartLineAddition(
+  transaction: Transaction<DatabaseSchema>,
+  cart: ResolvedCart,
+  input: { variantId: string; quantity: string; expectedVersion: number; productId?: string },
+) {
   const desired = quantity(input.quantity);
-  return mutateCart(db, input, 'add_line', async (transaction, cart) => {
-    await assertSellableVariant(transaction, cart.organizationId, input.variantId);
-    const existingLine = await sql<{ quantity: string }>`
-      select quantity::text
-      from cart.cart_lines
-      where cart_id = ${cart.id} and variant_id = ${input.variantId}
-      for update
-    `.execute(transaction);
-    const requestedTotal =
-      desired + (existingLine.rows[0] ? quantity(existingLine.rows[0].quantity) : 0n);
-    if (requestedTotal > 99n)
-      throw new CartDomainError('LIMIT_EXCEEDED', 'Cart quantity limit exceeded.');
-    if (!existingLine.rows[0]) {
-      const count = await sql<{
-        count: number;
-      }>`select count(*)::int count from cart.cart_lines where cart_id=${cart.id}`.execute(
-        transaction,
-      );
-      if ((count.rows[0]?.count ?? 0) >= 100)
-        throw new CartDomainError('LIMIT_EXCEEDED', 'Cart line limit exceeded.');
-    }
-    const ats = availableWholeUnits(
-      await availableToSell(transaction, cart.organizationId, input.variantId),
+  await assertSellableVariant(transaction, cart.organizationId, input.variantId, input.productId);
+  const existingLine = await sql<{ quantity: string }>`
+    select quantity::text
+    from cart.cart_lines
+    where cart_id = ${cart.id} and variant_id = ${input.variantId}
+    for update
+  `.execute(transaction);
+  const requestedTotal =
+    desired + (existingLine.rows[0] ? quantity(existingLine.rows[0].quantity) : 0n);
+  if (requestedTotal > 99n)
+    throw new CartDomainError('LIMIT_EXCEEDED', 'Cart quantity limit exceeded.');
+  if (!existingLine.rows[0]) {
+    const count = await sql<{
+      count: number;
+    }>`select count(*)::int count from cart.cart_lines where cart_id=${cart.id}`.execute(
+      transaction,
     );
-    if (requestedTotal > ats)
-      throw new CartDomainError('UNAVAILABLE', 'Requested quantity is not currently available.');
-    const price = await resolveVariantPrice(transaction, {
-      organizationId: cart.organizationId,
-      variantId: input.variantId,
-      currency: cart.currency,
-      at: cart.evaluatedAt,
-    });
-    if (!price) throw new CartDomainError('UNPRICED', 'This Variant has no current selling price.');
-    await sql`
-      insert into cart.cart_lines (organization_id, cart_id, variant_id, quantity, last_seen_unit_price)
-      values (${cart.organizationId}, ${cart.id}, ${input.variantId}, ${input.quantity}::numeric, ${price.amount}::numeric)
-      on conflict (cart_id, variant_id) do update
-      set quantity = cart.cart_lines.quantity + excluded.quantity,
-          last_seen_unit_price = excluded.last_seen_unit_price,
-          version = cart.cart_lines.version + 1,
-          updated_at = now()
-    `.execute(transaction);
-    const version = await bumpCartVersion(transaction, cart.id, input.expectedVersion);
-    return evaluateCart(transaction, { ...cart, version });
+    if ((count.rows[0]?.count ?? 0) >= 100)
+      throw new CartDomainError('LIMIT_EXCEEDED', 'Cart line limit exceeded.');
+  }
+  const ats = availableWholeUnits(
+    await availableToSell(transaction, cart.organizationId, input.variantId),
+  );
+  if (requestedTotal > ats)
+    throw new CartDomainError('UNAVAILABLE', 'Requested quantity is not currently available.');
+  const price = await resolveVariantPrice(transaction, {
+    organizationId: cart.organizationId,
+    variantId: input.variantId,
+    currency: cart.currency,
+    at: cart.evaluatedAt,
   });
+  if (!price) throw new CartDomainError('UNPRICED', 'This Variant has no current selling price.');
+  await sql`
+    insert into cart.cart_lines (organization_id, cart_id, variant_id, quantity, last_seen_unit_price)
+    values (${cart.organizationId}, ${cart.id}, ${input.variantId}, ${input.quantity}::numeric, ${price.amount}::numeric)
+    on conflict (cart_id, variant_id) do update
+    set quantity = cart.cart_lines.quantity + excluded.quantity,
+        last_seen_unit_price = excluded.last_seen_unit_price,
+        version = cart.cart_lines.version + 1,
+        updated_at = now()
+  `.execute(transaction);
+  const version = await bumpCartVersion(transaction, cart.id, input.expectedVersion);
+  return evaluateCart(transaction, { ...cart, version });
 }
 
 export async function setCartLineQuantity<Scope extends CartMutationScope>(

@@ -98,6 +98,7 @@ export function protectCartRoutes(
           ? 404
           : [
                 'STALE_VERSION',
+                'WISHLIST_CHANGED',
                 'MERGE_STALE',
                 'MERGE_REVIEW_REQUIRED',
                 'CONFLICT',

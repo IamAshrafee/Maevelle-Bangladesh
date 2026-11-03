@@ -6238,6 +6238,7 @@ export * from './wishlist-analytics.js';
 export type {
   CartOwnerDto,
   CartMutationOutcomeDto,
+  WishlistCartTransferRequestDto,
   CartCommerceIssueDto,
   GuestCartViewDto,
   AccountCartViewDto,

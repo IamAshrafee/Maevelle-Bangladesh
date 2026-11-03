@@ -22,3 +22,4 @@ export {
 export { getAccountCart, establishAccountCart } from './cart/account.js';
 export { previewCartMerge, commitCartMerge } from './cart/merge.js';
 export type { AccountCartAuthority, CartMutationScope } from './cart/types.js';
+export { transferAccountWishlistItem } from './cart/wishlist-transfer.js';

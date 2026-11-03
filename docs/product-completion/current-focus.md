@@ -1,5 +1,7 @@
 # Current Focus
 
+Shopping Cart Phase 04A implements atomic Account Wishlist Add and Move. Guest, shared and recommended product Adds use the existing exact Cart command. Local acceptance is **PARTIAL** and production release is **BLOCKED**. See the [implementation report and Phase 04B contract](../architecture/cart/PHASE_04A_IMPLEMENTATION_REPORT.md).
+
 Shopping Cart Phase 03D.1 closed the reproduced guest-discovery deadlock and verified the combined Cart UI in Chromium. Local acceptance remains **PARTIAL** and production release is **BLOCKED**. See the [reliability closure report](../architecture/cart/PHASE_03D1_RELIABILITY_CLOSURE.md).
 
 Shopping Cart Phase 03D local acceptance is **PARTIAL** and production release is **BLOCKED**. See the [targeted browser and recovery acceptance report](../architecture/cart/PHASE_03D_TARGETED_ACCEPTANCE.md) for native zoom, live recovery and the remaining human acceptance procedure.

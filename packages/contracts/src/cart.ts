@@ -138,3 +138,14 @@ export interface CartMergeGuestContextDto {
   readonly cartId: string;
   readonly ownerContext: string;
 }
+
+/** A single saved product in the authenticated shopper's Wishlist. */
+export interface WishlistCartTransferRequestDto {
+  readonly action: 'ADD' | 'MOVE';
+  readonly productId: string;
+  readonly variantId: string;
+  readonly quantity: string;
+  readonly wishlistVersion: number;
+  readonly version: number;
+  readonly ownerContext: string;
+}
