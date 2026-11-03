@@ -24,6 +24,8 @@ The working-mode documentation in `docs/development-working-policy.md` was align
 
 ## 2. Target workflow and responsibility split
 
+The Admin and Storefront build scripts compile `@maevelle/contracts` before running Next.js. TypeScript reads the package’s source types, while runtime imports use its emitted JavaScript. The Docker context excludes local `dist` directories, so frontend images compile contracts from the checkout.
+
 Developer: make a focused change, add a forward migration when schema changes, run focused local checks, commit and push. CircleCI: build and test the exact commit, test fresh install and upgrade, publish images, capture full SHA and per-image digest in a release manifest. It must not SSH to the VPS as a side effect of a push until an explicitly designed deploy gate exists. Developer invokes deployment for a selected approved manifest. VPS-side Maevelle-only scripts perform preflight, backup when required, one-time migration, selective service update, verification and release-record write. Manual authorization governs staging reset and destructive restore; a normal deploy is an operator-triggered action with clear logs.
 
 | Conceptual command | Existing equivalent | Recommended owner and behavior |

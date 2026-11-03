@@ -3,6 +3,9 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
+  "scripts": {
+    "build": "tsc --build tsconfig.build.json --pretty false"
+  },
   "exports": {
     ".": {
       "types": "./src/index.ts",
