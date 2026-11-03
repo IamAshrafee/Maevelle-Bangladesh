@@ -1,5 +1,7 @@
 # Cart security threat model
 
+See [Phase 03A account ownership and merge acceptance](PHASE_03A_ACCOUNT_CART_IMPLEMENTATION.md) for the implemented backend contract, tested races and open security and release gates.
+
 For current executed Phase 01-C coverage, see the [integrated security verification](PHASE_01C_SECURITY_VERIFICATION.md). The entries below retain their original design scope and identifiers.
 
 Phase01B mitigation evidence: [frontend security review](PHASE_01B_SECURITY_REVIEW.md) and [browser results](PHASE_01B_BROWSER_SCENARIO_RESULTS.md). Legacy fixed-cookie adoption/retirement/fixation parity remains High/open; frontend work does not close that backend boundary.

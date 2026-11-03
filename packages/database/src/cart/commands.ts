@@ -1,14 +1,14 @@
 import { sql, type Kysely, type Transaction } from 'kysely';
 import type { DatabaseSchema } from '../index.js';
-import type { CartView, GuestMutationScope } from './types.js';
+import type { CartMutationScope } from './types.js';
 import { CartDomainError } from './errors.js';
 import { checkedVersion } from './context.js';
 import { availableToSell, assertSellableVariant } from './availability.js';
 import { quantity, availableWholeUnits } from './value.js';
-import { getGuestCart } from './queries.js';
-import { mutateGuestCart } from './receipts.js';
+import { evaluateCart } from './queries.js';
+import { mutateCart } from './receipts.js';
 import { resolveVariantPrice } from '../pricing.js';
-async function bumpCartVersion(
+export async function bumpCartVersion(
   transaction: Transaction<DatabaseSchema>,
   cartId: string,
   expectedVersion: number,
@@ -24,18 +24,17 @@ async function bumpCartVersion(
   return checkedVersion(version);
 }
 
-export async function addGuestCartLine(
+export async function addCartLine<Scope extends CartMutationScope>(
   db: Kysely<DatabaseSchema>,
-  input: GuestMutationScope & {
-    token: string;
+  input: Scope & {
     variantId: string;
     quantity: string;
     expectedVersion: number;
     idempotencyKey?: string;
   },
-): Promise<CartView> {
+) {
   const desired = quantity(input.quantity);
-  return mutateGuestCart(db, input, 'add_line', async (transaction, cart) => {
+  return mutateCart(db, input, 'add_line', async (transaction, cart) => {
     await assertSellableVariant(transaction, cart.organizationId, input.variantId);
     const existingLine = await sql<{ quantity: string }>`
       select quantity::text
@@ -77,23 +76,21 @@ export async function addGuestCartLine(
           version = cart.cart_lines.version + 1,
           updated_at = now()
     `.execute(transaction);
-    await bumpCartVersion(transaction, cart.id, input.expectedVersion);
-    const view = await getGuestCart(transaction, input.token);
-    return view;
+    const version = await bumpCartVersion(transaction, cart.id, input.expectedVersion);
+    return evaluateCart(transaction, { ...cart, version });
   });
 }
 
-export async function setGuestCartLineQuantity(
+export async function setCartLineQuantity<Scope extends CartMutationScope>(
   db: Kysely<DatabaseSchema>,
-  input: GuestMutationScope & {
-    token: string;
+  input: Scope & {
     lineId: string;
     quantity: string;
     expectedVersion: number;
   },
-): Promise<CartView> {
+) {
   const desired = quantity(input.quantity);
-  return mutateGuestCart(db, input, 'set_quantity', async (transaction, cart) => {
+  return mutateCart(db, input, 'set_quantity', async (transaction, cart) => {
     const line = await sql<{ id: string; variant_id: string; quantity: string }>`
       select id, variant_id, quantity::text
       from cart.cart_lines
@@ -102,7 +99,7 @@ export async function setGuestCartLineQuantity(
     `.execute(transaction);
     const existingLine = line.rows[0];
     if (!existingLine) throw new CartDomainError('NOT_FOUND', 'Cart line was not found.');
-    if (quantity(existingLine.quantity) === desired) return getGuestCart(transaction, input.token);
+    if (quantity(existingLine.quantity) === desired) return evaluateCart(transaction, cart);
     await assertSellableVariant(transaction, cart.organizationId, existingLine.variant_id);
     const ats = availableWholeUnits(
       await availableToSell(transaction, cart.organizationId, existingLine.variant_id),
@@ -120,18 +117,18 @@ export async function setGuestCartLineQuantity(
       update cart.cart_lines set quantity = ${input.quantity}::numeric, version = version + 1, updated_at = now()
       where id = ${input.lineId} and cart_id = ${cart.id} and organization_id = ${cart.organizationId} returning id
     `.execute(transaction);
-    await bumpCartVersion(transaction, cart.id, input.expectedVersion);
-    return getGuestCart(transaction, input.token);
+    const version = await bumpCartVersion(transaction, cart.id, input.expectedVersion);
+    return evaluateCart(transaction, { ...cart, version });
   });
 }
 
 /** Replace a configuration within its product. An existing target line survives a merge. */
-export async function replaceGuestCartLineVariant(
+export async function replaceCartLineVariant<Scope extends CartMutationScope>(
   db: Kysely<DatabaseSchema>,
-  input: GuestMutationScope & { lineId: string; targetVariantId: string; quantity: string },
-): Promise<CartView> {
+  input: Scope & { lineId: string; targetVariantId: string; quantity: string },
+) {
   const desired = quantity(input.quantity);
-  return mutateGuestCart(db, input, 'replace_variant', async (transaction, cart) => {
+  return mutateCart(db, input, 'replace_variant', async (transaction, cart) => {
     const lines = await sql<{
       id: string;
       variant_id: string;
@@ -171,7 +168,7 @@ export async function replaceGuestCartLineVariant(
     });
     if (!price) throw new CartDomainError('UNPRICED', 'This Variant has no current selling price.');
     if (source.variant_id === input.targetVariantId && quantity(source.quantity) === desired)
-      return getGuestCart(transaction, input.token);
+      return evaluateCart(transaction, cart);
 
     const survivingLineId = target?.id ?? source.id;
     await sql`
@@ -184,31 +181,31 @@ export async function replaceGuestCartLineVariant(
         delete from cart.cart_lines
         where id = ${source.id} and cart_id = ${cart.id} and organization_id = ${cart.organizationId}
       `.execute(transaction);
-    await bumpCartVersion(transaction, cart.id, input.expectedVersion);
-    return getGuestCart(transaction, input.token);
+    const version = await bumpCartVersion(transaction, cart.id, input.expectedVersion);
+    return evaluateCart(transaction, { ...cart, version });
   });
 }
 
-export async function removeGuestCartLine(
+export async function removeCartLine<Scope extends CartMutationScope>(
   db: Kysely<DatabaseSchema>,
-  input: GuestMutationScope & { token: string; lineId: string; expectedVersion: number },
-): Promise<CartView> {
-  return mutateGuestCart(db, input, 'remove_line', async (transaction, cart) => {
+  input: Scope & { lineId: string; expectedVersion: number },
+) {
+  return mutateCart(db, input, 'remove_line', async (transaction, cart) => {
     const removed = await sql<{ id: string }>`
       delete from cart.cart_lines where id = ${input.lineId} and cart_id = ${cart.id} and organization_id = ${cart.organizationId} returning id
     `.execute(transaction);
     if (!removed.rows[0]) throw new CartDomainError('NOT_FOUND', 'Cart line was not found.');
-    await bumpCartVersion(transaction, cart.id, input.expectedVersion);
-    return getGuestCart(transaction, input.token);
+    const version = await bumpCartVersion(transaction, cart.id, input.expectedVersion);
+    return evaluateCart(transaction, { ...cart, version });
   });
 }
 
-export async function applyGuestCartCoupon(
+export async function applyCartCoupon<Scope extends CartMutationScope>(
   db: Kysely<DatabaseSchema>,
-  input: GuestMutationScope & { token: string; couponCode: string; expectedVersion: number },
-): Promise<CartView> {
+  input: Scope & { couponCode: string; expectedVersion: number },
+) {
   const normalizedCode = input.couponCode.trim().replace(/\s+/g, '').toLocaleUpperCase();
-  return mutateGuestCart(db, input, 'apply_coupon', async (transaction, cart) => {
+  return mutateCart(db, input, 'apply_coupon', async (transaction, cart) => {
     const coupon = await sql<{ id: string }>`
       select id from promotions.coupon_codes
       where organization_id = ${cart.organizationId} and normalized_code = ${normalizedCode} and status = 'ACTIVE'
@@ -218,23 +215,23 @@ export async function applyGuestCartCoupon(
     const selected = await sql<{ count: number; present: boolean }>`
       select count(*)::int count,coalesce(bool_or(coupon_code_id=${couponId}),false) present
       from cart.cart_coupons where cart_id=${cart.id}`.execute(transaction);
-    if (selected.rows[0]!.present) return getGuestCart(transaction, input.token);
+    if (selected.rows[0]!.present) return evaluateCart(transaction, cart);
     if (!selected.rows[0]!.present && selected.rows[0]!.count >= 10)
       throw new CartDomainError('LIMIT_EXCEEDED', 'Cart coupon limit exceeded.');
     await sql`insert into cart.cart_coupons (cart_id, coupon_code_id) values (${cart.id}, ${couponId}) on conflict do nothing`.execute(
       transaction,
     );
-    await bumpCartVersion(transaction, cart.id, input.expectedVersion);
-    return getGuestCart(transaction, input.token);
+    const version = await bumpCartVersion(transaction, cart.id, input.expectedVersion);
+    return evaluateCart(transaction, { ...cart, version });
   });
 }
 
-export async function removeGuestCartCoupon(
+export async function removeCartCoupon<Scope extends CartMutationScope>(
   db: Kysely<DatabaseSchema>,
-  input: GuestMutationScope & { token: string; couponCode: string; expectedVersion: number },
-): Promise<CartView> {
+  input: Scope & { couponCode: string; expectedVersion: number },
+) {
   const normalizedCode = input.couponCode.trim().replace(/\s+/g, '').toLocaleUpperCase();
-  return mutateGuestCart(db, input, 'remove_coupon', async (transaction, cart) => {
+  return mutateCart(db, input, 'remove_coupon', async (transaction, cart) => {
     const removed = await sql<{ coupon_code_id: string }>`
       delete from cart.cart_coupons link using promotions.coupon_codes coupon
       where link.cart_id = ${cart.id} and link.coupon_code_id = coupon.id and coupon.normalized_code = ${normalizedCode}
@@ -242,17 +239,17 @@ export async function removeGuestCartCoupon(
     `.execute(transaction);
     if (!removed.rows[0])
       throw new CartDomainError('NOT_FOUND', 'Coupon was not applied to this Cart.');
-    await bumpCartVersion(transaction, cart.id, input.expectedVersion);
-    return getGuestCart(transaction, input.token);
+    const version = await bumpCartVersion(transaction, cart.id, input.expectedVersion);
+    return evaluateCart(transaction, { ...cart, version });
   });
 }
 
 /** Clear is one intention: remove lines AND coupon selections, with one revision/receipt. */
-export async function clearGuestCart(
+export async function clearCart<Scope extends CartMutationScope>(
   db: Kysely<DatabaseSchema>,
-  input: GuestMutationScope,
-): Promise<CartView> {
-  return mutateGuestCart(db, input, 'clear', async (transaction, cart) => {
+  input: Scope,
+) {
+  return mutateCart(db, input, 'clear', async (transaction, cart) => {
     const lines =
       await sql`delete from cart.cart_lines where cart_id=${cart.id} returning id`.execute(
         transaction,
@@ -261,8 +258,10 @@ export async function clearGuestCart(
       await sql`delete from cart.cart_coupons where cart_id=${cart.id} returning coupon_code_id`.execute(
         transaction,
       );
-    if (lines.rows.length || coupons.rows.length)
-      await bumpCartVersion(transaction, cart.id, input.expectedVersion);
-    return getGuestCart(transaction, input.token);
+    const version =
+      lines.rows.length || coupons.rows.length
+        ? await bumpCartVersion(transaction, cart.id, input.expectedVersion)
+        : cart.version;
+    return evaluateCart(transaction, { ...cart, version });
   });
 }

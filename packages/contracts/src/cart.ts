@@ -100,3 +100,41 @@ export interface ReplaceGuestCartLineVariantRequestDto extends GuestCartMutation
   readonly targetVariantId: string;
   readonly quantity: string;
 }
+
+export type AccountCartViewDto = Omit<GuestCartViewDto, 'expiresAt'> & { readonly expiresAt: null };
+
+export interface CartMergeSelectionDto {
+  readonly guestCartId: string;
+  readonly guestOwnerContext: string;
+  readonly ownerContext: string;
+}
+
+export interface CartMergeCommitRequestDto extends CartMergeSelectionDto {
+  readonly reviewFingerprint: string;
+  readonly version: number;
+}
+
+export interface CartMergePreviewDto {
+  readonly selection: CartMergeSelectionDto;
+  readonly accountRevision: string;
+  readonly guestRevision: string;
+  readonly reviewFingerprint: string;
+  readonly status: 'READY' | 'REVIEW_REQUIRED';
+  readonly blockers: readonly ('EMPTY_GUEST' | 'QUANTITY_LIMIT' | 'LINE_LIMIT')[];
+  readonly lines: readonly {
+    readonly variantId: string;
+    readonly guestLineId: string;
+    readonly survivingLineId: string;
+    readonly accountQuantity: number;
+    readonly guestQuantity: number;
+    readonly requestedQuantity: number;
+  }[];
+  readonly account: AccountCartViewDto;
+  readonly guest: GuestCartViewDto;
+  readonly projected: AccountCartViewDto | null;
+}
+
+export interface CartMergeGuestContextDto {
+  readonly cartId: string;
+  readonly ownerContext: string;
+}

@@ -1,7 +1,14 @@
 import { afterAll, describe, expect, it, vi } from 'vitest';
 import { sql } from 'kysely';
 
-import { addGuestCartLine, applyGuestCartCoupon, createGuestCart } from './cart.js';
+import {
+  addGuestCartLine,
+  applyGuestCartCoupon,
+  commitCartMerge,
+  createGuestCart,
+  establishAccountCart,
+  previewCartMerge,
+} from './cart.js';
 import { createDatabase } from './index.js';
 import { adjustInventory } from './inventory.js';
 import {
@@ -30,6 +37,7 @@ import { createOrganization } from './platform.js';
 import { createPriceDefinition } from './pricing.js';
 import { createCouponCode, createPromotion } from './promotions.js';
 import { createLocation } from './warehouse.js';
+import { resolveOrEnrollShopper } from './shopper.js';
 
 const database = createDatabase({
   connectionString: process.env.TEST_DATABASE_URL!,
@@ -255,6 +263,94 @@ describe('atomic guest checkout and COD Orders', () => {
     );
     expect(orders.rows[0]?.count).toBe('1');
     expect(await balances(input)).toEqual({ sellable: '1.000000', reserved: '1.000000' });
+  });
+
+  it('serializes guest placement behind an in-flight Cart merge without creating an Order', async () => {
+    const input = await fixture();
+    const flow = await checkoutFor(input);
+    const db = database.db;
+    const email = `cart-order-race-${crypto.randomUUID()}@example.test`;
+    const user = await sql<{ id: string }>`
+      insert into iam.users(name,email,email_normalized,email_verified)
+      values('Synthetic Cart shopper',${email},${email},true) returning id
+    `.execute(db);
+    const principal = await resolveOrEnrollShopper(db, input.organizationId, user.rows[0]!.id);
+    expect(principal).toBeTruthy();
+    const owner = { ...principal!, currency: 'BDT' };
+    const account = await establishAccountCart(db, owner);
+    const selection = {
+      ownerContext: account.ownerContext,
+      guestCartId: flow.cart.cart.id,
+      guestOwnerContext: flow.cart.cart.ownerContext,
+    };
+    const review = await previewCartMerge(db, owner, selection, flow.cart.token);
+    await sql`
+      create function cart.pause_merge_for_placement_test() returns trigger language plpgsql as $$ begin
+        if new.status='MERGED' then perform pg_advisory_xact_lock(30302); end if;
+        return new;
+      end $$;
+      create trigger pause_merge_for_placement_test before update on cart.carts
+        for each row execute function cart.pause_merge_for_placement_test()
+    `.execute(db);
+    try {
+      const operations = await db.transaction().execute(async (blocker) => {
+        await sql`select pg_advisory_xact_lock(30302)`.execute(blocker);
+        const merge = commitCartMerge(
+          db,
+          owner,
+          {
+            ...selection,
+            version: account.version,
+            reviewFingerprint: review.reviewFingerprint,
+          },
+          crypto.randomUUID(),
+          flow.cart.token,
+        );
+        const merged = Promise.allSettled([merge]);
+        const findMerger = () =>
+          sql<{ pid: number }>`
+          select pid from pg_locks
+          where locktype='advisory' and not granted and classid=0 and objid=30302
+        `.execute(blocker);
+        const mergerPid = await vi.waitFor(
+          async () => {
+            const result = await findMerger();
+            expect(result.rows[0]?.pid).toBeDefined();
+            return result.rows[0]!.pid;
+          },
+          { timeout: 1500, interval: 20 },
+        );
+        const placed = Promise.allSettled([submit(flow)]);
+        await vi.waitFor(
+          async () => {
+            const waiting = await sql`
+            select pid from pg_locks where not granted and ${mergerPid}=any(pg_blocking_pids(pid))
+          `.execute(blocker);
+            expect(waiting.rows.length).toBeGreaterThan(0);
+          },
+          { timeout: 1500, interval: 20 },
+        );
+        return { merged, placed };
+      });
+      expect((await operations.merged)[0]).toMatchObject({
+        status: 'fulfilled',
+        value: { version: 2 },
+      });
+      expect((await operations.placed)[0]).toMatchObject({
+        status: 'rejected',
+        reason: { code: 'NOT_FOUND' },
+      });
+      expect(await balances(input)).toEqual({ sellable: '2.000000', reserved: '0.000000' });
+      const orders =
+        await sql`select id from orders.orders where organization_id=${input.organizationId}`.execute(
+          db,
+        );
+      expect(orders.rows).toEqual([]);
+    } finally {
+      await sql`drop trigger pause_merge_for_placement_test on cart.carts; drop function cart.pause_merge_for_placement_test()`.execute(
+        db,
+      );
+    }
   });
 
   it('makes duplicate same-key submission canonical, rejects fingerprint reuse, and completes a checkout only once', async () => {

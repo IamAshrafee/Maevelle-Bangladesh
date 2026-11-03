@@ -84,6 +84,15 @@ export async function linkCustomerAccount(
       );
     }
 
+    const previousCart = await sql`
+      select id from cart.carts
+      where organization_id=${input.organizationId} and customer_id=${input.customerId}
+        and owner_account_id is not null and owner_user_id<>${input.userId}
+      limit 1
+    `.execute(tx);
+    if (previousCart.rows.length)
+      throw new CustomerDomainError('CONFLICT', 'An Account Cart is bound to the previous shopper.');
+
     const verifiedAt = input.verifiedAt ? new Date(input.verifiedAt) : new Date();
 
     const inserted = await sql<{

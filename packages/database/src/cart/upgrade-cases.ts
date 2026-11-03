@@ -117,4 +117,49 @@ export const cartUpgradeCases: Record<string, UpgradeCase> = {
       );
     },
   },
+  '3216_account_cart': {
+    async before(db, organizationId) {
+      const activeDigest = hashToken('synthetic-account-cart-upgrade-slot');
+      await sql`insert into cart.carts(organization_id,public_token_hash,currency_code,expires_at,credential_state)
+        values(${organizationId},${activeDigest},'BDT',now()+interval '1 day','SLOT_V1')`.execute(
+        db,
+      );
+    },
+    async after(db, organizationId) {
+      const activeDigest = hashToken('synthetic-account-cart-upgrade-slot');
+      const credentials = await sql<{ credential_state: string; public_token_hash: string }>`
+        select credential_state,public_token_hash from cart.carts where organization_id=${organizationId}
+          and (id=${cartId} or public_token_hash=${activeDigest}) order by credential_state
+      `.execute(db);
+      assert.deepEqual(credentials.rows, [
+        { credential_state: 'RETIRED', public_token_hash: 'retired:' + digest },
+        { credential_state: 'SLOT_V1', public_token_hash: activeDigest },
+      ]);
+      const customer = await sql<{ id: string }>`
+        insert into customers.customers(organization_id,customer_number,display_name)
+        values(${organizationId},'UPGRADE-ACCOUNT-CART','Synthetic Account Cart') returning id
+      `.execute(db);
+      const customerId = customer.rows[0]!.id;
+      const shopper = await sql<{ id: string }>`
+        insert into iam.users(name,email,email_normalized,email_verified)
+        values('Synthetic','upgrade-cart@example.test','upgrade-cart@example.test',true) returning id
+      `.execute(db);
+      const account = await sql<{ id: string }>`
+        insert into customers.customer_accounts(organization_id,customer_id,user_id,link_type)
+        values(${organizationId},${customerId},${shopper.rows[0]!.id},'VERIFIED_EMAIL') returning id
+      `.execute(db);
+      const insert = (id: string) =>
+        sql`
+        insert into cart.carts(organization_id,owner_account_id,customer_id,owner_user_id,currency_code,credential_state)
+        values(${organizationId},${account.rows[0]!.id},${id},${shopper.rows[0]!.id},'BDT','ACCOUNT')
+      `.execute(db);
+      const unrelated = await sql<{ id: string }>`
+        insert into customers.customers(organization_id,customer_number,display_name)
+        values(${organizationId},'UPGRADE-UNRELATED-CART','Unrelated synthetic customer') returning id
+      `.execute(db);
+      await assert.rejects(() => insert(unrelated.rows[0]!.id), /cart_account_mapping_fk/);
+      await insert(customerId);
+      await assert.rejects(() => insert(customerId), /cart_active_account_owner/);
+    },
+  },
 };

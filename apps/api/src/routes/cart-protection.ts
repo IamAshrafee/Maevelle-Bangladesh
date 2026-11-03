@@ -40,7 +40,8 @@ export function protectCartRoutes(
     )
       throw new CartRequestError('UNSUPPORTED_MEDIA_TYPE', 415, 'JSON is required.');
     const create =
-      request.method === 'POST' && request.url.split('?')[0] === '/storefront/v1/carts';
+      request.method === 'POST' &&
+      ['/storefront/v1/carts', '/storefront/v1/carts/account'].includes(request.url.split('?')[0]!);
     const bucket = create ? 'initialize' : write ? 'mutate' : 'read';
     const maximum = create ? 20 : write ? 120 : 240;
     const key = createHmac('sha256', config.betterAuthSecret)
@@ -95,6 +96,8 @@ export function protectCartRoutes(
           ? 404
           : [
                 'STALE_VERSION',
+                'MERGE_STALE',
+                'MERGE_REVIEW_REQUIRED',
                 'CONFLICT',
                 'OWNER_CHANGED',
                 'IDEMPOTENCY_CONFLICT',

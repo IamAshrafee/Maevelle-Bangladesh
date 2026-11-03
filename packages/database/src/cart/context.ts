@@ -11,12 +11,12 @@ export function checkedVersion(value: string): number {
     throw new CartDomainError('UNAVAILABLE', 'Cart revision cannot be represented safely.');
   return version;
 }
-export interface ResolvedGuestCart {
+export interface ResolvedCart<Expiry extends Date | null = Date | null> {
   id: string;
   organizationId: string;
   currency: string;
   version: number;
-  expiresAt: Date;
+  expiresAt: Expiry;
   evaluatedAt: string;
   ownerContext: string;
 }
@@ -24,7 +24,7 @@ export async function findCart(
   db: Kysely<DatabaseSchema>,
   token: string,
   lock = false,
-): Promise<ResolvedGuestCart> {
+): Promise<ResolvedCart<Date>> {
   const result = await sql<{
     id: string;
     organization_id: string;

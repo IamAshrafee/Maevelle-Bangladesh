@@ -3,7 +3,7 @@ import { sql, type Kysely } from 'kysely';
 import { hashToken } from '@maevelle/security';
 
 import type { DatabaseSchema } from '../index.js';
-import { getGuestCart, type CartView } from '../cart.js';
+import { CartDomainError, getGuestCart, type CartView } from '../cart.js';
 import {
   CustomerDomainError,
   resolveOrCreateOrderCustomerInTransaction,
@@ -192,7 +192,15 @@ export async function placeOrder(
         'CHECKOUT_COMPLETED',
         'Checkout has already created an Order with a different request.',
       );
-    const cart = await getGuestCart(transaction, input.cartToken);
+    // Placement consumes guest intent. Serialize with merge and other Cart writers
+    // before reading lines, and hold that fence through conversion.
+    const cart = await getGuestCart(transaction, input.cartToken, { forUpdate: true }).catch(
+      (error: unknown) => {
+        if (error instanceof CartDomainError && error.code === 'NOT_FOUND')
+          throw new OrderDomainError('NOT_FOUND', 'Checkout Cart was not found.');
+        throw error;
+      },
+    );
     if (cart.id !== checkout.cart_id)
       throw new OrderDomainError('NOT_FOUND', 'Checkout was not found.');
     // Cart now redacts withdrawn merchandise; preserve the existing Checkout review outcome.

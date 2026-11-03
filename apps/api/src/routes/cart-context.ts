@@ -5,6 +5,7 @@ import { sql } from '@maevelle/database';
 import type { ShopperPrincipal } from '@maevelle/database/shopper';
 import { resolveStorefrontContext } from '@maevelle/database/storefront';
 import { hashToken } from '@maevelle/security';
+import type { AccountCartAuthority } from '@maevelle/database/cart';
 import type { CartOwnerDto } from '@maevelle/contracts';
 
 export class CartRequestError extends Error {
@@ -17,6 +18,19 @@ export class CartRequestError extends Error {
     super(message);
   }
 }
+type ResolvedCartOwner =
+  Extract<CartOwnerDto, { kind: 'GUEST' }> | (AccountCartAuthority & { readonly kind: 'ACCOUNT' });
+
+export function requireAccountCartOwner(owner: ResolvedCartOwner | null): AccountCartAuthority {
+  if (owner?.kind !== 'ACCOUNT')
+    throw new CartRequestError(
+      'SHOPPER_SESSION_REQUIRED',
+      401,
+      'Sign in to access your account Cart.',
+    );
+  return owner;
+}
+
 export type CartShopperResolver = (
   request: FastifyRequest,
   strict?: boolean,
@@ -57,9 +71,10 @@ export async function resolveCartRequest(
   config: RuntimeConfig,
   request: FastifyRequest,
   resolveShopper: CartShopperResolver,
+  accountOnly = false,
 ): Promise<{
   context: { organizationId: string; currency: string };
-  owner: CartOwnerDto | null;
+  owner: ResolvedCartOwner | null;
   token?: string;
   tokens: readonly string[];
 }> {
@@ -83,15 +98,14 @@ export async function resolveCartRequest(
       tokens: [],
       owner: {
         kind: 'ACCOUNT',
-        organizationId: context.organizationId,
-        accountId: shopper.accountId,
-        customerId: shopper.customerId,
+        ...shopper,
         currency: context.currency,
       },
     };
   }
   if (hasShopperCookie)
     throw new CartRequestError('SESSION_EXPIRED', 401, 'Sign in again before accessing your Cart.');
+  if (accountOnly) return { context, owner: null, tokens: [] };
   const tokens = cartCookies(request, config.nodeEnv === 'production');
   if (!tokens.length) return { context, owner: null, tokens };
   const rows = await sql<{ id: string; owner_context: string; public_token_hash: string }>`

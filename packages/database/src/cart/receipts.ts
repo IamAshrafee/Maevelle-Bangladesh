@@ -2,11 +2,13 @@ import { sql, type Kysely, type Transaction } from 'kysely';
 import type { CartMutationOutcomeDto } from '@maevelle/contracts';
 import type { DatabaseSchema } from '../index.js';
 import { claimIdempotencyRecord, IdempotencyKeyReuseError } from '../platform.js';
-import { findCart, type ResolvedGuestCart } from './context.js';
+import { findCart, type ResolvedCart } from './context.js';
 import { CartDomainError } from './errors.js';
-import { getGuestCart } from './queries.js';
+import { evaluateCart } from './queries.js';
+import { assertActiveCartAccount, findAccountCart } from './account.js';
+import { cartTransaction } from './transaction.js';
 import { fingerprint, quantity } from './value.js';
-import type { CartView, GuestMutationScope } from './types.js';
+import type { OwnedCartView, CartMutationScope, CartMutationView } from './types.js';
 
 /** Sorting object keys makes command identity independent of transport property order. */
 function canonical(value: unknown): unknown {
@@ -20,32 +22,45 @@ function canonical(value: unknown): unknown {
   return value;
 }
 
-/** Shared by every existing guest mutation, not just add. No external calls under lock. */
-export async function mutateGuestCart(
+/** Authorize and serialize Cart intent, then commit its receipt and outbox together. */
+export function mutateCart<Scope extends CartMutationScope>(
   db: Kysely<DatabaseSchema>,
-  input: GuestMutationScope,
+  input: Scope,
   operation: string,
-  apply: (transaction: Transaction<DatabaseSchema>, cart: ResolvedGuestCart) => Promise<CartView>,
-): Promise<CartView> {
+  apply: (transaction: Transaction<DatabaseSchema>, cart: ResolvedCart) => Promise<OwnedCartView>,
+): Promise<CartMutationView<Scope>>;
+export async function mutateCart(
+  db: Kysely<DatabaseSchema>,
+  input: CartMutationScope,
+  operation: string,
+  apply: (transaction: Transaction<DatabaseSchema>, cart: ResolvedCart) => Promise<OwnedCartView>,
+): Promise<OwnedCartView> {
   if (!Number.isSafeInteger(input.expectedVersion) || input.expectedVersion < 1)
     throw new CartDomainError('VALIDATION_FAILED', 'Cart revision is invalid.');
   const request = Object.fromEntries(
-    Object.entries(input).filter(([key]) => key !== 'token' && key !== 'idempotencyKey'),
+    Object.entries(input).filter(
+      ([key]) => key !== 'token' && key !== 'idempotencyKey' && key !== 'account',
+    ),
   );
   const digest = fingerprint(canonical({ operation, ...request }));
-  const key = input.idempotencyKey ?? `legacy:${digest}`;
-  if (key.length > 160 || !/^[A-Za-z0-9:_-]{1,160}$/.test(key))
+  const key =
+    'account' in input ? input.idempotencyKey : (input.idempotencyKey ?? `legacy:${digest}`);
+  if (!key || !/^[A-Za-z0-9:_-]{1,160}$/.test(key))
     throw new CartDomainError('VALIDATION_FAILED', 'Idempotency key is invalid.');
-  const execute = async (tx: Transaction<DatabaseSchema>) => {
-    await sql`set local lock_timeout='2s'`.execute(tx);
-    await sql`set local statement_timeout='5s'`.execute(tx);
-    const cart = await findCart(tx, input.token, true);
+  return cartTransaction(db, async (tx) => {
+    const account = 'account' in input ? input.account : null;
+    if (account) await assertActiveCartAccount(tx, account, true);
+    const cart =
+      'account' in input
+        ? await findAccountCart(tx, input.account, true)
+        : await findCart(tx, input.token, true);
     if (
-      (input.organizationId && cart.organizationId !== input.organizationId) ||
-      (input.currency && cart.currency !== input.currency)
+      'token' in input &&
+      ((input.organizationId && cart.organizationId !== input.organizationId) ||
+        (input.currency && cart.currency !== input.currency))
     )
       throw new CartDomainError('NOT_FOUND', 'Cart was not found.');
-    if (input.ownerContext && input.ownerContext !== cart.ownerContext)
+    if ((account || input.ownerContext) && input.ownerContext !== cart.ownerContext)
       throw new CartDomainError(
         'OWNER_CHANGED',
         'Cart owner changed. Resolve the current context.',
@@ -54,7 +69,7 @@ export async function mutateGuestCart(
     try {
       record = await claimIdempotencyRecord(tx, {
         organizationId: cart.organizationId,
-        principalType: 'GUEST_CART',
+        principalType: account ? 'ACCOUNT_CART' : 'GUEST_CART',
         principalId: cart.id,
         operationType: `cart.foundation.${operation}`,
         idempotencyKey: key,
@@ -84,7 +99,7 @@ export async function mutateGuestCart(
       if (record.status !== 'SUCCEEDED' || !saved?.safe_response)
         throw new CartDomainError('CONFLICT', 'This Cart intent is not ready for replay.');
       return {
-        ...(await getGuestCart(tx, input.token)),
+        ...(await evaluateCart(tx, cart)),
         outcome: { ...saved.safe_response, replayed: true },
       };
     }
@@ -147,15 +162,8 @@ export async function mutateGuestCart(
       result_entity_type='cart',result_entity_id=${cart.id},safe_response=${JSON.stringify(outcome)}::jsonb,
       completed_at=now(),expires_at=now()+interval '7 days' where id=${record.id}`.execute(tx);
     return { ...view, outcome };
-  };
-  // A concurrent Cart writer can invalidate a repeatable-read snapshot while we wait
-  // for its row lock. Restart the entire transaction so receipt lookup precedes the
-  // stale revision check on the fresh snapshot.
-  for (let attempt = 1; ; attempt++) {
-    try {
-      return await db.transaction().setIsolationLevel('repeatable read').execute(execute);
-    } catch (error) {
-      if (attempt >= 3 || (error as { code?: string } | null)?.code !== '40001') throw error;
-    }
-  }
+  });
 }
+
+/** Compatibility entry point for internal guest callers. */
+export { mutateCart as mutateGuestCart };

@@ -1626,6 +1626,18 @@ export async function mergeCustomers(
       }
     }
 
+    const accountCartCustomers = [input.sourceCustomerId];
+    if (sourceAccount?.status === 'ACTIVE' && targetAccount?.status !== 'ACTIVE')
+      accountCartCustomers.push(input.targetCustomerId);
+    const ownedCarts = await sql`
+      select id from cart.carts
+      where organization_id=${input.organizationId} and owner_account_id is not null
+        and customer_id=any(${accountCartCustomers}::uuid[])
+      limit 1
+    `.execute(transaction);
+    if (ownedCarts.rows.length)
+      throw new CustomerDomainError('CONFLICT', 'Resolve account-owned Carts before merging these customers.');
+
     const counts = await sql<{
       phones: number;
       emails: number;

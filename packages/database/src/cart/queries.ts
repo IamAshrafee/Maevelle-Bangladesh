@@ -3,13 +3,17 @@ import { sql, type Kysely } from 'kysely';
 import type { CartCommerceIssueDto } from '@maevelle/contracts';
 import type { DatabaseSchema } from '../index.js';
 import type { CartView } from './types.js';
-import { findCart } from './context.js';
+import { findCart, type ResolvedCart } from './context.js';
 import { availableToSellByVariant } from './availability.js';
 import { parseMoney, money, quantity, availableWholeUnits, fingerprint } from './value.js';
 import { catalogVariantIsStructurallyValid } from '../catalog-variant-integrity.js';
 import { resolveVariantPrices } from '../pricing.js';
 import { evaluatePromotions } from '../promotions.js';
-export async function getGuestCart(db: Kysely<DatabaseSchema>, token: string): Promise<CartView> {
+export async function getGuestCart(
+  db: Kysely<DatabaseSchema>,
+  token: string,
+  options?: { readonly forUpdate: true },
+): Promise<CartView> {
   if (!db.isTransaction)
     return db
       .transaction()
@@ -17,9 +21,23 @@ export async function getGuestCart(db: Kysely<DatabaseSchema>, token: string): P
       .execute(async (tx) => {
         await sql`set local lock_timeout='2s'`.execute(tx);
         await sql`set local statement_timeout='5s'`.execute(tx);
-        return getGuestCart(tx, token);
+        return getGuestCart(tx, token, options);
       });
-  const cart = await findCart(db, token);
+  return evaluateCart(db, await findCart(db, token, options?.forUpdate));
+}
+
+export interface ProjectedCartLine {
+  readonly id: string;
+  readonly quantity: number;
+}
+
+/** Evaluate persisted or proposed intent using the same Catalog, Pricing, Inventory and Promotions reads. */
+export async function evaluateCart<Expiry extends Date | null>(
+  db: Kysely<DatabaseSchema>,
+  cart: ResolvedCart<Expiry>,
+  proposal?: { readonly guestCartId: string; readonly lines: readonly ProjectedCartLine[] },
+): Promise<Omit<CartView, 'expiresAt'> & { expiresAt: Expiry extends Date ? string : null }> {
+  const planned = proposal && JSON.stringify(proposal.lines);
   const evaluatedAt = cart.evaluatedAt;
   const lines = await sql<{
     id: string;
@@ -35,7 +53,8 @@ export async function getGuestCart(db: Kysely<DatabaseSchema>, token: string): P
     media_asset_id: string | null;
     options: { name: string; value: string }[];
   }>`
-    select line.id, line.variant_id, line.quantity::text, variant.sku, product.id as product_id,
+    select line.id, line.variant_id,
+      ${planned === undefined ? sql`line.quantity::text` : sql`planned.quantity::text`} as quantity, variant.sku, product.id as product_id,
       product.title as product_title,product.handle as product_handle,
       (variant.status='ACTIVE' and product.status='ACTIVE' and product.publication_status='PUBLISHED') as visible,
       case when variant.status='ACTIVE' and product.status='ACTIVE' and product.publication_status='PUBLISHED'
@@ -67,11 +86,23 @@ export async function getGuestCart(db: Kysely<DatabaseSchema>, token: string): P
         where option_link.variant_id=variant.id) as options
     from cart.cart_lines line
     join cart.carts cart_row on cart_row.id=line.cart_id
+    ${
+      planned === undefined
+        ? sql``
+        : sql`
+      join jsonb_to_recordset(${planned}::jsonb) as planned(id uuid,quantity integer) on planned.id=line.id
+    `
+    }
     join catalog.product_variants variant on variant.id = line.variant_id
     join catalog.products product on product.id = variant.product_id
     left join catalog.product_categories category on category.product_id = product.id
-    where line.cart_id = ${cart.id}
+    where ${
+      proposal
+        ? sql`line.organization_id = ${cart.organizationId} and line.cart_id in (${cart.id},${proposal.guestCartId})`
+        : sql`line.cart_id = ${cart.id}`
+    }
     group by line.id, line.variant_id, line.quantity, variant.id, variant.sku, product.id, product.title,product.handle,cart_row.organization_id
+      ${planned === undefined ? sql`` : sql`, planned.quantity`}
     order by line.created_at, line.id
     limit 101
   `.execute(db);
@@ -205,7 +236,7 @@ export async function getGuestCart(db: Kysely<DatabaseSchema>, token: string): P
     evaluatedAt: new Date(evaluatedAt).toISOString(),
     currency: cart.currency,
     version: cart.version,
-    expiresAt: cart.expiresAt.toISOString(),
+    expiresAt: (cart.expiresAt?.toISOString() ?? null) as Expiry extends Date ? string : null,
     calculationVersion,
     calculationFingerprint: fingerprint({
       calculationVersion,

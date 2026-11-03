@@ -240,7 +240,7 @@ it('AR06 migration upgrades populated 3214, fails safely on invalid legacy data 
     expect(retained.rows[0]!.quantity).toBe('0.500000');
     // Explicit synthetic-data repair. No automatic truncation belongs in the migration.
     await sql`update cart.cart_lines set quantity=2 where cart_id=${g.cart.id}`.execute(db);
-    expect((await runMigrations(db)).executed).toEqual(['3215_cart_integrity']);
+    expect((await runMigrations(db)).executed[0]).toBe('3215_cart_integrity');
     expect((await getGuestCart(db, g.token)).lines[0]!.quantity).toBe('2.000000');
     expect((await runMigrations(db)).executed).toEqual([]);
   } finally {

@@ -1,6 +1,8 @@
 export class CartDomainError extends Error {
   public constructor(
     public readonly code:
+      | 'MERGE_STALE'
+      | 'MERGE_REVIEW_REQUIRED'
       | 'NOT_FOUND'
       | 'CONFLICT'
       | 'VALIDATION_FAILED'

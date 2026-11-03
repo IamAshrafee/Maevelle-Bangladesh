@@ -132,6 +132,9 @@ beforeAll(async () => {
     ['3211_wishlist_share_receipt_tombstones', 'Success'],
     ['3212_wishlist_analytics', 'Success'],
   ]);
+  // Runtime CRM commands use the current cross-domain schema.
+  const current = await migrator.migrateToLatest();
+  if (current.error) throw current.error;
   legacy = { organizationId: organization.id, shareId: guestShare.rows[0]!.id,
     productId: product.rows[0]!.id, viewToken, manageToken,
     accountId: account.rows[0]!.id, listId: list.rows[0]!.id };
