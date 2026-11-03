@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import type { WishlistItem } from '@/features/wishlist/types';
 
 export interface WishlistCatalogProduct {
@@ -31,6 +32,7 @@ export interface WishlistViewProps {
   categories: readonly string[];
   activeCategory: string;
   onCategoryChange: (category: string) => void;
+  bagActions?: ((item: WishlistDisplayItem) => ReactNode) | undefined;
   onRemove: (item: WishlistDisplayItem) => void;
   pendingIds: readonly string[];
   nextCursor: string | null;

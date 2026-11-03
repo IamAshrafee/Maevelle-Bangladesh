@@ -100,3 +100,45 @@ it('recovers exact merge metadata only under the original account partition', ()
   expect(createCartJournal(s, () => 1000, 'B'.repeat(43)).read()).toBeNull();
   expect(createCartJournal(s, () => 1000).read()).toBeNull();
 });
+
+it('restores a Move with its observed Wishlist revision only for the original partition', () => {
+  const s = storage();
+  const partition = 'A'.repeat(43);
+  const account = createCartJournal(s, () => 1000, partition);
+  const move: CartIntent = {
+    ...intent,
+    command: {
+      kind: 'wishlist-transfer',
+      request: {
+        action: 'MOVE',
+        productId: key,
+        variantId: key,
+        quantity: '3',
+        wishlistVersion: 4,
+      },
+    },
+  };
+  expect(account.save(move)).toBe(true);
+  expect(account.read()).toEqual(move);
+  expect(createCartJournal(s, () => 1000, 'B'.repeat(43)).read()).toBeNull();
+  expect(createCartJournal(s, () => 1000).read()).toBeNull();
+});
+
+it('retains an expired Move for review under the original partition', () => {
+  const account = createCartJournal(storage(), () => 8 * 86_400_000, 'A'.repeat(43));
+  const move: CartIntent = {
+    ...intent,
+    command: {
+      kind: 'wishlist-transfer',
+      request: {
+        action: 'MOVE',
+        productId: key,
+        variantId: key,
+        quantity: '1',
+        wishlistVersion: 2,
+      },
+    },
+  };
+  expect(account.save(move)).toBe(true);
+  expect(account.read()).toEqual(move);
+});

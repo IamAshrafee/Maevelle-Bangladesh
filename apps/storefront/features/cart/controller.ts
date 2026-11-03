@@ -3,7 +3,7 @@ import { StorefrontClientApiError } from '@/lib/api/client/http';
 import { forgetGuestSession } from './session-recovery';
 import { createCartActivity } from './activity';
 import type { CartApi } from './api';
-import type { CartJournal } from './pending-journal';
+import { CART_INTENT_MAX_AGE, type CartJournal } from './pending-journal';
 import { CartCoordinationError, cartIssue, isUncertain, cartOwnerUnavailable } from './errors';
 import {
   EMPTY_CART_SNAPSHOT,
@@ -12,6 +12,7 @@ import {
   type CartIntent,
   type CartSnapshot,
   type CartView,
+  type WishlistTransfer,
 } from './types';
 
 interface Dependencies {
@@ -20,6 +21,7 @@ interface Dependencies {
   coordinate<T>(task: () => Promise<T>): Promise<T>;
   sessionSignal?(phase: 'begin' | 'settled'): void;
   notify(context: string, revision: number): void;
+  wishlistChanged?(partition: string): void;
   surface?: () => string;
   now?: () => number;
   uuid?: () => string;
@@ -184,19 +186,22 @@ export function createCartController(deps: Dependencies) {
     restored = true;
     const persisted = journal.read();
     const intent = unresolvedIntent ?? persisted;
-    if (intent)
+    if (intent) {
+      const expired = now() - intent.createdAt > CART_INTENT_MAX_AGE;
       publish({
         pending: intent,
         recoveryPersisted: persisted?.key === intent.key,
-        sync: 'uncertain',
+        sync: expired ? 'conflict' : 'uncertain',
         issue: {
-          code: 'RECOVERED_INTENT',
-          message:
-            'An earlier action may already be saved. Retry it while the original bag is available, or explicitly stop recovery before starting again.',
-          recovery: 'same-intent',
+          code: expired ? 'INTENT_EXPIRED' : 'RECOVERED_INTENT',
+          message: expired
+            ? 'An earlier action may already be saved. Its recovery window ended. Review the bag and Wishlist before starting again.'
+            : 'An earlier action may already be saved. Retry it while the original bag is available, or explicitly stop recovery before starting again.',
+          recovery: expired ? 'review' : 'same-intent',
           retryAt: 0,
         },
       });
+    }
   }
   async function refresh(force = false): Promise<CartView | null> {
     if (ownerPending || resetting) return null;
@@ -337,7 +342,7 @@ export function createCartController(deps: Dependencies) {
     surface = deps.surface?.(),
   ): Promise<CartView> {
     current(e);
-    if (now() - intent.createdAt > 7 * 86_400_000)
+    if (now() - intent.createdAt > CART_INTENT_MAX_AGE)
       throw new CartCoordinationError(
         'REVIEW_REQUIRED',
         'This action is too old to replay. Review the bag before a new action.',
@@ -365,7 +370,18 @@ export function createCartController(deps: Dependencies) {
       const command = intent.command;
       const version = Number(view.outcome.committedVersion);
       let notice = 'Your bag is up to date.';
-      if (command.kind === 'merge') {
+      if (command.kind === 'wishlist-transfer') {
+        if (command.request.action === 'MOVE' && partition) deps.wishlistChanged?.(partition);
+        const action =
+          command.request.action === 'MOVE' ? 'Moved to your bag' : 'Added to your bag';
+        const quantity = view.outcome.changes.find(
+          (change) => change.variantId === command.request.variantId,
+        )?.quantity;
+        notice =
+          quantity && version === view.version
+            ? `${action}. Your bag now has ${quantity} of this selection.`
+            : `${action}. Review your bag for current quantities.`;
+      } else if (command.kind === 'merge') {
         if (deps.journal.context() === command.request.guestOwnerContext) deps.journal.select();
         notice = 'Guest bag merged into your account bag.';
       } else if (command.kind !== 'replace' && (recovering || surface !== deps.surface?.()))
@@ -411,6 +427,12 @@ export function createCartController(deps: Dependencies) {
           issue: policy,
           notice: null,
         });
+        if (
+          intent.command.kind === 'wishlist-transfer' &&
+          partition &&
+          ['WISHLIST_CHANGED', 'NOT_FOUND'].includes(policy.code)
+        )
+          deps.wishlistChanged?.(partition);
         if (cartOwnerUnavailable(policy.code)) fail(error, e, ticket);
         else if (policy.code === 'STALE_VERSION') {
           try {
@@ -429,7 +451,15 @@ export function createCartController(deps: Dependencies) {
   function command(
     command: CartCommand,
     observed?: Pick<CartView, 'ownerContext' | 'version'>,
+    expectedPartition?: string | null,
   ): Promise<CartView> {
+    if (expectedPartition !== undefined && (ownerPending || expectedPartition !== partition))
+      return Promise.reject(
+        new CartCoordinationError(
+          'OWNER_TRANSITION',
+          'Your shopper context changed. Review your saved items.',
+        ),
+      );
     if (now() < (state.issue?.retryAt ?? 0))
       return Promise.reject(
         new CartCoordinationError(
@@ -535,6 +565,16 @@ export function createCartController(deps: Dependencies) {
     initialize,
     addItem: (variantId: string, quantity: number) =>
       command({ kind: 'add', variantId, quantity: String(quantity) }),
+    addGuestSavedItem: (
+      variantId: string,
+      quantity: string,
+      observed?: Pick<CartView, 'ownerContext' | 'version'>,
+    ) => command({ kind: 'add', variantId, quantity }, observed, null),
+    transferWishlistItem: (
+      request: WishlistTransfer,
+      ownerPartition: string,
+      observed?: Pick<CartView, 'ownerContext' | 'version'>,
+    ) => command({ kind: 'wishlist-transfer', request }, observed, ownerPartition),
     setQuantity: (lineId: string, quantity: string) => command({ kind: 'set', lineId, quantity }),
     replaceVariant: (
       lineId: string,
@@ -707,6 +747,14 @@ export function createCartController(deps: Dependencies) {
             'REVIEW_REQUIRED',
             'The pending action is not available in this shopper context.',
           );
+        if (now() - intent.createdAt > CART_INTENT_MAX_AGE) {
+          const message = 'This action is too old to replay. Review the bag before a new action.';
+          publish({
+            sync: 'conflict',
+            issue: { code: 'INTENT_EXPIRED', message, recovery: 'review', retryAt: 0 },
+          });
+          throw new CartCoordinationError('REVIEW_REQUIRED', message);
+        }
         if (state.confirmed && state.confirmed.ownerContext !== intent.ownerContext)
           throw new CartCoordinationError(
             'REVIEW_REQUIRED',

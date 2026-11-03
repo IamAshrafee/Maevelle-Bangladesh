@@ -735,3 +735,58 @@ it('preserves the unknown intent and honors Retry-After when its verification re
   expect(api.get).toHaveBeenCalledTimes(reads);
   expect(api.mutate).toHaveBeenCalledTimes(1);
 });
+
+it('replays an uncertain Wishlist Move and refreshes its original owner only after confirmation', async () => {
+  const storage = memory();
+  const partition = 'A'.repeat(43);
+  const wishlistChanged = vi.fn();
+  const projectionFor = (version: number) => ({ ...projection(version), expiresAt: null });
+  const mutate = vi
+    .fn<CartApi['mutate']>()
+    .mockRejectedValueOnce(new TypeError('response lost'))
+    .mockResolvedValueOnce({
+      ...projectionFor(2),
+      outcome: {
+        receiptId: key,
+        operation: 'wishlist_transfer',
+        committedVersion: '2',
+        eventIds: [key],
+        replayed: true,
+        changes: [],
+      },
+    });
+  const api: CartApi = {
+    get: vi.fn(async () => projectionFor(1)),
+    initialize: vi.fn(async () => projectionFor(1)),
+    forgetSession: vi.fn(async () => ({ sessionForgotten: true as const })),
+    mutate,
+  };
+  const journal = createCartJournal(storage, () => 1000, partition);
+  const controller = createCartController({
+    api,
+    journal: createCartJournal(storage, () => 1000),
+    coordinate: (task) => task(),
+    notify: vi.fn(),
+    wishlistChanged,
+    now: () => 1000,
+    uuid: () => key,
+  });
+  const move = {
+    action: 'MOVE' as const,
+    productId: line,
+    variantId: variant,
+    quantity: '1',
+    wishlistVersion: 9,
+  };
+  await controller.settleOwner({ partition, api, journal });
+  await expect(controller.transferWishlistItem(move, 'wrong-owner')).rejects.toMatchObject({
+    code: 'OWNER_TRANSITION',
+  });
+  await expect(controller.transferWishlistItem(move, partition)).rejects.toThrow('response lost');
+  expect(wishlistChanged).not.toHaveBeenCalled();
+  expect(journal.read()?.command).toEqual({ kind: 'wishlist-transfer', request: move });
+  await controller.retryPending();
+  expect(mutate.mock.calls[1]).toEqual(mutate.mock.calls[0]);
+  expect(wishlistChanged).toHaveBeenCalledExactlyOnceWith(partition);
+  expect(journal.read()).toBeNull();
+});

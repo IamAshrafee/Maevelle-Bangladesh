@@ -2,7 +2,7 @@ import type { CartCommand, CartIntent } from './types';
 const KEY = 'maevelle_cart_pending_v1';
 const SESSION_REVIEW_KEY = 'maevelle_cart_session_review_v1';
 const CONTEXT_KEY = 'maevelle_cart_context_v1';
-const MAX_AGE = 7 * 86_400_000;
+export const CART_INTENT_MAX_AGE = 7 * 86_400_000;
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 export interface CartJournal {
   requiresSessionReview(): boolean;
@@ -48,12 +48,14 @@ export function createCartJournal(
           !Number.isSafeInteger(parsed.version) ||
           parsed.version! < 1 ||
           typeof parsed.createdAt !== 'number' ||
-          parsed.createdAt > now() + 60_000 ||
-          now() - parsed.createdAt > MAX_AGE
+          parsed.createdAt > now() + 60_000
         )
           return null;
         const command = parsed.command as CartCommand | undefined;
         if (!command) return null;
+        // Keep expired transfers visible for explicit reconciliation, without replaying them.
+        if (command.kind !== 'wishlist-transfer' && now() - parsed.createdAt > CART_INTENT_MAX_AGE)
+          return null;
         if (
           command.kind === 'add' &&
           uuid.test(command.variantId) &&
@@ -91,6 +93,30 @@ export function createCartJournal(
                   }
                 : { kind: 'set', lineId: command.lineId, quantity: command.quantity },
           };
+        if (command.kind === 'wishlist-transfer' && partition) {
+          const request = command.request;
+          if (
+            !request ||
+            !['ADD', 'MOVE'].includes(request.action) ||
+            !uuid.test(request.productId) ||
+            !uuid.test(request.variantId) ||
+            !/^[1-9][0-9]?$/.test(request.quantity) ||
+            !Number.isSafeInteger(request.wishlistVersion) ||
+            request.wishlistVersion < 1
+          )
+            return null;
+          const { action, productId, variantId, quantity, wishlistVersion } = request;
+          return {
+            key: parsed.key,
+            ownerContext: parsed.ownerContext,
+            version: parsed.version!,
+            createdAt: parsed.createdAt,
+            command: {
+              kind: 'wishlist-transfer',
+              request: { action, productId, variantId, quantity, wishlistVersion },
+            },
+          };
+        }
         if (command.kind === 'merge' && partition) {
           const request = command.request;
           if (

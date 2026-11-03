@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { cx } from '@/components/ui/classnames';
 import { requestStorefrontClient } from '@/lib/api/client/http';
@@ -9,6 +9,11 @@ import { useWishlist } from '@/features/wishlist/use-wishlist';
 import { emitWishlistObservation } from '@/lib/analytics/wishlist-telemetry';
 import { WishlistDesktopView } from './wishlist-desktop-view';
 import { WishlistMobileView } from './wishlist-mobile-view';
+import { cartStore } from '@/features/cart/browser-runtime';
+import { cartIssue } from '@/features/cart/errors';
+import { wishlistStore } from '../wishlist-store';
+import { WishlistBagDialog, type WishlistBagSelection } from './wishlist-bag-dialog';
+import { WishlistBagFeedback } from './wishlist-bag-feedback';
 import { WishlistSharingPanel } from './wishlist-sharing-panel';
 import type { WishlistCatalogProduct, WishlistDisplayItem, WishlistSort, WishlistViewProps } from './wishlist-view-model';
 
@@ -22,7 +27,7 @@ export interface WishlistPageShellProps {
 export function WishlistPageShell({ className, mode: viewMode = 'auto', inDrawer = false, onNavigate }: WishlistPageShellProps) {
   const { items, count, nextCursor, loadingMore, loadMore, removeItem, recentlyRemoved, undoRemove, toastMessage,
     mode, sync, syncMessage, retrySync, pendingIds, mergeReviewed, mergeConflict,
-    reviewMergeConflict, confirmMergeAfterReview, ownerGeneration, ownerPartition } = useWishlist();
+    reviewMergeConflict, confirmMergeAfterReview, ownerGeneration, ownerPartition, listVersion } = useWishlist();
   const [catalog, setCatalog] = useState<Map<string, WishlistCatalogProduct> | null>(null);
   const catalogCache = useRef(new Map<string, WishlistCatalogProduct>());
   const sharingRef = useRef<HTMLDivElement>(null);
@@ -32,6 +37,53 @@ export function WishlistPageShell({ className, mode: viewMode = 'auto', inDrawer
   const [sort, setSort] = useState<WishlistSort>('recent');
   const [activeCategory, setActiveCategory] = useState('all');
   const [sharingOpen, setSharingOpen] = useState(false);
+  const feedbackId = useId();
+  const focusBagFeedback = useRef(false);
+  const [selection, setSelection] = useState<WishlistBagSelection | null>(null);
+  const [bagFeedback, setBagFeedback] = useState<{ generation: number; message: string | null } | null>(null);
+  const activeSelection = selection?.source.generation === ownerGeneration ? selection : null;
+  const feedback = bagFeedback?.generation === ownerGeneration ? bagFeedback : null;
+
+  function chooseForBag(item: WishlistDisplayItem, action: WishlistBagSelection['action']) {
+    focusBagFeedback.current = false;
+    setBagFeedback(null);
+    setSelection({
+      item,
+      action,
+      source: { generation: ownerGeneration, partition: ownerPartition, version: listVersion },
+      bag: cartStore.getSnapshot().confirmed,
+    });
+  }
+
+  async function submitBagSelection(variantId: string, quantity: string) {
+    if (!activeSelection) return;
+    const { source, item, bag, action } = activeSelection;
+    focusBagFeedback.current = true;
+    const latest = wishlistStore.getSnapshot();
+    if (latest.ownerGeneration !== source.generation || latest.ownerPartition !== source.partition) return;
+    if (
+      latest.sync !== 'synced' ||
+      latest.listVersion !== source.version ||
+      !latest.items.some((entry) => entry.id === item.entry.id &&
+        entry.savedAt === item.entry.savedAt && entry.preferredVariantId === item.entry.preferredVariantId)
+    ) {
+      setBagFeedback({ generation: source.generation, message: 'Your wishlist changed. Review your saved items before trying again.' });
+      return;
+    }
+    setBagFeedback({ generation: source.generation, message: null });
+    try {
+      if (source.partition)
+        await cartStore.transferWishlistItem({
+          action, productId: item.entry.id, variantId, quantity, wishlistVersion: source.version,
+        }, source.partition, bag ?? undefined);
+      else if (latest.mode === 'guest')
+        await cartStore.addGuestSavedItem(variantId, quantity, bag ?? undefined);
+    } catch (error) {
+      if (wishlistStore.getSnapshot().ownerGeneration === source.generation && !cartStore.getSnapshot().issue)
+        setBagFeedback({ generation: source.generation, message: cartIssue(error, Date.now()).message });
+    }
+  }
+
   const ids = items.map((item) => item.id).join(',');
   useEffect(() => { setSharingOpen(false); }, [ownerGeneration]);
 
@@ -96,11 +148,36 @@ export function WishlistPageShell({ className, mode: viewMode = 'auto', inDrawer
       ...entry, title: product.title, handle: product.handle, price: Number(product.price ?? 0),
       inStock: product.available,
     } : entry),
+    bagActions: inDrawer ? undefined : (item) => item.product?.available && (
+      <div className="flex flex-wrap gap-2">
+        <Button className="min-h-11" size="sm" variant="tonal" aria-label={`Add ${item.product.title} to bag`}
+          disabled={sync !== 'synced' || pendingIds.includes(item.entry.id)} onClick={(event) => { event.currentTarget.focus(); chooseForBag(item, 'ADD'); }}>Add to bag</Button>
+        {mode === 'account' && ownerPartition && (
+          <Button className="min-h-11" size="sm" variant="outline" aria-label={`Move ${item.product.title} to bag`}
+            disabled={sync !== 'synced' || pendingIds.includes(item.entry.id)} onClick={(event) => { event.currentTarget.focus(); chooseForBag(item, 'MOVE'); }}>Move to bag</Button>
+        )}
+      </div>
+    ),
     pendingIds, nextCursor, loadingMore, onLoadMore: () => void loadMore(),
     onShare: () => { setSharingOpen(true); requestAnimationFrame(() => sharingRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })); },
     showSharing: true, onNavigate,
   };
   return <div className={cx('relative min-h-[60vh] w-full bg-surface', className)}>
+    {!inDrawer && <WishlistBagFeedback id={feedbackId} engaged={Boolean(feedback)} message={feedback?.message ?? null} onNavigate={onNavigate} />}
+    {activeSelection && <WishlistBagDialog
+      selection={activeSelection}
+      disabled={sync !== 'synced' || listVersion !== activeSelection.source.version}
+      onClose={() => {
+        if (wishlistStore.getSnapshot().ownerGeneration !== activeSelection.source.generation) return;
+        setSelection((current) => current === activeSelection ? null : current);
+        if (focusBagFeedback.current) {
+          focusBagFeedback.current = false;
+          requestAnimationFrame(() => document.getElementById(feedbackId)?.focus());
+        }
+      }}
+      onSubmit={submitBagSelection}
+      fallbackFocusId={feedbackId}
+    />}
     {toastMessage ? <div aria-live="polite" className="mx-auto mt-4 max-w-7xl px-4 sm:px-6"><div className="rounded-xl border border-border bg-inverse-surface px-4 py-3 font-label-md text-xs text-inverse-on-surface shadow-lg">{toastMessage} {recentlyRemoved ? <button className="ml-2 min-h-11 font-semibold underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus" onClick={undoRemove} type="button">Undo</button> : null}</div></div> : null}
     {syncMessage ? <div className="mx-auto mt-4 max-w-7xl px-4 sm:px-6"><div className="rounded-xl border border-border bg-surface-container-lowest p-4 font-body-md text-sm text-on-surface" role={sync === 'error' || sync === 'conflicted' ? 'alert' : 'status'}>
       {syncMessage} {mergeConflict ? <Button className="ml-2" onClick={() => void reviewMergeConflict()} variant="outline">Review current wishlist</Button>

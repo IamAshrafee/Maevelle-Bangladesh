@@ -38,6 +38,13 @@ export function cartIssue(error: unknown, now: number, submitted = false): CartI
       recovery: 'sign-in',
       retryAt,
     };
+  if (code === 'WISHLIST_CHANGED')
+    return {
+      code,
+      message: 'Your wishlist changed. Review your current saved items before trying again.',
+      recovery: 'review',
+      retryAt,
+    };
   if (code === 'CART_CONTEXT_LIMIT')
     return {
       code,

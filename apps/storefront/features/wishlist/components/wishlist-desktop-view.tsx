@@ -10,7 +10,7 @@ import type { WishlistViewProps } from './wishlist-view-model';
 
 export function WishlistDesktopView(props: WishlistViewProps) {
   const { count, items, totalVisible, availableVisible, mode, sort, onSortChange, categories,
-    activeCategory, onCategoryChange, onRemove, pendingIds, nextCursor, loadingMore, onLoadMore,
+    activeCategory, onCategoryChange, bagActions, onRemove, pendingIds, nextCursor, loadingMore, onLoadMore,
     onShare, showSharing, onNavigate } = props;
   return <div className="mx-auto w-full max-w-7xl px-6 py-8 lg:px-8">
     <nav aria-label="Breadcrumbs" className="mb-4 flex items-center gap-2 font-label-sm text-xs text-on-surface-variant">
@@ -38,7 +38,7 @@ export function WishlistDesktopView(props: WishlistViewProps) {
           <WishlistSortControl onChange={onSortChange} sort={sort} />
         </div> : <p className="font-label-sm text-xs text-on-surface-variant">Most recently saved pieces first</p>}
         <div className="space-y-4">
-          {items.map((item) => <WishlistItemCard item={item} key={item.entry.id} onNavigate={onNavigate} onRemove={onRemove} pending={pendingIds.includes(item.entry.id)} variant="desktop" />)}
+          {items.map((item) => <WishlistItemCard bagActions={bagActions?.(item)} item={item} key={item.entry.id} onNavigate={onNavigate} onRemove={onRemove} pending={pendingIds.includes(item.entry.id)} variant="desktop" />)}
           {items.length === 0 ? <p className="rounded-2xl border border-dashed border-border bg-surface-container-lowest p-8 text-center font-body-md text-on-surface-variant">No pieces in this category. Choose All pieces to see your collection.</p> : null}
         </div>
         {mode === 'account' ? <WishlistPageEnd count={count} loadingMore={loadingMore} nextCursor={nextCursor} onLoadMore={onLoadMore} shown={totalVisible} /> : null}

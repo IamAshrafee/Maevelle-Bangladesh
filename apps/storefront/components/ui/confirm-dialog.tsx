@@ -9,6 +9,7 @@ export function ConfirmDialog({
   title,
   children,
   confirmLabel,
+  confirmDisabled = false,
   onConfirm,
   onClose,
   variant = 'danger',
@@ -18,6 +19,7 @@ export function ConfirmDialog({
   title: string;
   children: ReactNode;
   confirmLabel: string;
+  confirmDisabled?: boolean;
   onConfirm(): Promise<unknown>;
   onClose(): void;
   variant?: ButtonVariant;
@@ -51,7 +53,7 @@ export function ConfirmDialog({
     };
   }, [open, fallbackFocusId]);
   async function confirm() {
-    if (busy) return;
+    if (busy || confirmDisabled) return;
     setBusy(true);
     try {
       await onConfirm();
@@ -111,6 +113,7 @@ export function ConfirmDialog({
         <Button
           variant={variant}
           loading={busy}
+          disabled={confirmDisabled}
           loadingLabel="Please wait"
           onClick={() => void confirm()}
         >

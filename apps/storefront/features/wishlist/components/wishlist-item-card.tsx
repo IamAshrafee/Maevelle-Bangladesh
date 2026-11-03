@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import type { ReactNode } from 'react';
 import { Money } from '@/components/commerce/price';
 import { IconButton } from '@/components/ui/icon-button';
 import { TrashIcon } from '@/components/ui/icons';
@@ -11,11 +12,12 @@ export interface WishlistItemCardProps {
   item: WishlistDisplayItem;
   onRemove: (item: WishlistDisplayItem) => void;
   pending: boolean;
+  bagActions?: ReactNode;
   variant?: 'mobile' | 'desktop';
   onNavigate?: (() => void) | undefined;
 }
 
-export function WishlistItemCard({ item, onRemove, pending, variant = 'mobile', onNavigate }: WishlistItemCardProps) {
+export function WishlistItemCard({ item, onRemove, pending, bagActions, variant = 'mobile', onNavigate }: WishlistItemCardProps) {
   const { entry, product } = item;
   const title = product?.title ?? 'Product unavailable';
   const image = product?.imageUrl ?? (product?.primaryMediaAssetId ? publicMediaPath(product.primaryMediaAssetId, 'card') : null);
@@ -49,6 +51,7 @@ export function WishlistItemCard({ item, onRemove, pending, variant = 'mobile', 
         </div>
         {productHref ? <Link className="inline-flex min-h-11 items-center rounded-lg border border-primary/30 bg-surface-container-low px-3 font-label-sm text-xs font-semibold text-primary transition-colors duration-150 hover:bg-primary hover:text-on-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus" href={productHref} onClick={() => onNavigate?.()}>View piece</Link> : null}
       </div>
+      {bagActions}
     </div>
   </article>;
 }

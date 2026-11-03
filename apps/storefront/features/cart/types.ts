@@ -2,12 +2,16 @@ import type {
   AccountCartViewDto,
   CartMergeCommitRequestDto,
   GuestCartViewDto,
+  WishlistCartTransferRequestDto,
 } from '@maevelle/contracts';
 
 export type CartView = GuestCartViewDto | AccountCartViewDto;
 
+export type WishlistTransfer = Omit<WishlistCartTransferRequestDto, 'version' | 'ownerContext'>;
+
 export type CartCommand =
   | { kind: 'merge'; request: CartMergeCommitRequestDto }
+  | { kind: 'wishlist-transfer'; request: WishlistTransfer }
   | { kind: 'clear' }
   | { kind: 'add'; variantId: string; quantity: string }
   | { kind: 'set'; lineId: string; quantity: string }

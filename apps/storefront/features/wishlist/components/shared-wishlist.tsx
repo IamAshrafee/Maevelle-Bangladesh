@@ -326,6 +326,12 @@ function SharedWishlistCollection({ token }: { readonly token: string }) {
                   title={product.title}
                 />
                 <div className="mt-3 flex flex-wrap items-center gap-2">
+                  <Link
+                    className="inline-flex min-h-11 items-center rounded-lg bg-surface-container-low px-3 text-sm font-semibold text-primary underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
+                    href={`/products/${product.handle}`}
+                  >
+                    {product.available ? 'Shop this piece' : 'View piece'}
+                  </Link>
                   <Button
                     className="min-h-10"
                     disabled={isInWishlist(product.id)}

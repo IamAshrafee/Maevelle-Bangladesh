@@ -1,4 +1,4 @@
-import type { CartSessionForgottenDto } from '@maevelle/contracts';
+import type { CartSessionForgottenDto, WishlistCartTransferRequestDto } from '@maevelle/contracts';
 import { requestStorefrontClient } from '@/lib/api/client/http';
 import type { CartIntent, CartView } from './types';
 
@@ -73,6 +73,25 @@ export function createCartApi(partition?: string): CartApi {
             version: command.request.version,
             reviewFingerprint: command.request.reviewFingerprint,
           }),
+        });
+      }
+      if (command.kind === 'wishlist-transfer') {
+        if (!partition) throw new Error('Account authority is required to transfer a saved item.');
+        const body: WishlistCartTransferRequestDto = {
+          ...command.request,
+          version: intent.version,
+          ownerContext: intent.ownerContext,
+        };
+        return requestCart(base + '/current/wishlist-transfers', {
+          method: 'POST',
+          cache: 'no-store',
+          headers: {
+            ...ownerHeaders,
+            'content-type': 'application/json',
+            'idempotency-key': intent.key,
+            'x-cart-context': intent.ownerContext,
+          },
+          body: JSON.stringify(body),
         });
       }
       const lineRoute = 'lineId' in command ? `/lines/${encodeURIComponent(command.lineId)}` : '';

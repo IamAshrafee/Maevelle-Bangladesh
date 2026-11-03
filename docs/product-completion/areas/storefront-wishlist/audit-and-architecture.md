@@ -1,5 +1,7 @@
 # Storefront wishlist: repository audit and implementation direction
 
+The Cart Phase 04B integration adds private Account Wishlist Add and atomic Move, guest Add with the saved entry retained, and a public product continuation for shared recipients. See the [Cart Storefront integration report](../../../architecture/cart/PHASE_04B_STOREFRONT_INTEGRATION_REPORT.md) for ownership and recovery behavior.
+
 Status: **in progress**. The customer-visible guest save/list workflow has been replaced; the complete capability, especially sharing and account ownership, is **not complete**.
 
 ## Product decisions from the owner discussion

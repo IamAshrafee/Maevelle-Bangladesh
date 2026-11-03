@@ -152,6 +152,17 @@ function createRuntime() {
         /* Optional hint only. */
       }
     },
+    wishlistChanged: (owner) => {
+      void import('../wishlist/wishlist-store')
+        .then(({ wishlistStore }) => {
+          const snapshot = wishlistStore.getSnapshot();
+          if (snapshot.mode === 'account' && snapshot.ownerPartition === owner)
+            return wishlistStore.revalidateSession();
+        })
+        .catch(() => {
+          /* Wishlist can reconcile independently on focus or next visit. */
+        });
+    },
     notify: (context, revision) => post({ kind: 'cart', context, revision }),
   });
   function refresh() {
@@ -378,6 +389,10 @@ export const cartStore = {
   refresh: () => instance().refresh(),
   reconcile: () => instance().reconcile(),
   addItem: (id: string, quantity: number) => invoke((c) => c.addItem(id, quantity)),
+  addGuestSavedItem: (...args: Parameters<CartController['addGuestSavedItem']>) =>
+    invoke((c) => c.addGuestSavedItem(...args)),
+  transferWishlistItem: (...args: Parameters<CartController['transferWishlistItem']>) =>
+    invoke((c) => c.transferWishlistItem(...args)),
   setQuantity: (id: string, quantity: string) => invoke((c) => c.setQuantity(id, quantity)),
   replaceVariant: (
     ...args: Parameters<ReturnType<typeof createCartController>['replaceVariant']>

@@ -1,5 +1,5 @@
 import { afterEach, expect, it, vi } from 'vitest';
-import { cartApi } from './api';
+import { cartApi, createCartApi } from './api';
 afterEach(() => vi.unstubAllGlobals());
 it('Clear sends one DELETE with an exact replay body, UUID key and observed owner; reset sends no authority', async () => {
   const fetch = vi.fn(
@@ -61,4 +61,43 @@ it('replays a replacement with the same command body and key', async () => {
     version: 5,
     ownerContext: intent.ownerContext,
   });
+});
+
+it('submits a Wishlist transfer only to the partitioned account endpoint with an exact body', async () => {
+  const fetch = vi.fn<(url: string, request: RequestInit) => Promise<Response>>(
+    async () => new Response(JSON.stringify({ data: {} }), { status: 200 }),
+  );
+  vi.stubGlobal('fetch', fetch);
+  const request = {
+    action: 'MOVE' as const,
+    productId: 'product',
+    variantId: 'variant',
+    wishlistVersion: 4,
+    quantity: '2',
+  };
+  const intent = {
+    key: 'original-key',
+    command: { kind: 'wishlist-transfer' as const, request },
+    version: 5,
+    ownerContext: 'owner-context',
+    createdAt: 1000,
+  };
+  expect(() => cartApi.mutate(intent)).toThrow('Account authority');
+  const account = createCartApi('partition-a');
+  await account.mutate(intent);
+  await account.mutate(intent);
+  const [url, first] = fetch.mock.calls[0]!;
+  expect(url).toBe('/api/storefront/v1/carts/account/current/wishlist-transfers');
+  expect(first.headers).toMatchObject({
+    'x-shopper-partition': 'partition-a',
+    'idempotency-key': intent.key,
+    'x-cart-context': intent.ownerContext,
+  });
+  expect(JSON.parse(String(first.body))).toEqual({
+    ...request,
+    version: intent.version,
+    ownerContext: intent.ownerContext,
+  });
+  expect(fetch.mock.calls[1]![1].body).toBe(first.body);
+  expect(fetch.mock.calls[1]![1].headers).toEqual(first.headers);
 });
