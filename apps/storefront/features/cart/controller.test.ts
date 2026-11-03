@@ -814,7 +814,23 @@ it('replays an uncertain Wishlist Move and refreshes its original owner only aft
   });
   await expect(controller.transferWishlistItem(move, partition)).rejects.toThrow('response lost');
   expect(wishlistChanged).not.toHaveBeenCalled();
-  expect(journal.read()?.command).toEqual({ kind: 'wishlist-transfer', request: move });
+  const pending = journal.read();
+  expect(pending?.command).toEqual({ kind: 'wishlist-transfer', request: move });
+
+  const otherPartition = 'B'.repeat(43);
+  const otherApi = { ...api, mutate: vi.fn<CartApi['mutate']>() };
+  controller.ownerTransition(true);
+  await controller.settleOwner({
+    partition: otherPartition,
+    api: otherApi,
+    journal: createCartJournal(storage, () => 1000, otherPartition),
+  });
+  await expect(controller.retryPending()).rejects.toMatchObject({ code: 'REVIEW_REQUIRED' });
+  expect(otherApi.mutate).not.toHaveBeenCalled();
+  expect(journal.read()).toEqual(pending);
+
+  controller.ownerTransition(true);
+  await controller.settleOwner({ partition, api, journal });
   await controller.retryPending();
   expect(mutate.mock.calls[1]).toEqual(mutate.mock.calls[0]);
   expect(wishlistChanged).toHaveBeenCalledExactlyOnceWith(partition);

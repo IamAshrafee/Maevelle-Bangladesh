@@ -158,11 +158,7 @@ function createRuntime() {
     },
     wishlistChanged: (owner) => {
       void import('../wishlist/wishlist-store')
-        .then(({ wishlistStore }) => {
-          const snapshot = wishlistStore.getSnapshot();
-          if (snapshot.mode === 'account' && snapshot.ownerPartition === owner)
-            return wishlistStore.revalidateSession();
-        })
+        .then(({ wishlistStore }) => wishlistStore.reconcileCartTransfer(owner))
         .catch(() => {
           /* Wishlist can reconcile independently on focus or next visit. */
         });

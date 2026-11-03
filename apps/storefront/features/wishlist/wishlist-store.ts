@@ -82,6 +82,15 @@ let draining = false;
 let mergeInFlight = false;
 let retryAt = 0;
 let recoveredAccountIntent = false;
+let cartReconciliationOwner: number | null = null;
+
+function flushCartReconciliation() {
+  if (cartReconciliationOwner === null || draining || mergeInFlight) return;
+  const owner = cartReconciliationOwner;
+  cartReconciliationOwner = null;
+  if (owner === ownerGeneration && snapshot.mode === 'account')
+    void wishlistStore.revalidateSession();
+}
 
 function placeholder(id: string): WishlistItem {
   return {
@@ -494,6 +503,7 @@ async function processMerge(epoch: number, currentPartition: string) {
     if (desired.size && epoch === generation) void drain();
     if (completed && guest.items.length && epoch === generation)
       void processMerge(epoch, currentPartition);
+    flushCartReconciliation();
   }
 }
 function expire(message: string) {
@@ -616,6 +626,7 @@ async function drain() {
   if (desired.size && epoch !== generation && snapshot.mode === 'account') void drain();
   if (!desired.size && epoch === generation && partition && guest.items.length)
     void processMerge(epoch, partition);
+  flushCartReconciliation();
 }
 function start() {
   if (started || typeof window === 'undefined') return;
@@ -639,6 +650,12 @@ export const wishlistStore = {
   },
   getSnapshot: () => snapshot,
   getServerSnapshot: () => EMPTY,
+  reconcileCartTransfer(owner: string) {
+    if (snapshot.mode !== 'account' || partition !== owner) return;
+    // A forced read would invalidate the in-flight Wishlist write's generation.
+    cartReconciliationOwner = ownerGeneration;
+    flushCartReconciliation();
+  },
   async revalidateSession(force = false) {
     if (typeof window === 'undefined') return;
     if (!force && (mergeInFlight || draining)) return;

@@ -39,3 +39,32 @@ pnpm exec vitest run apps/api/src/{account-cart,cart-foundation,cart-credential-
 ## Phase 04-C priorities
 
 Extend browser acceptance to competing tabs, multi-Bag guest selection, account switching and session expiry during a transfer, stock or publication loss between confirmation and commit, and long Wishlist pagination after reconciliation. Run reduced-motion, high-zoom, physical touch, Safari, Firefox and human screen-reader checks. Verify the existing release gates separately, including persistent migration and recovery, deployed proxy and roles, privacy and retention, and representative workloads. Guest Move, shared bulk transfer, reverse transfer, Bag ranking and purchase-time promotion decisions retain their separate boundaries.
+
+## Phase 04-C focused closure
+
+The focused local cross-domain gate passed. Production release remains blocked
+on the existing rollout gates.
+
+A confirmed Move could skip Wishlist reconciliation while a local Wishlist write
+was active. A rate-limited write left the stale saved item visible. The Wishlist
+store now defers the verified refresh until the write or merge settles, and
+discards deferred refreshes after an owner-generation change. The refresh reads
+the authoritative list and leaves pending Wishlist writes intact.
+
+- 49 Storefront tests passed across the Cart controller and Wishlist store,
+  including owner-partitioned recovery and the concurrent rate-limit regression.
+- Four Fastify/PostgreSQL transfer tests passed on a disposable database. They
+  covered ADD retention, variant consolidation, competing exact and independent
+  keys, revoked-session denial, re-save preservation, stale revisions,
+  publication and stock checks, outbox rollback, and a single analytics fact
+  for the winning Move.
+- Chromium at 390 CSS px dropped a committed Move response through a loopback
+  proxy. The Bag replayed the original key, retained one Cart unit, and
+  preserved the newly saved Wishlist entry. The Storefront production build,
+  its TypeScript check, focused ESLint and whitespace checks passed.
+
+Phase 07 should cover deployed session and proxy transitions, persistent
+migration and restore, representative concurrency, and physical-device and
+assistive-technology checks. Privacy, retention and commerce-policy approvals
+remain separate. The prior recommendation, shared-list and coupon browser
+evidence was carried forward without repeating those journeys.

@@ -366,3 +366,50 @@ describe('shared Wishlist controller', () => {
     unsubscribe();
   });
 });
+
+it('reconciles a confirmed Cart Move after a concurrent Wishlist write is rate limited', async () => {
+  const otherProduct = { ...product, id: '22222222-2222-4222-8222-222222222222' };
+  let moved = false;
+  let finishWrite!: (response: Response) => void;
+  const write = new Promise<Response>((resolve) => { finishWrite = resolve; });
+  const fetch = vi.fn(async (path: string) => {
+    if (path.endsWith('/shopper/session'))
+      return ok({ authenticated: true, partition: 'account-a' });
+    if (path.includes('/wishlist?'))
+      return ok({
+        items: moved ? [] : [{
+          productId, preferredVariantId: null, preferredVariantAvailable: false,
+          savedAt: '2026-11-03T00:00:00.000Z', version: 1,
+          product: { handle: 'current', title: 'Current product', minimumPrice: '100', available: true },
+        }],
+        count: moved ? 0 : 1,
+        version: moved ? 2 : 1,
+        nextCursor: null,
+      });
+    if (path.includes('/wishlist/items/')) return write;
+    throw new Error(`Unexpected request: ${path}`);
+  });
+  vi.stubGlobal('fetch', fetch);
+  const { wishlistStore } = await import('./wishlist-store');
+  const unsubscribe = wishlistStore.subscribe(() => {});
+  try {
+    await vi.waitFor(() => expect(wishlistStore.getSnapshot().mode).toBe('account'));
+    expect(wishlistStore.getSnapshot().items.map(({ id }) => id)).toEqual([productId]);
+    expect(wishlistStore.save(otherProduct)).toBe(true);
+    await vi.waitFor(() => expect(fetch.mock.calls.some(([path]) => path.includes('/wishlist/items/'))).toBe(true));
+
+    moved = true;
+    wishlistStore.reconcileCartTransfer('account-a');
+    expect(wishlistStore.getSnapshot().listVersion).toBe(1);
+    finishWrite(Response.json({ error: { code: 'RATE_LIMITED' } }, {
+      status: 429, headers: { 'retry-after': '3600' },
+    }));
+
+    await vi.waitFor(() => expect(wishlistStore.getSnapshot().listVersion).toBe(2));
+    expect(wishlistStore.getSnapshot().items.some(({ id }) => id === productId)).toBe(false);
+    expect(wishlistStore.getSnapshot().pendingIds).toEqual([otherProduct.id]);
+    expect(fetch.mock.calls.filter(([path]) => path.includes('/wishlist/items/'))).toHaveLength(1);
+  } finally {
+    unsubscribe();
+  }
+});

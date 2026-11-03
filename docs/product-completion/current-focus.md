@@ -1,6 +1,8 @@
 # Current Focus
 
-Shopping Cart Phase 06 adds the Admin Cart Analytics report for committed changes and consented browser observations. See the [reporting contract](../domains/analytics/analytics-reporting-architecture.md#admin-cart-analytics-phase-06). Resume Phase 04-C Cart acceptance next. Retention and rollout approvals remain open.
+Shopping Cart Phase 04-C passed focused local integration closure. The [Phase 04-C evidence and Phase 07 handoff](../architecture/cart/PHASE_04B_STOREFRONT_INTEGRATION_REPORT.md#phase-04-c-focused-closure) records the Wishlist reconciliation fix, competing Move and replay evidence, and the remaining release gates. Production remains blocked.
+
+Shopping Cart Phase 06 adds the Admin Cart Analytics report for committed changes and consented browser observations. See the [reporting contract](../domains/analytics/analytics-reporting-architecture.md#admin-cart-analytics-phase-06). Retention and rollout approvals remain open.
 
 Shopping Cart Phase 05B integrates consented Storefront Bag observations with the existing ingestion path. See the [observation contract](../domains/analytics/analytics-reporting-architecture.md#consented-cart-observations-phase-05b) for Phase 06 reporting semantics and remaining policy decisions.
 

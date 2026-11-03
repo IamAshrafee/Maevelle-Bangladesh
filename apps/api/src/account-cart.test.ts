@@ -851,7 +851,27 @@ it('fences account changes, stale Wishlist revisions and rejected commerce', asy
   expect(stale.json().error.code).toBe('WISHLIST_CHANGED');
   const unavailable = await inject('POST', transferUrl, a, { ...intent, quantity: '99' });
   expect(unavailable.json().error.code).toBe('UNAVAILABLE');
-  expect((await current(a)).lines).toEqual([]);
+  const db = isolation.database.db;
+  await sql`update catalog.products set publication_status='UNPUBLISHED'
+    where organization_id=${fixture.organizationId} and id=${fixture.productId}`.execute(db);
+  try {
+    const unpublished = await inject('POST', transferUrl, a, intent);
+    expect(unpublished.json().error.code).toBe('UNAVAILABLE');
+    // A PDP reached from a cached recommendation or revoked share uses ordinary Add.
+    const directAdd = await inject('POST', accountBase + '/current/lines', a, {
+      ownerContext: intent.ownerContext,
+      version: intent.version,
+      variantId: intent.variantId,
+      quantity: intent.quantity,
+    });
+    expect(directAdd.json().error.code).toBe('UNAVAILABLE');
+    const unchanged = await current(a);
+    expect(unchanged.lines).toEqual([]);
+    expect(unchanged.version).toBe(intent.version);
+  } finally {
+    await sql`update catalog.products set publication_status='PUBLISHED'
+      where organization_id=${fixture.organizationId} and id=${fixture.productId}`.execute(db);
+  }
   const moved = await inject('POST', transferUrl, a, intent);
   expect(moved.statusCode, moved.body).toBe(200);
 });
@@ -877,4 +897,49 @@ it('rolls back Wishlist deletion and Cart state when the outbox write fails', as
   const retried = await inject('POST', transferUrl, a, intent, key);
   expect(retried.statusCode, retried.body).toBe(200);
   expect(retried.json().data.outcome.replayed).toBe(false);
+});
+
+it('serializes two independent Wishlist Moves and preserves a re-save on exact receipt replay', async () => {
+  const intent = await savedTransfer();
+  const sameAccount = await signIn(firstShopperEmail);
+  const keys = [crypto.randomUUID(), crypto.randomUUID()];
+  const results = await Promise.all([
+    inject('POST', transferUrl, a, intent, keys[0]),
+    inject('POST', transferUrl, sameAccount, intent, keys[1]),
+  ]);
+  const winner = results.findIndex((response) => response.statusCode === 200);
+  expect(winner, results.map((response) => response.body).join('\n')).toBeGreaterThanOrEqual(0);
+  expect(results[1 - winner]!.json().error.code).toBe('STALE_VERSION');
+  const outcome = results[winner]!.json().data.outcome;
+
+  const itemUrl = '/storefront/v1/wishlist/items/' + fixture.productId;
+  const resaved = await inject('PUT', itemUrl, sameAccount, {
+    preferredVariantId: fixture.variantId,
+    expectedVersion: intent.wishlistVersion + 1,
+  });
+  expect(resaved.statusCode, resaved.body).toBe(200);
+  const signedOut = await inject('POST', '/shopper-auth/sign-out', a, {});
+  expect(signedOut.statusCode, signedOut.body).toBe(200);
+  const replayWithRevokedSession = await inject('POST', transferUrl, a, intent, keys[winner]);
+  expect(replayWithRevokedSession.statusCode, replayWithRevokedSession.body).toBe(401);
+  const replay = await inject('POST', transferUrl, sameAccount, intent, keys[winner]);
+  expect(replay.statusCode, replay.body).toBe(200);
+  expect(replay.json().data.outcome).toEqual({ ...outcome, replayed: true });
+  expect(replay.json().data.lines.map((line: { quantity: string }) => line.quantity)).toEqual(['1.000000']);
+  const wishlist = await inject('GET', '/storefront/v1/wishlist', sameAccount);
+  expect(wishlist.statusCode, wishlist.body).toBe(200);
+  expect(wishlist.json().data).toMatchObject({
+    version: resaved.json().data.version,
+    count: 1,
+    items: [{ productId: fixture.productId, preferredVariantId: fixture.variantId }],
+  });
+
+  const db = isolation.database.db;
+  await processCartAnalyticsOutbox(db, 500);
+  const facts = await sql<{ count: string }>`
+    select count(*)::text as count from analytics.cart_mutations
+    where organization_id=${fixture.organizationId} and cart_id=${replay.json().data.id}
+      and operation='wishlist_transfer' and wishlist_action='MOVE'
+  `.execute(db);
+  expect(facts.rows[0]?.count).toBe('1');
 });
