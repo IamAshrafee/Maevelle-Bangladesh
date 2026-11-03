@@ -2,7 +2,7 @@ import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { Type } from 'typebox';
 import type { DatabaseClient } from '@maevelle/database';
 import { createShare, getAccountShares, getAccountShareLink, rotateAccountShareLink, manageAccountShare, claimGuestShare, ShareError } from '@maevelle/database/wishlist-share-lifecycle';
-import { shareKey } from '@maevelle/database/wishlist-share-crypto';
+import { type ShareEncryptionKey, ShareRecoveryError, shareKey } from '@maevelle/database/wishlist-share-crypto';
 import type { WishlistOwner } from '@maevelle/database/wishlist-account';
 
 const uuid = Type.String({ format: 'uuid' });
@@ -17,14 +17,15 @@ const body = Type.Object({
 }, { additionalProperties: false });
 
 export function registerAccountWishlistShareRoutes(app: FastifyInstance, database: DatabaseClient,
-  resolveShopper: (request: FastifyRequest) => Promise<WishlistOwner | null>, encryptionKey: string): void {
-  const key = shareKey(encryptionKey);
+  resolveShopper: (request: FastifyRequest) => Promise<WishlistOwner | null>, encryptionKey: string | ShareEncryptionKey): void {
+  const key = typeof encryptionKey === 'string' ? shareKey(encryptionKey) : encryptionKey;
   async function owner(request: FastifyRequest, reply: { code(status: number): { send(value: unknown): unknown } }) {
     const principal = await resolveShopper(request);
     if (!principal) reply.code(401).send({ error: { code: 'UNAUTHENTICATED', message: 'Sign in to manage shares.' } });
     return principal;
   }
   function fail(reply: { code(status: number): { send(value: unknown): unknown } }, error: unknown) {
+    if (error instanceof ShareRecoveryError) return reply.code(503).send({ error: { code: 'RECOVERY_UNAVAILABLE', message: 'Link recovery is unavailable. Retry later or explicitly rotate the link.' } });
     if (!(error instanceof ShareError)) throw error;
     return reply.code(error.code === 'NOT_FOUND' ? 404 : error.code === 'CONFLICT' ? 409 : 422)
       .send({ error: { code: error.code, message: error.message } });

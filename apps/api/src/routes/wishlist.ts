@@ -4,17 +4,18 @@ import { sql, type DatabaseClient } from '@maevelle/database';
 import { resolveStorefrontContext } from '@maevelle/database/storefront';
 import { WishlistShareError } from '@maevelle/database/wishlist-sharing';
 import { createShare, manageGuestShare, openPublicShare, ShareError } from '@maevelle/database/wishlist-share-lifecycle';
-import { shareKey } from '@maevelle/database/wishlist-share-crypto';
+import { type ShareEncryptionKey, ShareRecoveryError, shareKey } from '@maevelle/database/wishlist-share-crypto';
 
 const secret = Type.String({ pattern: '^[A-Za-z0-9_-]{43}$' });
 
 function shareError(reply: { code(status: number): { send(value: unknown): unknown } }, caught: unknown) {
+  if (caught instanceof ShareRecoveryError) return reply.code(503).send({ error: { code: 'RECOVERY_UNAVAILABLE', message: 'Creation recovery is unavailable. Keep the pending request and retry later.' } });
   if (!(caught instanceof WishlistShareError) && !(caught instanceof ShareError)) throw caught;
   return reply.code(caught.code === 'NOT_FOUND' ? 404 : caught.code === 'CONFLICT' ? 409 : 422).send({ error: { code: caught.code, message: caught.message } });
 }
 
 /** Public, bounded hydration for browser-owned guest wishlists. Only published catalog data escapes. */
-export function registerWishlistRoutes(app: FastifyInstance, database: DatabaseClient, storefrontOrganizationCode = 'maevelle', encryptionKey?: string): void {
+export function registerWishlistRoutes(app: FastifyInstance, database: DatabaseClient, storefrontOrganizationCode = 'maevelle', encryptionKey?: string | ShareEncryptionKey): void {
   app.post('/storefront/v1/wishlist/products', {
     schema: { body: Type.Object({ productIds: Type.Array(Type.String({ format: 'uuid' }), { maxItems: 100, uniqueItems: true }) }) },
   }, async (request, reply) => {
@@ -66,7 +67,7 @@ export function registerWishlistRoutes(app: FastifyInstance, database: DatabaseC
       const body = request.body as { productIds?: string[]; items?: { productId: string; preferredVariantId?: string | null }[]; operationId: string; expiresAt: string; creationScope?: 'ALL' | 'SELECTED' };
       if (!encryptionKey) return reply.code(503).send({ error: { code: 'UNAVAILABLE', message: 'Sharing is unavailable.' } });
       return { data: await createShare(database.db, context.organizationId, body.items ?? body.productIds!.map((productId) => ({ productId })), {
-        operationId: body.operationId, ...(body.creationScope ? { creationScope: body.creationScope } : {}), key: shareKey(encryptionKey), expiresAt: body.expiresAt,
+        operationId: body.operationId, ...(body.creationScope ? { creationScope: body.creationScope } : {}), key: typeof encryptionKey === 'string' ? shareKey(encryptionKey) : encryptionKey, expiresAt: body.expiresAt,
       }) };
     } catch (caught) { return shareError(reply, caught); }
   });

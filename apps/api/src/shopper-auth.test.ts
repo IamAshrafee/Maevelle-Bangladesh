@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import type { RuntimeConfig } from '@maevelle/config';
 import { createDatabase, sql, type DatabaseClient } from '@maevelle/database';
 import { runMigrations } from '@maevelle/database/migrate';
@@ -24,7 +24,7 @@ let customerId: string;
 let shopperUserId: string;
 let accountShareId: string;
 
-function config(databaseUrl: string): RuntimeConfig {
+function config(databaseUrl: string, versionedRecovery = false): RuntimeConfig {
   return {
     nodeEnv: 'test',
     databaseUrl,
@@ -36,6 +36,7 @@ function config(databaseUrl: string): RuntimeConfig {
     workerHeartbeatIntervalMs: 30_000,
     betterAuthSecret: 'test-only-better-auth-secret-that-is-long-enough',
     authEncryptionKey: 'MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=',
+    ...(versionedRecovery ? { wishlistShareRecovery: { activeId: 'synthetic-2026', roots: { 'synthetic-2026': Buffer.alloc(32, 39).toString('base64') }, readLegacy: true } } : {}),
     authBaseUrl: 'http://localhost:3000',
     authTrustedOrigins: [origin],
     authTotpIssuer: 'Maevelle',
@@ -117,7 +118,7 @@ beforeAll(async () => {
   ).id;
   app = buildApi({
     database,
-    config: config(url.toString()),
+    config: config(url.toString(), true),
     logger: false,
     shopperAuthEmailSender: async (message) => {
       mailbox.push(message);
@@ -356,6 +357,34 @@ describe('shopper realm and private Wishlist', () => {
       headers: { cookie: shopperCookie },
     });
     expect(afterLogout.statusCode).toBe(401);
+  }, 15_000);
+
+  it('documents provider-idempotent concurrent verification without issuing or transferring sessions', async () => {
+    const link = new URL(mailbox[0]!.text.match(/https?:\/\/\S+/)![0]);
+    const results = await Promise.all([1, 2].map(() => app.inject({ method: 'GET', url: `${link.pathname}${link.search}` })));
+    for (const result of results) {
+      expect(result.statusCode).toBe(302);
+      expect(result.headers.location).not.toContain('error=');
+      expect(JSON.stringify(result.headers['set-cookie'] ?? '')).not.toContain('session_token');
+    }
+    const token = link.searchParams.get('token')!;
+    link.searchParams.set('token', `${token.slice(0, -8)}AAAAAAAA`);
+    const modified = await app.inject({ method: 'GET', url: `${link.pathname}${link.search}` });
+    expect(modified.headers.location).toContain('INVALID_TOKEN');
+    expect((await app.inject({ method: 'GET', url: '/storefront/v1/wishlist' })).statusCode).toBe(401);
+    // This is evidence of the mismatch, not a test claiming strict replay rejection.
+  });
+
+  it('rejects read and mutation after the configured 12-hour session TTL without shortening settings', async () => {
+    const login = await post('/shopper-auth/sign-in/email', { email, password });
+    const activeCookie = cookie(login, 'maevelle-shopper.session_token');
+    const product = (await sql<{ id: string }>`select id::text from catalog.products where organization_id=${organizationId} and handle='saved'`.execute(database.db)).rows[0]!;
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(Date.now() + 12 * 60 * 60 * 1000 + 1000);
+    try {
+      expect((await app.inject({ method: 'GET', url: '/storefront/v1/wishlist', headers: { cookie: activeCookie } })).statusCode).toBe(401);
+      expect((await app.inject({ method: 'PUT', url: `/storefront/v1/wishlist/items/${product.id}`, headers: { cookie: activeCookie, origin, 'content-type': 'application/json' }, payload: {} })).statusCode).toBe(401);
+    } finally { vi.useRealTimers(); }
   });
 
   it('resets a password with a single-use capability and invalidates earlier sessions', async () => {
@@ -385,6 +414,37 @@ describe('shopper realm and private Wishlist', () => {
       headers: { cookie: oldCookie },
     });
     expect(expiredSession.statusCode).toBe(401);
+    expect(
+      (await post('/shopper-auth/sign-in/email', { email, password: newPassword })).statusCode,
+    ).toBe(200);
+  });
+
+  it('rejects expired verification and password-reset capabilities without changing the password', async () => {
+    const verificationUrl = new URL(mailbox[0]!.text.match(/https?:\/\/\S+/)![0]);
+    const requested = await post('/shopper-auth/request-password-reset', {
+      email,
+      redirectTo: `${origin}/account?view=reset`,
+    });
+    expect(requested.statusCode).toBe(200);
+    const resetUrl = new URL(mailbox.at(-1)!.text.match(/https?:\/\/\S+/)![0]);
+    const token = resetUrl.pathname.split('/').at(-1)!;
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(Date.now() + 16 * 60 * 1000);
+    try {
+      const verification = await app.inject({
+        method: 'GET',
+        url: `${verificationUrl.pathname}${verificationUrl.search}`,
+      });
+      expect(verification.statusCode).toBe(302);
+      expect(verification.headers.location).toContain('TOKEN_EXPIRED');
+      const reset = await post('/shopper-auth/reset-password', {
+        token,
+        newPassword: 'Should-never-be-accepted-123!',
+      });
+      expect(reset.statusCode).toBe(400);
+    } finally {
+      vi.useRealTimers();
+    }
     expect(
       (await post('/shopper-auth/sign-in/email', { email, password: newPassword })).statusCode,
     ).toBe(200);

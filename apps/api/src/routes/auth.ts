@@ -1,3 +1,5 @@
+import { assertShareRecoveryKeysAvailable } from '@maevelle/database/wishlist-share-lifecycle';
+import { shareKeyRing } from '@maevelle/database/wishlist-share-crypto';
 import type { FastifyInstance } from 'fastify';
 
 import type { RuntimeConfig } from '@maevelle/config';
@@ -195,12 +197,17 @@ export function registerAuthRoutes(
   registerAccountRoutes(app, database, auth, config, objectStorage);
   registerCatalogRoutes(app, database, auth, config.storefrontOrganizationCode);
   registerRecommendationRoutes(app, database, auth, config.storefrontOrganizationCode);
-  registerWishlistRoutes(app, database, config.storefrontOrganizationCode, config.authEncryptionKey);
+  const recovery = config.wishlistShareRecovery;
+  const wishlistKey = recovery
+    ? shareKeyRing(recovery.activeId, recovery.roots, recovery.readLegacy ? config.authEncryptionKey : undefined, recovery.writeLegacy ?? false)
+    : config.authEncryptionKey;
+  if (typeof wishlistKey !== 'string') app.addHook('onReady', async () => { await assertShareRecoveryKeysAvailable(database.db, wishlistKey); });
+  registerWishlistRoutes(app, database, config.storefrontOrganizationCode, wishlistKey);
   const shopperSender = shopperAuthEmailSender ?? createShopperAuthEmailSender(config);
   const resolveShopper = registerShopperAuthRoutes(app, config, database, shopperSender);
   if (shopperSender) {
     registerAccountWishlistRoutes(app, database, resolveShopper);
-    registerAccountWishlistShareRoutes(app, database, resolveShopper, config.authEncryptionKey);
+    registerAccountWishlistShareRoutes(app, database, resolveShopper, wishlistKey);
   }
   registerMediaRoutes(app, database, auth, objectStorage, {
     maxUploadBytes: config.mediaMaxUploadBytes,

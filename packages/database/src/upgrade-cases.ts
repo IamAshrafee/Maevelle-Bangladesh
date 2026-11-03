@@ -1,3 +1,4 @@
+import { wishlistUpgradeCases } from './wishlist/upgrade-cases.js';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { sql, type Kysely } from 'kysely';
@@ -20,23 +21,40 @@ let archivedObjectId = '';
 let repairAssetId = '';
 
 export const upgradeCases: Record<string, UpgradeCase> = {
+  ...wishlistUpgradeCases,
   '3212_wishlist_analytics': {
     async before(db, organizationId) {
       await sql`insert into wishlist.shares(id,organization_id,view_token_digest,manage_token_digest,expires_at)
-        values ('00000000-0000-4000-8000-000000003212',${organizationId},${Buffer.alloc(32,21)},${Buffer.alloc(32,22)},now()+interval '30 days')`.execute(db);
+        values ('00000000-0000-4000-8000-000000003212',${organizationId},${Buffer.alloc(32, 21)},${Buffer.alloc(32, 22)},now()+interval '30 days')`.execute(
+        db,
+      );
     },
     async after(db, organizationId) {
-      const share=await sql<{creation_scope:string;expiration_reported_at:Date|null;view_token_digest:Buffer}>`
+      const share = await sql<{
+        creation_scope: string;
+        expiration_reported_at: Date | null;
+        view_token_digest: Buffer;
+      }>`
         select creation_scope,expiration_reported_at,view_token_digest from wishlist.shares
-        where organization_id=${organizationId} and id='00000000-0000-4000-8000-000000003212'::uuid`.execute(db);
-      assert.equal(share.rows.length,1);
-      assert.equal(share.rows[0]?.creation_scope,'UNKNOWN');
-      assert.equal(share.rows[0]?.expiration_reported_at,null);
-      assert.deepEqual(share.rows[0]?.view_token_digest,Buffer.alloc(32,21));
-      const facts=await sql<{count:string}>`select count(*)::text count from analytics.wishlist_outcomes where organization_id=${organizationId}`.execute(db);
-      assert.equal(facts.rows[0]?.count,'0');
-      const indexes=await sql<{count:string}>`select count(*)::text count from pg_indexes where indexname in ('wishlist_interest_product','wishlist_expiration_pending','wishlist_outcomes_period','wishlist_failures_organization')`.execute(db);
-      assert.equal(indexes.rows[0]?.count,'4');
+        where organization_id=${organizationId} and id='00000000-0000-4000-8000-000000003212'::uuid`.execute(
+        db,
+      );
+      assert.equal(share.rows.length, 1);
+      assert.equal(share.rows[0]?.creation_scope, 'UNKNOWN');
+      assert.equal(share.rows[0]?.expiration_reported_at, null);
+      assert.deepEqual(share.rows[0]?.view_token_digest, Buffer.alloc(32, 21));
+      const facts = await sql<{
+        count: string;
+      }>`select count(*)::text count from analytics.wishlist_outcomes where organization_id=${organizationId}`.execute(
+        db,
+      );
+      assert.equal(facts.rows[0]?.count, '0');
+      const indexes = await sql<{
+        count: string;
+      }>`select count(*)::text count from pg_indexes where indexname in ('wishlist_interest_product','wishlist_expiration_pending','wishlist_outcomes_period','wishlist_failures_organization')`.execute(
+        db,
+      );
+      assert.equal(indexes.rows[0]?.count, '4');
     },
   },
 
@@ -65,7 +83,10 @@ export const upgradeCases: Record<string, UpgradeCase> = {
       assert.equal(rows.rows.length, 1);
       const row = rows.rows[0];
       assert.ok(row);
-      assert.ok(row.purge_retry_after != null, 'purge_retry_after should be set for legacy PURGING assets');
+      assert.ok(
+        row.purge_retry_after != null,
+        'purge_retry_after should be set for legacy PURGING assets',
+      );
       assert.equal(Number(row.purge_attempts), 0);
       assert.equal(row.purge_claim_token, null);
       assert.equal(row.purge_lease_until, null);

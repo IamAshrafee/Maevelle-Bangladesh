@@ -16,6 +16,13 @@ export interface RuntimeConfig {
   readonly workerHeartbeatIntervalMs: number;
   readonly betterAuthSecret: string;
   readonly authEncryptionKey: string;
+  /** Independent Wishlist roots; omitted during reader-first deployment. */
+  readonly wishlistShareRecovery?: {
+    readonly activeId: string;
+    readonly roots: Readonly<Record<string, string>>;
+    readonly readLegacy: boolean;
+    readonly writeLegacy?: boolean;
+  };
   readonly authBaseUrl: string;
   readonly authTrustedOrigins: readonly string[];
   readonly authTotpIssuer: string;
@@ -224,6 +231,56 @@ function shortLabel(
  * Parses only runtime configuration needed by the current foundation. Error
  * messages deliberately name variables without echoing their values.
  */
+function wishlistShareRecovery(environment: Environment): RuntimeConfig['wishlistShareRecovery'] {
+  const activeId = environment.WISHLIST_SHARE_ACTIVE_KEY_ID;
+  const encoded = environment.WISHLIST_SHARE_KEYS;
+  if (!activeId && !encoded) {
+    if (
+      environment.WISHLIST_SHARE_READ_LEGACY === 'false' ||
+      environment.WISHLIST_SHARE_WRITE_LEGACY !== undefined
+    )
+      throw new Error('Versioned Wishlist keys are required to disable legacy reads.');
+    return undefined;
+  }
+  try {
+    const roots: unknown = JSON.parse(encoded ?? '');
+    if (
+      !activeId ||
+      !/^[A-Za-z0-9_-]{1,64}$/.test(activeId) ||
+      !roots ||
+      typeof roots !== 'object' ||
+      Array.isArray(roots) ||
+      !Object.hasOwn(roots, activeId) ||
+      Object.keys(roots).length > 20
+    )
+      throw new Error();
+    for (const [id, value] of Object.entries(roots)) {
+      if (
+        id === 'legacy' ||
+        !/^[A-Za-z0-9_-]{1,64}$/.test(id) ||
+        typeof value !== 'string' ||
+        !/^[A-Za-z0-9+/]{43}=$/.test(value) ||
+        Buffer.from(value, 'base64').length !== 32
+      )
+        throw new Error();
+    }
+    const legacy = environment.WISHLIST_SHARE_READ_LEGACY;
+    if (legacy !== undefined && legacy !== 'true' && legacy !== 'false') throw new Error();
+    const writeLegacy = environment.WISHLIST_SHARE_WRITE_LEGACY;
+    if (writeLegacy !== undefined && writeLegacy !== 'true' && writeLegacy !== 'false')
+      throw new Error();
+    if (writeLegacy === 'true' && legacy === 'false') throw new Error();
+    return {
+      activeId,
+      roots: roots as Record<string, string>,
+      readLegacy: legacy !== 'false',
+      writeLegacy: writeLegacy === 'true',
+    };
+  } catch {
+    throw new Error('Invalid Wishlist share recovery key configuration.');
+  }
+}
+
 export function parseConfig(environment: Environment): RuntimeConfig {
   const nodeEnvValue = environment.NODE_ENV ?? 'development';
 
@@ -233,6 +290,7 @@ export function parseConfig(environment: Environment): RuntimeConfig {
 
   const nodeEnv = nodeEnvValue as NodeEnvironment;
   const primaryDatabaseUrl = requiredPostgresUrl(environment, 'DATABASE_URL');
+  const shareRecovery = wishlistShareRecovery(environment);
   const testDatabaseUrl = optionalPostgresUrl(environment, 'TEST_DATABASE_URL');
 
   let databaseUrl = primaryDatabaseUrl;
@@ -449,6 +507,7 @@ export function parseConfig(environment: Environment): RuntimeConfig {
     ),
     betterAuthSecret: requiredSecret(environment, 'BETTER_AUTH_SECRET', 32),
     authEncryptionKey: requiredBase64Key(environment, 'AUTH_ENCRYPTION_KEY'),
+    ...(shareRecovery ? { wishlistShareRecovery: shareRecovery } : {}),
     authBaseUrl: environment.BETTER_AUTH_URL ?? 'http://localhost:8080/api',
     authTrustedOrigins: environment.AUTH_TRUSTED_ORIGINS
       ? environment.AUTH_TRUSTED_ORIGINS.split(',')

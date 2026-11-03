@@ -328,7 +328,7 @@ describe('Wishlist analytics database, events and Worker', () => {
     expect((await counts())['wishlist.share.expired']).toBeUndefined(); // No fabricated pre-instrumentation expiry.
     const options = {
       operationId: shareToken(),
-      expiresAt: new Date(Date.now() + 86400001).toISOString(),
+      expiresAt: new Date(Date.now() + 2 * 86400_000).toISOString(),
       key: Buffer.alloc(32, 3),
     };
     const share = await createShare(database.db, organizationId, [{ productId }], options);

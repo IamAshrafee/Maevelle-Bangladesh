@@ -178,3 +178,29 @@ describe('parseConfig', () => {
     ]);
   });
 });
+
+describe('Wishlist recovery key configuration', () => {
+  it('keeps legacy writes by default and accepts an independent active ring with legacy reads', () => {
+    expect(parseConfig(validEnvironment).wishlistShareRecovery).toBeUndefined();
+    const roots = { 'share-2026': Buffer.alloc(32, 31).toString('base64') };
+    expect(
+      parseConfig({
+        ...validEnvironment,
+        WISHLIST_SHARE_ACTIVE_KEY_ID: 'share-2026',
+        WISHLIST_SHARE_KEYS: JSON.stringify(roots),
+      }).wishlistShareRecovery,
+    ).toEqual({ activeId: 'share-2026', roots, readLegacy: true, writeLegacy: false });
+  });
+  it('rejects partial/malformed configuration without leaking the submitted keys', () => {
+    for (const extra of [
+      { WISHLIST_SHARE_ACTIVE_KEY_ID: 'missing' },
+      { WISHLIST_SHARE_KEYS: 'private-invalid-key-material' },
+      { WISHLIST_SHARE_READ_LEGACY: 'false' },
+      {
+        WISHLIST_SHARE_ACTIVE_KEY_ID: 'legacy',
+        WISHLIST_SHARE_KEYS: JSON.stringify({ legacy: validEnvironment.AUTH_ENCRYPTION_KEY }),
+      },
+    ])
+      expect(() => parseConfig({ ...validEnvironment, ...extra })).toThrow();
+  });
+});

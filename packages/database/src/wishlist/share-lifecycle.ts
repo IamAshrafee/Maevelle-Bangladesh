@@ -4,14 +4,14 @@ import { createHash } from 'node:crypto';
 import { sql, type Kysely } from 'kysely';
 import type { DatabaseSchema } from '../index.js';
 import type { WishlistOwner } from './account.js';
-import { openSealedShare, sealShare, shareToken, tokenDigest } from './share-crypto.js';
+import { type ShareEncryptionKey, openSealedShare, sealShare, shareToken, tokenDigest } from './share-crypto.js';
 import { appendAuditEvent } from '../platform.js';
 
 export class ShareError extends Error {
   constructor(readonly code: 'INVALID_SELECTION' | 'NOT_FOUND' | 'CONFLICT', message: string) { super(message); }
 }
 export type ShareItem = { productId: string; preferredVariantId?: string | null };
-export type CreateOptions = { operationId: string; key: Buffer; expiresAt: string; owner?: WishlistOwner; selection?: 'all' | 'selected'; creationScope?: 'ALL' | 'SELECTED' };
+export type CreateOptions = { operationId: string; key: ShareEncryptionKey; expiresAt: string; owner?: WishlistOwner; selection?: 'all' | 'selected'; creationScope?: 'ALL' | 'SELECTED' };
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const capability = /^[A-Za-z0-9_-]{43}$/;
 const fail = (message: string) => new ShareError('INVALID_SELECTION', message);
@@ -26,7 +26,7 @@ const expiry = (value: string) => {
 /** The operation ID is a 256-bit browser-generated recovery capability, retained for 48 hours. */
 export async function createShare(db: Kysely<DatabaseSchema>, organizationId: string, requested: readonly ShareItem[], options: CreateOptions) {
   const selection = options.selection ?? 'selected';
-  if (!capability.test(options.operationId) || options.key.length !== 32) throw fail('Invalid creation recovery credential.');
+  if (!capability.test(options.operationId) || (Buffer.isBuffer(options.key) && options.key.length !== 32)) throw fail('Invalid creation recovery credential.');
   if (selection === 'all' && !options.owner) throw fail('Guest selection must be explicit.');
   if (requested.length > 100 || (selection === 'selected' && requested.length === 0)) throw fail('Select between 1 and 100 products.');
   const items = requested.map((item) => ({ productId: item.productId.toLowerCase(), preferredVariantId: item.preferredVariantId?.toLowerCase() ?? null }));
@@ -140,7 +140,7 @@ export async function getAccountShares(db: Kysely<DatabaseSchema>, owner: Wishli
     nextCursor: rows.rows.length > limit ? page.at(-1)!.id : null };
 }
 
-export async function getAccountShareLink(db: Kysely<DatabaseSchema>, owner: WishlistOwner, id: string, key: Buffer) {
+export async function getAccountShareLink(db: Kysely<DatabaseSchema>, owner: WishlistOwner, id: string, key: ShareEncryptionKey) {
   const row = await sql<{ view_token_ciphertext: Buffer | null }>`select view_token_ciphertext from wishlist.shares
     where organization_id=${owner.organizationId} and owner_account_id=${owner.accountId}::uuid and id=${id}::uuid
       and revoked_at is null and expires_at>now()`.execute(db);
@@ -150,7 +150,7 @@ export async function getAccountShareLink(db: Kysely<DatabaseSchema>, owner: Wis
 }
 
 /** Explicit rotation invalidates the old viewing capability after commit. */
-export async function rotateAccountShareLink(db: Kysely<DatabaseSchema>, owner: WishlistOwner, id: string, key: Buffer, expectedVersion: number) {
+export async function rotateAccountShareLink(db: Kysely<DatabaseSchema>, owner: WishlistOwner, id: string, key: ShareEncryptionKey, expectedVersion: number) {
   if (!Number.isSafeInteger(expectedVersion) || expectedVersion < 1) throw fail('Invalid share version.');
   return db.transaction().execute(async (tx) => {
     const current = await sql<{ id: string; version: string }>`select id::text,version::text from wishlist.shares
@@ -294,3 +294,5 @@ export async function manageGuestShare(db: Kysely<DatabaseSchema>, organizationI
     expired: row.expires_at.getTime() <= Date.now(), version: Number(row.version) };
   });
 }
+
+export { assertShareRecoveryKeysAvailable, reencryptShareRecoveryBatch } from './share-key-migration.js';
