@@ -21,6 +21,7 @@ import {
   TruckIcon,
 } from '@/components/ui/icons';
 import { CommerceBadge } from '@/components/ui/badge';
+import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { Button } from '@/components/ui/button';
 import { CategoryPill, FilterChip } from '@/components/ui/chip';
 import { Field } from '@/components/ui/field';
@@ -37,10 +38,7 @@ import { Surface } from '@/components/ui/surface';
 import { Textarea } from '@/components/ui/textarea';
 import { Toggle } from '@/components/ui/toggle';
 import { Price } from '@/components/commerce/price';
-import {
-  DesktopProductCard,
-  MobileProductCard,
-} from '@/components/commerce/product-card';
+import { DesktopProductCard, MobileProductCard } from '@/components/commerce/product-card';
 import { QuantityStepper } from '@/components/commerce/quantity-stepper';
 import { WishlistButton } from '@/components/commerce/wishlist-button';
 import { CartDrawer } from '@/components/commerce/cart-drawer';
@@ -63,6 +61,7 @@ import { CheckoutPageShell } from '@/features/checkout';
 import { SizeGuideDialog } from '@/components/size-guide-dialog';
 
 export default function StorefrontDesignSystemPage() {
+  const [confirmOpen, setConfirmOpen] = useState(false);
   // Interactive UI State
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [isHeartFilled, setIsHeartFilled] = useState(false);
@@ -77,7 +76,9 @@ export default function StorefrontDesignSystemPage() {
     'Please wrap this with a crimson ribbon and include the note: Happy Anniversary, Priya!',
   );
   const [demoCalligraphyChecked, setDemoCalligraphyChecked] = useState(false);
-  const [selectedDeliveryCard, setSelectedDeliveryCard] = useState<'express' | 'standard'>('express');
+  const [selectedDeliveryCard, setSelectedDeliveryCard] = useState<'express' | 'standard'>(
+    'express',
+  );
   const [selectedPaymentCard, setSelectedPaymentCard] = useState<'bkash' | 'cod'>('bkash');
   const [activeFilters, setActiveFilters] = useState<string[]>([
     'In Stock in Gulshan',
@@ -118,6 +119,20 @@ export default function StorefrontDesignSystemPage() {
 
   return (
     <div className="relative min-h-screen bg-surface font-body-md text-on-surface antialiased pb-28">
+      <div className="p-4">
+        <Button variant="outline" onClick={() => setConfirmOpen(true)}>
+          Preview confirmation dialog
+        </Button>
+      </div>
+      <ConfirmDialog
+        open={confirmOpen}
+        title="Confirm this example?"
+        confirmLabel="Confirm example"
+        onClose={() => setConfirmOpen(false)}
+        onConfirm={async () => undefined}
+      >
+        <p>A keyboard-accessible confirmation with Cancel focused first.</p>
+      </ConfirmDialog>
       {/* Toast Spec Feedback */}
       {toastMessage && (
         <div
@@ -230,9 +245,9 @@ export default function StorefrontDesignSystemPage() {
               </span>
             </div>
             <p className="text-body-sm text-[13px] text-on-surface-variant leading-relaxed">
-              Engineered for Bangladesh’s mobile network conditions (EDGE to 4G handshakes). Zero heavy
-              client dependencies, strict WCAG AA 4.5:1+ contrast resilience under direct tropical
-              daylight, and micro-animations calibrated under 2KB per spec.
+              Engineered for Bangladesh’s mobile network conditions (EDGE to 4G handshakes). Zero
+              heavy client dependencies, strict WCAG AA 4.5:1+ contrast resilience under direct
+              tropical daylight, and micro-animations calibrated under 2KB per spec.
             </p>
             <div className="grid grid-cols-2 gap-2 pt-1">
               <div className="flex flex-col rounded-xl bg-surface-container-lowest p-3 shadow-xs">
@@ -374,7 +389,9 @@ export default function StorefrontDesignSystemPage() {
                   Viewport Canvas Background
                 </span>
               </div>
-              <span className="font-label-sm text-xs font-bold text-on-surface-variant">CANVAS</span>
+              <span className="font-label-sm text-xs font-bold text-on-surface-variant">
+                CANVAS
+              </span>
             </button>
           </div>
 
@@ -432,7 +449,8 @@ export default function StorefrontDesignSystemPage() {
             </h2>
           </div>
           <p className="text-body-sm text-on-surface-variant">
-            Editorial Playfair Serif balanced with utilitarian Plus Jakarta Sans for rapid mobile reading.
+            Editorial Playfair Serif balanced with utilitarian Plus Jakarta Sans for rapid mobile
+            reading.
           </p>
 
           <div className="space-y-3">
@@ -469,7 +487,9 @@ export default function StorefrontDesignSystemPage() {
             {/* Body & Micro UI */}
             <div className="space-y-2 rounded-xl bg-surface-container-lowest p-3.5 shadow-xs">
               <div className="flex items-center justify-between text-on-surface-variant">
-                <span className="font-label-sm text-xs">font-body-md • Plus Jakarta Sans 14/20</span>
+                <span className="font-label-sm text-xs">
+                  font-body-md • Plus Jakarta Sans 14/20
+                </span>
                 <span className="rounded bg-surface-container-low px-1.5 py-0.5 font-label-sm text-[10px]">
                   400 Reg
                 </span>
@@ -502,9 +522,9 @@ export default function StorefrontDesignSystemPage() {
                 </span>
               </div>
               <p className="text-body-sm text-[13px] text-on-surface-variant leading-relaxed">
-                Never write &quot;Tk.&quot; or &quot;BDT&quot;. Always prepend the official unicode &quot;৳&quot;
-                without trailing decimals (৳2,450 not ৳2,450.00). Use Bangladesh comma grouping (Lakh
-                format when &gt; 99,999).
+                Never write &quot;Tk.&quot; or &quot;BDT&quot;. Always prepend the official unicode
+                &quot;৳&quot; without trailing decimals (৳2,450 not ৳2,450.00). Use Bangladesh comma
+                grouping (Lakh format when &gt; 99,999).
               </p>
 
               {/* Live Specimen */}
@@ -595,11 +615,7 @@ export default function StorefrontDesignSystemPage() {
                 <span className="font-label-sm text-[10px] text-on-surface-variant">
                   State: Active Pressed (scale-98 + #7E0E35)
                 </span>
-                <Button
-                  className="scale-98 shadow-inner"
-                  fullWidth
-                  variant="primary"
-                >
+                <Button className="scale-98 shadow-inner" fullWidth variant="primary">
                   <ShoppingBagIcon size={18} />
                   <span>Adding to Bag...</span>
                 </Button>
@@ -644,11 +660,7 @@ export default function StorefrontDesignSystemPage() {
               </span>
 
               {/* Soft Tonal */}
-              <Button
-                fullWidth
-                onClick={() => showToast('Saved to wishlist')}
-                variant="tonal"
-              >
+              <Button fullWidth onClick={() => showToast('Saved to wishlist')} variant="tonal">
                 <HeartIcon size={18} />
                 <span>Save Item for Later (Wishlist)</span>
               </Button>
@@ -715,7 +727,9 @@ export default function StorefrontDesignSystemPage() {
                 >
                   <ShoppingBagIcon size={20} />
                 </IconButton>
-                <span className="font-label-sm text-[10px] text-on-surface-variant">Bag Anchor</span>
+                <span className="font-label-sm text-[10px] text-on-surface-variant">
+                  Bag Anchor
+                </span>
               </div>
 
               {/* Filter with Pip */}
@@ -816,11 +830,7 @@ export default function StorefrontDesignSystemPage() {
                   <button
                     className="text-body-sm text-xs font-semibold text-primary underline"
                     onClick={() =>
-                      setActiveFilters([
-                        'In Stock in Gulshan',
-                        'Under ৳2,500',
-                        'Freshwater Pearl',
-                      ])
+                      setActiveFilters(['In Stock in Gulshan', 'Under ৳2,500', 'Freshwater Pearl'])
                     }
                     type="button"
                   >
@@ -866,7 +876,8 @@ export default function StorefrontDesignSystemPage() {
             </h2>
           </div>
           <p className="text-body-sm text-on-surface-variant">
-            Precision engineered with 44px/48px touch standards, Bangladesh MFS &amp; Courier verifications, and warm linen surfaces.
+            Precision engineered with 44px/48px touch standards, Bangladesh MFS &amp; Courier
+            verifications, and warm linen surfaces.
           </p>
 
           <div className="space-y-6">
@@ -878,11 +889,7 @@ export default function StorefrontDesignSystemPage() {
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {/* Full Name with Success Verification */}
-                <Field
-                  id="specimen-fullname"
-                  label="Customer Full Name"
-                  required
-                >
+                <Field id="specimen-fullname" label="Customer Full Name" required>
                   <Input
                     defaultValue="Tahmina Chowdhury"
                     id="specimen-fullname"
@@ -945,11 +952,7 @@ export default function StorefrontDesignSystemPage() {
                   id="specimen-promo"
                   label="Voucher &amp; Promo Code"
                 >
-                  <Input
-                    defaultValue="SUMMER-VOUCHER-99"
-                    hasError
-                    id="specimen-promo"
-                  />
+                  <Input defaultValue="SUMMER-VOUCHER-99" hasError id="specimen-promo" />
                 </Field>
 
                 {/* Disabled Input */}
@@ -958,11 +961,7 @@ export default function StorefrontDesignSystemPage() {
                   id="specimen-nid"
                   label="National ID / Tax Token (Verified)"
                 >
-                  <Input
-                    defaultValue="1992-2692-0482-1048"
-                    disabled
-                    id="specimen-nid"
-                  />
+                  <Input defaultValue="1992-2692-0482-1048" disabled id="specimen-nid" />
                 </Field>
               </div>
 
@@ -1170,6 +1169,8 @@ export default function StorefrontDesignSystemPage() {
                       Prominent (Hero PDP 44px)
                     </span>
                     <QuantityStepper onChange={setStepperVal} size="lg" value={stepperVal} />
+                    <span className="text-label-sm">Touch (48px)</span>
+                    <QuantityStepper onChange={setStepperVal} size="touch" value={stepperVal} />
                   </div>
                 </div>
               </div>
@@ -1194,32 +1195,48 @@ export default function StorefrontDesignSystemPage() {
               <div className="mb-1.5 flex h-10 w-12 items-center justify-center rounded-sm bg-primary-fixed font-label-sm text-[10px] font-bold text-on-primary-fixed">
                 4px
               </div>
-              <span className="font-headline-sm text-[13px] font-bold text-on-surface">rounded-sm</span>
-              <span className="text-body-sm text-[11px] text-on-surface-variant">Micro badges, tags</span>
+              <span className="font-headline-sm text-[13px] font-bold text-on-surface">
+                rounded-sm
+              </span>
+              <span className="text-body-sm text-[11px] text-on-surface-variant">
+                Micro badges, tags
+              </span>
             </div>
 
             <div className="flex flex-col items-center rounded-xl bg-surface-container-lowest p-3 text-center shadow-xs">
               <div className="mb-1.5 flex h-10 w-12 items-center justify-center rounded-md bg-primary-fixed font-label-sm text-[10px] font-bold text-on-primary-fixed">
                 8px
               </div>
-              <span className="font-headline-sm text-[13px] font-bold text-on-surface">rounded-md</span>
-              <span className="text-body-sm text-[11px] text-on-surface-variant">Inputs, swatches</span>
+              <span className="font-headline-sm text-[13px] font-bold text-on-surface">
+                rounded-md
+              </span>
+              <span className="text-body-sm text-[11px] text-on-surface-variant">
+                Inputs, swatches
+              </span>
             </div>
 
             <div className="flex flex-col items-center rounded-xl bg-surface-container-lowest p-3 text-center shadow-xs">
               <div className="mb-1.5 flex h-10 w-12 items-center justify-center rounded-xl bg-primary-fixed font-label-sm text-[10px] font-bold text-on-primary-fixed">
                 12px
               </div>
-              <span className="font-headline-sm text-[13px] font-bold text-on-surface">rounded-xl</span>
-              <span className="text-body-sm text-[11px] text-on-surface-variant">Cards, container blocks</span>
+              <span className="font-headline-sm text-[13px] font-bold text-on-surface">
+                rounded-xl
+              </span>
+              <span className="text-body-sm text-[11px] text-on-surface-variant">
+                Cards, container blocks
+              </span>
             </div>
 
             <div className="flex flex-col items-center rounded-xl bg-surface-container-lowest p-3 text-center shadow-xs">
               <div className="mb-1.5 flex h-10 w-12 items-center justify-center rounded-full bg-primary-fixed font-label-sm text-[10px] font-bold text-on-primary-fixed">
                 9999px
               </div>
-              <span className="font-headline-sm text-[13px] font-bold text-on-surface">rounded-full</span>
-              <span className="text-body-sm text-[11px] text-on-surface-variant">Pills, icon buttons</span>
+              <span className="font-headline-sm text-[13px] font-bold text-on-surface">
+                rounded-full
+              </span>
+              <span className="text-body-sm text-[11px] text-on-surface-variant">
+                Pills, icon buttons
+              </span>
             </div>
           </div>
         </section>
@@ -1233,7 +1250,8 @@ export default function StorefrontDesignSystemPage() {
             </h2>
           </div>
           <p className="text-body-sm text-on-surface-variant">
-            Authoritative luxury notices, shimmer placeholders, spinners, hairline dividers, and 3-tier elevation surfaces.
+            Authoritative luxury notices, shimmer placeholders, spinners, hairline dividers, and
+            3-tier elevation surfaces.
           </p>
 
           <div className="space-y-6">
@@ -1258,22 +1276,18 @@ export default function StorefrontDesignSystemPage() {
                 title="Complimentary Velvet Gift Box • All Orders"
                 variant="brand"
               >
-                All orders over ৳2,000 receive Maevelle signature crimson velvet preservation pouch with wax-sealed authenticity certificate.
+                All orders over ৳2,000 receive Maevelle signature crimson velvet preservation pouch
+                with wax-sealed authenticity certificate.
               </Notice>
 
               {/* Success Notice */}
-              <Notice
-                title="Dhaka Express Order Confirmed"
-                variant="success"
-              >
-                Your heirloom freshwater pearl necklace was inspected by our master jeweler and dispatched with Pathao courier (OTP: 4928).
+              <Notice title="Dhaka Express Order Confirmed" variant="success">
+                Your heirloom freshwater pearl necklace was inspected by our master jeweler and
+                dispatched with Pathao courier (OTP: 4928).
               </Notice>
 
               {/* Warning Notice */}
-              <Notice
-                title="Limited Drop Low Stock"
-                variant="warning"
-              >
+              <Notice title="Limited Drop Low Stock" variant="warning">
                 Only 2 units of 18K Micro-Gold Vermeil drop earrings remain in stock.
               </Notice>
 
@@ -1291,7 +1305,8 @@ export default function StorefrontDesignSystemPage() {
                 title="bKash Payment Verification Timeout"
                 variant="danger"
               >
-                Transaction was timed out by bank gateway. Please verify your bKash wallet PIN or switch to Cash on Delivery.
+                Transaction was timed out by bank gateway. Please verify your bKash wallet PIN or
+                switch to Cash on Delivery.
               </Notice>
 
               {/* Info Notice with Dismiss Button */}
@@ -1301,7 +1316,8 @@ export default function StorefrontDesignSystemPage() {
                 title="White Glove Doorstep Inspection"
                 variant="info"
               >
-                Patrons across all 64 districts in Bangladesh are welcome to open the parcel and inspect the jewelry before releasing cash to the rider.
+                Patrons across all 64 districts in Bangladesh are welcome to open the parcel and
+                inspect the jewelry before releasing cash to the rider.
               </Notice>
             </div>
 
@@ -1364,11 +1380,15 @@ export default function StorefrontDesignSystemPage() {
                   </div>
                   <div className="flex items-center gap-2">
                     <Spinner size="md" variant="primary" />
-                    <span className="font-label-sm text-xs text-on-surface-variant">md (20px standard)</span>
+                    <span className="font-label-sm text-xs text-on-surface-variant">
+                      md (20px standard)
+                    </span>
                   </div>
                   <div className="flex items-center gap-2">
                     <Spinner size="lg" variant="primary" />
-                    <span className="font-label-sm text-xs text-on-surface-variant">lg (28px hero)</span>
+                    <span className="font-label-sm text-xs text-on-surface-variant">
+                      lg (28px hero)
+                    </span>
                   </div>
                 </div>
               </div>
@@ -1383,28 +1403,52 @@ export default function StorefrontDesignSystemPage() {
               {/* Surface Tiers Grid */}
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <Surface className="p-4 text-center" variant="flat">
-                  <span className="block font-headline-sm text-xs font-bold text-on-surface">Tier 1: Flat</span>
-                  <span className="text-[11px] text-on-surface-variant/80">Hairline border, no shadow</span>
+                  <span className="block font-headline-sm text-xs font-bold text-on-surface">
+                    Tier 1: Flat
+                  </span>
+                  <span className="text-[11px] text-on-surface-variant/80">
+                    Hairline border, no shadow
+                  </span>
                 </Surface>
                 <Surface interactive className="p-4 text-center" variant="raised">
-                  <span className="block font-headline-sm text-xs font-bold text-on-surface">Tier 2: Raised (Interactive)</span>
-                  <span className="text-[11px] text-on-surface-variant/80">shadow-2xs, tap to press</span>
+                  <span className="block font-headline-sm text-xs font-bold text-on-surface">
+                    Tier 2: Raised (Interactive)
+                  </span>
+                  <span className="text-[11px] text-on-surface-variant/80">
+                    shadow-2xs, tap to press
+                  </span>
                 </Surface>
                 <Surface interactive className="p-4 text-center" variant="floating">
-                  <span className="block font-headline-sm text-xs font-bold text-on-surface">Tier 3: Floating</span>
-                  <span className="text-[11px] text-on-surface-variant/80">shadow-lg, high elevation</span>
+                  <span className="block font-headline-sm text-xs font-bold text-on-surface">
+                    Tier 3: Floating
+                  </span>
+                  <span className="text-[11px] text-on-surface-variant/80">
+                    shadow-lg, high elevation
+                  </span>
                 </Surface>
                 <Surface className="p-4 text-center" variant="glass">
-                  <span className="block font-headline-sm text-xs font-bold text-on-surface">Frosted Liquid Glass</span>
-                  <span className="text-[11px] text-on-surface-variant/80">backdrop-blur-xl chrome</span>
+                  <span className="block font-headline-sm text-xs font-bold text-on-surface">
+                    Frosted Liquid Glass
+                  </span>
+                  <span className="text-[11px] text-on-surface-variant/80">
+                    backdrop-blur-xl chrome
+                  </span>
                 </Surface>
                 <Surface className="p-4 text-center" variant="sunken">
-                  <span className="block font-headline-sm text-xs font-bold text-on-surface">Sunken Well</span>
-                  <span className="text-[11px] text-on-surface-variant/80">container-low subtle inset</span>
+                  <span className="block font-headline-sm text-xs font-bold text-on-surface">
+                    Sunken Well
+                  </span>
+                  <span className="text-[11px] text-on-surface-variant/80">
+                    container-low subtle inset
+                  </span>
                 </Surface>
                 <Surface className="p-4 text-center" variant="inverse">
-                  <span className="block font-headline-sm text-xs font-bold text-inverse-on-surface">Inverse Noir</span>
-                  <span className="text-[11px] text-inverse-on-surface/80">dark canvas toast/overlay</span>
+                  <span className="block font-headline-sm text-xs font-bold text-inverse-on-surface">
+                    Inverse Noir
+                  </span>
+                  <span className="text-[11px] text-inverse-on-surface/80">
+                    dark canvas toast/overlay
+                  </span>
                 </Surface>
               </div>
 
@@ -1430,10 +1474,11 @@ export default function StorefrontDesignSystemPage() {
             </h2>
           </div>
           <p className="text-body-sm text-on-surface-variant max-w-3xl">
-            Extracted faithfully from the Warm Editorial shop design. Borderless
-            outer silhouette, 3:4 image hero, frosted glass capsule badges, floating delivery/rating pills,
-            and finish swatches. Dual responsive modes: <strong>Mobile &amp; Tablet</strong> touch-optimized
-            cards and <strong>Desktop</strong> expanded cards with slide-up &quot;Quick Add to Bag&quot; and secondary angle hover crossfade.
+            Extracted faithfully from the Warm Editorial shop design. Borderless outer silhouette,
+            3:4 image hero, frosted glass capsule badges, floating delivery/rating pills, and finish
+            swatches. Dual responsive modes: <strong>Mobile &amp; Tablet</strong> touch-optimized
+            cards and <strong>Desktop</strong> expanded cards with slide-up &quot;Quick Add to
+            Bag&quot; and secondary angle hover crossfade.
           </p>
 
           {/* PART 1: MOBILE & TABLET 2-COLUMN CATALOG GRID SPECIMEN (1:1 STITCH FIDELITY) */}
@@ -1579,7 +1624,9 @@ export default function StorefrontDesignSystemPage() {
                   imageUrl="https://lh3.googleusercontent.com/aida-public/AB6AXuCcp0kQtKWyXQxXORp6oMlIv7kruGPkvNnmsn098HT7XfEDFyw15_3W-Ro2wuptp3x5VO4luMShLM4FICmjRw1vbTx2CmVRurQuL_52s0L8eEN5yHe5JMyBdlErRobAsMSr9pEXrX4DV3AUMyNkrVVhT_WUC2T5BCjB_dC_3xk6HAMNSwhqc0EjqjeDjE6-RVuqhFbzcxl_NaG8xdjEFskQalqMaG4nsvwbd969TBtxQOqaXzOYBNDx"
                   isSoldOut={true}
                   onNotifyMe={() => {
-                    showToast("We will notify you via SMS/Email as soon as Adeline Pleated Scarf restocks!");
+                    showToast(
+                      'We will notify you via SMS/Email as soon as Adeline Pleated Scarf restocks!',
+                    );
                   }}
                   onWishlistToggle={(active) => {
                     showToast(active ? 'Added to Wishlist' : 'Removed from Wishlist');
@@ -1599,7 +1646,9 @@ export default function StorefrontDesignSystemPage() {
                   Desktop Product Cards (Expanded Viewport Experience)
                 </span>
                 <span className="text-[12px] text-on-surface-variant">
-                  Enhanced for cursor pointer ergonomics: Slide-up &quot;Quick Add to Bag&quot; on image hover, secondary angle crossfade, multi-line typography, and subtitle specifications.
+                  Enhanced for cursor pointer ergonomics: Slide-up &quot;Quick Add to Bag&quot; on
+                  image hover, secondary angle crossfade, multi-line typography, and subtitle
+                  specifications.
                 </span>
               </div>
               <div className="flex items-center gap-2">
@@ -1629,7 +1678,9 @@ export default function StorefrontDesignSystemPage() {
                   showToast('Quick-added Aurelia Baroque Pearl Drop to Bag');
                 }}
                 onWishlistToggle={(active) => {
-                  showToast(active ? 'Added Aurelia Earrings to Wishlist' : 'Removed from Wishlist');
+                  showToast(
+                    active ? 'Added Aurelia Earrings to Wishlist' : 'Removed from Wishlist',
+                  );
                 }}
                 originalPrice={2200}
                 price={1850}
@@ -1690,7 +1741,9 @@ export default function StorefrontDesignSystemPage() {
                 imageUrl="https://lh3.googleusercontent.com/aida-public/AB6AXuCcp0kQtKWyXQxXORp6oMlIv7kruGPkvNnmsn098HT7XfEDFyw15_3W-Ro2wuptp3x5VO4luMShLM4FICmjRw1vbTx2CmVRurQuL_52s0L8eEN5yHe5JMyBdlErRobAsMSr9pEXrX4DV3AUMyNkrVVhT_WUC2T5BCjB_dC_3xk6HAMNSwhqc0EjqjeDjE6-RVuqhFbzcxl_NaG8xdjEFskQalqMaG4nsvwbd969TBtxQOqaXzOYBNDx"
                 isSoldOut={true}
                 onNotifyMe={() => {
-                  showToast("We will notify you via SMS/Email as soon as Adeline Pleated Scarf restocks!");
+                  showToast(
+                    'We will notify you via SMS/Email as soon as Adeline Pleated Scarf restocks!',
+                  );
                 }}
                 onWishlistToggle={(active) => {
                   showToast(active ? 'Added Scarf to Wishlist' : 'Removed from Wishlist');
@@ -1723,7 +1776,8 @@ export default function StorefrontDesignSystemPage() {
             </h2>
           </div>
           <p className="text-body-sm text-on-surface-variant">
-            Interactive bottom sheet dialogs crafted for mobile ergonomics with safe-area inset support.
+            Interactive bottom sheet dialogs crafted for mobile ergonomics with safe-area inset
+            support.
           </p>
 
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
@@ -1732,13 +1786,10 @@ export default function StorefrontDesignSystemPage() {
                 Shopping Bag Drawer (Cart)
               </h3>
               <p className="text-body-sm text-xs text-on-surface-variant">
-                Includes shipping progress bar to ৳3,000 threshold, quantity steppers, and dual checkout actions.
+                Includes shipping progress bar to ৳3,000 threshold, quantity steppers, and dual
+                checkout actions.
               </p>
-              <Button
-                className="w-full"
-                onClick={() => setIsCartOpen(true)}
-                variant="primary"
-              >
+              <Button className="w-full" onClick={() => setIsCartOpen(true)} variant="primary">
                 <ShoppingBagIcon size={18} />
                 <span>Open Shopping Bag Drawer</span>
               </Button>
@@ -1749,13 +1800,10 @@ export default function StorefrontDesignSystemPage() {
                 Sort Collection Bottom Sheet
               </h3>
               <p className="text-body-sm text-xs text-on-surface-variant">
-                Heirloom curation sorting with Dhaka vault labels, trending pills, and custom radio controls.
+                Heirloom curation sorting with Dhaka vault labels, trending pills, and custom radio
+                controls.
               </p>
-              <Button
-                className="w-full"
-                onClick={() => setIsSortOpen(true)}
-                variant="tonal"
-              >
+              <Button className="w-full" onClick={() => setIsSortOpen(true)} variant="tonal">
                 <ArrowRightIcon className="rotate-90" size={18} />
                 <span>Open Sort Bottom Sheet</span>
               </Button>
@@ -1773,14 +1821,11 @@ export default function StorefrontDesignSystemPage() {
                 )}
               </div>
               <p className="text-body-sm text-xs text-on-surface-variant">
-                Price budget slider, palette swatches, material chips, and Dhaka express availability.
+                Price budget slider, palette swatches, material chips, and Dhaka express
+                availability.
               </p>
               <div className="flex flex-col gap-2 pt-1">
-                <Button
-                  className="w-full"
-                  onClick={() => setIsFilterOpen(true)}
-                  variant="primary"
-                >
+                <Button className="w-full" onClick={() => setIsFilterOpen(true)} variant="primary">
                   <FilterIcon size={18} />
                   <span>Open Refine Selection Drawer</span>
                 </Button>
@@ -1807,7 +1852,10 @@ export default function StorefrontDesignSystemPage() {
             </h2>
           </div>
           <p className="text-body-sm text-on-surface-variant">
-            Dual-viewport navbar system. Mobile/Tablet focuses on pure brand logo, search expander, and cart badge (no hamburger, no account). Desktop expands to a luxury 2-row header with prominent search, express courier reassurance, badged utilities, and an interactive category mega-menu.
+            Dual-viewport navbar system. Mobile/Tablet focuses on pure brand logo, search expander,
+            and cart badge (no hamburger, no account). Desktop expands to a luxury 2-row header with
+            prominent search, express courier reassurance, badged utilities, and an interactive
+            category mega-menu.
           </p>
 
           <div className="space-y-6">
@@ -1875,7 +1923,11 @@ export default function StorefrontDesignSystemPage() {
             </h2>
           </div>
           <p className="text-body-sm text-on-surface-variant">
-            Dual-viewport footer system. Mobile &amp; Tablet maintains an ultra-minimal, clean footprint with a tactile Back to top scroller, safe-area bottom clearance so it never collides with fixed bottom navigation on phones, and an elegant 3-column spread on tablets. Desktop embraces a serene, airy warm-linen aesthetic with a quiet single-line newsletter signup, 3 spacious link columns, and understated payment notes.
+            Dual-viewport footer system. Mobile &amp; Tablet maintains an ultra-minimal, clean
+            footprint with a tactile Back to top scroller, safe-area bottom clearance so it never
+            collides with fixed bottom navigation on phones, and an elegant 3-column spread on
+            tablets. Desktop embraces a serene, airy warm-linen aesthetic with a quiet single-line
+            newsletter signup, 3 spacious link columns, and understated payment notes.
           </p>
 
           <div className="space-y-6">
@@ -1920,7 +1972,10 @@ export default function StorefrontDesignSystemPage() {
             </h2>
           </div>
           <p className="text-body-sm text-on-surface-variant max-w-3xl">
-            The original populated Wishlist design specimen remains here as the visual reference. The live mobile and tablet Wishlist opens in a bottom sheet; desktop uses an editorial two-column page. Real product state replaces the earlier simulated cart and delivery actions.
+            The original populated Wishlist design specimen remains here as the visual reference.
+            The live mobile and tablet Wishlist opens in a bottom sheet; desktop uses an editorial
+            two-column page. Real product state replaces the earlier simulated cart and delivery
+            actions.
           </p>
 
           <div className="flex items-center gap-3">
@@ -1962,11 +2017,13 @@ export default function StorefrontDesignSystemPage() {
                 </span>
               </div>
               <div className="bg-surface p-2 sm:p-4">
-                  <WishlistDesignSpecimen mode="desktop" />
+                <WishlistDesignSpecimen mode="desktop" />
               </div>
             </div>
             <div className="rounded-2xl border border-border/60 bg-surface p-4 sm:p-6">
-              <p className="mb-4 font-label-sm text-xs font-bold uppercase tracking-wider text-on-surface">Wishlist Sharing · Populated Reference</p>
+              <p className="mb-4 font-label-sm text-xs font-bold uppercase tracking-wider text-on-surface">
+                Wishlist Sharing · Populated Reference
+              </p>
               <WishlistSharingSpecimen />
             </div>
           </div>
@@ -1983,7 +2040,12 @@ export default function StorefrontDesignSystemPage() {
             </h2>
           </div>
           <p className="text-body-sm text-on-surface-variant max-w-3xl">
-            High-conversion luxury checkout flow. Mobile view is a 1:1 extraction of the Stitch mobile design system featuring 3-step indicator, collapsible order summary accordion, 🇧🇩 +880 mobile verification, Dhaka Express vs Nationwide courier toggle, official bKash/Nagad &amp; COD payment selectors, Maevelle Bangladesh guarantee badges, and persistent bottom purchase bar. Desktop view expands into a 2-column layout with a sticky order value sidebar.
+            High-conversion luxury checkout flow. Mobile view is a 1:1 extraction of the Stitch
+            mobile design system featuring 3-step indicator, collapsible order summary accordion, 🇧🇩
+            +880 mobile verification, Dhaka Express vs Nationwide courier toggle, official
+            bKash/Nagad &amp; COD payment selectors, Maevelle Bangladesh guarantee badges, and
+            persistent bottom purchase bar. Desktop view expands into a 2-column layout with a
+            sticky order value sidebar.
           </p>
 
           <div className="flex items-center gap-3">
@@ -2080,7 +2142,6 @@ export default function StorefrontDesignSystemPage() {
         selectedSizeLabel="S"
         onSelectSize={(s) => showToast(`Selected Size ${s} applied from Size Guide.`)}
       />
-
     </div>
   );
 }

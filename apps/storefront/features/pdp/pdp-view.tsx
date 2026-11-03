@@ -38,6 +38,7 @@ export interface PdpViewProps {
   readonly onAddToCart: (variantId: string, quantity: number) => Promise<void>;
   readonly busy: boolean;
   readonly cartMessage: string;
+  readonly cartEpoch?: number;
 }
 
 export function PdpView({
@@ -54,6 +55,7 @@ export function PdpView({
   onAddToCart,
   busy,
   cartMessage,
+  cartEpoch = 0,
 }: PdpViewProps) {
   const fallbackBreadcrumbs = useMemo((): readonly BreadcrumbItemDef[] => {
     const items: BreadcrumbItemDef[] = [{ label: 'Shop', href: '/categories' }];
@@ -81,6 +83,15 @@ export function PdpView({
     return primaryVal ? { [visualAxis.id]: primaryVal.id } : {};
   });
 
+  const continuation = useRef({ product: product.id, epoch: cartEpoch, active: true });
+  if (continuation.current.product !== product.id || continuation.current.epoch !== cartEpoch)
+    continuation.current = { product: product.id, epoch: cartEpoch, active: true };
+  useEffect(() => {
+    continuation.current.active = true;
+    return () => {
+      continuation.current.active = false;
+    };
+  }, []);
   const router = useRouter();
   const [activeMedia, setActiveMedia] = useState(0);
   const [quantity, setQuantity] = useState(1);
@@ -267,6 +278,10 @@ export function PdpView({
   ).toFixed(1);
   const ratingCount = product.ratingSummary?.ratingCount ?? 0;
 
+  useEffect(() => {
+    setActionFeedback(null);
+  }, [cartEpoch]);
+
   const handleAddToCartClick = async () => {
     if (unselectedAxes.length > 0) {
       setActionFeedback(`Please select ${unselectedAxes[0]?.name ?? 'option'}`);
@@ -277,10 +292,9 @@ export function PdpView({
 
     try {
       await onAddToCart(selectedVariant.id, quantity);
-      setActionFeedback('Added to your bag');
-      setTimeout(() => setActionFeedback(null), 3000);
+      // Committed outcome feedback comes from the shared controller.
     } catch {
-      // Error is surfaced by parent cartMessage
+      // Shared CartFeedback announces the controller error.
     }
   };
 
@@ -292,11 +306,12 @@ export function PdpView({
     }
     if (!selectedVariant || !selectedVariant.available) return;
 
+    const origin = continuation.current;
     try {
       await onAddToCart(selectedVariant.id, quantity);
-      router.push('/checkout');
+      if (origin === continuation.current && origin.active) router.push('/checkout');
     } catch {
-      router.push('/checkout');
+      // Rejected/unknown Cart actions must not continue into Checkout.
     }
   };
 
@@ -322,7 +337,12 @@ export function PdpView({
           onSelect={handleMediaSelect}
           wishlisted={wishlisted}
           wishlistPending={wishlistPending}
-          {...(onWishlistToggle ? { onWishlistToggle: () => onWishlistToggle(product.options.length ? selectedVariant?.id ?? null : null) } : {})}
+          {...(onWishlistToggle
+            ? {
+                onWishlistToggle: () =>
+                  onWishlistToggle(product.options.length ? (selectedVariant?.id ?? null) : null),
+              }
+            : {})}
         />
 
         {/* Commercial header */}
@@ -385,7 +405,7 @@ export function PdpView({
             >
               <span>
                 {busy
-                  ? 'Adding…'
+                  ? 'Please wait…'
                   : cartMessage?.includes('Added') || actionFeedback?.includes('Added')
                     ? 'Added to Bag ✓'
                     : unselectedAxes.length > 0
@@ -471,7 +491,6 @@ export function PdpView({
           />
         </section>
 
-
         {/* Sticky bottom bar */}
         <PdpStickyBar
           price={priceDisplay?.amount ?? null}
@@ -509,7 +528,14 @@ export function PdpView({
                   onSelect={handleMediaSelect}
                   wishlisted={wishlisted}
                   wishlistPending={wishlistPending}
-                  {...(onWishlistToggle ? { onWishlistToggle: () => onWishlistToggle(product.options.length ? selectedVariant?.id ?? null : null) } : {})}
+                  {...(onWishlistToggle
+                    ? {
+                        onWishlistToggle: () =>
+                          onWishlistToggle(
+                            product.options.length ? (selectedVariant?.id ?? null) : null,
+                          ),
+                      }
+                    : {})}
                 />
               </div>
 
@@ -666,7 +692,7 @@ export function PdpView({
                     >
                       <span>
                         {busy
-                          ? 'Adding…'
+                          ? 'Please wait…'
                           : cartMessage?.includes('Added') || actionFeedback?.includes('Added')
                             ? 'Added to Bag ✓'
                             : unselectedAxes.length > 0
@@ -744,7 +770,6 @@ export function PdpView({
             />
           </section>
           {/* Core of the product details page ends here */}
-
         </div>
       </div>
 

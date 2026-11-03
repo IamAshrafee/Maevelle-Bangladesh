@@ -3,10 +3,11 @@
 import { cx } from '@/components/ui/classnames';
 import { wholeQuantity } from '@/lib/format/money';
 
-export type QuantityStepperSize = 'sm' | 'md' | 'lg';
+export type QuantityStepperSize = 'sm' | 'md' | 'lg' | 'touch';
 export type QuantityStepperVariant = 'bordered' | 'pill';
 
 export type QuantityStepperProps = {
+  label?: string;
   className?: string;
   disabled?: boolean;
   max?: number;
@@ -26,6 +27,12 @@ const sizeStyles: Record<
     val: string;
   }
 > = {
+  touch: {
+    container: 'h-13 rounded-lg',
+    btn: 'w-12 text-base',
+    val: 'w-10 text-base',
+    text: 'text-base',
+  },
   sm: {
     container: 'h-7 rounded-lg',
     btn: 'w-7 text-xs',
@@ -48,6 +55,7 @@ const sizeStyles: Record<
 
 export function QuantityStepper({
   className,
+  label = 'Quantity',
   disabled = false,
   max = 99,
   min = 1,
@@ -76,6 +84,8 @@ export function QuantityStepper({
 
   return (
     <div
+      role="group"
+      aria-label={label}
       className={cx(
         'inline-flex items-center overflow-hidden transition-colors',
         variant === 'bordered'

@@ -1,0 +1,283 @@
+'use client';
+
+import { cartApi } from './api';
+import { createCartController, type CartController } from './controller';
+import { createCartJournal } from './pending-journal';
+import { EMPTY_CART_SNAPSHOT } from './types';
+
+const CHANNEL = 'maevelle:cart-coordination:v1';
+const CART_SIGNAL = 'maevelle_cart_hint_v1';
+const RESET_SIGNAL = 'maevelle_cart_session_signal_v1';
+const SIGNAL = 'maevelle_cart_identity_v1';
+const WISHLIST_AUTH_SIGNAL = 'maevelle_shopper_auth_signal';
+const uuid = /^[0-9a-f-]{36}$/i;
+let runtime: ReturnType<typeof createRuntime> | null = null;
+function createRuntime() {
+  let channel: BroadcastChannel | null = null;
+  let clients = 0;
+  let cleanup: (() => void) | null = null;
+  let started = false,
+    authHold = false,
+    lastHint = 0;
+  let hintTimer: ReturnType<typeof setTimeout> | undefined;
+  const seen = new Set<string>();
+  const storage = {
+    getItem: (key: string) => window.sessionStorage.getItem(key),
+    setItem: (key: string, value: string) => window.sessionStorage.setItem(key, value),
+    removeItem: (key: string) => window.sessionStorage.removeItem(key),
+  };
+  function post(message: Record<string, unknown>) {
+    try {
+      const hint = { ...message, nonce: crypto.randomUUID() };
+      channel?.postMessage(hint);
+      if (message.kind === 'cart') {
+        try {
+          localStorage.setItem(CART_SIGNAL, JSON.stringify(hint));
+        } catch {
+          /* Focus/poll fallback. */
+        }
+      }
+    } catch {
+      /* Hints are optional. */
+    }
+  }
+  const controller = createCartController({
+    api: cartApi,
+    journal: createCartJournal(storage),
+    coordinate: async (task) => {
+      if (typeof navigator.locks?.request !== 'function') return task();
+      let entered = false;
+      const waiting = new AbortController();
+      const timer = setTimeout(() => waiting.abort(), 20000);
+      try {
+        return await navigator.locks.request(
+          'maevelle:cart-bootstrap',
+          { signal: waiting.signal },
+          () => {
+            entered = true;
+            return task();
+          },
+        );
+      } catch (error) {
+        // Cookie/storage policy can deny Web Locks before the callback runs.
+        // Optional coordination must not bypass the server's cookie round-trip barrier.
+        if (
+          !entered &&
+          error instanceof DOMException &&
+          ['SecurityError', 'NotSupportedError'].includes(error.name)
+        )
+          return task();
+        throw error;
+      } finally {
+        clearTimeout(timer);
+      }
+    },
+    surface: () => window.location.pathname,
+    sessionSignal: (phase) => {
+      post({ kind: 'session', phase });
+      try {
+        localStorage.setItem(RESET_SIGNAL, JSON.stringify({ phase, nonce: crypto.randomUUID() }));
+      } catch {
+        /* Optional hint only. */
+      }
+    },
+    notify: (context, revision) => post({ kind: 'cart', context, revision }),
+  });
+  function refresh() {
+    if (document.visibilityState === 'visible' && !authHold)
+      void controller.refresh().catch(() => undefined);
+  }
+  function receiveCart(hint: Record<string, unknown>) {
+    const current = controller.getSnapshot().confirmed;
+    if (
+      !current ||
+      current.ownerContext !== hint.context ||
+      !Number.isSafeInteger(hint.revision) ||
+      Number(hint.revision) <= current.version
+    )
+      return;
+    if (hintTimer) return;
+    hintTimer = setTimeout(
+      () => {
+        hintTimer = undefined;
+        lastHint = Date.now();
+        if (document.visibilityState === 'visible' && !authHold)
+          void controller.refresh(true).catch(() => undefined);
+      },
+      Math.max(0, 500 - (Date.now() - lastHint)),
+    );
+  }
+  function identity(phase: 'begin' | 'settled', broadcast = false) {
+    authHold = phase === 'begin';
+    controller.ownerTransition();
+    if (broadcast) {
+      post({ kind: 'identity', phase });
+      try {
+        localStorage.setItem(SIGNAL, JSON.stringify({ phase, nonce: crypto.randomUUID() }));
+      } catch {
+        /* Broadcast/focus remain available. */
+      }
+    }
+    if (!authHold && document.visibilityState === 'visible')
+      void controller.settleOwner().catch(() => undefined);
+  }
+  let lastSessionPhase: string | null = null;
+  function sessionHint(phase: 'begin' | 'settled') {
+    if (lastSessionPhase === phase) return;
+    lastSessionPhase = phase;
+    controller.expectFreshSession();
+    controller.ownerTransition();
+    if (phase === 'settled' && !authHold) void controller.settleOwner().catch(() => undefined);
+  }
+  function stop() {
+    clients--;
+    if (clients === 0) {
+      cleanup?.();
+      cleanup = null;
+      started = false;
+    }
+  }
+  return {
+    controller,
+    identity,
+    start() {
+      clients++;
+      if (started) return stop;
+      const events = new AbortController();
+      const options = { signal: events.signal };
+      started = true;
+      try {
+        channel = new BroadcastChannel(CHANNEL);
+        channel.onmessage = ({ data }: { data: unknown }) => {
+          if (!data || typeof data !== 'object') return;
+          const hint = data as Record<string, unknown>;
+          if (typeof hint.nonce !== 'string' || hint.nonce.length > 64 || seen.has(hint.nonce))
+            return;
+          seen.add(hint.nonce);
+          if (seen.size > 128) seen.delete(seen.values().next().value!);
+          if (hint.kind === 'session' && (hint.phase === 'begin' || hint.phase === 'settled')) {
+            sessionHint(hint.phase);
+            return;
+          }
+          if (hint.kind === 'identity' && (hint.phase === 'begin' || hint.phase === 'settled')) {
+            identity(hint.phase);
+            return;
+          }
+          if (
+            hint.kind !== 'cart' ||
+            typeof hint.context !== 'string' ||
+            !uuid.test(hint.context) ||
+            !Number.isSafeInteger(hint.revision) ||
+            Number(hint.revision) < 1
+          )
+            return;
+          receiveCart(hint);
+        };
+      } catch {
+        /* Storage/focus fallback has no credentials. */
+      }
+      addEventListener(
+        'storage',
+        (event) => {
+          if (event.key === CART_SIGNAL && event.newValue) {
+            try {
+              const hint = JSON.parse(event.newValue);
+              if (hint && typeof hint === 'object') receiveCart(hint);
+            } catch {
+              /* Untrusted hint. */
+            }
+          } else if (event.key === RESET_SIGNAL && event.newValue) {
+            try {
+              const hint = JSON.parse(event.newValue);
+              if (hint.phase === 'begin' || hint.phase === 'settled') sessionHint(hint.phase);
+            } catch {
+              /* Untrusted hint. */
+            }
+          } else if (event.key === SIGNAL && event.newValue) {
+            try {
+              const hint = JSON.parse(event.newValue) as { phase?: unknown };
+              if (hint.phase === 'begin' || hint.phase === 'settled') identity(hint.phase);
+            } catch {
+              /* Untrusted hint ignored. */
+            }
+          } else if (event.key === WISHLIST_AUTH_SIGNAL) identity('settled');
+        },
+        options,
+      );
+      addEventListener(
+        'focus',
+        () => {
+          if (!authHold) void controller.settleOwner().catch(() => undefined);
+        },
+        options,
+      );
+      addEventListener(
+        'pageshow',
+        () => {
+          if (!authHold) void controller.settleOwner().catch(() => undefined);
+        },
+        options,
+      );
+      document.addEventListener(
+        'visibilitychange',
+        () => {
+          if (document.visibilityState === 'hidden') controller.ownerTransition(true);
+          else if (!authHold) void controller.settleOwner().catch(() => undefined);
+        },
+        options,
+      );
+      addEventListener('online', refresh, options);
+      addEventListener('maevelle:cart-changed', refresh, options);
+      const timer = setInterval(refresh, 30_000);
+      cleanup = () => {
+        events.abort();
+        clearInterval(timer);
+        if (hintTimer) clearTimeout(hintTimer);
+        hintTimer = undefined;
+        channel?.close();
+        channel = null;
+      };
+      refresh();
+      return stop;
+    },
+  };
+}
+function instance() {
+  if (!runtime) runtime = createRuntime();
+  return runtime;
+}
+function invoke<T>(action: (controller: CartController) => T): T {
+  return action(instance().controller);
+}
+/** No browser instance/private state is created by server rendering. */
+export const cartStore = {
+  getSnapshot: () =>
+    typeof window === 'undefined' ? EMPTY_CART_SNAPSHOT : instance().controller.getSnapshot(),
+  getServerSnapshot: () => EMPTY_CART_SNAPSHOT,
+  subscribe(listener: () => void) {
+    const active = instance();
+    const unsubscribe = active.controller.subscribe(listener);
+    const stop = active.start();
+    return () => {
+      unsubscribe();
+      stop();
+    };
+  },
+  initialize: () => invoke((c) => c.initialize()),
+  refresh: () => invoke((c) => c.refresh()),
+  reconcile: () => invoke((c) => c.reconcile()),
+  addItem: (id: string, quantity: number) => invoke((c) => c.addItem(id, quantity)),
+  setQuantity: (id: string, quantity: string) => invoke((c) => c.setQuantity(id, quantity)),
+  removeItem: (id: string) => invoke((c) => c.removeItem(id)),
+  applyCoupon: (code: string) => invoke((c) => c.applyCoupon(code)),
+  removeCoupon: (code: string) => invoke((c) => c.removeCoupon(code)),
+  getCartCount: () => invoke((c) => c.getCartCount()),
+  getCartSummary: () => invoke((c) => c.getCartSummary()),
+  forgetSession: () => invoke((c) => c.forgetSession()),
+  clearCart: () => invoke((c) => c.clearCart()),
+  selectContext: (context: string) => invoke((c) => c.selectContext(context)),
+  reviewContexts: () => invoke((c) => c.reviewContexts()),
+  retryPending: () => invoke((c) => c.retryPending()),
+  stopRetrying: () => invoke((c) => c.stopRetrying()),
+  ownerTransition: (phase: 'begin' | 'settled') => instance().identity(phase, true),
+};

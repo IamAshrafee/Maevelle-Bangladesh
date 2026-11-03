@@ -32,7 +32,7 @@ export function PdpStickyBar({
   const canAdd = available && unselectedAxesCount === 0 && !!price && !busy;
 
   const buttonLabel = busy
-    ? 'Adding…'
+    ? 'Please wait…'
     : cartMessage?.includes('Added')
       ? 'Added to Bag ✓'
       : unselectedAxesCount > 0

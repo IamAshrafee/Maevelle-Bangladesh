@@ -28,14 +28,12 @@ export function MobileNavbar({
 }: MobileNavbarProps) {
   const pathname = usePathname();
   const router = useRouter();
-  const liveCount = useCartCount(initialCartCount ?? 0);
+  const liveCount = useCartCount(initialCartCount);
   const cartCount = initialCartCount !== undefined ? initialCartCount : liveCount;
+  const cartLabel =
+    cartCount === null ? 'View shopping bag' : `View shopping bag (${cartCount} items)`;
 
   const { addRecentSearch } = useRecentSearches();
-
-  if (pathname?.startsWith('/checkout')) {
-    return null;
-  }
 
   const [isMobileSearchOpen, setIsMobileSearchOpen] = useState(false);
   const [isTabletSearchFocused, setIsTabletSearchFocused] = useState(false);
@@ -49,7 +47,7 @@ export function MobileNavbar({
 
   // Trigger bounce animation when cart count increases
   useEffect(() => {
-    if (cartCount > 0) {
+    if (cartCount !== null && cartCount > 0) {
       setCartAnimate(true);
       const timer = setTimeout(() => setCartAnimate(false), 300);
       return () => clearTimeout(timer);
@@ -139,6 +137,7 @@ export function MobileNavbar({
     setIsTabletSearchFocused(false);
   };
 
+  if (pathname?.startsWith('/checkout')) return null;
   return (
     <>
       <header
@@ -151,7 +150,7 @@ export function MobileNavbar({
           className,
         )}
       >
-        <div className="flex h-16 items-center justify-between px-4 sm:px-6">
+        <div className="flex min-h-16 flex-wrap items-center justify-between gap-y-2 px-4 py-2 sm:px-6">
           {/* Brand Logo (Left) */}
           <Link
             aria-label={`${storeName} Home`}
@@ -168,7 +167,7 @@ export function MobileNavbar({
 
           {/* Tablet Inline Search Bar (Visible on sm to lg) */}
           <div
-            className="relative hidden sm:flex flex-1 max-w-xs md:max-w-md mx-4 z-40"
+            className="relative hidden sm:flex min-w-48 flex-1 max-w-xs md:max-w-md mx-4 z-40"
             ref={tabletSearchBoxRef}
           >
             <form className="relative w-full" onSubmit={handleSearchSubmit}>
@@ -192,7 +191,7 @@ export function MobileNavbar({
                 {searchQuery && (
                   <button
                     aria-label="Clear search input"
-                    className="flex h-5 w-5 items-center justify-center rounded-full text-on-surface-variant hover:text-primary active:scale-90 transition-all cursor-pointer mr-0.5 animate-in zoom-in-75 fade-in-0"
+                    className="flex h-5 w-5 items-center justify-center rounded-full text-on-surface-variant hover:text-primary active:scale-90 transition-[color,background-color,transform] cursor-pointer mr-0.5 animate-in zoom-in-75 fade-in-0"
                     onClick={() => {
                       setSearchQuery('');
                       tabletSearchInputRef.current?.focus();
@@ -248,13 +247,13 @@ export function MobileNavbar({
             {/* Shopping Bag Button (Live counter & pop animation) */}
             {onOpenCart ? (
               <button
-                aria-label={`View shopping bag (${cartCount} items)`}
+                aria-label={cartLabel}
                 className="relative flex h-11 w-11 items-center justify-center rounded-full text-on-surface transition-colors hover:bg-surface-container-low hover:text-primary active:scale-95 cursor-pointer"
                 onClick={onOpenCart}
                 type="button"
               >
                 <ShoppingBagIcon size={22} />
-                {cartCount > 0 && (
+                {cartCount !== null && cartCount > 0 && (
                   <span
                     className={`absolute top-1.5 right-1.5 flex h-4 min-w-[16px] items-center justify-center rounded-full bg-primary px-1 font-label-sm text-[10px] font-bold font-mono tabular-nums leading-none text-white shadow-xs transition-transform ${
                       cartAnimate ? 'scale-125' : 'scale-100'
@@ -266,12 +265,12 @@ export function MobileNavbar({
               </button>
             ) : (
               <Link
-                aria-label={`View shopping bag (${cartCount} items)`}
+                aria-label={cartLabel}
                 className="relative flex h-11 w-11 items-center justify-center rounded-full text-on-surface transition-colors hover:bg-surface-container-low hover:text-primary active:scale-95 cursor-pointer"
                 href="/cart"
               >
                 <ShoppingBagIcon size={22} />
-                {cartCount > 0 && (
+                {cartCount !== null && cartCount > 0 && (
                   <span
                     className={`absolute top-1.5 right-1.5 flex h-4 min-w-[16px] items-center justify-center rounded-full bg-primary px-1 font-label-sm text-[10px] font-bold font-mono tabular-nums leading-none text-white shadow-xs transition-transform ${
                       cartAnimate ? 'scale-125' : 'scale-100'
@@ -305,7 +304,7 @@ export function MobileNavbar({
                 {searchQuery && (
                   <button
                     aria-label="Clear search input"
-                    className="absolute right-2.5 top-1/2 -translate-y-1/2 flex h-6 w-6 items-center justify-center rounded-full text-on-surface-variant hover:text-primary active:scale-90 transition-all duration-150 cursor-pointer animate-in zoom-in-75 fade-in-0"
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 flex h-6 w-6 items-center justify-center rounded-full text-on-surface-variant hover:text-primary active:scale-90 transition-[color,background-color,transform] duration-150 cursor-pointer animate-in zoom-in-75 fade-in-0"
                     onClick={() => {
                       setSearchQuery('');
                       searchInputRef.current?.focus();
@@ -326,7 +325,7 @@ export function MobileNavbar({
 
               <button
                 aria-label="Close search panel"
-                className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-on-surface-variant hover:bg-surface-container hover:text-on-surface active:scale-90 transition-all duration-150 cursor-pointer"
+                className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-on-surface-variant hover:bg-surface-container hover:text-on-surface active:scale-90 transition-[color,background-color,transform] duration-150 cursor-pointer"
                 onClick={() => setIsMobileSearchOpen(false)}
                 type="button"
               >

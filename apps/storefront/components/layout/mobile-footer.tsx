@@ -86,21 +86,27 @@ export function MobileFooter({
             >
               Track Order
             </Link>
-            <span aria-hidden="true" className="text-border/60 text-[10px] select-none">•</span>
+            <span aria-hidden="true" className="text-border/60 text-[10px] select-none">
+              •
+            </span>
             <Link
               className="px-2 py-1.5 transition-colors duration-150 hover:text-primary active:scale-95"
               href="/policies/shipping"
             >
               Shipping
             </Link>
-            <span aria-hidden="true" className="text-border/60 text-[10px] select-none">•</span>
+            <span aria-hidden="true" className="text-border/60 text-[10px] select-none">
+              •
+            </span>
             <Link
               className="px-2 py-1.5 transition-colors duration-150 hover:text-primary active:scale-95"
               href="/policies/returns"
             >
               Returns
             </Link>
-            <span aria-hidden="true" className="text-border/60 text-[10px] select-none">•</span>
+            <span aria-hidden="true" className="text-border/60 text-[10px] select-none">
+              •
+            </span>
             <Link
               className="px-2 py-1.5 transition-colors duration-150 hover:text-primary active:scale-95"
               href="/policies/privacy"
@@ -108,7 +114,9 @@ export function MobileFooter({
               Privacy
             </Link>
             <PrivacyChoices />
-            <span aria-hidden="true" className="text-border/60 text-[10px] select-none">•</span>
+            <span aria-hidden="true" className="text-border/60 text-[10px] select-none">
+              •
+            </span>
             <Link
               className="px-2 py-1.5 transition-colors duration-150 hover:text-primary active:scale-95"
               href="/policies/terms"
@@ -147,10 +155,7 @@ export function MobileFooter({
             </p>
             <p className="text-[11px] text-on-surface-variant font-mono tabular-nums pt-1">
               Tel:{' '}
-              <a
-                className="text-primary hover:underline"
-                href="tel:+8801700623835"
-              >
+              <a className="text-primary hover:underline" href="tel:+8801700623835">
                 +880 1700-MAEVELLE
               </a>
             </p>
@@ -223,15 +228,23 @@ export function MobileFooter({
         </div>
 
         {/* TABLET BOTTOM BAR */}
-        <div className="hidden sm:flex items-center justify-between border-t border-border/30 pt-4 text-xs text-on-surface-variant/75 font-label-sm">
-          <span>© {new Date().getFullYear()} {storeName} Bangladesh Ltd.</span>
-          <div className="flex items-center gap-3">
-            <Link className="hover:text-primary transition-colors duration-150" href="/policies/privacy">
+        <div className="hidden sm:flex min-w-0 flex-wrap items-center justify-between gap-3 border-t border-border/30 pt-4 text-xs text-on-surface-variant/75 font-label-sm">
+          <span>
+            © {new Date().getFullYear()} {storeName} Bangladesh Ltd.
+          </span>
+          <div className="flex min-w-0 flex-wrap items-center gap-3">
+            <Link
+              className="hover:text-primary transition-colors duration-150"
+              href="/policies/privacy"
+            >
               Privacy
             </Link>
             <PrivacyChoices />
             <span>•</span>
-            <Link className="hover:text-primary transition-colors duration-150" href="/policies/terms">
+            <Link
+              className="hover:text-primary transition-colors duration-150"
+              href="/policies/terms"
+            >
               Terms
             </Link>
             <span>•</span>

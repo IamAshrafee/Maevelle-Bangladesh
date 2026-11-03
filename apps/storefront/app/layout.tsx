@@ -6,6 +6,7 @@ import { StorefrontFooter } from '@/components/layout/storefront-footer';
 import { StorefrontHeader } from '@/components/layout/storefront-header';
 import { SkipLink } from '@/components/ui/skip-link';
 import { StorefrontChat } from '@/features/chat/chat-root';
+import { CartFeedback } from '@/features/cart/components/cart-feedback';
 import { AnalyticsConsent } from '@/components/layout/analytics-consent';
 import { storefrontPublicBaseUrl } from '@/lib/env/storefront';
 
@@ -53,6 +54,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
       >
         <SkipLink>Skip to content</SkipLink>
         <StorefrontHeader />
+        <CartFeedback />
         <div id="main-content" tabIndex={-1}>
           {children}
         </div>

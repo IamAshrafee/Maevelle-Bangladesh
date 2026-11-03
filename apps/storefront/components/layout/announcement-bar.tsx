@@ -24,32 +24,27 @@ export function AnnouncementBar({
   dismissible = true,
 }: AnnouncementBarProps) {
   const pathname = usePathname();
-  const [isDismissing, setIsDismissing] = useState(false);
 
   const isCheckout = pathname?.startsWith('/checkout');
   const [isDismissed, setIsDismissed] = useState(false);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isPaused, setIsPaused] = useState(false);
+  const [manualPause, setManualPause] = useState(false);
 
   const messages = announcement ? [announcement, ...DEFAULT_MESSAGES] : DEFAULT_MESSAGES;
 
   // Auto-rotate messages every 4.8 seconds when not paused
   useEffect(() => {
-    if (messages.length <= 1 || isPaused || isDismissed) return;
+    if (messages.length <= 1 || isPaused || manualPause || isDismissed) return;
 
     const timer = setInterval(() => {
       setCurrentIndex((prev) => (prev + 1) % messages.length);
     }, 4800);
 
     return () => clearInterval(timer);
-  }, [messages.length, isPaused, isDismissed]);
+  }, [messages.length, isPaused, manualPause, isDismissed]);
 
-  const handleDismiss = () => {
-    setIsDismissing(true);
-    setTimeout(() => {
-      setIsDismissed(true);
-    }, 240);
-  };
+  const handleDismiss = () => setIsDismissed(true);
 
   if (isDismissed) return null;
 
@@ -65,45 +60,51 @@ export function AnnouncementBar({
     <aside
       aria-label="Store announcement"
       className={cx(
-        'relative z-50 flex w-full items-center justify-center bg-primary px-3 sm:px-6 text-center font-label-sm text-[11px] sm:text-xs font-medium tracking-wide text-white select-none overflow-hidden transition-[max-height,opacity,padding] duration-250 ease-out',
-        isDismissing
-          ? 'max-h-0 opacity-0 py-0'
-          : 'max-h-12 opacity-100 min-h-[34px] sm:min-h-[36px] py-1.5',
+        'relative z-50 flex min-w-0 w-full flex-wrap items-center justify-center gap-1 bg-primary px-3 py-1 text-center text-label-sm font-medium text-on-primary',
         isCheckout && 'hidden lg:flex',
         className,
       )}
       onMouseEnter={() => setIsPaused(true)}
       onMouseLeave={() => setIsPaused(false)}
+      onFocusCapture={() => setIsPaused(true)}
+      onBlurCapture={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget)) setIsPaused(false);
+      }}
       onTouchEnd={() => setIsPaused(false)}
       onTouchStart={() => setIsPaused(true)}
     >
-      <div className="flex items-center justify-center gap-2 overflow-hidden max-w-2xl px-7 sm:px-10">
+      <div className="flex min-w-0 flex-1 basis-48 items-center justify-center gap-2">
         <SparklesIcon className="shrink-0 text-white/90" size={13} />
-        <span
-          className="truncate inline-block animate-in fade-in slide-in-from-bottom-0.5 duration-300 motion-reduce:animate-none"
-          key={currentIndex}
-        >
+        <span className="min-w-0 break-words" key={currentIndex}>
           {messages[currentIndex]}
         </span>
       </div>
 
       {/* Rotating Arrow Controls (when more than 1 message) */}
       {messages.length > 1 && (
-        <div className="hidden md:flex items-center gap-0.5 ml-2 text-white/70">
+        <div className="flex min-w-0 max-w-full flex-wrap items-center justify-center text-on-primary">
           <button
             aria-label="Previous announcement"
-            className="flex h-5 w-5 items-center justify-center rounded hover:bg-white/15 hover:text-white active:scale-90 transition-[background-color,transform] duration-150 cursor-pointer"
+            className="flex min-h-12 min-w-12 items-center justify-center rounded hover:bg-white/15 hover:text-white active:scale-90 transition-[background-color,transform] duration-150 cursor-pointer"
             onClick={handlePrev}
             type="button"
           >
             <ArrowUpIcon className="-rotate-90" size={11} />
+          </button>
+          <button
+            type="button"
+            className="min-h-12 px-2 underline"
+            aria-pressed={manualPause}
+            onClick={() => setManualPause((value) => !value)}
+          >
+            {manualPause ? 'Resume announcements' : 'Pause announcements'}
           </button>
           <span className="text-[10px] font-mono opacity-70 tabular-nums">
             {currentIndex + 1}/{messages.length}
           </span>
           <button
             aria-label="Next announcement"
-            className="flex h-5 w-5 items-center justify-center rounded hover:bg-white/15 hover:text-white active:scale-90 transition-[background-color,transform] duration-150 cursor-pointer"
+            className="flex min-h-12 min-w-12 items-center justify-center rounded hover:bg-white/15 hover:text-white active:scale-90 transition-[background-color,transform] duration-150 cursor-pointer"
             onClick={handleNext}
             type="button"
           >
@@ -116,7 +117,7 @@ export function AnnouncementBar({
       {dismissible && (
         <button
           aria-label="Dismiss announcement"
-          className="absolute right-2 sm:right-3 flex h-6 w-6 items-center justify-center rounded-full text-white/80 hover:bg-white/15 hover:text-white active:scale-90 transition-[background-color,transform] duration-150 cursor-pointer"
+          className="flex min-h-12 min-w-12 items-center justify-center rounded-full text-white/80 hover:bg-white/15 hover:text-white active:scale-90 transition-[background-color,transform] duration-150 cursor-pointer"
           onClick={handleDismiss}
           type="button"
         >

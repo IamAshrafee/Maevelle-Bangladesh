@@ -129,7 +129,8 @@ Glass is allowed only for sticky global chrome, a sticky mobile purchase bar, or
 | `SortDrawer` | 1:1 Stitch bottom-sheet drawer with auto-select, editorial Playfair heading, crisp berry radio checkmarks, Trending pill, and single Reset button. |
 | `CartDrawer` | Slide-up shopping bag sheet with free shipping progress bar (৳2,500 threshold), item steppers, subtotal, and dual checkout CTAs. |
 | `ProductCard` | 3:4 portrait card with ATELIER DROP urgency badge, wishlist pop button, finish swatches, and inline Add to Bag. |
-| `QuantityStepper` | Tactile `[-] count [+]` stepper with minimum 1 protection and `scale-90` tactile feedback. |
+| `ConfirmDialog` | Native named/described confirmation composed from Button; Cancel first, Tab containment, Escape, busy state and post-removal focus fallback. Used by Cart Clear and explicit session recovery; preview in the lab. |
+| `QuantityStepper` | Tactile `[-] count [+]` stepper with minimum 1 protection and `scale-90` tactile feedback. The `touch` size supplies 48px buttons for Cart; `label` names the control group for its product. Existing sm/md/lg sizes remain available. |
 | `WishlistButton` | Animated heart toggle with tactile scale pop and accessibility labeling. |
 | `PhoneInput` | Courier contact input with 🇧🇩 `+880` prefix chip, validation, and verified check indicator. |
 | `Toggle` | Tactile iOS/Maevelle 1-tap checkout switch with smooth sliding thumb. |

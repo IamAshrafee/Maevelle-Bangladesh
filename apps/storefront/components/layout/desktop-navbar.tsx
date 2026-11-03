@@ -49,11 +49,31 @@ interface MegaMenuSection {
 const MEGA_MENUS: Record<string, MegaMenuSection> = {
   'fine-jewelry': {
     curated: [
-      { name: 'Freshwater Pearl Drops', path: '/categories/fine-jewelry/pearls', count: '14 pieces' },
-      { name: '18K Micro-Gold Vermeil', path: '/categories/fine-jewelry/gold-vermeil', count: '18 pieces' },
-      { name: 'Handcrafted Filigree Earrings', path: '/categories/fine-jewelry/earrings', count: '22 pieces' },
-      { name: 'Kundan Heritage Chokers', path: '/categories/fine-jewelry/kundan', count: '8 pieces' },
-      { name: 'Polki & Semiprecious Bangles', path: '/categories/fine-jewelry/bangles', count: '12 pieces' },
+      {
+        name: 'Freshwater Pearl Drops',
+        path: '/categories/fine-jewelry/pearls',
+        count: '14 pieces',
+      },
+      {
+        name: '18K Micro-Gold Vermeil',
+        path: '/categories/fine-jewelry/gold-vermeil',
+        count: '18 pieces',
+      },
+      {
+        name: 'Handcrafted Filigree Earrings',
+        path: '/categories/fine-jewelry/earrings',
+        count: '22 pieces',
+      },
+      {
+        name: 'Kundan Heritage Chokers',
+        path: '/categories/fine-jewelry/kundan',
+        count: '8 pieces',
+      },
+      {
+        name: 'Polki & Semiprecious Bangles',
+        path: '/categories/fine-jewelry/bangles',
+        count: '12 pieces',
+      },
     ],
     materials: [
       { name: 'Freshwater Pearls', desc: 'Sourced from artisanal pearl farms with natural luster' },
@@ -72,14 +92,33 @@ const MEGA_MENUS: Record<string, MegaMenuSection> = {
   },
   'silk-scarves': {
     curated: [
-      { name: 'Mulberry Silk Stoles', path: '/categories/silk-scarves/mulberry', count: '9 pieces' },
-      { name: 'Botanical Heritage Prints', path: '/categories/silk-scarves/botanical', count: '15 pieces' },
-      { name: 'Hand-rolled Silk Squares', path: '/categories/silk-scarves/squares', count: '11 pieces' },
-      { name: 'Evening Chiffon Wraps', path: '/categories/silk-scarves/chiffon', count: '7 pieces' },
+      {
+        name: 'Mulberry Silk Stoles',
+        path: '/categories/silk-scarves/mulberry',
+        count: '9 pieces',
+      },
+      {
+        name: 'Botanical Heritage Prints',
+        path: '/categories/silk-scarves/botanical',
+        count: '15 pieces',
+      },
+      {
+        name: 'Hand-rolled Silk Squares',
+        path: '/categories/silk-scarves/squares',
+        count: '11 pieces',
+      },
+      {
+        name: 'Evening Chiffon Wraps',
+        path: '/categories/silk-scarves/chiffon',
+        count: '7 pieces',
+      },
     ],
     materials: [
       { name: 'Pure Mulberry Silk', desc: '100% grade 6A mulberry silk weave, hand-finished' },
-      { name: 'Artisanal Block Prints', desc: 'Natural organic dyes crafted with artisanal heritage' },
+      {
+        name: 'Artisanal Block Prints',
+        desc: 'Natural organic dyes crafted with artisanal heritage',
+      },
     ],
     featured: {
       title: 'Monsoon Garden Silk Scarf',
@@ -94,7 +133,11 @@ const MEGA_MENUS: Record<string, MegaMenuSection> = {
   handbags: {
     curated: [
       { name: 'Travertine Mini Bags', path: '/categories/handbags/mini', count: '6 pieces' },
-      { name: 'Micro-Quilted Crossbody', path: '/categories/handbags/crossbody', count: '10 pieces' },
+      {
+        name: 'Micro-Quilted Crossbody',
+        path: '/categories/handbags/crossbody',
+        count: '10 pieces',
+      },
       { name: 'Embroidered Silk Potlis', path: '/categories/handbags/potli', count: '8 pieces' },
       { name: 'Structured Leather Totes', path: '/categories/handbags/totes', count: '5 pieces' },
     ],
@@ -114,9 +157,21 @@ const MEGA_MENUS: Record<string, MegaMenuSection> = {
   },
   'hair-accents': {
     curated: [
-      { name: 'Plush Velvet Bows', path: '/categories/hair-accents/velvet-bows', count: '8 pieces' },
-      { name: 'Freshwater Pearl Barrettes', path: '/categories/hair-accents/pearl-clips', count: '12 pieces' },
-      { name: 'Mulberry Silk Scrunchies', path: '/categories/hair-accents/scrunchies', count: '16 pieces' },
+      {
+        name: 'Plush Velvet Bows',
+        path: '/categories/hair-accents/velvet-bows',
+        count: '8 pieces',
+      },
+      {
+        name: 'Freshwater Pearl Barrettes',
+        path: '/categories/hair-accents/pearl-clips',
+        count: '12 pieces',
+      },
+      {
+        name: 'Mulberry Silk Scrunchies',
+        path: '/categories/hair-accents/scrunchies',
+        count: '16 pieces',
+      },
       { name: 'Gold Filigree Hairpins', path: '/categories/hair-accents/pins', count: '7 pieces' },
     ],
     materials: [
@@ -135,7 +190,6 @@ const MEGA_MENUS: Record<string, MegaMenuSection> = {
   },
 };
 
-
 export function DesktopNavbar({
   announcement,
   cartCount: initialCartCount,
@@ -146,12 +200,16 @@ export function DesktopNavbar({
 }: DesktopNavbarProps) {
   const router = useRouter();
   const pathname = usePathname();
-  const liveCount = useCartCount(initialCartCount ?? 0);
+  const liveCount = useCartCount(initialCartCount);
   const cartCount = initialCartCount !== undefined ? initialCartCount : liveCount;
+  const cartLabel =
+    cartCount === null ? 'View shopping bag' : `View shopping bag (${cartCount} items)`;
   const wishlist = useWishlist();
   const wishlistCount = wishlist.count;
-  const wishlistLabel = wishlist.mode === 'resolving' || wishlist.mode === 'expired'
-    ? 'View Wishlist (count unavailable)' : `View Wishlist (${wishlistCount} items)`;
+  const wishlistLabel =
+    wishlist.mode === 'resolving' || wishlist.mode === 'expired'
+      ? 'View Wishlist (count unavailable)'
+      : `View Wishlist (${wishlistCount} items)`;
 
   const { addRecentSearch } = useRecentSearches();
 
@@ -267,10 +325,30 @@ export function DesktopNavbar({
   };
 
   const menuItems = [
-    { id: 'fine-jewelry', label: 'Fine Jewelry', path: '/categories/fine-jewelry', hasDropdown: true },
-    { id: 'silk-scarves', label: 'Silk Scarves', path: '/categories/silk-scarves', hasDropdown: true },
-    { id: 'handbags', label: 'Handbags & Clutches', path: '/categories/handbags', hasDropdown: true },
-    { id: 'hair-accents', label: 'Hair Accents', path: '/categories/hair-accents', hasDropdown: true },
+    {
+      id: 'fine-jewelry',
+      label: 'Fine Jewelry',
+      path: '/categories/fine-jewelry',
+      hasDropdown: true,
+    },
+    {
+      id: 'silk-scarves',
+      label: 'Silk Scarves',
+      path: '/categories/silk-scarves',
+      hasDropdown: true,
+    },
+    {
+      id: 'handbags',
+      label: 'Handbags & Clutches',
+      path: '/categories/handbags',
+      hasDropdown: true,
+    },
+    {
+      id: 'hair-accents',
+      label: 'Hair Accents',
+      path: '/categories/hair-accents',
+      hasDropdown: true,
+    },
     { id: 'new-arrivals', label: 'New Arrivals', path: '/categories/new-arrivals', isNew: true },
     { id: 'curated-drops', label: 'Curated Drops', path: '/categories/curated', badge: 'Curated' },
     { id: 'all', label: 'Shop All', path: '/categories' },
@@ -293,7 +371,9 @@ export function DesktopNavbar({
         <div
           className={cx(
             'overflow-hidden transition-[max-height,opacity,transform] duration-300 ease-out',
-            isScrolled ? 'max-h-0 opacity-0 -translate-y-2 pointer-events-none' : 'max-h-12 opacity-100 translate-y-0'
+            isScrolled
+              ? 'max-h-0 opacity-0 -translate-y-2 pointer-events-none'
+              : 'max-h-12 opacity-100 translate-y-0',
           )}
         >
           <AnnouncementBar announcement={announcement} />
@@ -303,7 +383,9 @@ export function DesktopNavbar({
         <div
           className={cx(
             'border-b border-border/30 overflow-hidden transition-[max-height,opacity,transform] duration-300 ease-out',
-            isScrolled ? 'max-h-0 opacity-0 -translate-y-4 pointer-events-none' : 'max-h-[80px] opacity-100 translate-y-0'
+            isScrolled
+              ? 'max-h-0 opacity-0 -translate-y-4 pointer-events-none'
+              : 'max-h-[80px] opacity-100 translate-y-0',
           )}
         >
           <div className="mx-auto flex h-[76px] max-w-7xl items-center justify-between gap-8 px-6 lg:px-8">
@@ -395,12 +477,13 @@ export function DesktopNavbar({
 
             {/* Right Action Utilities (Badged Icons & Cart) */}
             <div className="flex items-center gap-4 shrink-0">
-
               {/* Favorite / Wishlist Button with Badge */}
               <Link
                 className="flex min-h-10 items-center rounded-xl px-3 text-xs font-semibold text-on-surface transition-colors hover:bg-surface-container-low hover:text-primary"
                 href="/account"
-              >Account</Link>
+              >
+                Account
+              </Link>
               <Link
                 aria-label={wishlistLabel}
                 className="group relative flex items-center gap-2 rounded-xl px-3 py-2 text-on-surface transition-[background-color,color] hover:bg-surface-container-low hover:text-primary cursor-pointer select-none"
@@ -420,14 +503,17 @@ export function DesktopNavbar({
               {/* Shopping Bag Button with Badge */}
               {onOpenCart ? (
                 <button
-                  aria-label={`View shopping bag (${cartCount} items)`}
+                  aria-label={cartLabel}
                   className="group relative flex items-center gap-2 rounded-xl bg-surface-container-low px-3.5 py-2 text-on-surface transition-[background-color,color] hover:bg-surface-container hover:text-primary active:scale-98 cursor-pointer select-none"
                   onClick={onOpenCart}
                   type="button"
                 >
                   <div className="relative">
-                    <ShoppingBagIcon className="text-primary transition-transform group-hover:scale-105" size={20} />
-                    {cartCount > 0 && (
+                    <ShoppingBagIcon
+                      className="text-primary transition-transform group-hover:scale-105"
+                      size={20}
+                    />
+                    {cartCount !== null && cartCount > 0 && (
                       <span className="absolute -top-1.5 -right-2 flex h-4 min-w-[16px] items-center justify-center rounded-full bg-primary px-1 font-label-sm text-[10px] font-bold font-mono tabular-nums text-white shadow-xs">
                         {cartCount}
                       </span>
@@ -437,13 +523,16 @@ export function DesktopNavbar({
                 </button>
               ) : (
                 <Link
-                  aria-label={`View shopping bag (${cartCount} items)`}
+                  aria-label={cartLabel}
                   className="group relative flex items-center gap-2 rounded-xl bg-surface-container-low px-3.5 py-2 text-on-surface transition-[background-color,color] hover:bg-surface-container hover:text-primary active:scale-98 cursor-pointer select-none"
                   href="/cart"
                 >
                   <div className="relative">
-                    <ShoppingBagIcon className="text-primary transition-transform group-hover:scale-105" size={20} />
-                    {cartCount > 0 && (
+                    <ShoppingBagIcon
+                      className="text-primary transition-transform group-hover:scale-105"
+                      size={20}
+                    />
+                    {cartCount !== null && cartCount > 0 && (
                       <span className="absolute -top-1.5 -right-2 flex h-4 min-w-[16px] items-center justify-center rounded-full bg-primary px-1 font-label-sm text-[10px] font-bold font-mono tabular-nums text-white shadow-xs">
                         {cartCount}
                       </span>
@@ -479,8 +568,8 @@ export function DesktopNavbar({
                         isOpen
                           ? 'bg-primary-fixed/25 text-primary font-semibold'
                           : isCurrent
-                          ? 'text-primary font-semibold'
-                          : 'text-on-surface hover:text-primary hover:bg-surface-container-low'
+                            ? 'text-primary font-semibold'
+                            : 'text-on-surface hover:text-primary hover:bg-surface-container-low'
                       }`}
                       href={item.path}
                       onClick={() => setActiveMenu((prev) => (prev === item.id ? null : item.id))}
@@ -526,7 +615,9 @@ export function DesktopNavbar({
                 <Link
                   className="flex min-h-9 items-center rounded-lg px-2.5 text-xs font-semibold text-on-surface transition-colors hover:bg-surface-container-low hover:text-primary"
                   href="/account"
-                >Account</Link>
+                >
+                  Account
+                </Link>
                 <Link
                   aria-label={wishlistLabel}
                   className="group relative flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-on-surface transition-[background-color,color] hover:bg-surface-container-low hover:text-primary cursor-pointer select-none"
@@ -546,14 +637,17 @@ export function DesktopNavbar({
                 {/* Shopping Bag Button */}
                 {onOpenCart ? (
                   <button
-                    aria-label={`View shopping bag (${cartCount} items)`}
+                    aria-label={cartLabel}
                     className="group relative flex items-center gap-1.5 rounded-lg bg-surface-container-low px-3 py-1.5 text-on-surface transition-[background-color,color] hover:bg-surface-container hover:text-primary active:scale-98 cursor-pointer select-none"
                     onClick={onOpenCart}
                     type="button"
                   >
                     <div className="relative">
-                      <ShoppingBagIcon className="text-primary transition-transform group-hover:scale-105" size={18} />
-                      {cartCount > 0 && (
+                      <ShoppingBagIcon
+                        className="text-primary transition-transform group-hover:scale-105"
+                        size={18}
+                      />
+                      {cartCount !== null && cartCount > 0 && (
                         <span className="absolute -top-1.5 -right-2 flex h-4 min-w-[16px] items-center justify-center rounded-full bg-primary px-1 font-label-sm text-[10px] font-bold font-mono tabular-nums text-white shadow-xs">
                           {cartCount}
                         </span>
@@ -563,13 +657,16 @@ export function DesktopNavbar({
                   </button>
                 ) : (
                   <Link
-                    aria-label={`View shopping bag (${cartCount} items)`}
+                    aria-label={cartLabel}
                     className="group relative flex items-center gap-1.5 rounded-lg bg-surface-container-low px-3 py-1.5 text-on-surface transition-[background-color,color] hover:bg-surface-container hover:text-primary active:scale-98 cursor-pointer select-none"
                     href="/cart"
                   >
                     <div className="relative">
-                      <ShoppingBagIcon className="text-primary transition-transform group-hover:scale-105" size={18} />
-                      {cartCount > 0 && (
+                      <ShoppingBagIcon
+                        className="text-primary transition-transform group-hover:scale-105"
+                        size={18}
+                      />
+                      {cartCount !== null && cartCount > 0 && (
                         <span className="absolute -top-1.5 -right-2 flex h-4 min-w-[16px] items-center justify-center rounded-full bg-primary px-1 font-label-sm text-[10px] font-bold font-mono tabular-nums text-white shadow-xs">
                           {cartCount}
                         </span>
@@ -604,7 +701,10 @@ export function DesktopNavbar({
                   href="/categories"
                 >
                   <span>All Collections</span>
-                  <ArrowRightIcon className="transition-transform group-hover:translate-x-0.5" size={13} />
+                  <ArrowRightIcon
+                    className="transition-transform group-hover:translate-x-0.5"
+                    size={13}
+                  />
                 </Link>
               </div>
             </div>

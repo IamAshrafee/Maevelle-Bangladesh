@@ -1,0 +1,703 @@
+import type { GuestCartViewDto } from '@maevelle/contracts';
+import { StorefrontClientApiError } from '@/lib/api/client/http';
+import { forgetGuestSession } from './session-recovery';
+import { createCartActivity } from './activity';
+import type { CartApi } from './api';
+import type { CartJournal } from './pending-journal';
+import { CartCoordinationError, cartIssue, isUncertain, cartOwnerUnavailable } from './errors';
+import {
+  EMPTY_CART_SNAPSHOT,
+  confirmedCartCount,
+  type CartCommand,
+  type CartIntent,
+  type CartSnapshot,
+} from './types';
+
+interface Dependencies {
+  api: CartApi;
+  journal: CartJournal;
+  coordinate<T>(task: () => Promise<T>): Promise<T>;
+  sessionSignal?(phase: 'begin' | 'settled'): void;
+  notify(context: string, revision: number): void;
+  surface?: () => string;
+  now?: () => number;
+  uuid?: () => string;
+}
+/** Server projections and submitted intents are distinct; this store owns neither prices nor inventory. */
+export function createCartController(deps: Dependencies) {
+  const now = deps.now ?? Date.now,
+    uuid = deps.uuid ?? (() => crypto.randomUUID());
+  const activity = createCartActivity();
+  let freshSessionExpected = deps.journal.requiresSessionReview();
+  let resetting = false;
+  let resetFlight: Promise<void> | null = null;
+  let state: CartSnapshot = EMPTY_CART_SNAPSHOT;
+  const listeners = new Set<() => void>();
+  let selected = deps.journal.context();
+  let epoch = 0,
+    issued = 0,
+    accepted = 0,
+    externalFence = 0;
+  let readFlight: Promise<GuestCartViewDto | null> | null = null;
+  let initFlight: Promise<GuestCartViewDto> | null = null;
+  let readAbort: AbortController | null = null;
+  let readTicket = 0;
+  let queue: Promise<unknown> = Promise.resolve();
+  const flights = new Map<string, Promise<GuestCartViewDto>>();
+  let unresolvedIntent: CartIntent | null = null;
+  let submitted = false;
+  let ownerPending = false;
+  let retryFlight: Promise<GuestCartViewDto> | null = null;
+  let restored = false;
+  let ownerLost = false;
+  function publish(patch: Partial<CartSnapshot>) {
+    state = { ...state, ...patch, epoch };
+    for (const listener of listeners) listener();
+  }
+  function current(e: number) {
+    if (e !== epoch)
+      throw new CartCoordinationError(
+        'OWNER_TRANSITION',
+        'The shopper context changed. Review your current bag.',
+      );
+  }
+  function apply(view: GuestCartViewDto, e: number, ticket: number, mutation = false) {
+    current(e);
+    if (ticket < accepted) return;
+    const previous = state.confirmed;
+    if (
+      previous?.ownerContext === view.ownerContext &&
+      (view.version < previous.version ||
+        (view.version === previous.version &&
+          Date.parse(view.evaluatedAt) < Date.parse(previous.evaluatedAt)))
+    )
+      return;
+    if (previous && previous.ownerContext !== view.ownerContext)
+      throw new CartCoordinationError(
+        'OWNER_TRANSITION',
+        'Choose the current bag before continuing.',
+      );
+    if (
+      previous &&
+      view.version > previous.version &&
+      (!mutation || Number(view.outcome?.committedVersion ?? view.version) < view.version)
+    )
+      externalFence++;
+    accepted = ticket;
+    ownerLost = false;
+    selected = view.ownerContext;
+    deps.journal.select(selected);
+    publish({ confirmed: view, mode: 'ready' });
+  }
+  function fail(error: unknown, e: number, ticket: number, writing = false) {
+    if (e !== epoch || ticket < accepted) return;
+    const issue = cartIssue(error, now(), writing);
+    const code = issue.code;
+    if (error instanceof StorefrontClientApiError && code === 'CART_CONTEXT_REQUIRED') {
+      accepted = ticket;
+      publish({
+        mode: 'ambiguous',
+        confirmed: null,
+        contexts: error.details.contexts ?? [],
+        issue,
+        sync: 'conflict',
+      });
+      return;
+    }
+    if (cartOwnerUnavailable(code)) {
+      epoch++;
+      externalFence++;
+      readAbort?.abort();
+      readFlight = null;
+      initFlight = null;
+      submitted = false;
+      selected = undefined;
+      ownerLost = true;
+      deps.journal.select();
+      accepted = ticket;
+      const unresolved = state.pending ?? unresolvedIntent ?? deps.journal.read();
+      publish({
+        confirmed: null,
+        mode: code === 'ACCOUNT_CART_NOT_READY' ? 'unavailable' : 'expired',
+        sync: 'idle',
+        issue,
+        pending: code === 'ACCOUNT_CART_NOT_READY' ? null : unresolved,
+        notice: null,
+      });
+      return;
+    }
+    const pendingIssue = state.pending && !writing ? state.issue : null;
+    publish({
+      mode: state.confirmed ? 'ready' : 'error',
+      sync: state.pending ? 'uncertain' : 'idle',
+      issue:
+        pendingIssue && issue.retryAt <= pendingIssue.retryAt
+          ? pendingIssue
+          : pendingIssue
+            ? { ...issue, recovery: pendingIssue.recovery }
+            : issue,
+      notice: null,
+    });
+  }
+  function restorePending() {
+    if (restored) return;
+    restored = true;
+    const intent = unresolvedIntent ?? deps.journal.read();
+    if (intent)
+      publish({
+        pending: intent,
+        sync: 'uncertain',
+        issue: {
+          code: 'RECOVERED_INTENT',
+          message:
+            'An earlier action may already be saved. Retry it while the original bag is available, or explicitly stop recovery before starting again.',
+          recovery: 'same-intent',
+          retryAt: 0,
+        },
+      });
+  }
+  async function refresh(force = false): Promise<GuestCartViewDto | null> {
+    if (ownerPending || resetting) return null;
+    if (now() < (state.issue?.retryAt ?? 0)) return state.confirmed;
+    if (readFlight && !force) return readFlight;
+    if (force) readAbort?.abort();
+    const e = epoch,
+      ticket = ++issued;
+    readTicket = ticket;
+    readAbort = new AbortController();
+    const context = selected;
+    if (!state.confirmed) publish({ mode: 'loading' });
+    if (!state.pending) publish({ sync: 'refreshing' });
+    const task: Promise<GuestCartViewDto | null> = (async () => {
+      try {
+        const view = await activity.track(deps.api.get(context, readAbort!.signal));
+        if (freshSessionExpected && !state.confirmed)
+          throw new CartCoordinationError(
+            'OWNER_TRANSITION',
+            'A bag session returned from another window after recovery. Check the bag explicitly before continuing.',
+          );
+        apply(view, e, ticket);
+        if (!state.pending && ticket >= accepted) publish({ issue: null });
+        restorePending();
+        return view;
+      } catch (error) {
+        if (e !== epoch) return null;
+        if (error instanceof Error && error.name === 'AbortError') return null;
+        if (
+          error instanceof StorefrontClientApiError &&
+          error.status === 404 &&
+          ticket >= accepted &&
+          !submitted
+        ) {
+          accepted = ticket;
+          const hadOwner = Boolean(context || state.confirmed || ownerLost);
+          ownerLost = hadOwner;
+          publish({
+            confirmed: null,
+            mode: hadOwner ? 'expired' : 'empty',
+            sync: 'idle',
+            issue: hadOwner
+              ? {
+                  code: error.code,
+                  message:
+                    'This browser no longer has access to the selected bag. No replacement has been created.',
+                  recovery: 'review',
+                  retryAt: 0,
+                }
+              : null,
+          });
+          restorePending();
+          return null;
+        }
+        fail(error, e, ticket);
+        throw error;
+      } finally {
+        if (e === epoch && state.sync === 'refreshing') publish({ sync: 'idle' });
+        if (readTicket === ticket) readFlight = null;
+      }
+    })();
+    readFlight = task;
+    return task;
+  }
+  async function initialize(): Promise<GuestCartViewDto> {
+    if (resetting)
+      throw new CartCoordinationError(
+        'REVIEW_REQUIRED',
+        'Wait for the new-bag recovery to finish.',
+      );
+    if (initFlight) return initFlight;
+    const e = epoch;
+    const task = deps
+      .coordinate(async () => {
+        current(e);
+        const found = await refresh(true);
+        current(e);
+        if (found) return found;
+        if (state.mode !== 'empty')
+          throw new CartCoordinationError(
+            'REVIEW_REQUIRED',
+            'Review the current session before starting another bag.',
+          );
+        publish({ sync: 'initializing', notice: null, issue: null });
+        const created = await activity.track(deps.api.initialize());
+        current(e);
+        // Unqualified cookie round trip deliberately surfaces competing authorities.
+        let verified: GuestCartViewDto;
+        try {
+          verified = await activity.track(deps.api.get());
+        } catch (error) {
+          current(e);
+          if (error instanceof StorefrontClientApiError && error.status === 404)
+            throw new CartCoordinationError(
+              'PERSISTENCE_UNAVAILABLE',
+              'The browser did not return its guest session cookie.',
+            );
+          throw error;
+        }
+        current(e);
+        if (verified.ownerContext !== created.ownerContext)
+          throw new CartCoordinationError(
+            'REVIEW_REQUIRED',
+            'The initialized bag differs from the current browser context. Review your bags.',
+          );
+        freshSessionExpected = false;
+        deps.journal.markSessionForgotten(false);
+        apply(verified, e, ++issued);
+        publish({ sync: 'idle' });
+        return verified;
+      })
+      .catch((error: unknown) => {
+        fail(error, e, ++issued);
+        throw error;
+      })
+      .finally(() => {
+        if (initFlight === task) initFlight = null;
+      });
+    initFlight = task;
+    return task;
+  }
+  function requireNoPending() {
+    if (state.pending || unresolvedIntent)
+      throw new CartCoordinationError(
+        'REVIEW_REQUIRED',
+        'Review the earlier action before submitting another action.',
+      );
+  }
+  async function submit(
+    intent: CartIntent,
+    e: number,
+    recovering = false,
+    surface = deps.surface?.(),
+  ): Promise<GuestCartViewDto> {
+    current(e);
+    if (now() - intent.createdAt > 7 * 86_400_000)
+      throw new CartCoordinationError(
+        'REVIEW_REQUIRED',
+        'This action is too old to replay. Review the bag before a new action.',
+      );
+    const ticket = ++issued;
+    submitted = true;
+    unresolvedIntent = intent;
+    publish({
+      pending: intent,
+      sync: 'pending',
+      issue: null,
+      notice: null,
+      recoveryPersisted: deps.journal.save(intent),
+    });
+    try {
+      const view = await deps.coordinate(() => {
+        current(e);
+        return activity.track(deps.api.mutate(intent));
+      });
+      current(e);
+      if (!view.outcome) throw new Error('The mutation outcome was not returned.');
+      apply(view, e, ticket, true);
+      deps.journal.save(null);
+      unresolvedIntent = null;
+      publish({
+        pending: null,
+        sync: 'idle',
+        issue: null,
+        notice:
+          recovering || surface !== deps.surface?.()
+            ? 'Your earlier bag action was confirmed. Review your bag for details.'
+            : Number(view.outcome.committedVersion) === view.version
+              ? intent.command.kind === 'clear'
+                ? Number(view.outcome.committedVersion) === intent.version
+                  ? 'Your bag is already empty. No items or coupons changed.'
+                  : 'Your bag was cleared. Items and selected coupons were removed.'
+                : intent.command.kind === 'add'
+                  ? 'Added to your bag.'
+                  : 'Your bag is up to date.'
+              : 'Your action was confirmed. Review the latest bag changes.',
+      });
+      deps.notify(intent.ownerContext, view.version);
+      return view;
+    } catch (error) {
+      if (e !== epoch) throw error;
+      const policy = cartIssue(error, now(), true);
+      if (isUncertain(error) || policy.recovery === 'same-intent') {
+        publish({ pending: intent, sync: 'uncertain', issue: policy, notice: null });
+      } else {
+        const unresolvedReplay =
+          recovering || ['IDEMPOTENCY_CONFLICT', 'INTENT_EXPIRED'].includes(policy.code);
+        if (!unresolvedReplay) {
+          deps.journal.save(null);
+          unresolvedIntent = null;
+        }
+        publish({
+          pending: unresolvedReplay ? intent : null,
+          sync: 'conflict',
+          issue: policy,
+          notice: null,
+        });
+        if (cartOwnerUnavailable(policy.code)) fail(error, e, ticket);
+        else if (policy.code === 'STALE_VERSION') {
+          try {
+            await refresh(true);
+          } catch {
+            /* Keep the original rejection/review notice. */
+          }
+          if (e === epoch) publish({ issue: policy, sync: 'conflict' });
+        }
+      }
+      throw error;
+    } finally {
+      if (e === epoch) submitted = false;
+    }
+  }
+  function command(command: CartCommand): Promise<GuestCartViewDto> {
+    if (now() < (state.issue?.retryAt ?? 0))
+      return Promise.reject(
+        new CartCoordinationError(
+          'REVIEW_REQUIRED',
+          'Please wait before trying another bag action.',
+        ),
+      );
+    if (state.mode === 'expired' && !state.confirmed)
+      return Promise.reject(
+        new CartCoordinationError(
+          'REVIEW_REQUIRED',
+          'Check the unavailable session or explicitly start a new bag before adding.',
+        ),
+      );
+    const same = flights.get(JSON.stringify(command));
+    if (same) return same;
+    if (resetting || state.pending || flights.has(JSON.stringify({ kind: 'clear' })))
+      return Promise.reject(
+        new CartCoordinationError(
+          'REVIEW_REQUIRED',
+          'Resolve the current bag action before submitting another.',
+        ),
+      );
+    const duplicate = JSON.stringify(command);
+    const existing = flights.get(duplicate);
+    if (existing) return existing;
+    if (flights.size >= 20)
+      return Promise.reject(
+        new CartCoordinationError(
+          'REVIEW_REQUIRED',
+          'Too many bag actions are waiting. Review your bag.',
+        ),
+      );
+    const e = epoch,
+      fence = externalFence,
+      surface = deps.surface?.();
+    const task = queue
+      .catch(() => undefined)
+      .then(async () => {
+        current(e);
+        if (ownerPending)
+          throw new CartCoordinationError(
+            'REVIEW_REQUIRED',
+            'Wait for shopper verification before changing the bag.',
+          );
+        requireNoPending();
+        const known = state.confirmed;
+        const view = known ? await refresh(true) : await initialize();
+        current(e);
+        requireNoPending();
+        if (!view)
+          throw new CartCoordinationError(
+            'REVIEW_REQUIRED',
+            'Your bag is not available. Review it before continuing.',
+          );
+        if (known && (fence !== externalFence || known.ownerContext !== view.ownerContext)) {
+          const error = new CartCoordinationError(
+            'REVIEW_REQUIRED',
+            'Your bag changed in another window. Review the current quantities before repeating your action.',
+          );
+          publish({
+            sync: 'conflict',
+            issue: { code: error.code, message: error.message, recovery: 'review', retryAt: 0 },
+            notice: null,
+          });
+          throw error;
+        }
+        return submit(
+          {
+            key: uuid(),
+            command,
+            ownerContext: view.ownerContext,
+            version: view.version,
+            createdAt: now(),
+          },
+          e,
+          false,
+          surface,
+        );
+      })
+      .finally(() => {
+        if (flights.get(duplicate) === task) flights.delete(duplicate);
+      });
+    flights.set(duplicate, task);
+    queue = task;
+    return task;
+  }
+  return {
+    getSnapshot: () => state,
+    getServerSnapshot: () => EMPTY_CART_SNAPSHOT,
+    subscribe(listener: () => void) {
+      listeners.add(listener);
+      return () => {
+        listeners.delete(listener);
+      };
+    },
+    refresh,
+    initialize,
+    addItem: (variantId: string, quantity: number) =>
+      command({ kind: 'add', variantId, quantity: String(quantity) }),
+    setQuantity: (lineId: string, quantity: string) => command({ kind: 'set', lineId, quantity }),
+    removeItem: (lineId: string) => command({ kind: 'remove', lineId }),
+    applyCoupon: (couponCode: string) => command({ kind: 'apply-coupon', couponCode }),
+    removeCoupon: (couponCode: string) => command({ kind: 'remove-coupon', couponCode }),
+    clearCart: () => command({ kind: 'clear' }),
+    forgetSession() {
+      if (now() < (state.issue?.retryAt ?? 0))
+        return Promise.reject(
+          new CartCoordinationError(
+            'REVIEW_REQUIRED',
+            'Please wait before checking the bag session again.',
+          ),
+        );
+      if (resetFlight) return resetFlight;
+      // Unknown outcomes require a separate explicit stop-recovery decision first.
+      if (state.pending || unresolvedIntent || deps.journal.read() || submitted || flights.size)
+        return Promise.reject(
+          new CartCoordinationError(
+            'REVIEW_REQUIRED',
+            'Resolve or explicitly stop recovery of the earlier action before starting a new bag.',
+          ),
+        );
+      if (ownerPending || !['expired', 'empty'].includes(state.mode))
+        return Promise.reject(
+          new CartCoordinationError(
+            'REVIEW_REQUIRED',
+            'Only an unavailable guest session can be forgotten.',
+          ),
+        );
+      resetting = true;
+      const e = ++epoch;
+      externalFence++;
+      readAbort?.abort();
+      readFlight = null;
+      initFlight = null;
+      publish({
+        confirmed: null,
+        pending: null,
+        contexts: [],
+        sync: 'resetting',
+        notice: null,
+        issue: null,
+      });
+      deps.sessionSignal?.('begin');
+      let reviewPersisted = true;
+      const task = (async () => {
+        try {
+          const remaining = await forgetGuestSession({
+            api: deps.api,
+            activity,
+            coordinate: deps.coordinate,
+            assertCurrent: () => current(e),
+            onAcknowledged: () => {
+              freshSessionExpected = true;
+              reviewPersisted = deps.journal.markSessionForgotten(true);
+              selected = undefined;
+              deps.journal.select();
+              deps.journal.save(null);
+              restored = false;
+            },
+          });
+          current(e);
+          if (remaining) {
+            ownerLost = true;
+            publish({
+              mode: 'expired',
+              sync: 'conflict',
+              issue: {
+                code: 'REVIEW_REQUIRED',
+                message:
+                  'Another window returned a bag session while recovery was finishing. Close other shopping tabs and check again before starting a new bag.',
+                recovery: 'review',
+                retryAt: 0,
+              },
+            });
+          } else {
+            ownerLost = false;
+            freshSessionExpected = true;
+            publish({
+              ...EMPTY_CART_SNAPSHOT,
+              mode: 'empty',
+              notice:
+                'This browser’s bag session was forgotten. Stored bags were not deleted or recovered. Choose an item to start a new bag.' +
+                (reviewPersisted
+                  ? ''
+                  : ' Browser storage could not record this recovery. Keep this tab open and check your bag again if you reload.'),
+            });
+          }
+        } catch (error) {
+          fail(error, e, ++issued);
+          if (epoch === e) publish({ mode: 'expired' });
+          throw error;
+        } finally {
+          resetting = false;
+          if (epoch === e && state.sync === 'resetting') publish({ sync: 'idle' });
+          deps.sessionSignal?.('settled');
+          resetFlight = null;
+        }
+      })();
+      resetFlight = task;
+      return task;
+    },
+    getCartCount: () => confirmedCartCount(state),
+    getCartSummary: () =>
+      state.confirmed
+        ? {
+            count: confirmedCartCount(state),
+            currency: state.confirmed.currency,
+            merchandiseNet: state.confirmed.merchandiseNet,
+          }
+        : null,
+    async selectContext(context: string) {
+      const outstanding = state.pending ?? unresolvedIntent ?? deps.journal.read();
+      if (outstanding && outstanding.ownerContext !== context)
+        throw new CartCoordinationError(
+          'REVIEW_REQUIRED',
+          'Resolve the original bag’s action before choosing another bag.',
+        );
+      if (!state.contexts.includes(context))
+        throw new CartCoordinationError(
+          'REVIEW_REQUIRED',
+          'Refresh the available bags before selecting one.',
+        );
+      epoch++;
+      readAbort?.abort();
+      readFlight = null;
+      initFlight = null;
+      selected = context;
+      accepted = 0;
+      publish({ confirmed: null, mode: 'loading', sync: 'refreshing', issue: null, notice: null });
+      const view = await refresh(true);
+      if (view) publish({ notice: 'Bag selected. Review it before adding again.' });
+      return view;
+    },
+    async reviewContexts() {
+      requireNoPending();
+      epoch++;
+      readAbort?.abort();
+      readFlight = null;
+      initFlight = null;
+      selected = undefined;
+      accepted = 0;
+      deps.journal.select();
+      publish({ confirmed: null, mode: 'loading', sync: 'refreshing', issue: null, notice: null });
+      return refresh(true);
+    },
+    retryPending() {
+      if (retryFlight) return retryFlight;
+      const task = (async () => {
+        const intent = state.pending;
+        if (!intent || ownerPending || resetting || submitted)
+          throw new CartCoordinationError(
+            'REVIEW_REQUIRED',
+            'The pending action is not available in this shopper context.',
+          );
+        if (state.confirmed && state.confirmed.ownerContext !== intent.ownerContext)
+          throw new CartCoordinationError(
+            'REVIEW_REQUIRED',
+            'Review the original bag before retrying its action.',
+          );
+        if (now() < (state.issue?.retryAt ?? 0))
+          throw new CartCoordinationError('REVIEW_REQUIRED', 'Please wait before retrying.');
+        const e = epoch;
+        let view: GuestCartViewDto;
+        try {
+          view = await activity.track(deps.api.get(intent.ownerContext));
+          current(e);
+        } catch (error) {
+          fail(error, e, ++issued);
+          throw error;
+        }
+        if (view.ownerContext !== intent.ownerContext)
+          throw new CartCoordinationError('OWNER_TRANSITION', 'The original bag is unavailable.');
+        apply(view, e, ++issued);
+        return submit(intent, e, true);
+      })().finally(() => {
+        if (retryFlight === task) retryFlight = null;
+      });
+      retryFlight = task;
+      return task;
+    },
+    stopRetrying() {
+      if (submitted || resetting || activity.busy())
+        throw new CartCoordinationError(
+          'REVIEW_REQUIRED',
+          'Wait for the in-flight action before stopping retries.',
+        );
+      deps.journal.save(null);
+      unresolvedIntent = null;
+      publish({
+        pending: null,
+        sync: 'idle',
+        issue: null,
+        notice:
+          'Automatic recovery stopped. Earlier changes may already be saved; review the bag before adding again.',
+      });
+    },
+    ownerTransition(preserveContext = false) {
+      ownerPending = true;
+      epoch++;
+      issued++;
+      accepted = 0;
+      externalFence++;
+      readAbort?.abort();
+      readFlight = null;
+      initFlight = null;
+      submitted = false;
+      if (!preserveContext) {
+        ownerLost = false;
+        selected = undefined;
+        deps.journal.select();
+      }
+      flights.clear();
+      queue = Promise.resolve();
+      restored = false;
+      publish({ ...EMPTY_CART_SNAPSHOT, mode: 'loading', sync: 'refreshing' });
+    },
+    settleOwner() {
+      ownerPending = false;
+      return refresh(true);
+    },
+    expectFreshSession: () => {
+      freshSessionExpected = true;
+      deps.journal.markSessionForgotten(true);
+    },
+    reconcile: () => {
+      freshSessionExpected = false;
+      deps.journal.markSessionForgotten(false);
+      return refresh(true);
+    },
+  };
+}
+export type CartController = ReturnType<typeof createCartController>;

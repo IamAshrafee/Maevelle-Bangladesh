@@ -4,6 +4,7 @@ import { useEffect, useState, useSyncExternalStore, type FormEvent } from 'react
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { cartStore } from '@/features/cart/browser-runtime';
 import { wishlistStore } from '@/features/wishlist/wishlist-store';
 
 type Mode = 'sign-in' | 'register' | 'forgot' | 'reset';
@@ -18,8 +19,10 @@ async function authRequest(path: string, body: Record<string, unknown>): Promise
   const value: unknown = await response.json().catch(() => null);
   if (!response.ok) {
     const error = value && typeof value === 'object' ? (value as Record<string, unknown>) : {};
-    const detail = error.error && typeof error.error === 'object'
-      ? error.error as Record<string, unknown> : error;
+    const detail =
+      error.error && typeof error.error === 'object'
+        ? (error.error as Record<string, unknown>)
+        : error;
     throw new Error(
       typeof detail.message === 'string' ? detail.message : 'The request could not be completed.',
     );
@@ -28,8 +31,11 @@ async function authRequest(path: string, body: Record<string, unknown>): Promise
 }
 
 export function ShopperAccount() {
-  const wishlist = useSyncExternalStore(wishlistStore.subscribe,
-    wishlistStore.getSnapshot, wishlistStore.getServerSnapshot);
+  const wishlist = useSyncExternalStore(
+    wishlistStore.subscribe,
+    wishlistStore.getSnapshot,
+    wishlistStore.getServerSnapshot,
+  );
   const [mode, setMode] = useState<Mode>('sign-in');
   const [signedIn, setSignedIn] = useState(false);
   const [checking, setChecking] = useState(true);
@@ -88,7 +94,12 @@ export function ShopperAccount() {
         setMessage('Check your email for a verification link, then sign in.');
         setMode('sign-in');
       } else if (mode === 'sign-in') {
-        await authRequest('sign-in/email', { email: email.trim(), password });
+        cartStore.ownerTransition('begin');
+        try {
+          await authRequest('sign-in/email', { email: email.trim(), password });
+        } finally {
+          cartStore.ownerTransition('settled');
+        }
         await loadSession();
         await wishlistStore.afterSignIn();
         setMessage('You are signed in. Your saved products are synchronizing.');
@@ -100,7 +111,12 @@ export function ShopperAccount() {
         setMessage('If this email has an account, a reset link is on its way.');
       } else {
         if (!token) throw new Error('This reset link is invalid or expired.');
-        await authRequest('reset-password', { token, newPassword: password });
+        cartStore.ownerTransition('begin');
+        try {
+          await authRequest('reset-password', { token, newPassword: password });
+        } finally {
+          cartStore.ownerTransition('settled');
+        }
         setMessage('Password changed. Sign in with your new password.');
         setMode('sign-in');
         setToken('');
@@ -119,7 +135,12 @@ export function ShopperAccount() {
     setError('');
     setMessage('');
     try {
-      await authRequest('sign-out', {});
+      cartStore.ownerTransition('begin');
+      try {
+        await authRequest('sign-out', {});
+      } finally {
+        cartStore.ownerTransition('settled');
+      }
       wishlistStore.signOut();
       setSignedIn(false);
       setPassword('');
@@ -276,8 +297,10 @@ export function ShopperAccount() {
           </p>
         ) : null}
         {signedIn && wishlist.message ? (
-          <p role={wishlist.sync === 'error' || wishlist.sync === 'conflicted' ? 'alert' : 'status'}
-            className="mt-4 rounded-lg border border-border p-3 text-sm text-on-surface">
+          <p
+            role={wishlist.sync === 'error' || wishlist.sync === 'conflicted' ? 'alert' : 'status'}
+            className="mt-4 rounded-lg border border-border p-3 text-sm text-on-surface"
+          >
             {wishlist.message}
           </p>
         ) : null}
