@@ -1,8 +1,11 @@
 'use client';
 
-import { cartApi } from './api';
+import { cartApi, createCartApi } from './api';
 import { createCartController, type CartController } from './controller';
 import { createCartJournal } from './pending-journal';
+import { resolveCartShopper } from './shopper-authority';
+import { cartIssue } from './errors';
+import { StorefrontClientApiError } from '@/lib/api/client/http';
 import { EMPTY_CART_SNAPSHOT } from './types';
 
 const CHANNEL = 'maevelle:cart-coordination:v1';
@@ -26,6 +29,74 @@ function createRuntime() {
     setItem: (key: string, value: string) => window.sessionStorage.setItem(key, value),
     removeItem: (key: string) => window.sessionStorage.removeItem(key),
   };
+  const guestJournal = createCartJournal(storage);
+  const accountMarker = 'maevelle_cart_account_seen_v1';
+  let accountExpected = false;
+  try {
+    accountExpected = storage.getItem(accountMarker) === '1';
+  } catch {
+    /* Storage is optional. */
+  }
+  let authorityCheck: Promise<unknown> | null = null;
+  let authorityAbort: AbortController | null = null;
+  let authorityResolved = false;
+  let partition: string | null = null;
+  let allowGuest = false;
+
+  function checkOwner(force = false) {
+    if (authHold) return Promise.resolve();
+    if (authorityCheck && !force) return authorityCheck;
+    authorityAbort?.abort();
+    const abort = new AbortController();
+    authorityAbort = abort;
+    authorityResolved = false;
+    controller.ownerTransition(true);
+    const task = (async () => {
+      let next: string | null;
+      try {
+        next = await resolveCartShopper(abort.signal);
+        if (abort.signal.aborted) return;
+        if (!next && accountExpected && !allowGuest)
+          throw new StorefrontClientApiError(
+            401,
+            'SESSION_EXPIRED',
+            'Sign in to check your account bag.',
+          );
+      } catch (error) {
+        if (abort.signal.aborted) return;
+        const expired = error instanceof StorefrontClientApiError && error.status === 401;
+        controller.authorityUnavailable(
+          {
+            ...cartIssue(error, Date.now()),
+            message: expired
+              ? 'Sign in again to access your account bag.'
+              : 'We could not check your shopper session. Check your bag again.',
+          },
+          expired,
+        );
+        return;
+      }
+      accountExpected = Boolean(next);
+      allowGuest = false;
+      try {
+        if (next) storage.setItem(accountMarker, '1');
+        else storage.removeItem(accountMarker);
+      } catch {
+        /* The active tab still holds the ownership fence. */
+      }
+      partition = next;
+      authorityResolved = true;
+      return controller.settleOwner({
+        partition: next,
+        api: next ? createCartApi(next) : cartApi,
+        journal: next ? createCartJournal(storage, Date.now, next) : guestJournal,
+      });
+    })().finally(() => {
+      if (authorityCheck === task) authorityCheck = null;
+    });
+    authorityCheck = task;
+    return task;
+  }
   function post(message: Record<string, unknown>) {
     try {
       const hint = { ...message, nonce: crypto.randomUUID() };
@@ -43,7 +114,7 @@ function createRuntime() {
   }
   const controller = createCartController({
     api: cartApi,
-    journal: createCartJournal(storage),
+    journal: guestJournal,
     coordinate: async (task) => {
       if (typeof navigator.locks?.request !== 'function') return task();
       let entered = false;
@@ -85,7 +156,7 @@ function createRuntime() {
   });
   function refresh() {
     if (document.visibilityState === 'visible' && !authHold)
-      void controller.refresh().catch(() => undefined);
+      void (authorityResolved ? controller.refresh() : checkOwner()).catch(() => undefined);
   }
   function receiveCart(hint: Record<string, unknown>) {
     const current = controller.getSnapshot().confirmed;
@@ -107,23 +178,29 @@ function createRuntime() {
       Math.max(0, 500 - (Date.now() - lastHint)),
     );
   }
-  function identity(phase: 'begin' | 'settled', broadcast = false) {
+  function identity(phase: 'begin' | 'settled', broadcast = false, signedOut = false) {
     authHold = phase === 'begin';
-    controller.ownerTransition();
+    if (signedOut && phase === 'settled') allowGuest = true;
+    authorityResolved = false;
+    authorityAbort?.abort();
+    controller.ownerTransition(true);
     if (broadcast) {
-      post({ kind: 'identity', phase });
+      post({ kind: 'identity', phase, signedOut });
       try {
-        localStorage.setItem(SIGNAL, JSON.stringify({ phase, nonce: crypto.randomUUID() }));
+        localStorage.setItem(
+          SIGNAL,
+          JSON.stringify({ phase, signedOut, nonce: crypto.randomUUID() }),
+        );
       } catch {
         /* Broadcast/focus remain available. */
       }
     }
     if (!authHold && document.visibilityState === 'visible')
-      void controller.settleOwner().catch(() => undefined);
+      void checkOwner(true).catch(() => undefined);
   }
   let lastSessionPhase: string | null = null;
   function sessionHint(phase: 'begin' | 'settled') {
-    if (lastSessionPhase === phase) return;
+    if (partition || !authorityResolved || lastSessionPhase === phase) return;
     lastSessionPhase = phase;
     controller.expectFreshSession();
     controller.ownerTransition();
@@ -135,11 +212,20 @@ function createRuntime() {
       cleanup?.();
       cleanup = null;
       started = false;
+      controller.ownerTransition(true);
     }
   }
   return {
     controller,
     identity,
+    refresh: () => authorityCheck ?? (authorityResolved ? controller.refresh() : checkOwner()),
+    reconcile: () =>
+      authorityResolved &&
+      controller.getSnapshot().owner === 'guest' &&
+      controller.getSnapshot().issue?.code !== 'ACCOUNT_CART_NOT_READY'
+        ? controller.reconcile()
+        : checkOwner(true),
+    accountPartition: () => (controller.getSnapshot().owner === 'account' ? partition : null),
     start() {
       clients++;
       if (started) return stop;
@@ -160,7 +246,7 @@ function createRuntime() {
             return;
           }
           if (hint.kind === 'identity' && (hint.phase === 'begin' || hint.phase === 'settled')) {
-            identity(hint.phase);
+            identity(hint.phase, false, hint.signedOut === true);
             return;
           }
           if (
@@ -195,8 +281,9 @@ function createRuntime() {
             }
           } else if (event.key === SIGNAL && event.newValue) {
             try {
-              const hint = JSON.parse(event.newValue) as { phase?: unknown };
-              if (hint.phase === 'begin' || hint.phase === 'settled') identity(hint.phase);
+              const hint = JSON.parse(event.newValue) as { phase?: unknown; signedOut?: unknown };
+              if (hint.phase === 'begin' || hint.phase === 'settled')
+                identity(hint.phase, false, hint.signedOut === true);
             } catch {
               /* Untrusted hint ignored. */
             }
@@ -207,29 +294,39 @@ function createRuntime() {
       addEventListener(
         'focus',
         () => {
-          if (!authHold) void controller.settleOwner().catch(() => undefined);
+          if (!authHold && document.visibilityState === 'visible')
+            void checkOwner().catch(() => undefined);
         },
         options,
       );
       addEventListener(
         'pageshow',
         () => {
-          if (!authHold) void controller.settleOwner().catch(() => undefined);
+          if (!authHold && document.visibilityState === 'visible')
+            void checkOwner().catch(() => undefined);
         },
         options,
       );
       document.addEventListener(
         'visibilitychange',
         () => {
-          if (document.visibilityState === 'hidden') controller.ownerTransition(true);
-          else if (!authHold) void controller.settleOwner().catch(() => undefined);
+          if (document.visibilityState === 'hidden') {
+            authorityAbort?.abort();
+            authorityResolved = false;
+            controller.ownerTransition(true);
+          } else if (!authHold) void checkOwner(true).catch(() => undefined);
         },
         options,
       );
       addEventListener('online', refresh, options);
       addEventListener('maevelle:cart-changed', refresh, options);
-      const timer = setInterval(refresh, 30_000);
+      const timer = setInterval(() => {
+        if (!partition) refresh();
+      }, 30_000);
       cleanup = () => {
+        authorityAbort?.abort();
+        authorityCheck = null;
+        authorityResolved = false;
         events.abort();
         clearInterval(timer);
         if (hintTimer) clearTimeout(hintTimer);
@@ -264,8 +361,8 @@ export const cartStore = {
     };
   },
   initialize: () => invoke((c) => c.initialize()),
-  refresh: () => invoke((c) => c.refresh()),
-  reconcile: () => invoke((c) => c.reconcile()),
+  refresh: () => instance().refresh(),
+  reconcile: () => instance().reconcile(),
   addItem: (id: string, quantity: number) => invoke((c) => c.addItem(id, quantity)),
   setQuantity: (id: string, quantity: string) => invoke((c) => c.setQuantity(id, quantity)),
   replaceVariant: (
@@ -282,5 +379,10 @@ export const cartStore = {
   reviewContexts: () => invoke((c) => c.reviewContexts()),
   retryPending: () => invoke((c) => c.retryPending()),
   stopRetrying: () => invoke((c) => c.stopRetrying()),
-  ownerTransition: (phase: 'begin' | 'settled') => instance().identity(phase, true),
+  mergeGuest: (...args: Parameters<CartController['mergeGuest']>) =>
+    invoke((c) => c.mergeGuest(...args)),
+  guestRecoveryPending: () => invoke((c) => c.guestRecoveryPending()),
+  accountPartition: () => (typeof window === 'undefined' ? null : instance().accountPartition()),
+  ownerTransition: (phase: 'begin' | 'settled', signedOut = false) =>
+    instance().identity(phase, true, signedOut),
 };

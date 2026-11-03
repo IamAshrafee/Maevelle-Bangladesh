@@ -250,6 +250,17 @@ it('establishes one persistent account Cart, scopes edits, and rejects stale dev
   const other = await inject('POST', accountBase, b, {});
   expect(other.statusCode, other.body).toBe(200);
   expect(other.json().data.id).not.toBe(original.id);
+  const session = await inject('GET', '/storefront/v1/shopper/session', a);
+  const partition = session.json().data.partition;
+  for (const url of [accountBase + '/current', accountBase + '/merge/guests']) {
+    const rejected = await app.inject({
+      method: 'GET',
+      url,
+      headers: { cookie: b, 'x-shopper-partition': partition },
+    });
+    expect(rejected.statusCode).toBe(409);
+    expect(rejected.json()).toMatchObject({ error: { code: 'OWNER_CHANGED' } });
+  }
   const attempts = await Promise.all(
     ['1', '2'].map((quantity, index) =>
       inject('POST', accountBase + '/current/lines', index === 0 ? a : device, {

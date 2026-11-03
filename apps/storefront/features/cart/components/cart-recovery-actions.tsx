@@ -16,7 +16,11 @@ export function CartRecoveryActions({
 }) {
   const [confirmation, setConfirmation] = useState<'reset' | 'stop' | null>(null);
   const pending = Boolean(state.pending) && !['pending', 'resetting'].includes(state.sync);
-  const canReset = state.mode === 'expired' && !state.pending && state.sync !== 'resetting';
+  const canReset =
+    state.owner === 'guest' &&
+    state.mode === 'expired' &&
+    !state.pending &&
+    state.sync !== 'resetting';
   const retryAt = state.issue?.retryAt ?? 0;
   const [clock, setClock] = useState(Date.now);
   useEffect(() => {

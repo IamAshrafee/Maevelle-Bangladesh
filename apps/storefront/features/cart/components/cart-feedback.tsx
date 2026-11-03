@@ -83,6 +83,14 @@ export function CartFeedback() {
             </Button>
           ) : null}
           <CartRecoveryActions state={state} acting={acting} act={act} />
+          {state.pending && state.issue?.recovery === 'sign-in' && (
+            <Link
+              href="/account"
+              className="inline-flex min-h-12 items-center text-primary underline"
+            >
+              Sign in to recover this bag action
+            </Link>
+          )}
           {state.issue &&
           !state.pending &&
           state.mode !== 'ambiguous' &&

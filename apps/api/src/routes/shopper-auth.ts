@@ -1,5 +1,5 @@
 import type { FastifyInstance, FastifyRequest } from 'fastify';
-import { createHmac } from 'node:crypto';
+import { hasShopperSessionCookie, shopperPartition } from '../auth/shopper-partition.js';
 import type { RuntimeConfig } from '@maevelle/config';
 import type { DatabaseClient } from '@maevelle/database';
 import { resolveStorefrontContext } from '@maevelle/database/storefront';
@@ -59,13 +59,12 @@ export function registerShopperAuthRoutes(
       if (strict) throw new Error('Verified shopper mapping unavailable.');
       return null;
     }
-    const partition = createHmac('sha256', config.betterAuthSecret)
-      .update(`shopper-client-partition:v1:${principal.organizationId}:${principal.accountId}`)
-      .digest('base64url');
-    return { principal, partition };
+    return { principal, partition: shopperPartition(config.betterAuthSecret, principal) };
   };
-  const resolve = async (request: FastifyRequest, strict = false): Promise<ShopperPrincipal | null> =>
-    (await resolveSession(request, strict))?.principal ?? null;
+  const resolve = async (
+    request: FastifyRequest,
+    strict = false,
+  ): Promise<ShopperPrincipal | null> => (await resolveSession(request, strict))?.principal ?? null;
 
   app.all('/shopper-auth/*', async (request, reply) => {
     const path = (request.raw.url?.split('?', 1)[0] ?? '').slice('/shopper-auth'.length);
@@ -97,10 +96,22 @@ export function registerShopperAuthRoutes(
 
   app.get('/storefront/v1/shopper/session', async (request, reply) => {
     reply.header('cache-control', 'private, no-store');
-    const session = await resolveSession(request);
+    const session = await resolveSession(request, true).catch(() => undefined);
+    if (session === undefined)
+      return reply.code(503).send({
+        error: {
+          code: 'AUTH_UNAVAILABLE',
+          message: 'Your account could not be checked. Try again.',
+        },
+      });
     if (!session)
       return reply.code(401).send({
-        error: { code: 'UNAUTHENTICATED', message: 'Sign in to your Maevelle account.' },
+        error: {
+          code: hasShopperSessionCookie(request.headers.cookie)
+            ? 'SESSION_EXPIRED'
+            : 'UNAUTHENTICATED',
+          message: 'Sign in to your Maevelle account.',
+        },
       });
     return { data: { authenticated: true, partition: session.partition } };
   });

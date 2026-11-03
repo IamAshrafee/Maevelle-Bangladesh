@@ -1,5 +1,7 @@
 # Cart security threat model
 
+See the [Phase 03B Storefront report](PHASE_03B_STOREFRONT_IMPLEMENTATION.md) for the implemented authenticated Bag, explicit guest review, and owner-scoped recovery.
+
 See [Phase 03A account ownership and merge acceptance](PHASE_03A_ACCOUNT_CART_IMPLEMENTATION.md) for the implemented backend contract, tested races and open security and release gates.
 
 For current executed Phase 01-C coverage, see the [integrated security verification](PHASE_01C_SECURITY_VERIFICATION.md). The entries below retain their original design scope and identifiers.

@@ -1,4 +1,4 @@
-import type { GuestCartViewDto } from '@maevelle/contracts';
+import type { CartMergeCommitRequestDto } from '@maevelle/contracts';
 import { StorefrontClientApiError } from '@/lib/api/client/http';
 import { forgetGuestSession } from './session-recovery';
 import { createCartActivity } from './activity';
@@ -11,6 +11,7 @@ import {
   type CartCommand,
   type CartIntent,
   type CartSnapshot,
+  type CartView,
 } from './types';
 
 interface Dependencies {
@@ -28,30 +29,39 @@ export function createCartController(deps: Dependencies) {
   const now = deps.now ?? Date.now,
     uuid = deps.uuid ?? (() => crypto.randomUUID());
   const activity = createCartActivity();
-  let freshSessionExpected = deps.journal.requiresSessionReview();
+  let api = deps.api;
+  let journal = deps.journal;
+  let partition: string | null = null;
+  const parked = new Map<string | null, CartIntent>();
+  let freshSessionExpected = journal.requiresSessionReview();
   let resetting = false;
   let resetFlight: Promise<void> | null = null;
   let state: CartSnapshot = EMPTY_CART_SNAPSHOT;
   const listeners = new Set<() => void>();
-  let selected = deps.journal.context();
+  let selected = journal.context();
   let epoch = 0,
     issued = 0,
     accepted = 0,
     externalFence = 0;
-  let readFlight: Promise<GuestCartViewDto | null> | null = null;
-  let initFlight: Promise<GuestCartViewDto> | null = null;
+  let readFlight: Promise<CartView | null> | null = null;
+  let initFlight: Promise<CartView> | null = null;
   let readAbort: AbortController | null = null;
   let readTicket = 0;
   let queue: Promise<unknown> = Promise.resolve();
-  const flights = new Map<string, Promise<GuestCartViewDto>>();
+  const flights = new Map<string, Promise<CartView>>();
   let unresolvedIntent: CartIntent | null = null;
   let submitted = false;
   let ownerPending = false;
-  let retryFlight: Promise<GuestCartViewDto> | null = null;
+  let retryFlight: Promise<CartView> | null = null;
   let restored = false;
   let ownerLost = false;
   function publish(patch: Partial<CartSnapshot>) {
-    state = { ...state, ...patch, epoch };
+    state = {
+      ...state,
+      ...patch,
+      epoch,
+      owner: ownerPending ? 'checking' : partition ? 'account' : 'guest',
+    };
     for (const listener of listeners) listener();
   }
   function current(e: number) {
@@ -61,9 +71,14 @@ export function createCartController(deps: Dependencies) {
         'The shopper context changed. Review your current bag.',
       );
   }
-  function apply(view: GuestCartViewDto, e: number, ticket: number, mutation = false) {
+  function apply(view: CartView, e: number, ticket: number, mutation = false) {
     current(e);
     if (ticket < accepted) return;
+    if (Boolean(partition) !== (view.expiresAt === null))
+      throw new CartCoordinationError(
+        'OWNER_TRANSITION',
+        'The bag does not match your shopper session.',
+      );
     const previous = state.confirmed;
     if (
       previous?.ownerContext === view.ownerContext &&
@@ -86,7 +101,7 @@ export function createCartController(deps: Dependencies) {
     accepted = ticket;
     ownerLost = false;
     selected = view.ownerContext;
-    deps.journal.select(selected);
+    journal.select(selected);
     const evaluationChanged =
       !mutation &&
       previous?.version === view.version &&
@@ -137,9 +152,9 @@ export function createCartController(deps: Dependencies) {
       submitted = false;
       selected = undefined;
       ownerLost = true;
-      deps.journal.select();
+      journal.select();
       accepted = ticket;
-      const unresolved = state.pending ?? unresolvedIntent ?? deps.journal.read();
+      const unresolved = state.pending ?? unresolvedIntent ?? journal.read();
       publish({
         confirmed: null,
         mode: code === 'ACCOUNT_CART_NOT_READY' ? 'unavailable' : 'expired',
@@ -152,7 +167,8 @@ export function createCartController(deps: Dependencies) {
     }
     const pendingIssue = state.pending && !writing ? state.issue : null;
     publish({
-      mode: state.confirmed ? 'ready' : 'error',
+      ...(partition && !writing ? { confirmed: null } : {}),
+      mode: state.confirmed && (!partition || writing) ? 'ready' : 'error',
       sync: state.pending ? 'uncertain' : 'idle',
       issue:
         pendingIssue && issue.retryAt <= pendingIssue.retryAt
@@ -166,7 +182,7 @@ export function createCartController(deps: Dependencies) {
   function restorePending() {
     if (restored) return;
     restored = true;
-    const intent = unresolvedIntent ?? deps.journal.read();
+    const intent = unresolvedIntent ?? journal.read();
     if (intent)
       publish({
         pending: intent,
@@ -180,7 +196,7 @@ export function createCartController(deps: Dependencies) {
         },
       });
   }
-  async function refresh(force = false): Promise<GuestCartViewDto | null> {
+  async function refresh(force = false): Promise<CartView | null> {
     if (ownerPending || resetting) return null;
     if (now() < (state.issue?.retryAt ?? 0)) return state.confirmed;
     if (readFlight && !force) return readFlight;
@@ -192,9 +208,9 @@ export function createCartController(deps: Dependencies) {
     const context = selected;
     if (!state.confirmed) publish({ mode: 'loading' });
     if (!state.pending) publish({ sync: 'refreshing' });
-    const task: Promise<GuestCartViewDto | null> = (async () => {
+    const task: Promise<CartView | null> = (async () => {
       try {
-        const view = await activity.track(deps.api.get(context, readAbort!.signal));
+        const view = await activity.track(api.get(context, readAbort!.signal));
         if (freshSessionExpected && !state.confirmed)
           throw new CartCoordinationError(
             'OWNER_TRANSITION',
@@ -243,7 +259,7 @@ export function createCartController(deps: Dependencies) {
     readFlight = task;
     return task;
   }
-  async function initialize(): Promise<GuestCartViewDto> {
+  async function initialize(): Promise<CartView> {
     if (resetting)
       throw new CartCoordinationError(
         'REVIEW_REQUIRED',
@@ -263,12 +279,17 @@ export function createCartController(deps: Dependencies) {
             'Review the current session before starting another bag.',
           );
         publish({ sync: 'initializing', notice: null, issue: null });
-        const created = await activity.track(deps.api.initialize());
+        const created = await activity.track(api.initialize());
         current(e);
+        if (partition) {
+          apply(created, e, ++issued);
+          publish({ sync: 'idle' });
+          return created;
+        }
         // Unqualified cookie round trip deliberately surfaces competing authorities.
-        let verified: GuestCartViewDto;
+        let verified: CartView;
         try {
-          verified = await activity.track(deps.api.get());
+          verified = await activity.track(api.get());
         } catch (error) {
           current(e);
           if (error instanceof StorefrontClientApiError && error.status === 404)
@@ -285,7 +306,7 @@ export function createCartController(deps: Dependencies) {
             'The initialized bag differs from the current browser context. Review your bags.',
           );
         freshSessionExpected = false;
-        deps.journal.markSessionForgotten(false);
+        journal.markSessionForgotten(false);
         apply(verified, e, ++issued);
         publish({ sync: 'idle' });
         return verified;
@@ -312,7 +333,7 @@ export function createCartController(deps: Dependencies) {
     e: number,
     recovering = false,
     surface = deps.surface?.(),
-  ): Promise<GuestCartViewDto> {
+  ): Promise<CartView> {
     current(e);
     if (now() - intent.createdAt > 7 * 86_400_000)
       throw new CartCoordinationError(
@@ -327,22 +348,25 @@ export function createCartController(deps: Dependencies) {
       sync: 'pending',
       issue: null,
       notice: null,
-      recoveryPersisted: deps.journal.save(intent),
+      recoveryPersisted: journal.save(intent),
     });
     try {
       const view = await deps.coordinate(() => {
         current(e);
-        return activity.track(deps.api.mutate(intent));
+        return activity.track(api.mutate(intent));
       });
       current(e);
       if (!view.outcome) throw new Error('The mutation outcome was not returned.');
       apply(view, e, ticket, true);
-      deps.journal.save(null);
+      journal.save(null);
       unresolvedIntent = null;
       const command = intent.command;
       const version = Number(view.outcome.committedVersion);
       let notice = 'Your bag is up to date.';
-      if (command.kind !== 'replace' && (recovering || surface !== deps.surface?.()))
+      if (command.kind === 'merge') {
+        if (deps.journal.context() === command.request.guestOwnerContext) deps.journal.select();
+        notice = 'Guest bag merged into your account bag.';
+      } else if (command.kind !== 'replace' && (recovering || surface !== deps.surface?.()))
         notice = 'Your earlier bag action was confirmed. Review your bag for details.';
       else if (version !== view.version)
         notice = 'Your action was confirmed. Review the latest bag changes.';
@@ -365,12 +389,18 @@ export function createCartController(deps: Dependencies) {
       if (e !== epoch) throw error;
       const policy = cartIssue(error, now(), true);
       if (isUncertain(error) || policy.recovery === 'same-intent') {
-        publish({ pending: intent, sync: 'uncertain', issue: policy, notice: null });
+        publish({
+          ...(partition ? { confirmed: null, mode: 'error' } : {}),
+          pending: intent,
+          sync: 'uncertain',
+          issue: policy,
+          notice: null,
+        });
       } else {
         const unresolvedReplay =
           recovering || ['IDEMPOTENCY_CONFLICT', 'INTENT_EXPIRED'].includes(policy.code);
         if (!unresolvedReplay) {
-          deps.journal.save(null);
+          journal.save(null);
           unresolvedIntent = null;
         }
         publish({
@@ -396,8 +426,8 @@ export function createCartController(deps: Dependencies) {
   }
   function command(
     command: CartCommand,
-    observed?: Pick<GuestCartViewDto, 'ownerContext' | 'version'>,
-  ): Promise<GuestCartViewDto> {
+    observed?: Pick<CartView, 'ownerContext' | 'version'>,
+  ): Promise<CartView> {
     if (now() < (state.issue?.retryAt ?? 0))
       return Promise.reject(
         new CartCoordinationError(
@@ -508,12 +538,23 @@ export function createCartController(deps: Dependencies) {
       lineId: string,
       targetVariantId: string,
       quantity: string,
-      observed: Pick<GuestCartViewDto, 'ownerContext' | 'version'>,
+      observed: Pick<CartView, 'ownerContext' | 'version'>,
     ) => command({ kind: 'replace', lineId, targetVariantId, quantity }, observed),
     removeItem: (lineId: string) => command({ kind: 'remove', lineId }),
     applyCoupon: (couponCode: string) => command({ kind: 'apply-coupon', couponCode }),
     removeCoupon: (couponCode: string) => command({ kind: 'remove-coupon', couponCode }),
     clearCart: () => command({ kind: 'clear' }),
+    mergeGuest(request: CartMergeCommitRequestDto) {
+      if (!partition || parked.has(null) || deps.journal.read())
+        return Promise.reject(
+          new CartCoordinationError(
+            'REVIEW_REQUIRED',
+            'Resolve the earlier guest bag action before merging.',
+          ),
+        );
+      return command({ kind: 'merge', request }, request);
+    },
+    guestRecoveryPending: () => parked.has(null) || Boolean(deps.journal.read()),
     forgetSession() {
       if (now() < (state.issue?.retryAt ?? 0))
         return Promise.reject(
@@ -524,14 +565,14 @@ export function createCartController(deps: Dependencies) {
         );
       if (resetFlight) return resetFlight;
       // Unknown outcomes require a separate explicit stop-recovery decision first.
-      if (state.pending || unresolvedIntent || deps.journal.read() || submitted || flights.size)
+      if (state.pending || unresolvedIntent || journal.read() || submitted || flights.size)
         return Promise.reject(
           new CartCoordinationError(
             'REVIEW_REQUIRED',
             'Resolve or explicitly stop recovery of the earlier action before starting a new bag.',
           ),
         );
-      if (ownerPending || !['expired', 'empty'].includes(state.mode))
+      if (partition || ownerPending || !['expired', 'empty'].includes(state.mode))
         return Promise.reject(
           new CartCoordinationError(
             'REVIEW_REQUIRED',
@@ -563,10 +604,10 @@ export function createCartController(deps: Dependencies) {
             assertCurrent: () => current(e),
             onAcknowledged: () => {
               freshSessionExpected = true;
-              reviewPersisted = deps.journal.markSessionForgotten(true);
+              reviewPersisted = journal.markSessionForgotten(true);
               selected = undefined;
-              deps.journal.select();
-              deps.journal.save(null);
+              journal.select();
+              journal.save(null);
               restored = false;
             },
           });
@@ -621,7 +662,7 @@ export function createCartController(deps: Dependencies) {
           }
         : null,
     async selectContext(context: string) {
-      const outstanding = state.pending ?? unresolvedIntent ?? deps.journal.read();
+      const outstanding = state.pending ?? unresolvedIntent ?? journal.read();
       if (outstanding && outstanding.ownerContext !== context)
         throw new CartCoordinationError(
           'REVIEW_REQUIRED',
@@ -651,7 +692,7 @@ export function createCartController(deps: Dependencies) {
       initFlight = null;
       selected = undefined;
       accepted = 0;
-      deps.journal.select();
+      journal.select();
       publish({ confirmed: null, mode: 'loading', sync: 'refreshing', issue: null, notice: null });
       return refresh(true);
     },
@@ -672,9 +713,9 @@ export function createCartController(deps: Dependencies) {
         if (now() < (state.issue?.retryAt ?? 0))
           throw new CartCoordinationError('REVIEW_REQUIRED', 'Please wait before retrying.');
         const e = epoch;
-        let view: GuestCartViewDto;
+        let view: CartView;
         try {
-          view = await activity.track(deps.api.get(intent.ownerContext));
+          view = await activity.track(api.get(intent.ownerContext));
           current(e);
         } catch (error) {
           fail(error, e, ++issued);
@@ -696,7 +737,7 @@ export function createCartController(deps: Dependencies) {
           'REVIEW_REQUIRED',
           'Wait for the in-flight action before stopping retries.',
         );
-      deps.journal.save(null);
+      journal.save(null);
       unresolvedIntent = null;
       publish({
         pending: null,
@@ -716,27 +757,51 @@ export function createCartController(deps: Dependencies) {
       readFlight = null;
       initFlight = null;
       submitted = false;
+      retryFlight = null;
       if (!preserveContext) {
         ownerLost = false;
         selected = undefined;
-        deps.journal.select();
+        journal.select();
       }
       flights.clear();
       queue = Promise.resolve();
       restored = false;
       publish({ ...EMPTY_CART_SNAPSHOT, mode: 'loading', sync: 'refreshing' });
     },
-    settleOwner() {
+    settleOwner(next?: { partition: string | null; api: CartApi; journal: CartJournal }) {
+      if (next && next.partition !== partition) {
+        if (unresolvedIntent) parked.set(partition, unresolvedIntent);
+        if (parked.size > 16) {
+          const oldestAccount = [...parked.keys()].find((key) => key !== null);
+          if (oldestAccount) parked.delete(oldestAccount);
+        }
+        partition = next.partition;
+        api = next.api;
+        journal = next.journal;
+        unresolvedIntent = parked.get(partition) ?? null;
+        parked.delete(partition);
+        selected = journal.context();
+        ownerLost = false;
+        freshSessionExpected = !partition && journal.requiresSessionReview();
+      }
       ownerPending = false;
+      if (resetFlight) {
+        const e = epoch;
+        return resetFlight.catch(() => undefined).then(() => (e === epoch ? refresh(true) : null));
+      }
       return refresh(true);
+    },
+    authorityUnavailable(issue: CartSnapshot['issue'], expired: boolean) {
+      ownerPending = true;
+      publish({ mode: expired ? 'expired' : 'error', sync: 'idle', confirmed: null, issue });
     },
     expectFreshSession: () => {
       freshSessionExpected = true;
-      deps.journal.markSessionForgotten(true);
+      journal.markSessionForgotten(true);
     },
     reconcile: () => {
       freshSessionExpected = false;
-      deps.journal.markSessionForgotten(false);
+      journal.markSessionForgotten(false);
       return refresh(true);
     },
   };

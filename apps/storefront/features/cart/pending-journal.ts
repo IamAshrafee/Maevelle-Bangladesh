@@ -15,7 +15,9 @@ export interface CartJournal {
 export function createCartJournal(
   storage: Pick<Storage, 'getItem' | 'setItem' | 'removeItem'>,
   now = Date.now,
+  partition?: string,
 ): CartJournal {
+  const key = partition ? `${KEY}:account:${partition}` : KEY;
   return {
     requiresSessionReview() {
       try {
@@ -35,7 +37,7 @@ export function createCartJournal(
     },
     read() {
       try {
-        const raw = storage.getItem(KEY);
+        const raw = storage.getItem(key);
         if (!raw || raw.length > 2048) return null;
         const parsed = JSON.parse(raw) as Partial<CartIntent>;
         if (
@@ -89,6 +91,30 @@ export function createCartJournal(
                   }
                 : { kind: 'set', lineId: command.lineId, quantity: command.quantity },
           };
+        if (command.kind === 'merge' && partition) {
+          const request = command.request;
+          if (
+            !request ||
+            request.ownerContext !== parsed.ownerContext ||
+            request.version !== parsed.version ||
+            !uuid.test(request.guestCartId) ||
+            !uuid.test(request.guestOwnerContext) ||
+            !/^[A-Za-z0-9_-]{43}$/.test(request.reviewFingerprint)
+          )
+            return null;
+          const { guestCartId, guestOwnerContext, reviewFingerprint, ownerContext, version } =
+            request;
+          return {
+            key: parsed.key,
+            ownerContext,
+            version,
+            createdAt: parsed.createdAt,
+            command: {
+              kind: 'merge',
+              request: { guestCartId, guestOwnerContext, ownerContext, version, reviewFingerprint },
+            },
+          };
+        }
         if (command.kind === 'clear')
           return {
             key: parsed.key,
@@ -114,18 +140,19 @@ export function createCartJournal(
       try {
         // Coupon text and full Cart/customer/product projections are never persisted.
         if (!intent) {
-          storage.removeItem(KEY);
+          storage.removeItem(key);
           return true;
         }
         if (intent.command.kind === 'apply-coupon' || intent.command.kind === 'remove-coupon')
           return false;
-        storage.setItem(KEY, JSON.stringify(intent));
+        storage.setItem(key, JSON.stringify(intent));
         return true;
       } catch {
         return false;
       }
     },
     context() {
+      if (partition) return undefined;
       try {
         const value = storage.getItem(CONTEXT_KEY);
         return value && uuid.test(value) ? value : undefined;
@@ -134,6 +161,7 @@ export function createCartJournal(
       }
     },
     select(context) {
+      if (partition) return;
       try {
         if (context) storage.setItem(CONTEXT_KEY, context);
         else storage.removeItem(CONTEXT_KEY);

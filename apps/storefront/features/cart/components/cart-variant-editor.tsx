@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useId, useRef, useState, type FormEvent } from 'react';
-import type { GuestCartViewDto } from '@maevelle/contracts';
+import type { CartView } from '../types';
 import { Button } from '@/components/ui/button';
 import { formatMoney, wholeQuantity } from '@/lib/format/money';
 import { cartStore } from '../browser-runtime';
@@ -12,8 +12,8 @@ export function CartVariantEditor({
   line,
   busy,
 }: {
-  cart: GuestCartViewDto;
-  line: GuestCartViewDto['lines'][number];
+  cart: CartView;
+  line: CartView['lines'][number];
   busy: boolean;
 }) {
   const inputId = useId();

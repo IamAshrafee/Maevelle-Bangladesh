@@ -25,7 +25,9 @@ export function protectCartRoutes(
     );
   });
   cart.addHook('onRequest', async (request, reply) => {
-    reply.header('cache-control', 'private, no-store').header('vary', 'Cookie, X-Cart-Context');
+    reply
+      .header('cache-control', 'private, no-store')
+      .header('vary', 'Cookie, X-Cart-Context, X-Shopper-Partition');
     const write = ['POST', 'PATCH', 'DELETE', 'PUT'].includes(request.method);
     if (
       write &&

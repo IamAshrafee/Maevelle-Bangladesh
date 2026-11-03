@@ -1,5 +1,7 @@
 # Storefront Cart UX architecture
 
+See the [Phase 03B Storefront report](PHASE_03B_STOREFRONT_IMPLEMENTATION.md) for the implemented authenticated Bag, explicit guest review, and owner-scoped recovery.
+
 > Frontend implementation notice (2026-11-03): [Phase01B-R](PHASE_01BR_IMPLEMENTATION_REPORT.md)
 > and its [state/recovery contract](PHASE_01BR_STATE_AND_RECOVERY_CONTRACT.md) supersede
 > unsupported-Clear/reset frontend assumptions. One controller now integrates

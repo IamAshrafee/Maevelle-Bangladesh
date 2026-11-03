@@ -6,6 +6,7 @@ import type { ShopperPrincipal } from '@maevelle/database/shopper';
 import { resolveStorefrontContext } from '@maevelle/database/storefront';
 import { hashToken } from '@maevelle/security';
 import type { AccountCartAuthority } from '@maevelle/database/cart';
+import { hasShopperSessionCookie, shopperPartition } from '../auth/shopper-partition.js';
 import type { CartOwnerDto } from '@maevelle/contracts';
 
 export class CartRequestError extends Error {
@@ -86,13 +87,22 @@ export async function resolveCartRequest(
       'Storefront Cart configuration is unavailable.',
     );
   // Unavailable or invalid authenticated state is never anonymous Cart authority.
-  const hasShopperCookie = /(?:^|;\s*)(?:__Secure-)?maevelle-shopper[.-]/.test(
-    request.headers.cookie ?? '',
-  );
+  const hasShopperCookie = hasShopperSessionCookie(request.headers.cookie);
   const shopper = await resolveShopper(request, true);
   if (shopper) {
     if (shopper.organizationId !== context.organizationId)
       throw new CartRequestError('INVALID_OWNERSHIP', 403, 'Cart ownership could not be resolved.');
+    const partition = request.headers['x-shopper-partition'];
+    if (
+      accountOnly &&
+      partition !== undefined &&
+      partition !== shopperPartition(config.betterAuthSecret, shopper)
+    )
+      throw new CartRequestError(
+        'OWNER_CHANGED',
+        409,
+        'Your account changed. Check your bag again.',
+      );
     return {
       context,
       tokens: [],

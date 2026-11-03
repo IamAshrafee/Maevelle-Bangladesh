@@ -97,7 +97,20 @@ try {
     EMAIL_ENABLED: 'false',
     SMS_ENABLED: 'false',
   });
-  const app = buildApi({ database, config, logger: false });
+  const shopperFixtures = process.env.CART_FIXTURE_SHOPPERS === '1';
+  const mail: string[] = [];
+  const app = buildApi({
+    database,
+    config,
+    logger: false,
+    ...(shopperFixtures
+      ? {
+          shopperAuthEmailSender: async (message) => {
+            mail.push(message.text);
+          },
+        }
+      : {}),
+  });
   app.post('/__fixture/reprice-and-expire', async () => {
     await setCurrentVariantPrice(database.db, {
       organizationId,
@@ -128,6 +141,27 @@ try {
       values (${organizationId}, ${productId}, 'new-axis', 'New option')`.execute(database.db);
     return { data: { updated: true } };
   });
+  if (shopperFixtures) {
+    for (const email of ['cart-shopper-a@example.test', 'cart-shopper-b@example.test']) {
+      const signup = await app.inject({
+        method: 'POST',
+        url: '/shopper-auth/sign-up/email',
+        headers: { origin, 'content-type': 'application/json' },
+        payload: {
+          email,
+          name: 'Synthetic cart shopper',
+          password: 'synthetic-cart-browser-password',
+          callbackURL: origin + '/account',
+        },
+      });
+      if (signup.statusCode !== 200)
+        throw new Error(`Synthetic shopper signup returned ${signup.statusCode}`);
+      const link = new URL(mail.at(-1)?.match(/https?:\/\/\S+/)?.[0] ?? '');
+      const verified = await app.inject({ method: 'GET', url: link.pathname + link.search });
+      if (![200, 302].includes(verified.statusCode))
+        throw new Error('Synthetic shopper verification failed');
+    }
+  }
   await app.listen({ host: '127.0.0.1', port: 3002 });
   console.log(JSON.stringify({ ready: true, handle }));
   await new Promise<void>((resolve) => {

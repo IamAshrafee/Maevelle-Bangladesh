@@ -16,16 +16,25 @@ const view: GuestCartViewDto = {
   discountTotal: '0.0000',
   merchandiseNet: '0.0000',
 };
-const mocks = vi.hoisted(() => ({ get: vi.fn(), mutate: vi.fn() }));
+const mocks = vi.hoisted(() => ({
+  get: vi.fn(),
+  mutate: vi.fn(),
+  session: vi.fn(),
+  createAccountApi: vi.fn(),
+}));
 vi.mock('./api', () => ({
+  createCartApi: mocks.createAccountApi,
   cartApi: { get: mocks.get, mutate: mocks.mutate, initialize: vi.fn(), forgetSession: vi.fn() },
 }));
+vi.mock('./shopper-authority', () => ({ resolveCartShopper: mocks.session }));
 const close = vi.fn(),
   postMessage = vi.fn();
 beforeEach(() => {
   vi.resetModules();
   vi.useFakeTimers();
   mocks.get.mockResolvedValue(view);
+  mocks.session.mockResolvedValue(null);
+  mocks.createAccountApi.mockReset();
   mocks.mutate.mockImplementation(async () => ({
     ...view,
     outcome: {
@@ -149,5 +158,57 @@ it('read Retry-After pauses background polling and new commands until the cooldo
   await vi.advanceTimersByTimeAsync(31000);
   expect(mocks.get).toHaveBeenCalledTimes(2);
   expect(cartStore.getSnapshot().mode).toBe('ready');
+  stop();
+});
+
+it('hides the account bag on lost authority and restores guest only after explicit sign-out', async () => {
+  const account = { ...view, expiresAt: null };
+  mocks.get.mockClear();
+  mocks.session.mockResolvedValue('A'.repeat(43));
+  mocks.createAccountApi.mockReturnValue({ get: vi.fn(async () => account) });
+  const { cartStore } = await import('./browser-runtime');
+  const stop = cartStore.subscribe(vi.fn());
+  await cartStore.refresh();
+  expect(cartStore.getSnapshot().confirmed).toEqual(account);
+  expect(mocks.get).not.toHaveBeenCalled();
+
+  mocks.session.mockResolvedValue(null);
+  cartStore.ownerTransition('begin');
+  expect(cartStore.getSnapshot().confirmed).toBeNull();
+  cartStore.ownerTransition('settled');
+  await cartStore.refresh();
+  expect(cartStore.getSnapshot().mode).toBe('expired');
+  expect(mocks.get).not.toHaveBeenCalled();
+
+  cartStore.ownerTransition('settled', true);
+  await cartStore.refresh();
+  expect(cartStore.getSnapshot().confirmed).toEqual(view);
+  stop();
+});
+
+it('drops the old account projection when a late read follows an account switch', async () => {
+  const accountA = { ...view, expiresAt: null };
+  const accountB = { ...accountA, ownerContext: crypto.randomUUID() };
+  let finishA!: (value: typeof accountA) => void;
+  const getA = vi.fn(
+    () =>
+      new Promise<typeof accountA>((resolve) => {
+        finishA = resolve;
+      }),
+  );
+  mocks.session.mockResolvedValue('A'.repeat(43));
+  mocks.createAccountApi.mockImplementation((partition) => ({
+    get: partition.startsWith('A') ? getA : vi.fn(async () => accountB),
+  }));
+  const { cartStore } = await import('./browser-runtime');
+  const stop = cartStore.subscribe(vi.fn());
+  await vi.waitFor(() => expect(getA).toHaveBeenCalled());
+  cartStore.ownerTransition('begin');
+  mocks.session.mockResolvedValue('B'.repeat(43));
+  cartStore.ownerTransition('settled');
+  await cartStore.refresh();
+  finishA(accountA);
+  await Promise.resolve();
+  expect(cartStore.getSnapshot().confirmed).toEqual(accountB);
   stop();
 });

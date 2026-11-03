@@ -136,10 +136,12 @@ export function ShopperAccount() {
     setMessage('');
     try {
       cartStore.ownerTransition('begin');
+      let signedOut = false;
       try {
         await authRequest('sign-out', {});
+        signedOut = true;
       } finally {
-        cartStore.ownerTransition('settled');
+        cartStore.ownerTransition('settled', signedOut);
       }
       wishlistStore.signOut();
       setSignedIn(false);
@@ -172,6 +174,12 @@ export function ShopperAccount() {
                 href="/wishlist"
               >
                 View wishlist
+              </Link>
+              <Link
+                href="/cart"
+                className="inline-flex min-h-12 items-center px-3 font-semibold text-primary underline underline-offset-4"
+              >
+                View your bag
               </Link>
               <Button disabled={busy} onClick={() => void signOut()} variant="outline">
                 Sign out

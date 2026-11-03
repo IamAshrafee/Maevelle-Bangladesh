@@ -1,4 +1,4 @@
-import type { GuestCartViewDto } from '@maevelle/contracts';
+import type { CartView } from './types';
 import { StorefrontClientApiError } from '@/lib/api/client/http';
 import type { CartApi } from './api';
 import type { createCartActivity } from './activity';
@@ -10,7 +10,7 @@ export async function forgetGuestSession(input: {
   coordinate<T>(task: () => Promise<T>): Promise<T>;
   assertCurrent(): void;
   onAcknowledged(): void;
-}): Promise<GuestCartViewDto | null> {
+}): Promise<CartView | null> {
   await input.activity.quiesce();
   return input.coordinate(async () => {
     input.assertCurrent();
@@ -19,7 +19,7 @@ export async function forgetGuestSession(input: {
     if (result.sessionForgotten !== true)
       throw new Error('The browser session could not be checked.');
     input.onAcknowledged();
-    let remaining: GuestCartViewDto | null = null;
+    let remaining: CartView | null = null;
     try {
       remaining = await input.activity.track(input.api.get());
     } catch (error) {

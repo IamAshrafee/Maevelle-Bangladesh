@@ -1,5 +1,7 @@
 # Current Focus
 
+Shopping Cart Phase 03B implements the authenticated Bag and explicit guest merge review. Local integrated acceptance is **PARTIAL** and production release is **BLOCKED**. See the [Phase 03B report and verification priorities](../architecture/cart/PHASE_03B_STOREFRONT_IMPLEMENTATION.md).
+
 Shopping Cart Phase 03A implements persistent account ownership, shared Cart operations, and explicit guest merge review and replay. Local backend acceptance is **PARTIAL** and production release is **BLOCKED**. See the [implementation report and Phase 03B contract](../architecture/cart/PHASE_03A_ACCOUNT_CART_IMPLEMENTATION.md).
 
 Shopping Cart Phase 02-C local integrated acceptance is **PARTIAL** and production release is **BLOCKED**. See the [integrated acceptance report](../architecture/cart/PHASE_02C_INTEGRATED_ACCEPTANCE.md) and [Phase 03A Account Cart backend handoff](../architecture/cart/PHASE_03A_ACCOUNT_CART_HANDOFF.md). The focused Orders regression passed with the existing delivery-pricing fixture correction.

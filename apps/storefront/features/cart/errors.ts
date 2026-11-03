@@ -22,12 +22,15 @@ export function cartIssue(error: unknown, now: number, submitted = false): CartI
   if (code === 'ACCOUNT_CART_NOT_READY')
     return {
       code,
-      message:
-        'Account shopping bags are not available yet. Your existing bag has not been erased.',
-      recovery: 'wait',
+      message: 'Your shopper session changed. Check your shopping bag again.',
+      recovery: 'refresh',
       retryAt,
     };
-  if (['SESSION_EXPIRED', 'INVALID_SESSION', 'UNAUTHENTICATED'].includes(code))
+  if (
+    ['SESSION_EXPIRED', 'INVALID_SESSION', 'UNAUTHENTICATED', 'SHOPPER_SESSION_REQUIRED'].includes(
+      code,
+    )
+  )
     return {
       code,
       message:
@@ -54,6 +57,8 @@ export function cartIssue(error: unknown, now: number, submitted = false): CartI
   if (
     [
       'STALE_VERSION',
+      'MERGE_STALE',
+      'MERGE_REVIEW_REQUIRED',
       'OWNER_CHANGED',
       'IDEMPOTENCY_CONFLICT',
       'INTENT_EXPIRED',
@@ -131,6 +136,7 @@ const unavailableOwnerCodes = new Set([
   'SESSION_EXPIRED',
   'INVALID_SESSION',
   'UNAUTHENTICATED',
+  'SHOPPER_SESSION_REQUIRED',
   'INVALID_OWNERSHIP',
   'OWNER_CHANGED',
   'OWNER_TRANSITION',

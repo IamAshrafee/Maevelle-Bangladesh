@@ -6,10 +6,15 @@ import { CartClearAction } from './cart-clear-action';
 import { CartLine } from './cart-line';
 import { CartSummary } from './cart-summary';
 import { cartIsBusy, confirmedCartCount } from '../types';
+import { useEffect } from 'react';
+import { cartStore } from '../browser-runtime';
 import { useCartSnapshot } from '../use-cart';
 
 export function CartPageView() {
   const snapshot = useCartSnapshot();
+  useEffect(() => {
+    void cartStore.refresh().catch(() => undefined);
+  }, []);
   const cart = snapshot.confirmed;
   const busy = cartIsBusy(snapshot);
   const loading = snapshot.mode === 'loading' || snapshot.mode === 'idle';
@@ -19,7 +24,9 @@ export function CartPageView() {
     <main className="mx-auto min-h-[60vh] max-w-7xl px-4 py-6 sm:px-6 sm:py-10">
       <header className="mb-6 flex flex-wrap items-center justify-between gap-3 border-b border-border-subtle pb-4">
         <div>
-          <h1 className="font-serif text-3xl font-semibold text-on-surface">Your shopping bag</h1>
+          <h1 className="font-serif text-3xl font-semibold text-on-surface">
+            {snapshot.owner === 'account' ? 'Your account bag' : 'Your shopping bag'}
+          </h1>
           {cart && (
             <p className="mt-1 text-sm text-on-surface-variant">
               Items in bag · {confirmedCartCount(snapshot)}
@@ -28,6 +35,20 @@ export function CartPageView() {
         </div>
         {!empty && <CartClearAction />}
       </header>
+
+      {snapshot.owner === 'account' && (
+        <aside className="mb-6 flex flex-wrap items-center justify-between gap-x-4 rounded-2xl border border-border-subtle px-4 py-2 sm:px-6">
+          <p className="text-sm text-on-surface-variant">
+            Your selections are saved to this account.
+          </p>
+          <Link
+            href="/cart/merge"
+            className="inline-flex min-h-12 items-center font-semibold text-primary underline underline-offset-4"
+          >
+            Review guest bags
+          </Link>
+        </aside>
+      )}
 
       {empty ? (
         <section className="mx-auto max-w-lg space-y-4 rounded-2xl border border-border-subtle bg-surface-container-lowest p-6 text-center sm:p-10">

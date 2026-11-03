@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import type { GuestCartViewDto } from '@maevelle/contracts';
+import type { CartView } from '../types';
 import { QuantityStepper } from '@/components/commerce/quantity-stepper';
 import { Button } from '@/components/ui/button';
 import { ShoppingBagIcon } from '@/components/ui/icons';
@@ -25,8 +25,8 @@ export function CartLine({
   surface,
   onNavigate,
 }: {
-  cart: GuestCartViewDto;
-  line: GuestCartViewDto['lines'][number];
+  cart: CartView;
+  line: CartView['lines'][number];
   busy: boolean;
   surface: 'drawer' | 'page';
   onNavigate?: () => void;

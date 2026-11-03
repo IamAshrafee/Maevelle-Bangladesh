@@ -1,12 +1,12 @@
 'use client';
 
 import { useId, type FormEvent } from 'react';
-import type { GuestCartViewDto } from '@maevelle/contracts';
+import type { CartView } from '../types';
 import { Button } from '@/components/ui/button';
 import { formatMoney } from '@/lib/format/money';
 import { cartStore } from '../browser-runtime';
 
-export function CartSummary({ cart, busy }: { cart: GuestCartViewDto; busy: boolean }) {
+export function CartSummary({ cart, busy }: { cart: CartView; busy: boolean }) {
   const input = useId();
   const selected = cart.commerceReview?.coupons;
   async function applyCoupon(event: FormEvent<HTMLFormElement>) {

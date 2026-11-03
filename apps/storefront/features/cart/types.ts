@@ -1,6 +1,13 @@
-import type { GuestCartViewDto } from '@maevelle/contracts';
+import type {
+  AccountCartViewDto,
+  CartMergeCommitRequestDto,
+  GuestCartViewDto,
+} from '@maevelle/contracts';
+
+export type CartView = GuestCartViewDto | AccountCartViewDto;
 
 export type CartCommand =
+  | { kind: 'merge'; request: CartMergeCommitRequestDto }
   | { kind: 'clear' }
   | { kind: 'add'; variantId: string; quantity: string }
   | { kind: 'set'; lineId: string; quantity: string }
@@ -28,7 +35,8 @@ export interface CartIssue {
 export interface CartSnapshot {
   readonly mode: CartMode;
   readonly sync: CartSync;
-  readonly confirmed: GuestCartViewDto | null;
+  readonly confirmed: CartView | null;
+  readonly owner: 'guest' | 'account' | 'checking';
   readonly pending: CartIntent | null;
   readonly contexts: readonly string[];
   readonly issue: CartIssue | null;
@@ -38,6 +46,7 @@ export interface CartSnapshot {
 }
 export const EMPTY_CART_SNAPSHOT: CartSnapshot = Object.freeze({
   mode: 'idle',
+  owner: 'checking',
   sync: 'idle',
   confirmed: null,
   pending: null,

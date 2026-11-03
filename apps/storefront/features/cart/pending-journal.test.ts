@@ -83,3 +83,20 @@ describe('Cart nonsecret recovery journal', () => {
     expect(blocked.context()).toBeUndefined();
   });
 });
+
+it('recovers exact merge metadata only under the original account partition', () => {
+  const s = storage();
+  const account = createCartJournal(s, () => 1000, 'A'.repeat(43));
+  const request = {
+    guestCartId: key,
+    guestOwnerContext: key,
+    ownerContext: key,
+    reviewFingerprint: 'F'.repeat(43),
+    version: 2,
+  };
+  const merge: CartIntent = { ...intent, command: { kind: 'merge', request } };
+  expect(account.save(merge)).toBe(true);
+  expect(account.read()).toEqual(merge);
+  expect(createCartJournal(s, () => 1000, 'B'.repeat(43)).read()).toBeNull();
+  expect(createCartJournal(s, () => 1000).read()).toBeNull();
+});
