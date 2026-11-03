@@ -13,7 +13,7 @@ jobs:
       - checkout
 
       - run:
-          name: Build, test and publish commit-pinned staging images
+          name: Publish verified staging candidate (VPS rollout tracked separately)
           no_output_timeout: 30m
           command: |
             set -euo pipefail

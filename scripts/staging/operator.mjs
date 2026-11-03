@@ -158,6 +158,12 @@ export async function workflow(options, dependencies = {}) {
     log(
       `Running release: ${status.recordedCommit ?? 'unrecorded'}\nMigrations: ${status.appliedMigrations} applied\nLast attempt: ${status.lastAttempt?.outcome ?? 'none'}`,
     );
+    const block = status.autoDeploy?.lastMigrationBlock;
+    if (block)
+      log(`Last automatic migration block: ${block.targetCommit} (${block.pendingMigrations.length} pending at check)`);
+    if (status.autoDeploy?.failedRef) log(`Held failed candidate: ${status.autoDeploy.failedRef}`);
+    if (status.autoDeploy?.inProgressRef)
+      log(`In-progress or interrupted candidate: ${status.autoDeploy.inProgressRef}`);
     return status;
   }
   const release = await fetch(sha, engine);

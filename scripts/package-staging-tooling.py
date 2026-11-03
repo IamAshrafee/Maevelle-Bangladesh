@@ -18,6 +18,7 @@ FILES = (
     "staging-operator-entry.py",
     "staging-auto-deploy.py",
     "staging-migrate.sh",
+    "staging-cart-preflight.sql",
     "staging/__init__.py",
     "staging/execute.py",
     "staging/auto.py",

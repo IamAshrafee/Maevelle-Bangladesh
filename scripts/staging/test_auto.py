@@ -92,8 +92,16 @@ class AutoDeployTests(unittest.TestCase):
 
     def test_pending_migration_blocks_without_apply(self):
         self.manifest = release(SERVICES, pending=("5100_next",))
-        self.assertEqual(self.run_check()["outcome"], "migration-blocked")
+        self.assertEqual(self.run_check(dry_run=True)["outcome"], "migration-blocked")
+        self.assertFalse(self.state.exists())
+        result = self.run_check()
+        self.assertEqual(result["outcome"], "migration-blocked")
+        self.assertEqual(result["pendingMigrations"], ["5100_next"])
+        self.assertEqual(json.loads(self.state.read_text())["migrationBlock"], result)
         self.assertFalse(any(call[:3] == ("systemctl", "--user", "restart") for call in self.host.calls))
+        self.host.applied.append("5100_next")
+        self.assertEqual(self.run_check()["outcome"], "verified")
+        self.assertNotIn("migrationBlock", json.loads(self.state.read_text()))
 
     def test_bad_manifest_or_private_ghcr_error_does_not_apply(self):
         for error in (ValueError("Invalid release digest"), RuntimeError("GHCR login rejected")):

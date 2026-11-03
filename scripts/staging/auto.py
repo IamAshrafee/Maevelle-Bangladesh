@@ -103,7 +103,7 @@ def check(*, dry_run=False, host=None, registry=None, fetch=download, state_path
             manifest = fetch(ref, short, host)
             if manifest["commitSha"] == current_sha:
                 if not dry_run:
-                    record(state_path, {**state, "appliedSequence": sequence, "appliedRef": ref, "appliedCommit": current_sha, "failedRef": None, "inProgressRef": None})
+                    record(state_path, {**state, "appliedSequence": sequence, "appliedRef": ref, "appliedCommit": current_sha, "failedRef": None, "inProgressRef": None, "migrationBlock": None})
                 log("Staging is already on the latest published release")
                 return {"outcome": "already-current", "runningCommit": current_sha}
             if state.get("failedRef") == ref:
@@ -122,12 +122,21 @@ def check(*, dry_run=False, host=None, registry=None, fetch=download, state_path
             raise
         if plan.pending:
             log(f"Migration gate: {len(plan.pending)} pending; application release unchanged")
-            return {"outcome": "migration-blocked", "targetCommit": manifest["commitSha"], "pendingMigrations": list(plan.pending)}
+            result = {
+                "outcome": "migration-blocked",
+                "targetCommit": manifest["commitSha"],
+                "runningCommit": current_sha,
+                "pendingMigrations": list(plan.pending),
+            }
+            if not dry_run:
+                record(state_path, {**state, "migrationBlock": result})
+            return result
         if dry_run:
             log(f"Preflight ready for {manifest['commitSha']}; services: {', '.join(plan.selected) or 'none'}")
             return {"outcome": "ready", "targetCommit": manifest["commitSha"], "selectedServices": list(plan.selected)}
         # Persist a hold marker before any application unit can be changed. If
         # the process is interrupted, the next timer run will not retry it.
+        state.pop("migrationBlock", None)
         record(state_path, {**state, "inProgressRef": ref, "targetCommit": manifest["commitSha"]})
         try:
             result = apply_release(manifest, host, manifest["commitSha"])

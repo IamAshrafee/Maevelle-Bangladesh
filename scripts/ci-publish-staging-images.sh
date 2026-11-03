@@ -262,11 +262,13 @@ echo "Release manifest: ghcr.io/iamashrafee/maevelle-release@$MANIFEST_DIGEST"
 # The pipeline number preserves source order when CI jobs finish out of order.
 MAIN_SHA="$(git ls-remote origin refs/heads/main | cut -f1)"
 if [ "$MAIN_SHA" != "$CIRCLE_SHA1" ]; then
-  echo "Skipping automatic deployment marker: main advanced to another commit."
+  echo "Staging rollout: not attempted; candidate marker skipped because main advanced."
   exit 0
 fi
 printf -v READY_SEQUENCE '%012d' "$MAEVELLE_PIPELINE_NUMBER"
 READY_IMAGE="ghcr.io/iamashrafee/maevelle-release:staging-ready-${READY_SEQUENCE}-${SHORT}"
 docker tag "$RELEASE_IMAGE" "$READY_IMAGE"
 docker push "$READY_IMAGE" >/dev/null
+printf '%s\n' "$READY_IMAGE" > "artifacts/staging-releases/${CIRCLE_SHA1}.ready"
 echo "Automatic staging candidate: ${READY_IMAGE}"
+echo "Staging rollout: not attempted by CircleCI; verify the independent VPS deployment status."

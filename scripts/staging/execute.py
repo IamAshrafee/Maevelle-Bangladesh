@@ -8,7 +8,7 @@ from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 
-from .host import CONTAINERS, SERVICES, Host, UNITS
+from .host import CONTAINERS, ENV_FILE, SERVICES, Host, UNITS
 from .manifest import validate
 from .plan import build_plan
 from .quadlet import replace_image
@@ -90,6 +90,62 @@ def apply_release(manifest: dict, host: Host, confirmation: str) -> dict:
         return _apply_locked(manifest, host)
 
 
+def cutover_release(manifest: dict, host: Host, confirmation: str) -> dict:
+    validate(manifest)
+    if confirmation != manifest["commitSha"]:
+        raise RuntimeError("Cutover requires the full target commit SHA")
+    with deployment_lock():
+        return _apply_locked(manifest, host, cutover=True)
+
+
+def _migrate_quiesced(manifest: dict, host: Host, applied: tuple[str, ...]) -> None:
+    timer = host.run("systemctl", "--user", "show", "--property=UnitFileState", "--value",
+                     "maevelle-auto-deploy.timer")
+    timer_state = host.run("systemctl", "--user", "show", "--property=ActiveState", "--value",
+                           "maevelle-auto-deploy.timer")
+    checker = host.run("systemctl", "--user", "show", "--property=ActiveState", "--value",
+                       "maevelle-auto-deploy.service")
+    if timer not in ("disabled", "masked", "") or timer_state != "inactive" or checker != "inactive":
+        raise RuntimeError("Disable the staging timer and verify timer and checker are inactive before cutover")
+
+    ref = manifest["images"]["api"]["ref"]
+    command = ("podman", "run", "--rm", "--pull=never", "--network", "maevelle-staging",
+               "--env-file", str(ENV_FILE), "--entrypoint", "node", ref)
+    host.run(*command, "-e", """
+      const url = new URL(process.env.DATABASE_URL);
+      if (!['postgres:', 'postgresql:'].includes(url.protocol) ||
+          url.hostname !== 'maevelle-staging-postgres' ||
+          (url.port && url.port !== '5432') || url.pathname !== '/maevelle_staging' || url.search)
+        process.exit(1);
+    """)
+    host.run(*command, "/app/scripts/check-migration-history.mjs")
+    cli = "/app/packages/database/dist/src/migrate-cli.js"
+    expected = manifest["schema"]["migrationNames"]
+
+    def verify_ledger(ledger: tuple[str, ...]) -> None:
+        output = host.run(*command, cli, "--status", timeout=120)
+        lines = [line for line in output.splitlines() if line.startswith(("applied ", "pending "))]
+        wanted = [f"{'applied' if index < len(ledger) else 'pending'} {name}"
+                  for index, name in enumerate(expected)]
+        if lines != wanted:
+            raise RuntimeError("Pinned migration job ledger differs from the reviewed plan")
+
+    verify_ledger(applied)
+    for name in ("worker", "storefront", "admin", "api"):
+        host.run("systemctl", "--user", "stop", UNITS[name], timeout=120)
+    states = host.service_states()
+    if any(states.get(name) != "inactive" for name in SERVICES) or any(
+        states.get(name) != "active" for name in ("postgres", "caddy")
+    ):
+        raise RuntimeError("Maevelle application units failed to quiesce")
+    running = host.run("podman", "ps", "--format", "{{.Names}}").splitlines()
+    if any(CONTAINERS[name] in running for name in SERVICES):
+        raise RuntimeError("A Maevelle application container is still running")
+    verify_ledger(applied)
+    host.run(*command, cli, timeout=900)
+    verify_ledger(tuple(expected))
+
+
 def reconcile_release(manifest: dict, host: Host, confirmation: str) -> dict:
     validate(manifest)
     if confirmation != manifest["commitSha"]:
@@ -119,11 +175,16 @@ def reconcile_release(manifest: dict, host: Host, confirmation: str) -> dict:
         return result
 
 
-def _apply_locked(manifest: dict, host: Host) -> dict:
+def _apply_locked(manifest: dict, host: Host, *, cutover: bool = False) -> dict:
     directory = state_directory(host)
     current = read_record(directory / "current.json")
     plan = build_plan(manifest, host, current)
-    if plan.pending:
+    if cutover:
+        if not current or list(plan.applied) != current["manifest"]["schema"]["migrationNames"]:
+            raise RuntimeError("Cutover requires a verified running release matching the current ledger")
+        if not plan.pending or set(plan.changed) != set(SERVICES):
+            raise RuntimeError("Cutover requires pending migrations and four new application images")
+    if plan.pending and not cutover:
         raise RuntimeError("Pending migrations block application deployment; use the separately reviewed staging-migrate.sh procedure")
     directory.mkdir(mode=0o700, parents=True, exist_ok=True)
     attempt_id = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ") + "-" + uuid.uuid4().hex[:8]
@@ -138,6 +199,7 @@ def _apply_locked(manifest: dict, host: Host) -> dict:
         "targetCommit": manifest["commitSha"],
         "startedAt": datetime.now(timezone.utc).isoformat(),
         "outcome": "running",
+        "operation": "schema-cutover" if cutover else "image-rollout",
         "rolloutCompleted": False,
         "changed": list(plan.changed),
         "selected": list(plan.selected),
@@ -151,6 +213,9 @@ def _apply_locked(manifest: dict, host: Host) -> dict:
     try:
         for name in plan.changed:
             host.pull_verified(plan.new_refs[name], manifest["commitSha"])
+        if cutover:
+            step = "quiesce and migrate"
+            _migrate_quiesced(manifest, host, plan.applied)
         step = "quadlet update"
         for name in plan.changed:
             path = host.quadlets[name]
@@ -163,13 +228,13 @@ def _apply_locked(manifest: dict, host: Host) -> dict:
             host.run("systemctl", "--user", "daemon-reload")
         if plan.selected:
             step = "service restart/readiness"
-            if "worker" in plan.selected:
+            if "worker" in plan.selected and not cutover:
                 worker_needs_recovery = True
                 host.run("systemctl", "--user", "stop", UNITS["worker"])
             for name in plan.selected:
                 if name == "worker":
                     continue
-                host.run("systemctl", "--user", "restart", UNITS[name], timeout=120)
+                host.run("systemctl", "--user", "start" if cutover else "restart", UNITS[name], timeout=120)
                 host.verify_service(name, plan.new_refs[name])
             if "worker" in plan.selected:
                 host.run("systemctl", "--user", "start", UNITS["worker"], timeout=120)
@@ -203,7 +268,7 @@ def _apply_locked(manifest: dict, host: Host) -> dict:
             "outcome": "failed", "failedStep": step,
             "error": str(error),
             "workerRecovery": recovery,
-            "recovery": "Inspect this attempt's Quadlet backups and Maevelle user-unit logs. Database migrations were not run. Restore previous compatible application refs only after checking current schema and recorded release.",
+            "recovery": ("Keep automation held and inspect the ledger and scoped unit state. Recover forward if credential retirement applied." if cutover else "Inspect this attempt's Quadlet backups and Maevelle user-unit logs. Database migrations were not run. Restore previous compatible application refs only after checking current schema and recorded release."),
             "diagnosticCommands": [f"journalctl --user -u maevelle-{name}.service -n 100 --no-pager" for name in plan.selected],
         })
         # No implicit rollback: the current release may be unrecorded or an operator

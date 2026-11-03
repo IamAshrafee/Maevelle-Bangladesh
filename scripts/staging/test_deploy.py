@@ -488,5 +488,51 @@ class DeploymentTests(unittest.TestCase):
         self.assertEqual(self.host.states["worker"], "active")
 
 
+class CutoverTests(unittest.TestCase):
+    def test_migration_job_requires_timer_hold_and_quiesces_before_apply(self):
+        from staging.execute import _migrate_quiesced
+
+        with tempfile.TemporaryDirectory() as directory:
+            host = FakeHost(Path(directory))
+            manifest = release(SERVICES, pending=("5100_next",))
+            calls = []
+            timer = "enabled"
+            residual = ""
+
+            def run(*args, **kwargs):
+                calls.append(args)
+                if args[:3] == ("systemctl", "--user", "show"):
+                    return timer if "--property=UnitFileState" in args else "inactive"
+                if args[:3] == ("systemctl", "--user", "stop"):
+                    name = args[3].removeprefix("maevelle-").removesuffix(".service")
+                    host.states[name] = "inactive"
+                if args[:2] == ("podman", "ps"):
+                    return residual
+                if args[-1] == "--status":
+                    return "\n".join(
+                        f"{'applied' if name in host.applied else 'pending'} {name}"
+                        for name in manifest["schema"]["migrationNames"]
+                    )
+                if args[-1].endswith("/migrate-cli.js"):
+                    self.assertTrue(all(host.states[name] == "inactive" for name in SERVICES))
+                    host.applied.append("5100_next")
+                return ""
+
+            host.run = run
+            with self.assertRaisesRegex(RuntimeError, "Disable the staging timer"):
+                _migrate_quiesced(manifest, host, tuple(host.applied))
+            self.assertFalse(any("stop" in call for call in calls))
+            timer = "disabled"
+            residual = CONTAINERS["api"]
+            with self.assertRaisesRegex(RuntimeError, "still running"):
+                _migrate_quiesced(manifest, host, tuple(host.applied))
+            self.assertEqual(host.applied, MIGRATIONS)
+            residual = ""
+            _migrate_quiesced(manifest, host, tuple(host.applied))
+            self.assertEqual(host.applied[-1], "5100_next")
+            self.assertEqual(host.states["postgres"], "active")
+            self.assertEqual(host.states["caddy"], "active")
+
+
 if __name__ == "__main__":
     unittest.main()

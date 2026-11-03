@@ -8,7 +8,7 @@ from pathlib import Path
 
 sys.dont_write_bytecode = True
 
-from staging.execute import apply_release, read_record, reconcile_release, state_directory
+from staging.execute import apply_release, cutover_release, read_record, reconcile_release, state_directory
 from staging.host import Host
 from staging.manifest import load
 from staging.plan import build_plan
@@ -19,6 +19,8 @@ def status(host: Host, target: dict | None = None) -> dict:
     directory = state_directory(host)
     current = read_record(directory / "current.json")
     last = read_record(directory / "latest-attempt.json")
+    auto = read_record(directory / "auto-deploy.json") or {}
+    block = auto.get("migrationBlock")
     states = host.service_states()
     quadlets = host.quadlet_refs()
     running = host.container_refs()
@@ -27,6 +29,12 @@ def status(host: Host, target: dict | None = None) -> dict:
         "recordedCommit": current["manifest"]["commitSha"] if current else None,
         "lastVerifiedAt": current.get("verifiedAt") if current else None,
         "lastAttempt": {key: last.get(key) for key in ("outcome", "targetCommit", "failedStep", "finishedAt") if key in last} if last else None,
+        "autoDeploy": {
+            "appliedCommit": auto.get("appliedCommit"),
+            "failedRef": auto.get("failedRef"),
+            "inProgressRef": auto.get("inProgressRef"),
+            "lastMigrationBlock": block,
+        },
         "serviceStates": states,
         "quadletImageRefs": quadlets,
         "runningImageRefs": running,
@@ -48,6 +56,9 @@ def main() -> int:
     apply_parser = sub.add_parser("apply")
     apply_parser.add_argument("--release", type=Path, required=True)
     apply_parser.add_argument("--confirm", required=True, help="Full target commit SHA")
+    cutover_parser = sub.add_parser("cutover", help="Migrate and activate a pinned staging release during maintenance")
+    cutover_parser.add_argument("--release", type=Path, required=True)
+    cutover_parser.add_argument("--confirm", required=True, help="Full target commit SHA")
     verify_parser = sub.add_parser("verify", help="Record an already-running release after independent health checks")
     verify_parser.add_argument("--release", type=Path, required=True)
     verify_parser.add_argument("--confirm", required=True, help="Full target commit SHA")
@@ -62,6 +73,8 @@ def main() -> int:
             result = build_plan(target, host, current).as_dict(host)
         elif args.action == "apply":
             result = apply_release(target, host, args.confirm)
+        elif args.action == "cutover":
+            result = cutover_release(target, host, args.confirm)
         else:
             result = reconcile_release(target, host, args.confirm)
         print(json.dumps(result, indent=2, sort_keys=True))

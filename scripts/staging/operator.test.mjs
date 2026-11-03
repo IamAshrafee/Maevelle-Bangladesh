@@ -162,3 +162,25 @@ test('SSH transport uses fixed no-argument gateway after successful key connecti
   assert.equal(JSON.parse(captured.input).action, 'status');
   assert.throws(() => sshRequest('-oProxyCommand=id', { action: 'status' }, () => {}), /SSH host/);
 });
+
+test('status distinguishes a blocked candidate from the running release', async () => {
+  const output = [];
+  await workflow({ action: 'status', host: 'maevelle-staging' }, {
+    remoteJson: (_host, request) => {
+      assert.deepEqual(request, { action: 'status' });
+      return {
+        recordedCommit: 'a'.repeat(40),
+        appliedMigrations: 55,
+        autoDeploy: {
+          lastMigrationBlock: {
+            targetCommit: 'b'.repeat(40),
+            pendingMigrations: ['3217_cart_analytics'],
+          },
+        },
+      };
+    },
+    log: (message) => output.push(message),
+  });
+  assert.match(output.join('\n'), /Running release: a{40}/);
+  assert.match(output.join('\n'), /Last automatic migration block: b{40} \(1 pending at check\)/);
+});

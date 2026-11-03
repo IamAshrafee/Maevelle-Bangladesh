@@ -1,6 +1,31 @@
 # Phase 07 — pull-based automatic staging deployment
 
-Status: local implementation only. The VPS was not contacted; the timer is not installed or enabled. Phase 04 recovery remains paused.
+## 2026-11-03 audit
+
+CircleCI pipeline `0e4d0e2a-9652-48e0-925e-be6dbd320b76` published all four images and ready marker `staging-ready-000000000010-0c0da8821793`. The release manifest digest is `sha256:4e140fa863ebfcfb1fb06f2171a03654cfe558d4076d42482c591964f4e7cd6a`. CircleCI has one publish job and does not invoke the VPS. Its green status means a candidate was published; verify rollout independently using `pnpm staging status`.
+
+The VPS operator gateway reported six active services and four running image refs matching their Quadlets for recorded release `5b4d8bdaed196c2cd743da6ff95131afedcdf384`. The last recorded rollout was for that release. The staging hostname resolves to this VPS. Its Nginx vhost forwards to Caddy on `127.0.0.1:18080`; public and loopback Storefront/Admin JavaScript asset sets matched. The available SSH account could not inspect the Maevelle user timer or private journal. A timer check before rollout could therefore have occurred without a recorded rollout.
+
+The staging ledger has 55 migrations, through `3206_media_rendition_repair`. This candidate requires 67. The migration gate blocks rollout with 12 pending migrations (`3207` through `3218`), even if the timer discovers the candidate. The gate remains in force. The checker now records the last migration block for the operator status command; the publish job archives the ready marker and explicitly reports that VPS rollout is independent.
+
+## Current disposable staging cutover
+
+The owner waived backup, restore rehearsal, recovery-point validation, and data-preservation gates for this development staging cutover. This waiver does not authorize deletion or apply to production. Prefer the existing 55-to-67 forward path, which passed the synthetic rehearsal. The previous release cannot create a valid Cart after credential retirement in migration 3214.
+
+1. Obtain a Maevelle-scoped maintenance window and operator access. As rootless `maevelle`, inspect the timer and checker journal, record the original enabled and active states, inspect the six user units and their dependencies, and verify that stopping the four app units leaves PostgreSQL and Caddy running. Verify the staging database name, private Podman network, and named PostgreSQL and media volumes. Verify that the rootless registry credential can access the release and four pinned app images.
+2. Install the reviewed Maevelle deployment tooling and stage the published manifest at `/home/maevelle/deployment/releases/incoming/0c0da882179316b75421e9f431e38daa3db758ef.json`. Compare it with the CI artifact and GHCR manifest digest from the audit. Run `staging-deploy.py plan --release <manifest>` and review the 55-entry ledger, 12 pending migrations, and four pinned image changes. Before downtime, run `staging-cart-preflight.sql` against the verified PostgreSQL container using an authorized read-only session. It requires the expected database name, PostgreSQL major version, and baseline ledger boundary. Require all reported counts to be zero. The probe checks Cart scope, credentials, revisions, quantities and prices, the expected absence of Wishlist and recommendations schemas, and storefront event integrity. The operator plan separately verifies the exact ledger prefix against the manifest. If incompatible data is found, stop for a separate decision. A rebuild would discard staging accounts, orders, carts, settings and other database records, and could leave existing media objects without metadata.
+3. For the approved cutover, disable and stop only the Maevelle user timer and confirm the checker is inactive. Leave the timer disabled through HTTPS acceptance. Run the following as rootless `maevelle` in its user session with the private GHCR auth file configured. The command checks the recorded release and current ledger, pulls and verifies all four images before downtime, holds the shared migration/deploy lock, stops the application units, checks that the database and Caddy remain active, runs the pinned migration job, and verifies the complete ledger before changing Quadlet image refs. It starts and verifies only the candidate application services.
+
+   ```sh
+   sha=0c0da882179316b75421e9f431e38daa3db758ef
+   systemctl --user disable --now maevelle-auto-deploy.timer
+   python3 /home/maevelle/deployment/tooling/staging-deploy.py cutover \
+     --release "/home/maevelle/deployment/releases/incoming/$sha.json" --confirm "$sha"
+   ```
+
+4. Confirm 67 applied migrations, candidate image digests and application readiness. Over staging HTTPS, verify Storefront, Admin, sign-in and session behavior, and guest Bag create/add/update. Run the cutover from a durable operator session such as tmux on the VPS. If connectivity is lost, reconnect to the existing session and inspect the lock, attempt record, ledger and unit state before deciding what to do. If a step fails, leave the timer held and inspect the ledger, attempt record and unit state. After 3214, use a compatible candidate/repair image and forward repair. Do not start the prior release or reset a database as an automatic failure response.
+5. After acceptance, restore the timer’s previous state, or enable it under separate operator approval if it was previously disabled. Future image-only releases can roll out automatically. Candidates with pending migrations remain held for supervised cutover.
+
 
 ## Mechanism
 

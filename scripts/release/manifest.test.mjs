@@ -18,9 +18,17 @@ const digests = Object.fromEntries(
 );
 
 test('validates exact release and Maevelle image identities', () => {
-  const manifest = makeManifest({ sha, digests, migrations: migrationNames() });
+  const registered = migrationNames();
+  const manifest = makeManifest({ sha, digests, migrations: registered });
   assert.equal(validateManifest(manifest).commitSha, sha);
-  assert.equal(manifest.schema.migrationNames.length, 51);
+  assert.deepEqual(manifest.schema.migrationNames, registered);
+  assert.throws(
+    () => validateManifest({
+      ...manifest,
+      schema: { ...manifest.schema, migrationNames: ['0000_wrong_baseline', ...registered.slice(1)] },
+    }),
+    /does not match the verified baseline/,
+  );
   assert.throws(() => validateManifest({ ...manifest, shortSha: 'wrong' }), /source SHA/);
   assert.throws(() => validateManifest({ ...manifest, status: 'building' }), /incomplete/);
   assert.throws(
