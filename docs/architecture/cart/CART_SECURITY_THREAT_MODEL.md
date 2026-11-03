@@ -1,5 +1,7 @@
 # Cart security threat model
 
+For current executed Phase 01-C coverage, see the [integrated security verification](PHASE_01C_SECURITY_VERIFICATION.md). The entries below retain their original design scope and identifiers.
+
 Phase01B mitigation evidence: [frontend security review](PHASE_01B_SECURITY_REVIEW.md) and [browser results](PHASE_01B_BROWSER_SCENARIO_RESULTS.md). Legacy fixed-cookie adoption/retirement/fixation parity remains High/open; frontend work does not close that backend boundary.
 
 Phase01A update: the [implemented profile](PHASE_01A_RECEIPT_AND_OWNER_CONTRACT.md), [bootstrap protocol](PHASE_01A_BOOTSTRAP_PROTOCOL.md) and [acceptance register](PHASE_01A_ACCEPTANCE_REGISTER.md) distinguish current code from this full-product proposal/historical design register. Only explicitly evidenced Phase01A coverage has run; other scenarios/threats remain unexecuted.

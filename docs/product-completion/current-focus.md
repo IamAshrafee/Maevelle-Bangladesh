@@ -1,5 +1,24 @@
 # Current Focus
 
+Shopping Cart Phase 02B is **PARTIAL**. The live guest drawer, full bag review,
+PDP Add and semantic selection editor share the Cart controller. See the
+[Phase 02B report](../architecture/cart/PHASE_02B_IMPLEMENTATION_REPORT.md)
+for local evidence and pending accessibility, policy and release gates.
+
+Shopping Cart Phase 02A is **PARTIAL**. Catalog configuration validation, coherent
+Cart snapshots, and provisional coupon eligibility are implemented. See the
+[continuation register](../architecture/cart/PHASE_02A_CONTINUATION.md) for the
+current Phase 02B contract, verification and owner-policy gates.
+
+Current owner assignment is **Shopping Cart Phase 01-C integrated acceptance**.
+Local status is PARTIAL. Chrome native 200%/400% and exact historical evidence recovery
+passed. Human AT, hardware and browser breadth remain open. The broad regression
+has one existing Orders delivery pricing fixture failure. Production is BLOCKED on
+persistent continuity/cutover, restore/revocation, real proxy/role and policy evidence.
+See the [implementation report](../architecture/cart/PHASE_01C_IMPLEMENTATION_REPORT.md)
+and [Phase 02A contract](../architecture/cart/PHASE_01C_PHASE02A_HANDOFF.md) before
+a separate commerce assignment. Preserve previous Cart and Wishlist checkpoints below.
+
 Current owner assignment: **Shopping Cart Phase01B-R frontend foundation**.
 [Report](../architecture/cart/PHASE_01BR_IMPLEMENTATION_REPORT.md): atomic Clear,
 deliberate session forgetting, unknown-intent continuity, reload-safe reset review,

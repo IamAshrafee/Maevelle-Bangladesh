@@ -1,0 +1,23 @@
+{
+  "status": "PASS",
+  "stoppedOwnedPorts": [
+    3000,
+    3002,
+    3004,
+    4447,
+    9227,
+    9228,
+    9230,
+    9231
+  ],
+  "removedOnlyContainer": "maevelle-cart01c-pg18",
+  "verifiedLabel": "maevelle.purpose=cart01c-isolated",
+  "verifiedLoopbackPort": 55444,
+  "verifiedTmpfs": "/var/lib/postgresql",
+  "remainingContainers": [
+    "maevelle-cart01a-pg18 127.0.0.1:55441->5432/tcp",
+    "codex-wishlist-visual-pg18 127.0.0.1:55440->5432/tcp"
+  ],
+  "sharedVolumesDeleted": false,
+  "trackedHarnessPreserved": true
+}

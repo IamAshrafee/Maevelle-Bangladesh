@@ -1,5 +1,5 @@
 import { registerWishlistObservability } from './wishlist-observability.js';
-import Fastify from 'fastify';
+import Fastify, { LogController } from 'fastify';
 import { createHmac } from 'node:crypto';
 import type { TypeBoxTypeProvider } from '@fastify/type-provider-typebox';
 import type { FastifyBaseLogger } from 'fastify';
@@ -49,6 +49,10 @@ export function buildApi(options: BuildApiOptions) {
         : { logger: true };
   const app = Fastify({
     ...loggerOptions,
+    // Cart paths can contain customer-specific coupon codes.
+    logController: new LogController({
+      disableRequestLogging: (request) => /^\/storefront\/v1\/carts(?:[/?]|$)/.test(request.url),
+    }),
     bodyLimit: 1_048_576,
     routerOptions: { maxParamLength: 160 },
     genReqId: (request) => resolveCorrelationId(request.headers['x-correlation-id']),
@@ -65,7 +69,7 @@ export function buildApi(options: BuildApiOptions) {
     try {
       done(null, rawBody.trim() ? JSON.parse(rawBody) : undefined);
     } catch {
-      done(new Error('Request body must be valid JSON.'));
+      done(Object.assign(new Error('Request body must be valid JSON.'), { statusCode: 400 }));
     }
   });
   app.addContentTypeParser('*', { parseAs: 'buffer' }, (_request, body, done) => {

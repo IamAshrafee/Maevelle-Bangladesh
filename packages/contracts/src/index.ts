@@ -6238,8 +6238,10 @@ export * from './wishlist-analytics.js';
 export type {
   CartOwnerDto,
   CartMutationOutcomeDto,
+  CartCommerceIssueDto,
   GuestCartViewDto,
   GuestCartMutationPreconditionDto,
   ClearGuestCartRequestDto,
+  ReplaceGuestCartLineVariantRequestDto,
   CartSessionForgottenDto,
 } from './cart.js';

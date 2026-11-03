@@ -1,0 +1,17 @@
+PASS BR18 Clear selected coupons and items together through the customer UI
+PASS BR19 Empty Clear is a consumed no-op and exact same-key replay preserves revision
+PASS BR20 Double activation of Clear confirms one intention and one request
+PASS BR21 Clear followed by explicit Add reuses valid authority and starts a new intention
+PASS BR22 Response lost after committed Clear is recovered with the exact saved intent
+PASS BR23 Stale confirmation cannot Clear a newer quantity without renewed intention
+PASS BR24 Clear synchronizes another tab header using bounded nonsecret hints
+PASS BR25 Actual database expiry offers deliberate cookie forgetting without automatic initialization
+PASS BR26 Browser credential eviction fails closed until explicit new-bag recovery
+PASS BR27 Reset racing a late bootstrap response fences both tabs without adopting the returned bag
+PASS BR28 Real keyboard confirmation, Escape, focus containment and restoration
+PASS BR29 Offline Clear preflight fails without a mutation; reconnect rereads authoritative state
+PASS BR30 503 Clear honors Retry-After and preserves the same intention for explicit retry
+PASS BR31 Actual transport timeout after committed Clear recovers without duplicate effects
+PASS BR32 Too many browser capability slots offer deliberate bounded session recovery
+PASS BR33 Closing a tab after commit and reopening reads current state without replaying or duplicating it
+PASS C01 Recovery read Retry-After pauses exact replay without losing intent

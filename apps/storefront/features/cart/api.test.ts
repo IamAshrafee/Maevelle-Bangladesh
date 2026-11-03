@@ -35,3 +35,30 @@ it('Clear sends one DELETE with an exact replay body, UUID key and observed owne
   expect(options.body).toBe('{}');
   expect(options.headers).not.toHaveProperty('idempotency-key');
 });
+
+it('replays a replacement with the same command body and key', async () => {
+  const fetch = vi.fn<(url: string, request: RequestInit) => Promise<Response>>(
+    async () => new Response(JSON.stringify({ data: {} }), { status: 200 }),
+  );
+  vi.stubGlobal('fetch', fetch);
+  const intent = {
+    key: '11111111-1111-4111-8111-111111111111',
+    command: { kind: 'replace' as const, lineId: 'line', targetVariantId: 'target', quantity: '3' },
+    version: 5,
+    ownerContext: '22222222-2222-4222-8222-222222222222',
+    createdAt: 1000,
+  };
+  await cartApi.mutate(intent);
+  await cartApi.mutate(intent);
+  const [url, request] = fetch.mock.calls[0]!;
+  expect(url).toBe('/api/storefront/v1/carts/current/lines/line/variant');
+  expect(request.method).toBe('PUT');
+  expect(request.headers).toEqual(fetch.mock.calls[1]![1].headers);
+  expect(request.body).toBe(fetch.mock.calls[1]![1].body);
+  expect(JSON.parse(String(request.body))).toEqual({
+    targetVariantId: 'target',
+    quantity: '3',
+    version: 5,
+    ownerContext: intent.ownerContext,
+  });
+});

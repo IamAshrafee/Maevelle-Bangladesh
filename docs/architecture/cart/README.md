@@ -1,3 +1,23 @@
+# Shopping Cart — Phase 01-C integrated acceptance
+
+**Local PARTIAL** with 14 PASS and 2 PARTIAL gates. **Production BLOCKED.** Integrated Chrome, real PostgreSQL, API and Storefront verification closed three defects and recovered the exact original benchmark. Prior checkpoints below retain their historical meaning.
+
+| Current document | Purpose |
+| --- | --- |
+| [Implementation report](PHASE_01C_IMPLEMENTATION_REPORT.md) | 20-point outcome and exact verification commands |
+| [Integrated audit](PHASE_01C_INTEGRATED_AUDIT.md) | Architecture, source boundaries and discrepancies |
+| [Contract verification](PHASE_01C_CONTRACT_VERIFICATION.md) | Operation and recovery matrix |
+| [Scenario results](PHASE_01C_SCENARIO_RESULTS.md) | Current S-ID traceability and concurrency evidence |
+| [Security verification](PHASE_01C_SECURITY_VERIFICATION.md) | T-ID coverage and three defect closures |
+| [Browser and accessibility](PHASE_01C_BROWSER_ACCESSIBILITY.md) | Real Chrome and native zoom, manual closure |
+| [Performance](PHASE_01C_PERFORMANCE_REGRESSION.md) | SQL plans, requests, resource and latency samples |
+| [Evidence integrity](PHASE_01C_EVIDENCE_INTEGRITY.md) | SHA-verified original benchmark recovery |
+| [Cutover readiness](PHASE_01C_CUTOVER_READINESS.md) | Local rehearsal and persistent dependencies |
+| [Phase 02A handoff](PHASE_01C_PHASE02A_HANDOFF.md) | Commerce requirements, invariants and acceptance |
+| [Acceptance register](PHASE_01C_ACCEPTANCE_REGISTER.md) | Separate local and production dispositions |
+
+---
+
 # Shopping Cart — Phase01B-R frontend foundation
 
 2026-11-03 · **PARTIAL local acceptance:18PASS/2PARTIAL**. Backend contracts remain
@@ -114,3 +134,9 @@ The fixed-cookie authority and independent Checkout owner bypass are closed in l
 - [Implementation report and next resume point](PHASE_01A1_IMPLEMENTATION_REPORT.md)
 
 Next: resolve legacy customer-continuity policy before any persistent cutover; Phase01B.1 zoom/accessibility and Phase02A atomic Clear remain distinct assignments. Historical reports above retain their original results.
+
+[Phase 02A implementation checkpoint and frontend handoff](PHASE_02A_IMPLEMENTATION_REPORT.md)
+
+[Phase 02A continuation, current acceptance register and frontend handoff](PHASE_02A_CONTINUATION.md)
+
+[Phase 02B guest storefront implementation and acceptance](PHASE_02B_IMPLEMENTATION_REPORT.md)

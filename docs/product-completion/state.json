@@ -2,13 +2,13 @@
   "program": "Maevelle Product Completion V2",
   "version": 2,
   "active_area": "storefront-cart",
-  "active_substage": "CART_PHASE_01BR_LOCAL_FRONTEND_PARTIAL",
+  "active_substage": "CART_PHASE_02B_GUEST_STOREFRONT_PARTIAL",
   "active_status": "IN_PROGRESS",
   "baseline_commit": "d2cce2c",
   "last_checkpoint_commit": "16f648a",
   "last_verified_commit": "16f648a",
-  "last_completed_action": "Cart01B-R frontend: one controller adopts atomic Clear and deliberate session forgetting; exact replay/unknown-intent, reset/reload, owner/PDP and lifecycle fences; bounded lock/queue/backoff; shared confirmations and responsive/touch fixes. See01BR report and final verification artifacts.",
-  "next_action": "Close recorded AT/device/native-zoom and historical timing-artifact provenance gaps; preserve01A-R operational cutover/restore/role/proxy and Wishlist gates. Read01BR report before separately assigned02A commerce work. No commit/push/deploy authorized.",
+  "last_completed_action": "Phase 01-C verified the integrated guest Cart, closed recovery cooldown, malformed JSON and coupon logging defects, recovered the original artifact by SHA-256, and passed Chrome native zoom.",
+  "next_action": "Close Phase 02B device, assistive-technology and native zoom acceptance, settle remaining commerce policy gates, and prepare the separate Checkout integration.",
   "interrupted": false,
   "blocked_by": [
     "SIZING_OWNER_RESPONSIVE_AND_ACCESSIBILITY_ACCEPTANCE_PENDING",
@@ -22,7 +22,8 @@
     "WISHLIST_KEY_CUSTODY_AND_RETIREMENT_APPROVAL_PENDING",
     "CART_LEGACY_PERSISTENT_CUTOVER_AND_RESTORE_CONTINUITY_UNVERIFIED",
     "CART_PRODUCTION_ROLE_PROXY_RETENTION_AND_VOLUME_GATES_OPEN",
-    "CART_PHASE01BR_AT_DEVICE_NATIVE_ZOOM_AND_TIMING_ARTIFACT_PROVENANCE_OPEN"
+    "CART_PHASE01C_HUMAN_AT_HARDWARE_AND_BROWSER_BREADTH_OPEN",
+    "ORDERS_DELIVERY_PRICING_REGRESSION_FIXTURE_CONFLICT"
   ],
   "owner_review_status": "PENDING",
   "verified_complete_areas": [

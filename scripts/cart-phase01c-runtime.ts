@@ -4,6 +4,8 @@ import { randomBytes } from 'node:crypto';
 import { createDatabase, sql } from '../packages/database/src/index.ts';
 import { runMigrations } from '../packages/database/src/migrate.ts';
 import { createPromotion, createCouponCode } from '../packages/database/src/promotions.ts';
+import { createPriceDefinition } from '../packages/database/src/pricing.ts';
+import { adjustInventory } from '../packages/database/src/inventory.ts';
 import { cartFixture } from '../packages/database/src/testing/cart-fixture.ts';
 import { parseConfig } from '../packages/config/src/index.ts';
 import { buildApi } from '../apps/api/src/app.ts';
@@ -23,6 +25,59 @@ const identity = await sql<{ name: string }>`select current_database() name`.exe
 if (identity.rows[0]?.name !== name) throw new Error('Target identity mismatch');
 await runMigrations(database.db);
 const fixture = await cartFixture(database);
+const choiceHandle = `${fixture.code}-choices`;
+const choice = await sql<{ id: string }>`
+  insert into catalog.products (organization_id, product_type_id, handle, title, status, publication_status, published_at)
+  select organization_id, product_type_id, ${choiceHandle}, 'Synthetic selectable clip', 'ACTIVE', 'PUBLISHED', now()
+  from catalog.products where id=${fixture.productId}
+  returning id
+`.execute(database.db);
+const choiceProductId = choice.rows[0]!.id;
+const axis = await sql<{ id: string }>`
+  insert into catalog.product_option_axes(organization_id, product_id, code, name)
+  values (${fixture.organizationId}, ${choiceProductId}, 'style', 'Style') returning id
+`.execute(database.db);
+const axisId = axis.rows[0]!.id;
+const locations = await sql<{ id: string }>`
+  select id from warehouse.locations where organization_id=${fixture.organizationId} and code='TEST'
+`.execute(database.db);
+let selectedVariantId = '';
+for (const style of ['Smooth', 'Textured']) {
+  const option = await sql<{ id: string }>`
+    insert into catalog.product_option_values(organization_id, product_id, option_axis_id, code, display_value)
+    values (${fixture.organizationId}, ${choiceProductId}, ${axisId}, ${style.toLowerCase()}, ${style}) returning id
+  `.execute(database.db);
+  const optionId = option.rows[0]!.id;
+  const sku = `C01-${style.toUpperCase()}`;
+  const variant = await sql<{ id: string }>`
+    insert into catalog.product_variants(organization_id, product_id, sku, sku_normalized, option_signature)
+    values (${fixture.organizationId}, ${choiceProductId}, ${sku}, ${sku}, ${optionId}) returning id
+  `.execute(database.db);
+  const variantId = variant.rows[0]!.id;
+  await sql`
+    insert into catalog.variant_option_values(organization_id, variant_id, option_axis_id, option_value_id)
+    values (${fixture.organizationId}, ${variantId}, ${axisId}, ${optionId})
+  `.execute(database.db);
+  await adjustInventory(database.db, {
+    organizationId: fixture.organizationId,
+    actorId: fixture.actorId,
+    variantId,
+    locationId: locations.rows[0]!.id,
+    condition: 'SELLABLE',
+    quantityDelta: '4',
+    reasonCode: 'OPENING_BALANCE',
+    idempotencyKey: crypto.randomUUID(),
+  });
+  await createPriceDefinition(database.db, {
+    organizationId: fixture.organizationId,
+    actorId: fixture.actorId,
+    variantId,
+    currency: 'BDT',
+    amount: style === 'Textured' ? '123.0000' : '100.0000',
+    effectiveFrom: new Date(Date.now() - 60_000),
+  });
+  if (style === 'Textured') selectedVariantId = variantId;
+}
 const promotion = await createPromotion(database.db, {
   organizationId: fixture.organizationId,
   actorId: fixture.actorId,
@@ -95,7 +150,15 @@ for (const actor of ['a', 'b']) {
 mkdirSync('/tmp/maevelle-cart01c', { recursive: true, mode: 0o700 });
 writeFileSync(
   '/tmp/maevelle-cart01c/fixture.json',
-  JSON.stringify({ ...fixture, databaseName: name, databaseUrl: base.href, origin, password }),
+  JSON.stringify({
+    ...fixture,
+    databaseName: name,
+    databaseUrl: base.href,
+    origin,
+    password,
+    choiceHandle,
+    selectedVariantId,
+  }),
   { mode: 0o600 },
 );
 await app.listen({ host: '127.0.0.1', port: 3002 });

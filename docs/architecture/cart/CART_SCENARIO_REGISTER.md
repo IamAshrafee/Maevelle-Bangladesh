@@ -1,5 +1,7 @@
 # Cart scenario register
 
+For current executed Phase 01-C coverage, see the [integrated scenario results](PHASE_01C_SCENARIO_RESULTS.md). The entries below retain their original design scope and identifiers.
+
 Phase01B execution evidence: [browser results](PHASE_01B_BROWSER_SCENARIO_RESULTS.md) maps actual Chrome cases to this register; [acceptance](PHASE_01B_ACCEPTANCE_REGISTER.md) records limited foundation coverage. This does not mark all59 design scenarios executed.
 
 Phase01A update: the [implemented profile](PHASE_01A_RECEIPT_AND_OWNER_CONTRACT.md), [bootstrap protocol](PHASE_01A_BOOTSTRAP_PROTOCOL.md) and [acceptance register](PHASE_01A_ACCEPTANCE_REGISTER.md) distinguish current code from this full-product proposal/historical design register. Only explicitly evidenced Phase01A coverage has run; other scenarios/threats remain unexecuted.
@@ -659,3 +661,9 @@ Phase01A update: the [implemented profile](PHASE_01A_RECEIPT_AND_OWNER_CONTRACT.
 ## Phase01A.1 executed update
 
 S01–S05/S17/S35–S38/S51/S53/S59 now have focused credential-retirement/owner/Checkout evidence in [Phase01A.1 tests](PHASE_01A1_TEST_EVIDENCE.md). Actual HTTPS Chrome adds old-cookie migration, renamed retired slot, mixed authorities, A/B/logout, mapping/session TTL failure, concurrent retirement and late fixed-cookie response. All17 prior Chrome PDP/Cart scenarios were rerun. This updates the credential boundary only: historical intent recovery remains unavailable without independent proof, account Cart/merge remains Phase03, S55 high-zoom/assistive review Phase01B.1, atomic Clear Phase02A. Do not infer complete full-product scenario acceptance from targeted tests.
+
+Phase 02A continuation results for Catalog invalidation, repeatable-read evaluation,
+replacement and discount eligibility are in the [current acceptance register](PHASE_02A_CONTINUATION.md#acceptance-register).
+
+See the [Phase 02B acceptance register](PHASE_02B_IMPLEMENTATION_REPORT.md#acceptance-register)
+for the guest Storefront journey, drawer and variant collision/replay evidence.

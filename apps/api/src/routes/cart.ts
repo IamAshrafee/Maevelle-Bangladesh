@@ -1,5 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import { Type } from 'typebox';
+import type { ReplaceGuestCartLineVariantRequestDto } from '@maevelle/contracts';
 import type { RuntimeConfig } from '@maevelle/config';
 import type { DatabaseClient } from '@maevelle/database';
 import {
@@ -10,6 +11,7 @@ import {
   getGuestCart,
   removeGuestCartCoupon,
   removeGuestCartLine,
+  replaceGuestCartLineVariant,
   setGuestCartLineQuantity,
 } from '@maevelle/database/cart';
 import { protectCartRoutes } from './cart-protection.js';
@@ -195,6 +197,27 @@ export function registerCartRoutes(
             ...scope,
             lineId: (request.params as { lineId: string }).lineId,
             quantity: (request.body as { quantity: string }).quantity,
+          }),
+        };
+      },
+    );
+    cart.put(
+      '/storefront/v1/carts/current/lines/:lineId/variant',
+      {
+        bodyLimit: 65_536,
+        schema: {
+          params: object({ lineId: uuid }),
+          body: object({ ...common, targetVariantId: uuid, quantity: units }),
+        },
+      },
+      async (request) => {
+        const { targetVariantId, quantity } = request.body as ReplaceGuestCartLineVariantRequestDto;
+        return {
+          data: await replaceGuestCartLineVariant(database.db, {
+            ...(await mutation(request)),
+            lineId: (request.params as { lineId: string }).lineId,
+            targetVariantId,
+            quantity,
           }),
         };
       },

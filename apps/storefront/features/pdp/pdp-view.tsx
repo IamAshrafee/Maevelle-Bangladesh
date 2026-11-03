@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { QuantityStepper } from '@/components/commerce/quantity-stepper';
 import type {
   ProductRatingSummaryDto,
   PublicReviewDto,
@@ -11,7 +11,7 @@ import type {
 } from '@maevelle/contracts';
 import { ProductReviews } from '@/components/product-reviews';
 import { SizeGuideDialog } from '@/components/size-guide-dialog';
-import { ShoppingBagIcon, StarIcon, TruckIcon } from '@/components/ui/icons';
+import { StarIcon } from '@/components/ui/icons';
 import { Breadcrumb, type BreadcrumbItemDef } from '@/components/ui/breadcrumb';
 import { cx } from '@/components/ui/classnames';
 import { ChatProductContext } from '@/features/chat/page-context';
@@ -71,28 +71,8 @@ export function PdpView({
 
   const effectiveBreadcrumbs = breadcrumbs ?? fallbackBreadcrumbs;
 
-  const [selected, setSelected] = useState<Record<string, string>>(() => {
-    const visualAxis = product.options.find((opt) => opt.isVisual);
-    if (!visualAxis) return {};
-    const primaryVal =
-      visualAxis.values.find((val) => val.isPrimary) ||
-      visualAxis.values.find((val) =>
-        product.variants.some((v) => v.optionValueIds.includes(val.id) && v.available),
-      ) ||
-      visualAxis.values[0];
-    return primaryVal ? { [visualAxis.id]: primaryVal.id } : {};
-  });
+  const [selected, setSelected] = useState<Record<string, string>>({});
 
-  const continuation = useRef({ product: product.id, epoch: cartEpoch, active: true });
-  if (continuation.current.product !== product.id || continuation.current.epoch !== cartEpoch)
-    continuation.current = { product: product.id, epoch: cartEpoch, active: true };
-  useEffect(() => {
-    continuation.current.active = true;
-    return () => {
-      continuation.current.active = false;
-    };
-  }, []);
-  const router = useRouter();
   const [activeMedia, setActiveMedia] = useState(0);
   const [quantity, setQuantity] = useState(1);
   const [actionFeedback, setActionFeedback] = useState<string | null>(null);
@@ -288,30 +268,13 @@ export function PdpView({
       setTimeout(() => setActionFeedback(null), 3000);
       return;
     }
-    if (!selectedVariant || !selectedVariant.available) return;
+    if (!selectedVariant || !selectedVariant.available || !selectedVariant.price) return;
 
     try {
       await onAddToCart(selectedVariant.id, quantity);
       // Committed outcome feedback comes from the shared controller.
     } catch {
       // Shared CartFeedback announces the controller error.
-    }
-  };
-
-  const handleBuyNowClick = async () => {
-    if (unselectedAxes.length > 0) {
-      setActionFeedback(`Please select ${unselectedAxes[0]?.name ?? 'option'}`);
-      setTimeout(() => setActionFeedback(null), 3000);
-      return;
-    }
-    if (!selectedVariant || !selectedVariant.available) return;
-
-    const origin = continuation.current;
-    try {
-      await onAddToCart(selectedVariant.id, quantity);
-      if (origin === continuation.current && origin.active) router.push('/checkout');
-    } catch {
-      // Rejected/unknown Cart actions must not continue into Checkout.
     }
   };
 
@@ -364,41 +327,20 @@ export function PdpView({
           className="px-4 pt-4"
         />
 
-        {/* Inline Mobile Action Buttons (Stepper + Add to Bag + Buy Now) */}
+        {/* Inline Mobile Action Buttons (Quantity and Add to Bag) */}
         <div className="px-4 pt-4 flex flex-col gap-2.5">
-          <div className="flex items-center gap-2.5 w-full">
-            {/* Stepper */}
-            <div className="flex items-center bg-[#f4ece8] rounded-full px-3 py-2 gap-2.5 shrink-0 h-12">
-              <button
-                type="button"
-                aria-label="Decrease quantity"
-                onClick={() => setQuantity((q) => Math.max(1, q - 1))}
-                className="w-8 h-8 flex items-center justify-center text-[#1e1b19] border-0 bg-transparent cursor-pointer text-xl leading-none select-none active:scale-90 transition-transform"
-              >
-                −
-              </button>
-              <span className="w-5 text-center text-[14px] font-semibold text-[#1e1b19] tabular-nums font-mono">
-                {quantity}
-              </span>
-              <button
-                type="button"
-                aria-label="Increase quantity"
-                onClick={() => setQuantity((q) => Math.min(10, q + 1))}
-                className="w-8 h-8 flex items-center justify-center text-[#1e1b19] border-0 bg-transparent cursor-pointer text-xl leading-none select-none active:scale-90 transition-transform"
-              >
-                +
-              </button>
-            </div>
+          <div className="flex flex-wrap items-center gap-2.5 w-full">
+            <QuantityStepper value={quantity} onChange={setQuantity} size="touch" disabled={busy} />
 
             {/* Add to Bag button */}
             <button
               type="button"
               id="pdp-mobile-inline-add-to-cart"
-              disabled={busy || unselectedAxes.length > 0 || !selectedVariant?.available}
+              disabled={busy || unselectedAxes.length > 0 || !selectedVariant?.available || !selectedVariant.price}
               onClick={handleAddToCartClick}
               className={cx(
                 'flex-1 h-12 rounded-full flex items-center justify-center px-4 font-semibold text-[13.5px] transition-[background-color,transform] duration-150 active:scale-[0.98] border-0 shadow-xs cursor-pointer',
-                unselectedAxes.length === 0 && selectedVariant?.available && !busy
+                unselectedAxes.length === 0 && selectedVariant?.available && selectedVariant.price && !busy
                   ? 'bg-[#9e2a4b] hover:bg-[#8b2340] text-white'
                   : 'bg-[#9e2a4b]/60 text-white/80 cursor-not-allowed',
               )}
@@ -411,27 +353,11 @@ export function PdpView({
                     : unselectedAxes.length > 0
                       ? `Select ${unselectedAxes[0]?.name ?? 'Option'}`
                       : !selectedVariant?.available
-                        ? 'Out of Stock'
-                        : 'Add to Bag'}
+                        ? 'Selection unavailable'
+                        : !selectedVariant.price ? 'Price unavailable' : 'Add to Bag'}
               </span>
             </button>
           </div>
-
-          {/* Buy Now button */}
-          <button
-            type="button"
-            id="pdp-mobile-inline-buy-now"
-            disabled={busy || unselectedAxes.length > 0 || !selectedVariant?.available}
-            onClick={handleBuyNowClick}
-            className={cx(
-              'w-full h-12 rounded-full flex items-center justify-center px-4 font-semibold text-[14px] transition-[background-color,transform] duration-150 active:scale-[0.98] border-0 shadow-xs cursor-pointer',
-              unselectedAxes.length === 0 && selectedVariant?.available && !busy
-                ? 'bg-[#1e1b19] hover:bg-[#332e2c] text-white'
-                : 'bg-[#1e1b19]/60 text-white/80 cursor-not-allowed',
-            )}
-          >
-            <span>Buy Now</span>
-          </button>
 
           {(actionFeedback || cartMessage) && (
             <p
@@ -493,14 +419,11 @@ export function PdpView({
 
         {/* Sticky bottom bar */}
         <PdpStickyBar
-          price={priceDisplay?.amount ?? null}
-          currency={priceDisplay?.currency ?? currency}
-          quantity={quantity}
-          onQuantityChange={(delta) => setQuantity((q) => Math.max(1, Math.min(10, q + delta)))}
+                    quantity={quantity}
+          onQuantityChange={setQuantity}
           onAddToCart={handleAddToCartClick}
-          onBuyNow={handleBuyNowClick}
           busy={busy}
-          available={selectedVariant?.available ?? false}
+          available={Boolean(selectedVariant?.available && selectedVariant.price)}
           cartMessage={actionFeedback ?? cartMessage}
           unselectedAxesCount={unselectedAxes.length}
           unselectedAxisName={unselectedAxes[0]?.name ?? ''}
@@ -617,75 +540,22 @@ export function PdpView({
                   className="px-0 pt-0"
                 />
 
-                {/* 5. Information cards (Nationwide Delivery, COD & Mobile Banking) */}
-                <div className="p-4 rounded-xl bg-[#faf2ee] border border-border/40 flex flex-col gap-3">
-                  <div className="flex items-start gap-3">
-                    <div className="w-8 h-8 rounded-full bg-[#eee7e3] flex items-center justify-center text-primary shrink-0 mt-0.5">
-                      <TruckIcon size={15} />
-                    </div>
-                    <div className="flex flex-col">
-                      <p className="text-[13px] font-semibold text-[#1e1b19] leading-tight">
-                        Nationwide Express Delivery
-                      </p>
-                      <p className="text-[12px] text-[#574144] mt-0.5 leading-relaxed">
-                        Inside Dhaka ৳60 (Next Day) · Outside Dhaka ৳120 (2–3 Days)
-                      </p>
-                    </div>
-                  </div>
+                <PdpTrustGrid />
 
-                  <div className="h-px bg-border/40" />
-
-                  <div className="flex items-start gap-3">
-                    <div className="w-8 h-8 rounded-full bg-[#eee7e3] flex items-center justify-center text-primary shrink-0 mt-0.5">
-                      <ShoppingBagIcon size={15} />
-                    </div>
-                    <div className="flex flex-col">
-                      <p className="text-[13px] font-semibold text-[#1e1b19] leading-tight">
-                        Cash on Delivery &amp; Mobile Banking
-                      </p>
-                      <p className="text-[12px] text-[#574144] mt-0.5 leading-relaxed">
-                        Cash on Delivery across all 64 districts · bKash, Nagad &amp; Cards
-                        accepted.
-                      </p>
-                    </div>
-                  </div>
-                </div>
-
-                {/* 6. Action buttons (Previous stepper + previous exact button style for both buttons) */}
+                {/* Quantity and Add to Bag */}
                 <div className="flex flex-col gap-2.5 pt-1">
                   <div className="flex items-center gap-2.5 xl:gap-3 w-full">
-                    {/* Previous stepper */}
-                    <div className="flex items-center bg-[#f4ece8] rounded-full px-3 py-2 gap-3 shrink-0">
-                      <button
-                        type="button"
-                        aria-label="Decrease quantity"
-                        onClick={() => setQuantity((q) => Math.max(1, q - 1))}
-                        className="w-8 h-8 flex items-center justify-center text-[#1e1b19] border-0 bg-transparent cursor-pointer text-xl leading-none select-none active:scale-90 transition-transform"
-                      >
-                        −
-                      </button>
-                      <span className="w-5 text-center text-[14px] font-semibold text-[#1e1b19] tabular-nums font-mono">
-                        {quantity}
-                      </span>
-                      <button
-                        type="button"
-                        aria-label="Increase quantity"
-                        onClick={() => setQuantity((q) => Math.min(10, q + 1))}
-                        className="w-8 h-8 flex items-center justify-center text-[#1e1b19] border-0 bg-transparent cursor-pointer text-xl leading-none select-none active:scale-90 transition-transform"
-                      >
-                        +
-                      </button>
-                    </div>
+                    <QuantityStepper value={quantity} onChange={setQuantity} size="touch" disabled={busy} />
 
-                    {/* Add to Bag button */}
+            {/* Add to Bag button */}
                     <button
                       type="button"
                       id="pdp-desktop-add-to-cart"
-                      disabled={busy || unselectedAxes.length > 0 || !selectedVariant?.available}
+                      disabled={busy || unselectedAxes.length > 0 || !selectedVariant?.available || !selectedVariant.price}
                       onClick={handleAddToCartClick}
                       className={cx(
                         'flex-1 h-12 rounded-full flex items-center justify-center px-4 font-semibold text-[14px] transition-[background-color,transform] duration-150 active:scale-[0.98] border-0 shadow-xs cursor-pointer',
-                        unselectedAxes.length === 0 && selectedVariant?.available && !busy
+                        unselectedAxes.length === 0 && selectedVariant?.available && selectedVariant.price && !busy
                           ? 'bg-[#9e2a4b] hover:bg-[#8b2340] text-white'
                           : 'bg-[#9e2a4b]/60 text-white/80 cursor-not-allowed',
                       )}
@@ -698,25 +568,9 @@ export function PdpView({
                             : unselectedAxes.length > 0
                               ? `Select ${unselectedAxes[0]?.name ?? 'Option'}`
                               : !selectedVariant?.available
-                                ? 'Out of Stock'
-                                : 'Add to Bag'}
+                                ? 'Selection unavailable'
+                                : !selectedVariant.price ? 'Price unavailable' : 'Add to Bag'}
                       </span>
-                    </button>
-
-                    {/* Buy Now button */}
-                    <button
-                      type="button"
-                      id="pdp-desktop-buy-now"
-                      disabled={busy || unselectedAxes.length > 0 || !selectedVariant?.available}
-                      onClick={handleBuyNowClick}
-                      className={cx(
-                        'flex-1 h-12 rounded-full flex items-center justify-center px-4 font-semibold text-[14px] transition-[background-color,transform] duration-150 active:scale-[0.98] border-0 shadow-xs cursor-pointer',
-                        unselectedAxes.length === 0 && selectedVariant?.available && !busy
-                          ? 'bg-[#1e1b19] hover:bg-[#332e2c] text-white'
-                          : 'bg-[#1e1b19]/60 text-white/80 cursor-not-allowed',
-                      )}
-                    >
-                      <span>Buy Now</span>
                     </button>
                   </div>
 

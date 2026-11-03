@@ -25,7 +25,8 @@ export function ProductCard({ item }: { readonly item: StorefrontSearchItemDto }
       id={item.id}
       imageUrl={imageUrl}
       isSoldOut={!item.available}
-      price={item.minimumPrice ?? 0}
+      price={item.minimumPrice}
+      selectionLinkLabel="Choose options"
       rating={rating}
       secondaryImageUrl={secondaryImageUrl}
       subtitle={item.description ?? undefined}

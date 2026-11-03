@@ -2,12 +2,15 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import Fastify, { type FastifyInstance } from 'fastify';
 import { parseConfig, type RuntimeConfig } from '@maevelle/config';
 import { createDatabase } from '@maevelle/database';
+import { createLogger } from '@maevelle/observability';
 import { runMigrations } from '@maevelle/database/migrate';
 import { registerCartRoutes } from './routes/cart.js';
+import { buildApi } from './app.js';
 import { registerShopperAuthRoutes } from './routes/shopper-auth.js';
 import { registerOrderRoutes } from './routes/orders.js';
 import { cartFixture, isolatedCartDatabase } from '@maevelle/database/testing/cart';
 import { createGuestCart } from '@maevelle/database/cart';
+import { createCouponCode, createPromotion } from '@maevelle/database/promotions';
 import type { GuestCartViewDto } from '@maevelle/contracts';
 import type { CartShopperResolver } from './routes/cart-context.js';
 import type { ShopperAuthEmail } from './auth/shopper-auth.js';
@@ -113,6 +116,50 @@ async function read(credential: string, context?: string, instance = app) {
     headers: headers(credential, context),
   });
 }
+it('protects variant replacement and replays the original receipt', async () => {
+  const created = await initialize();
+  const credential = cookie(created);
+  const added = await add(credential, data(created));
+  expect(added.statusCode).toBe(200);
+  const current = data(added);
+  const line = current.lines[0]!;
+  const url = `/storefront/v1/carts/current/lines/${line.id}/variant`;
+  const payload = {
+    ownerContext: current.ownerContext,
+    version: current.version,
+    targetVariantId: line.variantId,
+    quantity: '2',
+  };
+  const key = crypto.randomUUID();
+  const replace = (body: typeof payload, requestHeaders: Record<string, string>) =>
+    app.inject({
+      method: 'PUT',
+      url,
+      remoteAddress: `127.3.0.${ip++}`,
+      headers: requestHeaders,
+      payload: body,
+    });
+  expect((await replace(payload, headers(credential))).statusCode).toBe(400);
+  const other = await initialize();
+  const otherCart = data(other);
+  const foreign = await replace(
+    { ...payload, ownerContext: otherCart.ownerContext, version: otherCart.version },
+    { ...headers(cookie(other)), 'idempotency-key': key },
+  );
+  expect(foreign.statusCode).toBe(404);
+  const authorized = { ...headers(credential), 'idempotency-key': key };
+  const response = await replace(payload, authorized);
+  expect(response.statusCode, response.body).toBe(200);
+  expect(data(response).lines[0]).toMatchObject({ id: line.id, quantity: '2.000000' });
+  const replay = await replace(payload, authorized);
+  expect(replay.statusCode).toBe(200);
+  expect(data(replay).outcome).toMatchObject({
+    receiptId: data(response).outcome!.receiptId,
+    replayed: true,
+  });
+  expect((await replace({ ...payload, quantity: '3' }, authorized)).statusCode).toBe(409);
+});
+
 describe('Cart API guest bootstrap and security with PostgreSQL', () => {
   it('S59 late competing initialization never overwrites acknowledged authority', async () => {
     const [a, b] = await Promise.all([initialize(), initialize()]);
@@ -531,4 +578,140 @@ it('AR13 malformed owned cookie names can be forgotten explicitly, with bounded 
   });
   expect(limit.json().error.code).toBe('CART_CONTEXT_LIMIT');
   expect(limit.headers['set-cookie']).toBeUndefined();
+});
+
+it('C03 coupon selection racing Clear has one revision winner and one replayable receipt', async () => {
+  const promotion = await createPromotion(db.db, {
+    organizationId: fixture.organizationId,
+    actorId: fixture.actorId,
+    name: 'Clear race',
+    promotionType: 'COUPON',
+    benefitType: 'PERCENTAGE_DISCOUNT',
+    benefitValue: '10',
+    combinability: 'EXCLUSIVE',
+  });
+  const couponCode = 'CLEAR-RACE';
+  await createCouponCode(db.db, {
+    organizationId: fixture.organizationId,
+    actorId: fixture.actorId,
+    promotionId: promotion.id,
+    code: couponCode,
+  });
+  const guest = await initialize();
+  const current = data(await add(cookie(guest), data(guest)));
+  const precondition = { version: current.version, ownerContext: current.ownerContext };
+  const clear = () =>
+    app.inject({
+      method: 'DELETE',
+      url: '/storefront/v1/carts/current',
+      headers: { ...headers(cookie(guest)), 'idempotency-key': clearKey },
+      payload: precondition,
+    });
+  const select = () =>
+    app.inject({
+      method: 'POST',
+      url: '/storefront/v1/carts/current/coupons',
+      headers: { ...headers(cookie(guest)), 'idempotency-key': selectKey },
+      payload: { ...precondition, couponCode },
+    });
+  const clearKey = crypto.randomUUID();
+  const selectKey = crypto.randomUUID();
+  const responses = await Promise.all([clear(), select()]);
+  expect(responses.map((response) => response.statusCode).sort()).toEqual([200, 409]);
+  expect(responses.find((response) => response.statusCode === 409)?.json().error.code).toBe(
+    'STALE_VERSION',
+  );
+  const clearWon = responses[0].statusCode === 200;
+  const winner = data(responses[clearWon ? 0 : 1]);
+  const projection = data(await read(cookie(guest)));
+  expect(projection.version).toBe(current.version + 1);
+  expect(projection.lines).toHaveLength(clearWon ? 0 : 1);
+  expect(projection.appliedCoupons).toHaveLength(clearWon ? 0 : 1);
+  const replay = await (clearWon ? clear() : select());
+  expect(replay.statusCode).toBe(200);
+  expect(data(replay).outcome).toMatchObject({
+    receiptId: winner.outcome?.receiptId,
+    committedVersion: winner.outcome?.committedVersion,
+    replayed: true,
+  });
+});
+
+it('C05 a valid guest cannot change a foreign line or submit malformed coupon and quantity inputs', async () => {
+  const foreign = await initialize();
+  const foreignView = data(await add(cookie(foreign), data(foreign)));
+  const caller = await initialize();
+  const callerView = data(caller);
+  const callerHeaders = { ...headers(cookie(caller)), 'idempotency-key': crypto.randomUUID() };
+  const payload = { version: callerView.version, ownerContext: callerView.ownerContext };
+  const foreignLine = foreignView.lines[0]!.id;
+  const url = '/storefront/v1/carts/current';
+  for (const method of ['PATCH', 'DELETE'] as const) {
+    const response = await app.inject({
+      method,
+      url: `${url}/lines/${foreignLine}`,
+      headers: callerHeaders,
+      payload: method === 'PATCH' ? { ...payload, quantity: '2' } : payload,
+    });
+    expect(response.statusCode).toBe(404);
+    expect(response.json().error.code).toBe('NOT_FOUND');
+  }
+  for (const quantity of ['-1', '1.5', '999999999999999999999999']) {
+    const response = await add(cookie(caller), callerView, quantity);
+    expect(response.statusCode).toBe(400);
+  }
+  const badCoupon = await app.inject({
+    method: 'POST',
+    url: `${url}/coupons`,
+    headers: callerHeaders,
+    payload: { ...payload, couponCode: '<script>' },
+  });
+  expect(badCoupon.statusCode).toBe(400);
+  expect(data(await read(cookie(caller))).version).toBe(callerView.version);
+  expect(data(await read(cookie(foreign))).version).toBe(foreignView.version);
+});
+
+it('C05 the assembled API rejects malformed JSON as a client error without backoff', async () => {
+  const assembled = buildApi({ database: db, config: cfg, logger: false });
+  apps.push(assembled);
+  const response = await assembled.inject({
+    method: 'POST',
+    url: '/storefront/v1/carts',
+    headers: headers(),
+    payload: '{malformed-cart-input',
+  });
+  expect(response.statusCode).toBe(400);
+  expect(response.json()).toMatchObject({ error: { code: 'INVALID_REQUEST' } });
+  expect(response.headers['retry-after']).toBeUndefined();
+  expect(response.headers['set-cookie']).toBeUndefined();
+  expect(response.headers['cache-control']).toBe('private, no-store');
+  expect(response.body).not.toContain('malformed-cart-input');
+});
+
+it('C05 assembled API logs redact Cart coupon paths and credentials', async () => {
+  const logs: string[] = [];
+  const logger = createLogger(
+    { component: 'api', level: 'info' },
+    {
+      write(line: string) {
+        logs.push(line);
+      },
+    },
+  );
+  const assembled = buildApi({ database: db, config: cfg, logger });
+  apps.push(assembled);
+  const guest = await initialize(assembled);
+  const view = data(guest);
+  const canary = 'C01-PRIVATE-COUPON-CANARY';
+  const rejected = await assembled.inject({
+    method: 'DELETE',
+    url: `/storefront/v1/carts/current/coupons/${canary}`,
+    headers: { ...headers(cookie(guest)), 'idempotency-key': crypto.randomUUID() },
+    payload: { ownerContext: view.ownerContext, version: view.version },
+  });
+  expect(rejected.statusCode).toBe(404);
+  const output = logs.join('');
+  expect(output).toContain('Cart request rejected');
+  expect(output).toContain('request completed');
+  expect(output.includes(canary)).toBe(false);
+  expect(output.includes(cookie(guest).split('=')[1]!)).toBe(false);
 });

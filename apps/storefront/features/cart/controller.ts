@@ -87,7 +87,31 @@ export function createCartController(deps: Dependencies) {
     ownerLost = false;
     selected = view.ownerContext;
     deps.journal.select(selected);
-    publish({ confirmed: view, mode: 'ready' });
+    const evaluationChanged =
+      !mutation &&
+      previous?.version === view.version &&
+      previous.calculationFingerprint !== view.calculationFingerprint &&
+      (previous.discountTotal !== view.discountTotal ||
+        previous.merchandiseNet !== view.merchandiseNet ||
+        view.lines.some((line) => {
+          const prior = previous.lines.find((item) => item.id === line.id);
+          return (
+            prior &&
+            (prior.unitPrice !== line.unitPrice || prior.availability !== line.availability)
+          );
+        }) ||
+        JSON.stringify(previous.commerceReview?.coupons) !==
+          JSON.stringify(view.commerceReview?.coupons));
+    publish({
+      confirmed: view,
+      mode: 'ready',
+      ...(evaluationChanged
+        ? {
+            notice:
+              'Prices, offers or availability changed. Review the latest details in your bag.',
+          }
+        : {}),
+    });
   }
   function fail(error: unknown, e: number, ticket: number, writing = false) {
     if (e !== epoch || ticket < accepted) return;
@@ -315,23 +339,26 @@ export function createCartController(deps: Dependencies) {
       apply(view, e, ticket, true);
       deps.journal.save(null);
       unresolvedIntent = null;
-      publish({
-        pending: null,
-        sync: 'idle',
-        issue: null,
-        notice:
-          recovering || surface !== deps.surface?.()
-            ? 'Your earlier bag action was confirmed. Review your bag for details.'
-            : Number(view.outcome.committedVersion) === view.version
-              ? intent.command.kind === 'clear'
-                ? Number(view.outcome.committedVersion) === intent.version
-                  ? 'Your bag is already empty. No items or coupons changed.'
-                  : 'Your bag was cleared. Items and selected coupons were removed.'
-                : intent.command.kind === 'add'
-                  ? 'Added to your bag.'
-                  : 'Your bag is up to date.'
-              : 'Your action was confirmed. Review the latest bag changes.',
-      });
+      const command = intent.command;
+      const version = Number(view.outcome.committedVersion);
+      let notice = 'Your bag is up to date.';
+      if (command.kind !== 'replace' && (recovering || surface !== deps.surface?.()))
+        notice = 'Your earlier bag action was confirmed. Review your bag for details.';
+      else if (version !== view.version)
+        notice = 'Your action was confirmed. Review the latest bag changes.';
+      else if (command.kind === 'replace')
+        notice = view.outcome.changes.some(
+          (change) => change.lineId === command.lineId && change.quantity === '0',
+        )
+          ? 'Selection changed and matching items were combined.'
+          : 'Your selection was updated.';
+      else if (command.kind === 'clear')
+        notice =
+          version === intent.version
+            ? 'Your bag is already empty. No items or coupons changed.'
+            : 'Your bag was cleared. Items and selected coupons were removed.';
+      else if (command.kind === 'add') notice = 'Added to your bag.';
+      publish({ pending: null, sync: 'idle', issue: null, notice });
       deps.notify(intent.ownerContext, view.version);
       return view;
     } catch (error) {
@@ -367,7 +394,10 @@ export function createCartController(deps: Dependencies) {
       if (e === epoch) submitted = false;
     }
   }
-  function command(command: CartCommand): Promise<GuestCartViewDto> {
+  function command(
+    command: CartCommand,
+    observed?: Pick<GuestCartViewDto, 'ownerContext' | 'version'>,
+  ): Promise<GuestCartViewDto> {
     if (now() < (state.issue?.retryAt ?? 0))
       return Promise.reject(
         new CartCoordinationError(
@@ -415,7 +445,8 @@ export function createCartController(deps: Dependencies) {
           );
         requireNoPending();
         const known = state.confirmed;
-        const view = known ? await refresh(true) : await initialize();
+        // A stale configuration editor must never establish a different bag.
+        const view = known ? await refresh(true) : observed ? null : await initialize();
         current(e);
         requireNoPending();
         if (!view)
@@ -423,7 +454,11 @@ export function createCartController(deps: Dependencies) {
             'REVIEW_REQUIRED',
             'Your bag is not available. Review it before continuing.',
           );
-        if (known && (fence !== externalFence || known.ownerContext !== view.ownerContext)) {
+        if (
+          (known && (fence !== externalFence || known.ownerContext !== view.ownerContext)) ||
+          (observed &&
+            (observed.version !== view.version || observed.ownerContext !== view.ownerContext))
+        ) {
           const error = new CartCoordinationError(
             'REVIEW_REQUIRED',
             'Your bag changed in another window. Review the current quantities before repeating your action.',
@@ -469,6 +504,12 @@ export function createCartController(deps: Dependencies) {
     addItem: (variantId: string, quantity: number) =>
       command({ kind: 'add', variantId, quantity: String(quantity) }),
     setQuantity: (lineId: string, quantity: string) => command({ kind: 'set', lineId, quantity }),
+    replaceVariant: (
+      lineId: string,
+      targetVariantId: string,
+      quantity: string,
+      observed: Pick<GuestCartViewDto, 'ownerContext' | 'version'>,
+    ) => command({ kind: 'replace', lineId, targetVariantId, quantity }, observed),
     removeItem: (lineId: string) => command({ kind: 'remove', lineId }),
     applyCoupon: (couponCode: string) => command({ kind: 'apply-coupon', couponCode }),
     removeCoupon: (couponCode: string) => command({ kind: 'remove-coupon', couponCode }),

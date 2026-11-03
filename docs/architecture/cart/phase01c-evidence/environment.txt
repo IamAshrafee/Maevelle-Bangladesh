@@ -1,0 +1,2 @@
+{"maevelle.purpose":"cart01c-isolated"} {"5432/tcp":[{"HostIp":"127.0.0.1","HostPort":"55444"}]} {"/var/lib/postgresql":""}
+maevelle_test|cart01c|PostgreSQL 18.6 (Debian 18.6-1.pgdg13+2) on aarch64-unknown-linux-gnu, compiled by gcc (Debian 14.2.0-19) 14.2.0, 64-bit

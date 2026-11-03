@@ -101,6 +101,43 @@ function setup(overrides: Partial<CartApi> = {}, storage = memory()) {
   return { c, api, notify, storage };
 }
 describe('unified Cart coordination', () => {
+  it('requires a fresh configuration review when the observed Cart revision changed', async () => {
+    const { c, api } = setup({ get: vi.fn(async () => projection(2, 1)) });
+    await c.refresh();
+    await expect(
+      c.replaceVariant(line, key, '1', { ownerContext: owner, version: 1 }),
+    ).rejects.toMatchObject({ code: 'REVIEW_REQUIRED' });
+    expect(api.mutate).not.toHaveBeenCalled();
+  });
+
+  it('never establishes a new Cart for a stale editor', async () => {
+    const { c, api } = setup();
+    await expect(
+      c.replaceVariant(line, key, '1', { ownerContext: owner, version: 1 }),
+    ).rejects.toMatchObject({ code: 'REVIEW_REQUIRED' });
+    expect(api.initialize).not.toHaveBeenCalled();
+    expect(api.mutate).not.toHaveBeenCalled();
+  });
+
+  it('announces a materially changed evaluation without changing the intent revision', async () => {
+    const initial = projection(1, 1);
+    const get = vi
+      .fn(async () => initial)
+      .mockResolvedValueOnce(initial)
+      .mockResolvedValueOnce({
+        ...initial,
+        evaluatedAt: '2026-11-02T00:00:03.000Z',
+        calculationFingerprint: 'changed',
+        merchandiseNet: '12.0000',
+        lines: [{ ...initial.lines[0]!, unitPrice: '12.0000' }],
+      });
+    const { c } = setup({ get });
+    await c.refresh();
+    await c.refresh();
+    expect(c.getSnapshot().confirmed?.intentRevision).toBe(initial.intentRevision);
+    expect(c.getSnapshot().notice).toContain('Prices, offers or availability changed');
+  });
+
   it('ordinary refresh is single-flight and never initializes a session', async () => {
     const d = deferred<GuestCartViewDto>();
     const { c, api } = setup({ get: vi.fn(() => d.promise) });

@@ -1,10 +1,12 @@
 import { CartDomainError } from './errors.js';
 import { sql, type Kysely } from 'kysely';
+import type { CartCommerceIssueDto } from '@maevelle/contracts';
 import type { DatabaseSchema } from '../index.js';
 import type { CartView } from './types.js';
 import { findCart } from './context.js';
 import { availableToSellByVariant } from './availability.js';
 import { parseMoney, money, quantity, availableWholeUnits, fingerprint } from './value.js';
+import { catalogVariantIsStructurallyValid } from '../catalog-variant-integrity.js';
 import { resolveVariantPrices } from '../pricing.js';
 import { evaluatePromotions } from '../promotions.js';
 export async function getGuestCart(db: Kysely<DatabaseSchema>, token: string): Promise<CartView> {
@@ -17,8 +19,8 @@ export async function getGuestCart(db: Kysely<DatabaseSchema>, token: string): P
         await sql`set local statement_timeout='5s'`.execute(tx);
         return getGuestCart(tx, token);
       });
-  const evaluatedAt = new Date();
   const cart = await findCart(db, token);
+  const evaluatedAt = cart.evaluatedAt;
   const lines = await sql<{
     id: string;
     variant_id: string;
@@ -26,7 +28,8 @@ export async function getGuestCart(db: Kysely<DatabaseSchema>, token: string): P
     sku: string;
     product_id: string;
     product_title: string;
-    eligible: boolean;
+    visible: boolean;
+    configured: boolean;
     category_ids: string[];
     product_handle: string;
     media_asset_id: string | null;
@@ -34,7 +37,14 @@ export async function getGuestCart(db: Kysely<DatabaseSchema>, token: string): P
   }>`
     select line.id, line.variant_id, line.quantity::text, variant.sku, product.id as product_id,
       product.title as product_title,product.handle as product_handle,
-      (variant.status='ACTIVE' and product.status='ACTIVE' and product.publication_status='PUBLISHED') as eligible,
+      (variant.status='ACTIVE' and product.status='ACTIVE' and product.publication_status='PUBLISHED') as visible,
+      case when variant.status='ACTIVE' and product.status='ACTIVE' and product.publication_status='PUBLISHED'
+        then ${catalogVariantIsStructurallyValid({
+          organizationId: sql.ref('variant.organization_id'),
+          productId: sql.ref('variant.product_id'),
+          variantId: sql.ref('variant.id'),
+          optionSignature: sql.ref('variant.option_signature'),
+        })} else false end as configured,
       coalesce(array_agg(category.category_id) filter (where category.category_id is not null), '{}') as category_ids,
       (select media_link.asset_id::text from catalog.product_media media_link
         join media.media_assets asset on asset.id=media_link.asset_id
@@ -70,10 +80,10 @@ export async function getGuestCart(db: Kysely<DatabaseSchema>, token: string): P
       'LIMIT_EXCEEDED',
       'This legacy Cart exceeds the safe hydration limit and needs review.',
     );
-  const coupons = await sql<{ normalized_code: string }>`
-    select coupon.normalized_code
+  const coupons = await sql<{ id: string; normalized_code: string }>`
+    select coupon.id, coupon.normalized_code
     from cart.cart_coupons link join promotions.coupon_codes coupon on coupon.id = link.coupon_code_id
-    where link.cart_id = ${cart.id}
+    where link.cart_id = ${cart.id} and coupon.organization_id = ${cart.organizationId}
     order by coupon.normalized_code
     limit 11
   `.execute(db);
@@ -83,7 +93,7 @@ export async function getGuestCart(db: Kysely<DatabaseSchema>, token: string): P
       'This legacy Cart exceeds the safe coupon limit and needs review.',
     );
   const eligibleVariants = lines.rows
-    .filter((line) => line.eligible)
+    .filter((line) => line.visible && line.configured)
     .map((line) => line.variant_id);
   const [prices, stock] = await Promise.all([
     resolveVariantPrices(db, {
@@ -95,10 +105,12 @@ export async function getGuestCart(db: Kysely<DatabaseSchema>, token: string): P
     availableToSellByVariant(db, cart.organizationId, eligibleVariants),
   ]);
   const computedLines = lines.rows.map((line) => {
-    const price = line.eligible ? prices.get(line.variant_id) : undefined;
+    const price = line.visible && line.configured ? prices.get(line.variant_id) : undefined;
     const ats = stock.get(line.variant_id) ?? '0';
     const lineQuantity = quantity(line.quantity);
-    const availability: CartView['lines'][number]['availability'] = !line.eligible
+    const availability: CartView['lines'][number]['availability'] = !(
+      line.visible && line.configured
+    )
       ? 'UNAVAILABLE'
       : !price
         ? 'UNPRICED'
@@ -111,6 +123,7 @@ export async function getGuestCart(db: Kysely<DatabaseSchema>, token: string): P
     return { ...line, price, gross, availability };
   });
   const calculations = await evaluatePromotions(db, {
+    guestPreview: true,
     organizationId: cart.organizationId,
     at: evaluatedAt,
     couponCodes: coupons.rows.map((coupon) => coupon.normalized_code),
@@ -133,17 +146,28 @@ export async function getGuestCart(db: Kysely<DatabaseSchema>, token: string): P
       );
     }
   }
+  const issues: CartCommerceIssueDto[] = [];
+  if (!computedLines.length) issues.push({ code: 'EMPTY_CART', action: 'ADD_ITEM' });
   const viewLines = computedLines.map((line) => {
+    if (line.availability !== 'AVAILABLE')
+      issues.push({
+        code: line.visible && !line.configured ? 'INVALID_CONFIGURATION' : line.availability,
+        lineId: line.id,
+        action:
+          line.availability === 'INSUFFICIENT_CURRENT_STOCK'
+            ? 'REDUCE_OR_REPLACE_OR_REMOVE'
+            : 'REPLACE_OR_REMOVE',
+      });
     const discount = discountByLine.get(line.id) ?? 0n;
     const gross = parseMoney(line.gross);
     return {
       id: line.id,
       variantId: line.variant_id,
-      sku: line.eligible ? line.sku : '',
-      productTitle: line.eligible ? line.product_title : 'Unavailable item',
-      productHandle: line.eligible ? line.product_handle : '',
-      mediaAssetId: line.eligible ? line.media_asset_id : null,
-      options: line.eligible ? line.options : [],
+      sku: line.visible && line.configured ? line.sku : '',
+      productTitle: line.visible ? line.product_title : 'Unavailable item',
+      productHandle: line.visible ? line.product_handle : '',
+      mediaAssetId: line.visible && line.configured ? line.media_asset_id : null,
+      options: line.visible && line.configured ? line.options : [],
       quantity: line.quantity,
       unitPrice: line.price?.amount ?? null,
       compareAtUnitPrice: line.price?.compareAtAmount ?? null,
@@ -155,12 +179,25 @@ export async function getGuestCart(db: Kysely<DatabaseSchema>, token: string): P
   });
   const merchandiseGross = viewLines.reduce((sum, line) => sum + parseMoney(line.gross), 0n);
   const discountTotal = viewLines.reduce((sum, line) => sum + parseMoney(line.discount), 0n);
+  const discountsByCoupon = new Map(
+    calculations
+      .filter((calculation) => calculation.couponCodeId !== null)
+      .map((calculation) => [calculation.couponCodeId, calculation.discount]),
+  );
+  const selectedCoupons = coupons.rows.map(({ id, normalized_code }) => {
+    const discount = discountsByCoupon.get(id);
+    return {
+      code: normalized_code,
+      status: discount ? ('EFFECTIVE' as const) : ('NO_CURRENT_BENEFIT' as const),
+      discount: discount ?? money(0n),
+    };
+  });
   const calculationVersion = cart.version;
   return {
     id: cart.id,
     ownerContext: cart.ownerContext,
     intentRevision: String(cart.version),
-    evaluatedAt: evaluatedAt.toISOString(),
+    evaluatedAt: new Date(evaluatedAt).toISOString(),
     currency: cart.currency,
     version: cart.version,
     expiresAt: cart.expiresAt.toISOString(),
@@ -175,15 +212,24 @@ export async function getGuestCart(db: Kysely<DatabaseSchema>, token: string): P
         line.price?.amount ?? null,
         line.price?.compareAtAmount ?? null,
         line.availability,
+        line.configured,
       ]),
       coupons: coupons.rows.map((coupon) => coupon.normalized_code),
       discounts: calculations.map((calculation) => [
         calculation.promotionId,
         calculation.revisionId,
+        calculation.couponCodeId,
         calculation.discount,
+        calculation.allocations.map(({ lineId, amount }) => [lineId, amount]),
       ]),
     }),
     lines: viewLines,
+    commerceReview: {
+      merchandiseReady: issues.length === 0,
+      deliveryEligibility: 'NOT_EVALUATED',
+      issues,
+      coupons: selectedCoupons,
+    },
     appliedCoupons: coupons.rows.map((coupon) => coupon.normalized_code),
     merchandiseGross: money(merchandiseGross),
     discountTotal: money(discountTotal),

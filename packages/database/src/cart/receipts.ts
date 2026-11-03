@@ -36,7 +36,7 @@ export async function mutateGuestCart(
   const key = input.idempotencyKey ?? `legacy:${digest}`;
   if (key.length > 160 || !/^[A-Za-z0-9:_-]{1,160}$/.test(key))
     throw new CartDomainError('VALIDATION_FAILED', 'Idempotency key is invalid.');
-  return db.transaction().execute(async (tx) => {
+  const execute = async (tx: Transaction<DatabaseSchema>) => {
     await sql`set local lock_timeout='2s'`.execute(tx);
     await sql`set local statement_timeout='5s'`.execute(tx);
     const cart = await findCart(tx, input.token, true);
@@ -69,7 +69,10 @@ export async function mutateGuestCart(
       throw error;
     }
     if (!record.created) {
-      const receipt = await sql<{ safe_response: CartMutationOutcomeDto | null; expired: boolean }>`
+      const receipt = await sql<{
+        safe_response: CartMutationOutcomeDto | null;
+        expired: boolean;
+      }>`
         select safe_response, (expires_at is null or expires_at <= clock_timestamp()) expired
         from platform.idempotency_records where id=${record.id}`.execute(tx);
       const saved = receipt.rows[0];
@@ -109,12 +112,15 @@ export async function mutateGuestCart(
           current = next.get(id);
         const previousQuantity = old ? quantity(old.quantity).toString() : '0';
         const nextQuantity = current ? quantity(current.quantity).toString() : '0';
-        return previousQuantity === nextQuantity
+        return previousQuantity === nextQuantity && old?.variant_id === current?.variantId
           ? []
           : [
               {
                 lineId: id,
                 variantId: current?.variantId ?? old!.variant_id,
+                ...(old && current && old.variant_id !== current.variantId
+                  ? { previousVariantId: old.variant_id }
+                  : {}),
                 previousQuantity,
                 quantity: nextQuantity,
               },
@@ -141,5 +147,15 @@ export async function mutateGuestCart(
       result_entity_type='cart',result_entity_id=${cart.id},safe_response=${JSON.stringify(outcome)}::jsonb,
       completed_at=now(),expires_at=now()+interval '7 days' where id=${record.id}`.execute(tx);
     return { ...view, outcome };
-  });
+  };
+  // A concurrent Cart writer can invalidate a repeatable-read snapshot while we wait
+  // for its row lock. Restart the entire transaction so receipt lookup precedes the
+  // stale revision check on the fresh snapshot.
+  for (let attempt = 1; ; attempt++) {
+    try {
+      return await db.transaction().setIsolationLevel('repeatable read').execute(execute);
+    } catch (error) {
+      if (attempt >= 3 || (error as { code?: string } | null)?.code !== '40001') throw error;
+    }
+  }
 }

@@ -24,29 +24,36 @@ const server = http.createServer(async (req, res) => {
     (mode === 'hold-init' && init) ||
     (mode === 'lose-mutation' && mutation) ||
     (mode === 'hold-mutation' && mutation) ||
-    (mode === 'hold-read' && cart && req.method === 'GET') ||
+    (['hold-read', 'limit-read'].includes(mode) && cart && req.method === 'GET') ||
     (mode === 'hang-mutation' && mutation) ||
     (mode === 'fail-mutation' && mutation)
   ) {
     fault = mode;
     mode = 'none';
   }
-  if (fault === 'fail-mutation') {
+  if (fault === 'fail-mutation' || fault === 'limit-read') {
+    const rateLimited = fault === 'limit-read';
+    const code = rateLimited ? 429 : 503;
     events.push({
       method: req.method,
       path,
-      status: 503,
+      status: code,
       fault,
       key: req.headers['idempotency-key'] ?? null,
       context: req.headers['x-cart-context'] ?? null,
     });
-    res.writeHead(503, {
+    res.writeHead(code, {
       'content-type': 'application/json',
       'cache-control': 'private, no-store',
       'retry-after': '2',
     });
     return res.end(
-      JSON.stringify({ error: { code: 'UNAVAILABLE', message: 'Synthetic service interruption' } }),
+      JSON.stringify({
+        error: {
+          code: rateLimited ? 'RATE_LIMITED' : 'UNAVAILABLE',
+          message: 'Synthetic service interruption',
+        },
+      }),
     );
   }
   const upstream = http.request(

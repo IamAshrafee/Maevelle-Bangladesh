@@ -59,7 +59,7 @@ async function fixture(quantity = '2') {
   const skuString = `ORDER-${crypto.randomUUID().slice(0, 8).toUpperCase()}`;
   const variant = await sql<{
     id: string;
-  }>`insert into catalog.product_variants (organization_id, product_id, sku, sku_normalized, option_signature) values (${organization.id}, ${product.rows[0]!.id}, ${skuString}, ${skuString}, ${crypto.randomUUID()}) returning id`.execute(
+  }>`insert into catalog.product_variants (organization_id, product_id, sku, sku_normalized, option_signature) values (${organization.id}, ${product.rows[0]!.id}, ${skuString}, ${skuString}, 'default') returning id`.execute(
     database.db,
   );
   const location = await createLocation(database.db, {
@@ -1347,7 +1347,7 @@ describe('atomic guest checkout and COD Orders', () => {
       `.execute(database.db);
       const dhakaNodeId = geoResult.rows[0]!.id;
 
-      // Create nationwide standard rule (P0, 120 BDT)
+      // Give the test rule precedence over the seeded nationwide P0 rule.
       const nationwideRule = await createDeliveryPricingRule(database.db, {
         organizationId: input.organizationId,
         actorId,
@@ -1355,7 +1355,7 @@ describe('atomic guest checkout and COD Orders', () => {
         countryCode: 'BD',
         flatAmount: '120.00',
         currency: 'BDT',
-        priority: 0,
+        priority: 5,
       });
       expect(nationwideRule.id).toBeDefined();
 
@@ -1397,7 +1397,7 @@ describe('atomic guest checkout and COD Orders', () => {
       expect(dhakaSim.quote?.priority).toBe(10);
       expect(dhakaSim.quote?.geographyNodeName).toBe('Dhaka Division Test');
 
-      // Simulate quote without geography: should match nationwide rule (120 BDT, P0)
+      // Simulate quote without geography: should match nationwide rule (120 BDT, P5)
       const nationwideSim = await simulateDeliveryPricingRuleQuote(database.db, {
         organizationId: input.organizationId,
         currency: 'BDT',
@@ -1406,7 +1406,7 @@ describe('atomic guest checkout and COD Orders', () => {
       expect(nationwideSim.matched).toBe(true);
       expect(nationwideSim.quote?.ruleName).toBe('Test Nationwide Standard');
       expect(nationwideSim.quote?.amount).toBe('120.0000');
-      expect(nationwideSim.quote?.priority).toBe(0);
+      expect(nationwideSim.quote?.priority).toBe(5);
 
       // Update Dhaka rule: change rate and status
       const updated = await updateDeliveryPricingRule(database.db, {

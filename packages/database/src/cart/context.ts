@@ -17,6 +17,7 @@ export interface ResolvedGuestCart {
   currency: string;
   version: number;
   expiresAt: Date;
+  evaluatedAt: string;
   ownerContext: string;
 }
 export async function findCart(
@@ -30,9 +31,10 @@ export async function findCart(
     currency_code: string;
     version: string;
     expires_at: Date;
+    evaluated_at: string;
     owner_context: string;
   }>`
-    select id, organization_id, currency_code, version::text, expires_at, owner_context
+    select id, organization_id, currency_code, version::text, expires_at, owner_context, transaction_timestamp()::text as evaluated_at
     from cart.carts
     where public_token_hash = ${hashToken(token)} and credential_state = 'SLOT_V1' and owner_account_id is null and status = 'ACTIVE' and expires_at > clock_timestamp()
     ${lock ? sql`for update` : sql``}
@@ -51,6 +53,7 @@ export async function findCart(
     currency: row.currency_code,
     version: checkedVersion(row.version),
     expiresAt: row.expires_at,
+    evaluatedAt: row.evaluated_at,
     ownerContext: row.owner_context,
   };
 }

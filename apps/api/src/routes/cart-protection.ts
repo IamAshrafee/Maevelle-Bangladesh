@@ -12,6 +12,18 @@ export function protectCartRoutes(
   database: DatabaseClient,
   config: RuntimeConfig,
 ): void {
+  cart.addHook('onResponse', async (request, reply) => {
+    request.log.info(
+      {
+        component: 'cart',
+        method: request.method,
+        route: request.routeOptions.url,
+        status: reply.statusCode,
+        responseTime: reply.elapsedTime,
+      },
+      'Cart request completed',
+    );
+  });
   cart.addHook('onRequest', async (request, reply) => {
     reply.header('cache-control', 'private, no-store').header('vary', 'Cookie, X-Cart-Context');
     const write = ['POST', 'PATCH', 'DELETE', 'PUT'].includes(request.method);

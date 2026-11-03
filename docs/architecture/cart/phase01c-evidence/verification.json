@@ -1,0 +1,36 @@
+{
+  "localStatus": "PARTIAL",
+  "localGates": {
+    "PASS": 14,
+    "PARTIAL": 2
+  },
+  "productionStatus": "BLOCKED",
+  "focusedRegression": {
+    "passed": 189,
+    "failed": 1,
+    "files": 20,
+    "failure": "existing Orders default delivery rule fixture conflict"
+  },
+  "browser": {
+    "functionalPassed": 36,
+    "layoutAXPassed": 9,
+    "nativeZoomPassed": 2,
+    "actualCookiePolicyPassed": 1,
+    "humanAT": "PARTIAL",
+    "otherEngines": "PARTIAL",
+    "hardwareTouch": "PARTIAL"
+  },
+  "checks": {
+    "productionStorefrontBuild": "PASS",
+    "standaloneBrowser": "PASS",
+    "APITypecheck": "PASS",
+    "StorefrontTypecheck": "PASS",
+    "scopedESLint": "PASS",
+    "architecture": "PASS",
+    "migrationHistory": "PASS",
+    "whitespace": "PASS"
+  },
+  "sourcePreservation": "PASS",
+  "historicalArtifactRecovery": "PASS",
+  "syntheticRestore": "PASS"
+}

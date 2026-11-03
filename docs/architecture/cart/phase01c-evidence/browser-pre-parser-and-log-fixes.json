@@ -1,0 +1,138 @@
+{
+  "engine": "Chrome/156.0.8078.74",
+  "database": "maevelle_cart01a_f3987d8e50cf4fe3b28876b0bc16a7d1",
+  "results": [
+    {
+      "name": "B01 ordinary PDP reads without guest creation",
+      "status": "PASS",
+      "detail": "No slot cookies; live GET404."
+    },
+    {
+      "name": "B02 first Add and shared header count",
+      "status": "PASS",
+      "detail": {
+        "slotCount": 1,
+        "httpOnly": true,
+        "labels": [
+          "View shopping bag (1 items)",
+          "View shopping bag (1 items)",
+          "View shopping bag (1 items)"
+        ]
+      }
+    },
+    {
+      "name": "B03 response lost after commit; exact receipt replay",
+      "status": "PASS",
+      "detail": "Committed quantity2 remained2; two requests same key."
+    },
+    {
+      "name": "B04 reload recovers uncertain intent without auto mutation",
+      "status": "PASS"
+    },
+    {
+      "name": "B05 Cart page quantity and removal compatibility",
+      "status": "PASS",
+      "detail": "Actual UI set4 then set3."
+    },
+    {
+      "name": "B06 two tabs stale desired state requires review",
+      "status": "PASS"
+    },
+    {
+      "name": "B07 cold tabs delayed Set-Cookie preserves acknowledged bag",
+      "status": "PASS",
+      "detail": {
+        "slots": 2,
+        "acknowledgedQuantity": 1,
+        "explicitSelection": true,
+        "explicitReturnToSelection": true
+      }
+    },
+    {
+      "name": "B08 account sign-in during delayed guest result hides old state",
+      "status": "PASS",
+      "detail": "Real auth UI, delayed guest response ignored, sign-out rechecks guest."
+    },
+    {
+      "name": "B09 Web Locks coordinate cold tabs; invalidations reconcile",
+      "status": "PASS",
+      "detail": {
+        "oneSlot": true,
+        "quantity": 2,
+        "broadcastHeaderUpdated": true
+      }
+    },
+    {
+      "name": "B10 real API no-op coupons, changed-key payload and tampering",
+      "status": "PASS",
+      "detail": {
+        "noopReplay": true,
+        "changedPayload": 409,
+        "invalidCoupon": "NOT_FOUND",
+        "forged": 400,
+        "foreign": 409
+      }
+    },
+    {
+      "name": "B11 removed credential fails closed without replacement",
+      "status": "PASS"
+    },
+    {
+      "name": "B12 responsive, reduced motion, keyboard and live feedback",
+      "status": "PASS",
+      "detail": {
+        "metrics": [
+          {
+            "width": 320,
+            "viewport": 320,
+            "body": 320
+          },
+          {
+            "width": 390,
+            "viewport": 390,
+            "body": 390
+          },
+          {
+            "width": 768,
+            "viewport": 768,
+            "body": 768
+          },
+          {
+            "width": 1280,
+            "viewport": 1280,
+            "body": 1280
+          }
+        ],
+        "zoom": {
+          "width": 640,
+          "scroll": 640
+        },
+        "keyboardFocus": true,
+        "reducedMotion": true,
+        "liveRegion": true
+      }
+    },
+    {
+      "name": "B13 client route navigation keeps in-flight controller and confirmed count",
+      "status": "PASS",
+      "detail": "Client navigation retained pending result, then UI removal committed."
+    },
+    {
+      "name": "B14 storage denial keeps exact in-memory recovery and warns",
+      "status": "PASS"
+    },
+    {
+      "name": "B15 account switching remains unavailable without prior guest display",
+      "status": "PASS"
+    },
+    {
+      "name": "B16 browser history and public HTML contain no private Cart snapshot",
+      "status": "PASS",
+      "detail": "Back navigation recovered current bag; unauthenticated HTML omitted private line IDs."
+    },
+    {
+      "name": "B17 supported coupon UI apply and remove use real Promotions",
+      "status": "PASS"
+    }
+  ]
+}

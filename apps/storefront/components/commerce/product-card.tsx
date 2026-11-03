@@ -39,6 +39,8 @@ export interface ProductCardProps {
   finishesCountLabel?: string | undefined;
   /** Direct link URL for product navigation */
   href?: string | undefined;
+  /** Link label when configuration should be resolved on the product page. */
+  selectionLinkLabel?: string;
   /** Unique product identifier */
   id: string;
   /** Image accessible description */
@@ -128,6 +130,7 @@ export function ProductCard({
   finishes,
   finishesCountLabel,
   href,
+  selectionLinkLabel,
   id,
   imageAlt,
   imageUrl,
@@ -461,6 +464,13 @@ export function ProductCard({
             </span>
           ) : null}
         </div>
+
+        {href && selectionLinkLabel && !isSoldOut && (
+          <Link href={href} aria-label={`${selectionLinkLabel} for ${title}`}
+            className="inline-flex min-h-12 items-center font-semibold text-primary underline underline-offset-4">
+            {selectionLinkLabel}
+          </Link>
+        )}
 
         {/* Optional Mobile Persistent Button (Legacy / Specimen Support) */}
         {showAddButton && !isSoldOut && onAddToCart ? (

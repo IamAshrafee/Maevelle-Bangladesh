@@ -1,0 +1,33 @@
+
+ RUN  v5.0.5 /Users/ashrafee/Documents/GitHub/Maevelle Bangladesh
+
+ ❯ apps/api/src/cart-foundation.test.ts (25 tests | 1 failed | 24 skipped) 2694ms
+   × C05 the assembled API rejects malformed JSON as a client error without backoff 748ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  apps/api/src/cart-foundation.test.ts > C05 the assembled API rejects malformed JSON as a client error without backoff
+AssertionError: expected 503 to be 400 // Object.is equality
+
+- Expected
++ Received
+
+- 400
++ 503
+
+ ❯ apps/api/src/cart-foundation.test.ts:637:31
+    635|     payload: '{malformed-cart-input',
+    636|   });
+    637|   expect(response.statusCode).toBe(400);
+       |                               ^
+    638|   expect(response.json()).toMatchObject({ error: { code: 'INVALID_REQU…
+    639|   expect(response.headers['retry-after']).toBeUndefined();
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 24 skipped (25)
+   Start at  11:34:53
+   Duration  4.25s (tests 65%, import 26%, transform 8%)
+

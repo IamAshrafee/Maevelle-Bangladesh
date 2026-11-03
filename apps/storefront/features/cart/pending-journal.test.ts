@@ -23,6 +23,16 @@ function storage() {
   };
 }
 describe('Cart nonsecret recovery journal', () => {
+  it('restores replacement identity and excludes non-command fields', () => {
+    const s = storage();
+    const j = createCartJournal(s, () => 1000);
+    const command = { kind: 'replace', lineId: key, targetVariantId: key, quantity: '1' } as const;
+    s.setItem(
+      'maevelle_cart_pending_v1',
+      JSON.stringify({ ...intent, command: { ...command, amount: '0' } }),
+    );
+    expect(j.read()).toEqual({ ...intent, command });
+  });
   it('only restores whitelisted fields, never arbitrary stored metadata', () => {
     const s = storage(),
       j = createCartJournal(s, () => 1000);

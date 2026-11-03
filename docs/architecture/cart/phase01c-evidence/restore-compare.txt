@@ -1,0 +1,4 @@
+cart 10 restored rows byte-equivalent under row_to_json to snapshot source rows
+line 8 restored rows byte-equivalent under row_to_json to snapshot source rows
+receipt 22 restored rows byte-equivalent under row_to_json to snapshot source rows
+outbox 21 restored rows byte-equivalent under row_to_json to snapshot source rows

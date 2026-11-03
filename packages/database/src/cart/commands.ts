@@ -65,6 +65,7 @@ export async function addGuestCartLine(
       organizationId: cart.organizationId,
       variantId: input.variantId,
       currency: cart.currency,
+      at: cart.evaluatedAt,
     });
     if (!price) throw new CartDomainError('UNPRICED', 'This Variant has no current selling price.');
     await sql`
@@ -108,10 +109,81 @@ export async function setGuestCartLineQuantity(
     );
     if (desired > ats)
       throw new CartDomainError('UNAVAILABLE', 'Requested quantity is not currently available.');
+    const price = await resolveVariantPrice(transaction, {
+      organizationId: cart.organizationId,
+      variantId: existingLine.variant_id,
+      currency: cart.currency,
+      at: cart.evaluatedAt,
+    });
+    if (!price) throw new CartDomainError('UNPRICED', 'This Variant has no current selling price.');
     await sql<{ id: string }>`
       update cart.cart_lines set quantity = ${input.quantity}::numeric, version = version + 1, updated_at = now()
       where id = ${input.lineId} and cart_id = ${cart.id} and organization_id = ${cart.organizationId} returning id
     `.execute(transaction);
+    await bumpCartVersion(transaction, cart.id, input.expectedVersion);
+    return getGuestCart(transaction, input.token);
+  });
+}
+
+/** Replace a configuration within its product. An existing target line survives a merge. */
+export async function replaceGuestCartLineVariant(
+  db: Kysely<DatabaseSchema>,
+  input: GuestMutationScope & { lineId: string; targetVariantId: string; quantity: string },
+): Promise<CartView> {
+  const desired = quantity(input.quantity);
+  return mutateGuestCart(db, input, 'replace_variant', async (transaction, cart) => {
+    const lines = await sql<{
+      id: string;
+      variant_id: string;
+      product_id: string;
+      quantity: string;
+    }>`
+      select line.id, line.variant_id, variant.product_id, line.quantity::text
+      from cart.cart_lines line
+      join catalog.product_variants variant
+        on variant.id = line.variant_id and variant.organization_id = line.organization_id
+      where line.cart_id = ${cart.id} and line.organization_id = ${cart.organizationId}
+        and (line.id = ${input.lineId} or line.variant_id = ${input.targetVariantId})
+      for update of line
+    `.execute(transaction);
+    const source = lines.rows.find((line) => line.id === input.lineId);
+    if (!source) throw new CartDomainError('NOT_FOUND', 'Cart line was not found.');
+    const target = lines.rows.find((line) => line.id !== source.id);
+    const total = desired + (target ? quantity(target.quantity) : 0n);
+    if (total > 99n) throw new CartDomainError('LIMIT_EXCEEDED', 'Cart quantity limit exceeded.');
+
+    await assertSellableVariant(
+      transaction,
+      cart.organizationId,
+      input.targetVariantId,
+      source.product_id,
+    );
+    const ats = availableWholeUnits(
+      await availableToSell(transaction, cart.organizationId, input.targetVariantId),
+    );
+    if (total > ats)
+      throw new CartDomainError('UNAVAILABLE', 'Requested quantity is not currently available.');
+    const price = await resolveVariantPrice(transaction, {
+      organizationId: cart.organizationId,
+      variantId: input.targetVariantId,
+      currency: cart.currency,
+      at: cart.evaluatedAt,
+    });
+    if (!price) throw new CartDomainError('UNPRICED', 'This Variant has no current selling price.');
+    if (source.variant_id === input.targetVariantId && quantity(source.quantity) === desired)
+      return getGuestCart(transaction, input.token);
+
+    const survivingLineId = target?.id ?? source.id;
+    await sql`
+      update cart.cart_lines set variant_id = ${input.targetVariantId}, quantity = ${total.toString()}::numeric,
+        last_seen_unit_price = ${price.amount}::numeric, version = version + 1, updated_at = now()
+      where id = ${survivingLineId} and cart_id = ${cart.id} and organization_id = ${cart.organizationId}
+    `.execute(transaction);
+    if (target)
+      await sql`
+        delete from cart.cart_lines
+        where id = ${source.id} and cart_id = ${cart.id} and organization_id = ${cart.organizationId}
+      `.execute(transaction);
     await bumpCartVersion(transaction, cart.id, input.expectedVersion);
     return getGuestCart(transaction, input.token);
   });

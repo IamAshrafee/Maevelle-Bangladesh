@@ -69,7 +69,8 @@ export function createCartJournal(
             },
           };
         if (
-          command.kind === 'set' &&
+          (command.kind === 'set' ||
+            (command.kind === 'replace' && uuid.test(command.targetVariantId))) &&
           uuid.test(command.lineId) &&
           /^[1-9][0-9]?$/.test(command.quantity)
         )
@@ -78,7 +79,15 @@ export function createCartJournal(
             ownerContext: parsed.ownerContext,
             version: parsed.version!,
             createdAt: parsed.createdAt,
-            command: { kind: command.kind, lineId: command.lineId, quantity: command.quantity },
+            command:
+              command.kind === 'replace'
+                ? {
+                    kind: 'replace',
+                    lineId: command.lineId,
+                    targetVariantId: command.targetVariantId,
+                    quantity: command.quantity,
+                  }
+                : { kind: 'set', lineId: command.lineId, quantity: command.quantity },
           };
         if (command.kind === 'clear')
           return {

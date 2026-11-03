@@ -30,6 +30,21 @@ function assertMoney(value: string, label: string): void {
   }
 }
 
+function scaledPrice(value: string): bigint {
+  const [whole, fraction = ''] = value.split('.');
+  return BigInt(whole!) * 10_000n + BigInt(fraction.padEnd(4, '0'));
+}
+
+function assertCompareAt(amount: string, compareAtAmount?: string | null): void {
+  if (compareAtAmount == null) return;
+  assertMoney(compareAtAmount, 'Compare-at amount');
+  if (scaledPrice(compareAtAmount) < scaledPrice(amount))
+    throw new PricingDomainError(
+      'VALIDATION_FAILED',
+      'Compare-at amount must be greater than or equal to the selling amount.',
+    );
+}
+
 function assertCurrency(value: string): void {
   if (!/^[A-Z]{3}$/.test(value)) {
     throw new PricingDomainError(
@@ -77,21 +92,7 @@ export async function createPriceDefinition(
 ): Promise<ResolvedPrice & { version: number }> {
   assertCurrency(input.currency);
   assertMoney(input.amount, 'Amount');
-  if (input.compareAtAmount !== undefined && input.compareAtAmount !== null) {
-    assertMoney(input.compareAtAmount, 'Compare-at amount');
-    if (
-      BigInt(
-        input.compareAtAmount
-          .replace('.', '')
-          .padEnd(
-            input.compareAtAmount.indexOf('.') < 0 ? 5 : input.compareAtAmount.indexOf('.') + 5,
-            '0',
-          ),
-      ) < 0n
-    ) {
-      throw new PricingDomainError('VALIDATION_FAILED', 'Compare-at amount is invalid.');
-    }
-  }
+  assertCompareAt(input.amount, input.compareAtAmount);
   if (input.effectiveTo && input.effectiveFrom && input.effectiveTo <= input.effectiveFrom) {
     throw new PricingDomainError(
       'VALIDATION_FAILED',
@@ -122,7 +123,7 @@ export async function createPriceDefinition(
           organization_id, variant_id, currency_code, amount, compare_at_amount, effective_from, effective_to, status
         ) values (
           ${input.organizationId}, ${input.variantId}, ${input.currency}, ${input.amount}::numeric,
-          ${input.compareAtAmount ?? null}::numeric, ${input.effectiveFrom ?? new Date()}, ${input.effectiveTo ?? null}, ${input.status ?? 'ACTIVE'}
+          ${input.compareAtAmount ?? null}::numeric, coalesce(${input.effectiveFrom ?? null}::timestamptz, now()), ${input.effectiveTo ?? null}, ${input.status ?? 'ACTIVE'}
         ) returning id, variant_id, amount::text, compare_at_amount::text, currency_code, version::text
       `.execute(transaction);
       const row = result.rows[0];
@@ -172,14 +173,7 @@ export async function setCurrentVariantPrice(
 ): Promise<ResolvedPrice & { version: number }> {
   assertCurrency(input.currency);
   assertMoney(input.amount, 'Amount');
-  if (input.compareAtAmount !== undefined && input.compareAtAmount !== null) {
-    assertMoney(input.compareAtAmount, 'Compare-at amount');
-    if (Number(input.compareAtAmount) < Number(input.amount))
-      throw new PricingDomainError(
-        'VALIDATION_FAILED',
-        'Compare-at amount must be greater than or equal to the selling amount.',
-      );
-  }
+  assertCompareAt(input.amount, input.compareAtAmount);
   return db.transaction().execute(async (transaction) => {
     const variant = await sql<{ id: string }>`select id::text from catalog.product_variants
       where organization_id=${input.organizationId} and id=${input.variantId}::uuid`.execute(
@@ -277,7 +271,7 @@ export async function archivePriceDefinition(
 /** The sole V1 price resolver shared by storefront, Cart, and Promotion calculation. */
 export async function resolveVariantPrice(
   db: Kysely<DatabaseSchema>,
-  input: { organizationId: string; variantId: string; currency: string; at?: Date },
+  input: { organizationId: string; variantId: string; currency: string; at?: Date | string },
 ): Promise<ResolvedPrice | undefined> {
   return (await resolveVariantPrices(db, { ...input, variantIds: [input.variantId] })).get(
     input.variantId,
@@ -287,7 +281,7 @@ export async function resolveVariantPrice(
 /** Same authoritative temporal selection as the single resolver, in one bounded query. */
 export async function resolveVariantPrices(
   db: Kysely<DatabaseSchema>,
-  input: { organizationId: string; variantIds: readonly string[]; currency: string; at?: Date },
+  input: { organizationId: string; variantIds: readonly string[]; currency: string; at?: Date | string },
 ): Promise<ReadonlyMap<string, ResolvedPrice>> {
   assertCurrency(input.currency);
   if (input.variantIds.length === 0) return new Map();
@@ -296,7 +290,7 @@ export async function resolveVariantPrices(
       'VALIDATION_FAILED',
       'Price evaluation is limited to 100 variants.',
     );
-  const at = input.at ?? new Date();
+  const at = input.at ?? sql`statement_timestamp()`;
   const result = await sql<{
     id: string;
     variant_id: string;

@@ -268,6 +268,9 @@ export const cartStore = {
   reconcile: () => invoke((c) => c.reconcile()),
   addItem: (id: string, quantity: number) => invoke((c) => c.addItem(id, quantity)),
   setQuantity: (id: string, quantity: string) => invoke((c) => c.setQuantity(id, quantity)),
+  replaceVariant: (
+    ...args: Parameters<ReturnType<typeof createCartController>['replaceVariant']>
+  ) => invoke((c) => c.replaceVariant(...args)),
   removeItem: (id: string) => invoke((c) => c.removeItem(id)),
   applyCoupon: (code: string) => invoke((c) => c.applyCoupon(code)),
   removeCoupon: (code: string) => invoke((c) => c.removeCoupon(code)),

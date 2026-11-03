@@ -459,6 +459,35 @@ await check(
   },
 );
 
+await check('C01 Recovery read Retry-After pauses exact replay without losing intent', async () => {
+  const { t } = await added();
+  await fault('lose-mutation');
+  await clear(t);
+  await wait(async () => (await text(t)).includes('Retry same action'));
+  const eventsBefore = (await status()).events.length;
+  await fault('limit-read');
+  await click(t, 'Retry same action');
+  await wait(async () => (await text(t)).includes('too many requests'));
+  assert.equal(
+    await t.evaluate(
+      '[...document.querySelectorAll("button")].find(e=>e.innerText==="Retry same action").disabled',
+    ),
+    true,
+  );
+  const limited = (await status()).events.slice(eventsBefore);
+  assert.equal(limited.filter((e) => e.status === 429).length, 1);
+  assert.equal(limited.filter((e) => e.method === 'DELETE').length, 0);
+  await click(t, 'Retry same action');
+  await wait(async () => (await text(t)).includes('earlier bag action was confirmed'));
+  const clearCalls = (await status()).events
+    .filter((e) => e.method === 'DELETE' && e.path === '/storefront/v1/carts/current')
+    .slice(-2);
+  assert.equal(clearCalls.length, 2);
+  assert.equal(clearCalls[0].key, clearCalls[1].key);
+  assert.equal(clearCalls[0].context, clearCalls[1].context);
+  assert.equal((await api(t)).body.data.lines.length, 0);
+});
+
 writeFileSync(
   process.env.CART_01BR_SCENARIOS
     ? '/tmp/maevelle-cart01c/browser-clear-reset-extra.json'

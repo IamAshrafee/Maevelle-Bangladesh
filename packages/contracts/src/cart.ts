@@ -24,10 +24,20 @@ export interface CartMutationOutcomeDto {
   readonly changes: readonly {
     readonly lineId: string;
     readonly variantId: string;
+    readonly previousVariantId?: string;
     readonly previousQuantity: string;
     readonly quantity: string;
   }[];
 }
+
+export type CartCommerceIssueDto =
+  | { readonly code: 'EMPTY_CART'; readonly action: 'ADD_ITEM' }
+  | {
+      readonly code:
+        'UNAVAILABLE' | 'UNPRICED' | 'INSUFFICIENT_CURRENT_STOCK' | 'INVALID_CONFIGURATION';
+      readonly lineId: string;
+      readonly action: 'REPLACE_OR_REMOVE' | 'REDUCE_OR_REPLACE_OR_REMOVE';
+    };
 
 export interface GuestCartViewDto {
   readonly id: string;
@@ -56,6 +66,17 @@ export interface GuestCartViewDto {
     net: string;
     availability: 'AVAILABLE' | 'UNAVAILABLE' | 'UNPRICED' | 'INSUFFICIENT_CURRENT_STOCK';
   }[];
+  /** Cart merchandise review only. Checkout must revalidate and resolve delivery and payment. */
+  readonly commerceReview?: {
+    readonly merchandiseReady: boolean;
+    readonly deliveryEligibility: 'NOT_EVALUATED';
+    readonly issues: readonly CartCommerceIssueDto[];
+    readonly coupons: readonly {
+      readonly code: string;
+      readonly status: 'EFFECTIVE' | 'NO_CURRENT_BENEFIT';
+      readonly discount: string;
+    }[];
+  };
   readonly appliedCoupons: readonly string[];
   readonly merchandiseGross: string;
   readonly discountTotal: string;
@@ -71,4 +92,10 @@ export interface GuestCartMutationPreconditionDto {
 export type ClearGuestCartRequestDto = GuestCartMutationPreconditionDto;
 export interface CartSessionForgottenDto {
   readonly sessionForgotten: true;
+}
+
+/** Quantity replaces the source quantity before any exact-variant merge. */
+export interface ReplaceGuestCartLineVariantRequestDto extends GuestCartMutationPreconditionDto {
+  readonly targetVariantId: string;
+  readonly quantity: string;
 }

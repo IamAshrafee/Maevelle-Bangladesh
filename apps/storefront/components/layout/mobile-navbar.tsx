@@ -248,7 +248,8 @@ export function MobileNavbar({
             {onOpenCart ? (
               <button
                 aria-label={cartLabel}
-                className="relative flex h-11 w-11 items-center justify-center rounded-full text-on-surface transition-colors hover:bg-surface-container-low hover:text-primary active:scale-95 cursor-pointer"
+                aria-haspopup="dialog"
+                className="relative flex h-12 w-12 items-center justify-center rounded-full text-on-surface transition-colors hover:bg-surface-container-low hover:text-primary active:scale-95 cursor-pointer"
                 onClick={onOpenCart}
                 type="button"
               >

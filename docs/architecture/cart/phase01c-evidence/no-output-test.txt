@@ -1,0 +1,9 @@
+
+ RUN  v5.0.5 /Users/ashrafee/Documents/GitHub/Maevelle Bangladesh
+
+
+ Test Files  1 passed (1)
+      Tests  1 passed | 9 skipped (10)
+   Start at  11:39:27
+   Duration  2.96s (tests 80%, import 13%, transform 7%)
+

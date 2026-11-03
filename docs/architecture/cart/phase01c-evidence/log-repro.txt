@@ -1,0 +1,33 @@
+
+ RUN  v5.0.5 /Users/ashrafee/Documents/GitHub/Maevelle Bangladesh
+
+ ❯ apps/api/src/cart-foundation.test.ts (26 tests | 1 failed | 25 skipped) 1620ms
+   × C05 assembled API logs redact Cart coupon paths and credentials 590ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  apps/api/src/cart-foundation.test.ts > C05 assembled API logs redact Cart coupon paths and credentials
+AssertionError: expected true to be false // Object.is equality
+
+- Expected
++ Received
+
+- false
++ true
+
+ ❯ apps/api/src/cart-foundation.test.ts:668:35
+    666|   expect(output).toContain('Cart request rejected');
+    667|   expect(output).toContain('request completed');
+    668|   expect(output.includes(canary)).toBe(false);
+       |                                   ^
+    669|   expect(output.includes(cookie(guest).split('=')[1]!)).toBe(false);
+    670| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 25 skipped (26)
+   Start at  11:35:51
+   Duration  2.78s (tests 60%, import 29%, transform 11%)
+

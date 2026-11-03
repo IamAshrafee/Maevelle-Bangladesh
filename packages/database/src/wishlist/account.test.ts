@@ -3,7 +3,6 @@ import { Pool } from 'pg';
 import { sql } from 'kysely';
 import { Migrator } from 'kysely/migration';
 import { createDatabase, type DatabaseClient } from '../index.js';
-import { runMigrations } from '../migrate.js';
 import { migrationProvider } from '../migrations/index.js';
 import { createOrganization } from '../platform.js';
 import { mergeCustomers } from '../customers.js';
@@ -126,7 +125,13 @@ beforeAll(async () => {
     (organization_id,wishlist_id,merge_id,request_digest,account_version,result,expires_at)
     values (${organization.id},${list.rows[0]!.id}::uuid,${crypto.randomUUID()}::uuid,
       ${Buffer.alloc(32, 1)},1,'{}'::jsonb,now()+interval '90 days')`.execute(database.db);
-  expect((await runMigrations(database.db)).executed).toEqual(['3210_wishlist_share_lifecycle', '3211_wishlist_share_receipt_tombstones', '3212_wishlist_analytics']);
+  const throughAnalytics = await migrator.migrateTo('3212_wishlist_analytics');
+  if (throughAnalytics.error) throw throughAnalytics.error;
+  expect(throughAnalytics.results?.map(({ migrationName, status }) => [migrationName, status])).toEqual([
+    ['3210_wishlist_share_lifecycle', 'Success'],
+    ['3211_wishlist_share_receipt_tombstones', 'Success'],
+    ['3212_wishlist_analytics', 'Success'],
+  ]);
   legacy = { organizationId: organization.id, shareId: guestShare.rows[0]!.id,
     productId: product.rows[0]!.id, viewToken, manageToken,
     accountId: account.rows[0]!.id, listId: list.rows[0]!.id };

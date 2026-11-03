@@ -1,0 +1,6 @@
+variant 0
+native-zoom 0
+blocked-cookies 0
+layout 0
+visibility 0
+performance 0

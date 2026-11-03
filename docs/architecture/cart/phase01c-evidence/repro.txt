@@ -1,0 +1,45 @@
+
+ RUN  v5.0.5 /Users/ashrafee/Documents/GitHub/Maevelle Bangladesh
+
+ ❯ apps/storefront/features/cart/controller.test.ts (36 tests | 1 failed | 35 skipped) 21ms
+   × preserves the unknown intent and honors Retry-After when its verification read is rate limited 19ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  apps/storefront/features/cart/controller.test.ts > preserves the unknown intent and honors Retry-After when its verification read is rate limited
+AssertionError: expected { mode: 'ready', …(8) } to match object { pending: { …(5) }, issue: { …(3) } }
+(22 matching properties omitted from actual)
+
+- Expected
++ Received
+
+@@ -1,10 +1,10 @@
+  {
+    "issue": {
+-     "code": "RATE_LIMITED",
++     "code": "NETWORK_UNAVAILABLE",
+      "recovery": "same-intent",
+-     "retryAt": 61000,
++     "retryAt": 0,
+    },
+    "pending": {
+      "command": {
+        "kind": "add",
+        "quantity": "1",
+
+ ❯ apps/storefront/features/cart/controller.test.ts:691:27
+    689|   );
+    690|   await expect(c.retryPending()).rejects.toMatchObject({ code: 'RATE_L…
+    691|   expect(c.getSnapshot()).toMatchObject({
+       |                           ^
+    692|     pending,
+    693|     issue: { code: 'RATE_LIMITED', recovery: 'same-intent', retryAt: 6…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 35 skipped (36)
+   Start at  11:32:34
+   Duration  244ms (transform 68%, tests 17%, import 12%, worker 3%)
+

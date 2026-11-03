@@ -504,6 +504,7 @@ export function DesktopNavbar({
               {onOpenCart ? (
                 <button
                   aria-label={cartLabel}
+                  aria-haspopup="dialog"
                   className="group relative flex items-center gap-2 rounded-xl bg-surface-container-low px-3.5 py-2 text-on-surface transition-[background-color,color] hover:bg-surface-container hover:text-primary active:scale-98 cursor-pointer select-none"
                   onClick={onOpenCart}
                   type="button"
@@ -638,6 +639,7 @@ export function DesktopNavbar({
                 {onOpenCart ? (
                   <button
                     aria-label={cartLabel}
+                    aria-haspopup="dialog"
                     className="group relative flex items-center gap-1.5 rounded-lg bg-surface-container-low px-3 py-1.5 text-on-surface transition-[background-color,color] hover:bg-surface-container hover:text-primary active:scale-98 cursor-pointer select-none"
                     onClick={onOpenCart}
                     type="button"

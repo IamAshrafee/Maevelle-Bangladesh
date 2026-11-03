@@ -1,0 +1,72 @@
+ M apps/api/src/app.ts
+ M apps/api/src/cart-foundation.test.ts
+ M apps/api/src/routes/cart-protection.ts
+ M docs/architecture/cart/CART_SCENARIO_REGISTER.md
+ M docs/architecture/cart/CART_SECURITY_THREAT_MODEL.md
+ M docs/architecture/cart/README.md
+ M docs/product-completion/current-focus.md
+ M docs/product-completion/state.json
+ M scripts/cart-phase01c-clear-reset.mjs
+ M scripts/cart-phase01c-proxy.mjs
+ M scripts/cart-phase01c-runtime.ts
+?? docs/architecture/cart/PHASE_01C_ACCEPTANCE_REGISTER.md
+?? docs/architecture/cart/PHASE_01C_BROWSER_ACCESSIBILITY.md
+?? docs/architecture/cart/PHASE_01C_CONTRACT_VERIFICATION.md
+?? docs/architecture/cart/PHASE_01C_CUTOVER_READINESS.md
+?? docs/architecture/cart/PHASE_01C_EVIDENCE_INTEGRITY.md
+?? docs/architecture/cart/PHASE_01C_IMPLEMENTATION_REPORT.md
+?? docs/architecture/cart/PHASE_01C_INTEGRATED_AUDIT.md
+?? docs/architecture/cart/PHASE_01C_PERFORMANCE_REGRESSION.md
+?? docs/architecture/cart/PHASE_01C_PHASE02A_HANDOFF.md
+?? docs/architecture/cart/PHASE_01C_SCENARIO_RESULTS.md
+?? docs/architecture/cart/PHASE_01C_SECURITY_VERIFICATION.md
+?? docs/architecture/cart/phase01c-evidence/api-types-final.txt
+?? docs/architecture/cart/phase01c-evidence/architecture.txt
+?? docs/architecture/cart/phase01c-evidence/backend-performance.json
+?? docs/architecture/cart/phase01c-evidence/baseline-status.txt
+?? docs/architecture/cart/phase01c-evidence/baseline-tests.txt
+?? docs/architecture/cart/phase01c-evidence/baseline.json
+?? docs/architecture/cart/phase01c-evidence/blocked-cookies.json
+?? docs/architecture/cart/phase01c-evidence/browser-clear-reset.json
+?? docs/architecture/cart/phase01c-evidence/browser-closure.txt
+?? docs/architecture/cart/phase01c-evidence/browser-harness.md
+?? docs/architecture/cart/phase01c-evidence/browser-harness.patch
+?? docs/architecture/cart/phase01c-evidence/browser-pre-parser-and-log-fixes.json
+?? docs/architecture/cart/phase01c-evidence/browser-regression.json
+?? docs/architecture/cart/phase01c-evidence/build-final.txt
+?? docs/architecture/cart/phase01c-evidence/cleanup.json
+?? docs/architecture/cart/phase01c-evidence/clear-closure.txt
+?? docs/architecture/cart/phase01c-evidence/clear-fixture-cache.txt
+?? docs/architecture/cart/phase01c-evidence/clear-standalone-assets.txt
+?? docs/architecture/cart/phase01c-evidence/closure-tests.txt
+?? docs/architecture/cart/phase01c-evidence/environment.txt
+?? docs/architecture/cart/phase01c-evidence/exclusive-create-test.txt
+?? docs/architecture/cart/phase01c-evidence/format-touched.txt
+?? docs/architecture/cart/phase01c-evidence/layout.json
+?? docs/architecture/cart/phase01c-evidence/lint-closure.txt
+?? docs/architecture/cart/phase01c-evidence/log-repro.txt
+?? docs/architecture/cart/phase01c-evidence/migrate.txt
+?? docs/architecture/cart/phase01c-evidence/migrations.txt
+?? docs/architecture/cart/phase01c-evidence/native-zoom-2.png
+?? docs/architecture/cart/phase01c-evidence/native-zoom-4.png
+?? docs/architecture/cart/phase01c-evidence/native-zoom.json
+?? docs/architecture/cart/phase01c-evidence/no-output-test.txt
+?? docs/architecture/cart/phase01c-evidence/parser-http-final.txt
+?? docs/architecture/cart/phase01c-evidence/parser-repro.txt
+?? docs/architecture/cart/phase01c-evidence/performance.json
+?? docs/architecture/cart/phase01c-evidence/populated-mobile-cart.png
+?? docs/architecture/cart/phase01c-evidence/prepare-browser.py
+?? docs/architecture/cart/phase01c-evidence/preservation.json
+?? docs/architecture/cart/phase01c-evidence/recovered-01ar-performance.json
+?? docs/architecture/cart/phase01c-evidence/recovery-search.txt
+?? docs/architecture/cart/phase01c-evidence/repro.txt
+?? docs/architecture/cart/phase01c-evidence/restore-compare.txt
+?? docs/architecture/cart/phase01c-evidence/safari-session.json
+?? docs/architecture/cart/phase01c-evidence/standalone-final.txt
+?? docs/architecture/cart/phase01c-evidence/storefront-types-final.txt
+?? docs/architecture/cart/phase01c-evidence/supplemental-exits.txt
+?? docs/architecture/cart/phase01c-evidence/variant.json
+?? docs/architecture/cart/phase01c-evidence/verification.json
+?? docs/architecture/cart/phase01c-evidence/visibility.json
+?? scripts/cart-phase01c-native-zoom.mjs
+?? scripts/cart-phase01c-variant.mjs

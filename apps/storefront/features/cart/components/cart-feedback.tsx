@@ -44,6 +44,14 @@ export function CartFeedback() {
                 ? 'Establishing your bag session…'
                 : 'Saving your bag action…')}
           </p>
+          {!state.issue && state.notice === 'Added to your bag.' && (
+            <Link
+              href="/cart"
+              className="inline-flex min-h-12 items-center font-semibold text-primary underline"
+            >
+              Review bag
+            </Link>
+          )}
           {!state.recoveryPersisted && state.pending ? (
             <p className="mt-2">
               Browser storage is unavailable for this action. Keep this tab open until its result is

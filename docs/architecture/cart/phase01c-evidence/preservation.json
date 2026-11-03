@@ -1,0 +1,69 @@
+{
+  "status": "PASS",
+  "baselineFiles": 2124,
+  "unchanged": 2113,
+  "changed": {
+    "docs/architecture/cart/CART_SECURITY_THREAT_MODEL.md": {
+      "before": "2e777f49e12fa53eacbec5c71c0808d2753b52a4625ed7c231defe4c9779dc15",
+      "after": "933670667b25550b737d93f5a9850790499a17c6565623e1fda8d02605322331"
+    },
+    "docs/architecture/cart/CART_SCENARIO_REGISTER.md": {
+      "before": "0851ce8f1801b03a87c711d222542a6e5fdd721ff109780e284ebdf0c062dc59",
+      "after": "25493c8aa93409b7fe1845d92ade021351ca7084b097f95768b154762b981caa"
+    },
+    "docs/product-completion/current-focus.md": {
+      "before": "24e228b1e628731b4ea53152ef16c9cd244d0ea3134d8cdc77ff2c412e9c025a",
+      "after": "f3a1a93641a593f21e7c3eeadbfa169e910c9cd15eb495fd33d37ba48c1b3e48"
+    },
+    "apps/api/src/app.ts": {
+      "before": "e6a962a28c588524517f7f3fd60aff8121dfa5aca129e7f89db814feb85efa28",
+      "after": "6b9aaf0d8e47e5431c6d6cc2d0515c4f3f738ae796d2f27d5c2a5dfa0b4c9143"
+    },
+    "apps/api/src/routes/cart-protection.ts": {
+      "before": "078c4658c20f96686d657a7d57c78993dca123b4a0d5f7c193ad24a90cb5cf39",
+      "after": "34edefae68b29b91620a1c849d9485ae215773a08d410d37a44ed95dde67d016"
+    },
+    "apps/storefront/features/cart/controller.test.ts": {
+      "before": "4184b397f8f01f1177a06118358cd3b1845ee54e8160f8f372fdaa645d80592e",
+      "after": "b27f7e8e6457e85130116c4c4b1d878cacc770657afaf3e226ae29be9e814cf7"
+    },
+    "docs/product-completion/state.json": {
+      "before": "d2a83d28b28aab8a85dc57cdeebead253063a0099425255632988ff0817d9046",
+      "after": "5776f7676be20e740413d9e0ca31959534e98db20f108e2cd8c56bcf795c3aed"
+    },
+    "packages/database/src/cart-reassessment.test.ts": {
+      "before": "5f986ce18a56fc009625431504fab6ef8f88170d5ee35092b47b323176521632",
+      "after": "ad3cd3abdacb33fc157302e662b0ba18c6ff7ed9843ba6d896680484ae2642de"
+    },
+    "apps/api/src/cart-foundation.test.ts": {
+      "before": "73259f3dbcf9f01f38d3ed1b46018ac95c6114a705013e3c1fdea759a5445d7c",
+      "after": "e184f0ccd936d2afbe9cd5c3129504feafeab9beeff9a50c54c6dfdb9b3fddb1"
+    },
+    "docs/architecture/cart/README.md": {
+      "before": "769684d8b7adb435de97b278711032530e151ab2e82f3bd57b6987315e334894",
+      "after": "42585c7690796b4320b34cd7e3145e0b50c2154ebb0e887b99926002cd091afb"
+    },
+    "apps/storefront/features/cart/controller.ts": {
+      "before": "6b29505f5c526cb42a56d29909ac77e692079c0f2b3e1cd80d80e496046ba4cc",
+      "after": "2fa2a947376d9123f5d662250e19ac2c48a1919acf13a1725320d53a857ead28"
+    }
+  },
+  "deleted": [],
+  "branch": "main",
+  "baselineHead": "aa290065407030e85b5b6847efd22fb437a65279",
+  "finalHead": "27b79e9fe1e3111d0f0b5fd9578eeb3636aac4e6",
+  "headAdvancedExternally": true,
+  "externalCommits": [
+    "27b79e9fe1e3111d0f0b5fd9578eeb3636aac4e6 test(cart): record local acceptance and product progress",
+    "26054ac335331438950b244090810f0efe31674e feat(storefront): implement resilient cart workflows",
+    "9b4eb24ca9c4fdd2bc7164752639d0f0f3e0ff9b feat(cart): implement cart integrity and credential lifecycle",
+    "3c50b11dd02469c7b70bafb0681e70ff0481380b test(wishlist): record local acceptance and recovery evidence",
+    "f0f6061d714d346884a9c40c6b7eb5ac288e509b fix(storefront): improve wishlist sharing feedback and telemetry",
+    "3740d2b632044c1954408e50b15ae6a0e9957be5 fix(admin): improve primary action contrast",
+    "3a0819c056473a2e8e16cb9f616c100b3169fa65 feat(admin): add wishlist analytics reports",
+    "562e98c75022f08aea84334e02d0094ca265d771 feat(wishlist): support versioned share recovery keys"
+  ],
+  "historicalReportsUnchanged": true,
+  "recoveredArtifactSHA256": "4722e88f62ad39edd7e597501d170408ffc607e201e752b4b1a2cc15d730e0aa",
+  "trackedHarnessPreserved": true
+}

@@ -48,33 +48,35 @@ export const cartApi: CartApi = {
   },
   mutate(intent) {
     const command = intent.command;
-    const route =
-      command.kind === 'clear'
-        ? ''
-        : command.kind === 'add'
-          ? '/lines'
-          : command.kind === 'set' || command.kind === 'remove'
-            ? `/lines/${encodeURIComponent(command.lineId)}`
-            : command.kind === 'apply-coupon'
-              ? '/coupons'
-              : `/coupons/${encodeURIComponent(command.couponCode)}`;
-    const method =
-      command.kind === 'set'
-        ? 'PATCH'
-        : command.kind === 'clear' || command.kind === 'remove' || command.kind === 'remove-coupon'
-          ? 'DELETE'
-          : 'POST';
-    const payload =
-      command.kind === 'add'
-        ? { variantId: command.variantId, quantity: command.quantity }
-        : command.kind === 'set'
-          ? { quantity: command.quantity }
-          : command.kind === 'apply-coupon'
-            ? { couponCode: command.couponCode }
-            : {};
+    const lineRoute = 'lineId' in command ? `/lines/${encodeURIComponent(command.lineId)}` : '';
+    const routeByCommand = {
+      clear: '',
+      add: '/lines',
+      set: lineRoute,
+      replace: `${lineRoute}/variant`,
+      remove: lineRoute,
+      'apply-coupon': '/coupons',
+      'remove-coupon':
+        'couponCode' in command ? `/coupons/${encodeURIComponent(command.couponCode)}` : '',
+    };
+    const methodByCommand = {
+      clear: 'DELETE',
+      add: 'POST',
+      set: 'PATCH',
+      replace: 'PUT',
+      remove: 'DELETE',
+      'apply-coupon': 'POST',
+      'remove-coupon': 'DELETE',
+    };
+    const payload = {
+      ...('quantity' in command ? { quantity: command.quantity } : {}),
+      ...(command.kind === 'add' ? { variantId: command.variantId } : {}),
+      ...(command.kind === 'replace' ? { targetVariantId: command.targetVariantId } : {}),
+      ...(command.kind === 'apply-coupon' ? { couponCode: command.couponCode } : {}),
+    };
     // Submitted identity/body never change on retry. No client price/tenant fields.
-    return requestCart(`/api/storefront/v1/carts/current${route}`, {
-      method,
+    return requestCart(`/api/storefront/v1/carts/current${routeByCommand[command.kind]}`, {
+      method: methodByCommand[command.kind],
       cache: 'no-store',
       headers: {
         'content-type': 'application/json',

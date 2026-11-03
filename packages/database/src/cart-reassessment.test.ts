@@ -265,6 +265,18 @@ it('AR08 1/20/100-line hydration uses constant query count; capture focused timi
   const db = isolated.database.db,
     g = await guest();
   const samples: { lines: number; queryCount: number; medianMs: number; p95Ms: number }[] = [];
+  for (let priority = 1; priority <= 4; priority++) {
+    await createPromotion(db, {
+      organizationId: f.organizationId,
+      actorId: f.actorId,
+      name: `Benchmark automatic ${priority}`,
+      promotionType: 'AUTOMATIC',
+      benefitType: 'PERCENTAGE_DISCOUNT',
+      benefitValue: '1',
+      combinability: 'STACKABLE',
+      priority,
+    });
+  }
   let count = 0;
   const plugin: KyselyPlugin = {
     transformQuery(args: { node: RootOperationNode }) {
@@ -280,8 +292,15 @@ it('AR08 1/20/100-line hydration uses constant query count; capture focused timi
     await sql`delete from cart.cart_lines where cart_id=${g.cart.id}`.execute(db);
     const variants = await sql<{
       id: string;
-    }>`insert into catalog.product_variants(organization_id,product_id,sku,sku_normalized,option_signature)
-      select ${f.organizationId},${f.productId},upper('AR-'||${g.cart.id}||'-'||${size}||'-'||n),upper('AR-'||${g.cart.id}||'-'||${size}||'-'||n),'ar-'||${size}||'-'||n from generate_series(1,${size}) n returning id`.execute(
+    }>`with products as (
+      insert into catalog.products (organization_id, product_type_id, handle, title, status, publication_status, published_at)
+      select product.organization_id, product.product_type_id, 'ar-'||${g.cart.id}||'-'||${size}||'-'||n,
+        'Benchmark product', 'ACTIVE', 'PUBLISHED', now()
+      from catalog.products product cross join generate_series(1,${size}) n where product.id = ${f.productId}
+      returning id, organization_id, handle
+    )
+    insert into catalog.product_variants (organization_id, product_id, sku, sku_normalized, option_signature)
+    select organization_id, id, upper(handle), upper(handle), 'default' from products returning id`.execute(
       db,
     );
     for (const v of variants.rows) {
@@ -292,6 +311,17 @@ it('AR08 1/20/100-line hydration uses constant query count; capture focused timi
         db,
       );
     }
+    await sql`
+      with items as (
+        insert into inventory.inventory_items (organization_id, variant_id)
+        select organization_id, variant_id from cart.cart_lines where cart_id = ${g.cart.id}
+        returning id, organization_id
+      )
+      insert into inventory.inventory_levels (organization_id, inventory_item_id, location_id, sellable_quantity)
+      select items.organization_id, items.id, location.id, 5
+      from items join warehouse.locations location on location.organization_id = items.organization_id
+      where location.code = 'TEST'
+    `.execute(db);
     const times: number[] = [],
       counts: number[] = [];
     for (let n = 0; n < 10; n++) {
@@ -301,6 +331,8 @@ it('AR08 1/20/100-line hydration uses constant query count; capture focused timi
       times.push(performance.now() - start);
       counts.push(count);
       expect(view.lines).toHaveLength(size);
+      expect(view.commerceReview?.merchandiseReady).toBe(true);
+      expect(BigInt(view.discountTotal.replace('.', ''))).toBeGreaterThan(0n);
       expect(view.lines.every((line) => line.unitPrice === '100.0000')).toBe(true);
     }
     times.sort((a, b) => a - b);
@@ -328,7 +360,7 @@ it('AR08 1/20/100-line hydration uses constant query count; capture focused timi
           pricePlan: pricePlan.rows,
           ownerPlan: ownerPlan.rows,
           limitation:
-            'Synthetic local 100-line reads; no concurrent load or representative catalog cardinality. Stock absent on benchmark variants.',
+            'Synthetic local reads with stocked variants and four active promotions; no concurrent load or representative catalog cardinality.',
         },
         null,
         2,

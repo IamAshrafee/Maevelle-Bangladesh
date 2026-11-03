@@ -1,0 +1,27 @@
+
+ RUN  v5.0.5 /Users/ashrafee/Documents/GitHub/Maevelle Bangladesh
+
+ ❯ packages/database/src/cart-reassessment.test.ts (10 tests | 1 failed | 9 skipped) 3096ms
+   × AR08 1/20/100-line hydration uses constant query count; capture focused timings and real query plans 327ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  packages/database/src/cart-reassessment.test.ts > AR08 1/20/100-line hydration uses constant query count; capture focused timings and real query plans
+Error: EEXIST: file already exists, open '/tmp/maevelle-cart01c/exclusive-create-canary.json'
+ ❯ packages/database/src/cart-reassessment.test.ts:323:5
+    321|   // Artifact writes are opt-in; regression tests must never overwrite…
+    322|   if (process.env.CART_PERFORMANCE_OUTPUT)
+    323|     writeFileSync(
+       |     ^
+    324|       process.env.CART_PERFORMANCE_OUTPUT,
+    325|       JSON.stringify(
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 9 skipped (10)
+   Start at  11:39:22
+   Duration  3.73s (tests 85%, import 10%, transform 5%)
+
+Expected EEXIST; existing artifact byte-for-byte unchanged.

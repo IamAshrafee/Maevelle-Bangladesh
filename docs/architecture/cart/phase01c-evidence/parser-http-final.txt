@@ -1,0 +1,15 @@
+HTTP/1.1 400 Bad Request
+x-request-id: b0c93664-937d-40c6-bcf5-58f17dc61db2
+x-content-type-options: nosniff
+x-frame-options: DENY
+referrer-policy: strict-origin-when-cross-origin
+permissions-policy: camera=(), microphone=(), geolocation=()
+content-security-policy: default-src 'none'; frame-ancestors 'none'
+cache-control: private, no-store
+vary: Cookie, X-Cart-Context
+connection: close
+content-type: application/json; charset=utf-8
+content-length: 121
+date: Tue, 03 Nov 2026 05:35:14 GMT
+
+{"error":{"code":"INVALID_REQUEST","message":"Invalid Cart request.","requestId":"b0c93664-937d-40c6-bcf5-58f17dc61db2"}}

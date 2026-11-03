@@ -1,0 +1,10 @@
+Expected SHA256 4722e88f62ad39edd7e597501d170408ffc607e201e752b4b1a2cc15d730e0aa 
+Current SHA256 a8445a040ec89a1ba06a3badce36bc8e713a0c4e02c51f24a402cd12b943f975
+Read-only Git blobs hashed 4640 (2–500 KB, including unreachable objects). Matches: ['e4c7fca58bca558ed57accbe4e035feb863510ca']
+docs/architecture/cart/phase01br-evidence/backend-performance.json 9c26b1220ec0a0db0432ba7c54e6f0ee9e9764aae1250cb306dc5f05aaaa3c78
+docs/architecture/cart/phase01br-evidence/performance.json 6d59dea9b9c777ad342f8837e38fd7eb0d1deeaab8cb7a43d27a130f3bf4b219
+docs/architecture/cart/phase01ar-evidence/performance.json a8445a040ec89a1ba06a3badce36bc8e713a0c4e02c51f24a402cd12b943f975
+/tmp/maevelle-cart01c/performance.json 528d331b57420de3f55c81e7191e800d62ed09f00518f1fc32aad3fae655cdbd
+Snapshots for disk /:
+No machine directory found for host.
+Command exited with status 1.

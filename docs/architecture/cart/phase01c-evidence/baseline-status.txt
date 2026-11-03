@@ -1,0 +1,311 @@
+ M apps/admin/components/admin-shell.tsx
+ M apps/admin/components/analytics/analytics-filter-toolbar.tsx
+ M apps/admin/components/analytics/analytics-workspace.tsx
+ M apps/admin/components/ui/button.tsx
+ M apps/admin/lib/analytics/types.ts
+ M apps/api/src/routes/account-wishlist-shares.ts
+ M apps/api/src/routes/auth.ts
+ M apps/api/src/routes/cart.ts
+ M apps/api/src/routes/orders.ts
+ M apps/api/src/routes/shopper-auth.ts
+ M apps/api/src/routes/wishlist.ts
+ M apps/api/src/server.ts
+ M apps/api/src/shopper-auth.test.ts
+ M apps/storefront/app/cart/page.tsx
+ M apps/storefront/app/design-system/page.tsx
+ M apps/storefront/app/layout.tsx
+ M apps/storefront/components/commerce/quantity-stepper.tsx
+ M apps/storefront/components/layout/announcement-bar.tsx
+ M apps/storefront/components/layout/desktop-navbar.tsx
+ M apps/storefront/components/layout/header-client-shell.tsx
+ M apps/storefront/components/layout/mobile-footer.tsx
+ M apps/storefront/components/layout/mobile-navbar.tsx
+ M apps/storefront/components/product-page-client.tsx
+ M apps/storefront/features/account/shopper-account.tsx
+ M apps/storefront/features/cart/use-cart-count.ts
+ M apps/storefront/features/chat/chat-root.tsx
+ M apps/storefront/features/pdp/pdp-sticky-bar.tsx
+ M apps/storefront/features/pdp/pdp-view.tsx
+ M apps/storefront/features/wishlist/components/shared-wishlist.tsx
+ M apps/storefront/features/wishlist/components/wishlist-page-shell.tsx
+ M apps/storefront/features/wishlist/components/wishlist-sharing-panel.tsx
+ M apps/storefront/features/wishlist/use-wishlist.ts
+ M apps/storefront/lib/api/client/http.ts
+ M apps/worker/src/server.ts
+ M docs/product-completion/current-focus.md
+ M docs/product-completion/state.json
+ M docs/storefront/design-system.md
+ M packages/config/src/index.test.ts
+ M packages/config/src/index.ts
+ M packages/contracts/src/index.ts
+ M packages/database/package.json
+ M packages/database/src/analytics/wishlist/wishlist-analytics.test.ts
+ M packages/database/src/cart.ts
+ M packages/database/src/index.ts
+ M packages/database/src/migrations/index.ts
+ M packages/database/src/orders/placement.ts
+ M packages/database/src/pricing.ts
+ M packages/database/src/promotions.ts
+ M packages/database/src/upgrade-cases.ts
+ M packages/database/src/upgrade-test-cli.ts
+ M packages/database/src/wishlist/share-crypto.test.ts
+ M packages/database/src/wishlist/share-crypto.ts
+ M packages/database/src/wishlist/share-lifecycle.ts
+?? apps/admin/components/analytics/use-wishlist-analytics.ts
+?? apps/admin/components/analytics/views/wishlist-view.tsx
+?? apps/admin/lib/analytics/date-presets.test.ts
+?? apps/admin/lib/analytics/wishlist-api.ts
+?? apps/admin/lib/analytics/wishlist-coverage.test.ts
+?? apps/admin/lib/analytics/wishlist-coverage.ts
+?? apps/admin/lib/analytics/wishlist-report-loader.test.ts
+?? apps/admin/lib/analytics/wishlist-report-loader.ts
+?? apps/admin/src/primary-action-contrast.test.tsx
+?? apps/admin/src/wishlist-analytics.test.tsx
+?? apps/api/src/cart-credential-closure.test.ts
+?? apps/api/src/cart-foundation.test.ts
+?? apps/api/src/routes/cart-context.ts
+?? apps/api/src/routes/cart-protection.ts
+?? apps/api/src/routes/checkout-cart-context.ts
+?? apps/storefront/components/ui/confirm-dialog.tsx
+?? apps/storefront/features/cart/activity.ts
+?? apps/storefront/features/cart/api.test.ts
+?? apps/storefront/features/cart/api.ts
+?? apps/storefront/features/cart/browser-runtime.test.ts
+?? apps/storefront/features/cart/browser-runtime.ts
+?? apps/storefront/features/cart/components/cart-clear-action.tsx
+?? apps/storefront/features/cart/components/cart-feedback.tsx
+?? apps/storefront/features/cart/components/cart-page-view.tsx
+?? apps/storefront/features/cart/components/cart-recovery-actions.tsx
+?? apps/storefront/features/cart/controller.test.ts
+?? apps/storefront/features/cart/controller.ts
+?? apps/storefront/features/cart/errors.ts
+?? apps/storefront/features/cart/pending-journal.test.ts
+?? apps/storefront/features/cart/pending-journal.ts
+?? apps/storefront/features/cart/session-recovery.ts
+?? apps/storefront/features/cart/types.ts
+?? apps/storefront/features/cart/use-cart.ts
+?? apps/storefront/features/wishlist/recipient-save-feedback.test.ts
+?? apps/storefront/features/wishlist/recipient-save-feedback.ts
+?? apps/storefront/lib/analytics/wishlist-telemetry.test.ts
+?? apps/storefront/lib/analytics/wishlist-telemetry.ts
+?? docs/architecture/cart/BASELINE_GIT_STATUS.txt
+?? docs/architecture/cart/CART_ADMIN_UX_ARCHITECTURE.md
+?? docs/architecture/cart/CART_ANALYTICS_TRACKING_SPEC.md
+?? docs/architecture/cart/CART_API_CONTRACTS.md
+?? docs/architecture/cart/CART_BUSINESS_RULES.md
+?? docs/architecture/cart/CART_CHECKOUT_HANDOFF_CONTRACT.md
+?? docs/architecture/cart/CART_DOMAIN_AND_DATA_MODEL.md
+?? docs/architecture/cart/CART_MASTER_IMPLEMENTATION_ROADMAP.md
+?? docs/architecture/cart/CART_MASTER_SPEC.md
+?? docs/architecture/cart/CART_SCENARIO_REGISTER.md
+?? docs/architecture/cart/CART_SECURITY_THREAT_MODEL.md
+?? docs/architecture/cart/CART_SEO_PERFORMANCE_SCALABILITY.md
+?? docs/architecture/cart/CART_STOREFRONT_UX_ARCHITECTURE.md
+?? docs/architecture/cart/CART_SYSTEM_ARCHITECTURE.md
+?? docs/architecture/cart/PHASE_00_ACCEPTANCE_REGISTER.md
+?? docs/architecture/cart/PHASE_00_FINAL_REPORT.md
+?? docs/architecture/cart/PHASE_00_REPOSITORY_AUDIT.md
+?? docs/architecture/cart/PHASE_00_VALIDATION.json
+?? docs/architecture/cart/PHASE_01A1_ACCEPTANCE_REGISTER.md
+?? docs/architecture/cart/PHASE_01A1_COMPATIBILITY_MATRIX.md
+?? docs/architecture/cart/PHASE_01A1_IMPLEMENTATION_REPORT.md
+?? docs/architecture/cart/PHASE_01A1_LEGACY_CREDENTIAL_AUDIT.md
+?? docs/architecture/cart/PHASE_01A1_SECURITY_MIGRATION_DESIGN.md
+?? docs/architecture/cart/PHASE_01A1_TEST_EVIDENCE.md
+?? docs/architecture/cart/PHASE_01AR_ACCEPTANCE_REGISTER.md
+?? docs/architecture/cart/PHASE_01AR_API_AND_FRONTEND_CONTRACT.md
+?? docs/architecture/cart/PHASE_01AR_ARCHITECTURE_DECISIONS.md
+?? docs/architecture/cart/PHASE_01AR_DATABASE_MIGRATION_REPORT.md
+?? docs/architecture/cart/PHASE_01AR_IMPLEMENTATION_REPORT.md
+?? docs/architecture/cart/PHASE_01AR_REASSESSMENT.md
+?? docs/architecture/cart/PHASE_01AR_REFACTOR_IMPACT_MAP.md
+?? docs/architecture/cart/PHASE_01AR_SECURITY_CLOSURE.md
+?? docs/architecture/cart/PHASE_01AR_TEST_EVIDENCE.md
+?? docs/architecture/cart/PHASE_01A_ACCEPTANCE_REGISTER.md
+?? docs/architecture/cart/PHASE_01A_BOOTSTRAP_PROTOCOL.md
+?? docs/architecture/cart/PHASE_01A_IMPACT_AND_COMPATIBILITY.md
+?? docs/architecture/cart/PHASE_01A_IMPLEMENTATION_REPORT.md
+?? docs/architecture/cart/PHASE_01A_RECEIPT_AND_OWNER_CONTRACT.md
+?? docs/architecture/cart/PHASE_01A_VERIFICATION.json
+?? docs/architecture/cart/PHASE_01BR_ACCEPTANCE_REGISTER.md
+?? docs/architecture/cart/PHASE_01BR_ACCESSIBILITY_REPORT.md
+?? docs/architecture/cart/PHASE_01BR_ARCHITECTURE_DECISIONS.md
+?? docs/architecture/cart/PHASE_01BR_BROWSER_ACCEPTANCE.md
+?? docs/architecture/cart/PHASE_01BR_CLEAR_AND_RESET_IMPLEMENTATION.md
+?? docs/architecture/cart/PHASE_01BR_FRONTEND_IMPACT_MAP.md
+?? docs/architecture/cart/PHASE_01BR_IMPLEMENTATION_REPORT.md
+?? docs/architecture/cart/PHASE_01BR_REASSESSMENT.md
+?? docs/architecture/cart/PHASE_01BR_SECURITY_AND_PERFORMANCE.md
+?? docs/architecture/cart/PHASE_01BR_STATE_AND_RECOVERY_CONTRACT.md
+?? docs/architecture/cart/PHASE_01B_ACCEPTANCE_REGISTER.md
+?? docs/architecture/cart/PHASE_01B_BOOTSTRAP_COORDINATION.md
+?? docs/architecture/cart/PHASE_01B_BROWSER_SCENARIO_RESULTS.md
+?? docs/architecture/cart/PHASE_01B_CART_STATE_ARCHITECTURE.md
+?? docs/architecture/cart/PHASE_01B_FRONTEND_IMPACT_MAP.md
+?? docs/architecture/cart/PHASE_01B_IMPLEMENTATION_REPORT.md
+?? docs/architecture/cart/PHASE_01B_MUTATION_RECONCILIATION.md
+?? docs/architecture/cart/PHASE_01B_SECURITY_REVIEW.md
+?? docs/architecture/cart/README.md
+?? docs/architecture/cart/phase01a1-evidence/baseline-status.txt
+?? docs/architecture/cart/phase01a1-evidence/browser.json
+?? docs/architecture/cart/phase01a1-evidence/final-status.txt
+?? docs/architecture/cart/phase01a1-evidence/phase01b-regression.json
+?? docs/architecture/cart/phase01a1-evidence/preservation.json
+?? docs/architecture/cart/phase01ar-evidence/architecture.txt
+?? docs/architecture/cart/phase01ar-evidence/baseline.json
+?? docs/architecture/cart/phase01ar-evidence/browser-run.txt
+?? docs/architecture/cart/phase01ar-evidence/browser.json
+?? docs/architecture/cart/phase01ar-evidence/cleanup.txt
+?? docs/architecture/cart/phase01ar-evidence/database-build.txt
+?? docs/architecture/cart/phase01ar-evidence/environment.txt
+?? docs/architecture/cart/phase01ar-evidence/final-status.txt
+?? docs/architecture/cart/phase01ar-evidence/final-tests.txt
+?? docs/architecture/cart/phase01ar-evidence/format.txt
+?? docs/architecture/cart/phase01ar-evidence/foundation-tests.txt
+?? docs/architecture/cart/phase01ar-evidence/lint.txt
+?? docs/architecture/cart/phase01ar-evidence/migration-history.txt
+?? docs/architecture/cart/phase01ar-evidence/performance.json
+?? docs/architecture/cart/phase01ar-evidence/preservation.json
+?? docs/architecture/cart/phase01ar-evidence/reassessment-tests.txt
+?? docs/architecture/cart/phase01ar-evidence/typecheck.txt
+?? docs/architecture/cart/phase01ar-evidence/upgrade.txt
+?? docs/architecture/cart/phase01b-evidence/architecture-check.txt
+?? docs/architecture/cart/phase01b-evidence/blocked-cookies.json
+?? docs/architecture/cart/phase01b-evidence/browser-results.json
+?? docs/architecture/cart/phase01b-evidence/focused-tests.txt
+?? docs/architecture/cart/phase01b-evidence/mobile-cart.png
+?? docs/architecture/cart/phase01b-evidence/storefront-build.txt
+?? docs/architecture/cart/phase01b-evidence/verification.json
+?? docs/architecture/cart/phase01b-evidence/visibility.json
+?? docs/architecture/cart/phase01br-evidence/architecture.txt
+?? docs/architecture/cart/phase01br-evidence/backend-performance.json
+?? docs/architecture/cart/phase01br-evidence/baseline-status.txt
+?? docs/architecture/cart/phase01br-evidence/baseline.json
+?? docs/architecture/cart/phase01br-evidence/blocked-cookies-run.txt
+?? docs/architecture/cart/phase01br-evidence/blocked-cookies.json
+?? docs/architecture/cart/phase01br-evidence/browser-clear-reset-extra.json
+?? docs/architecture/cart/phase01br-evidence/browser-clear-reset-initial.txt
+?? docs/architecture/cart/phase01br-evidence/browser-clear-reset.json
+?? docs/architecture/cart/phase01br-evidence/browser-clear-reset.txt
+?? docs/architecture/cart/phase01br-evidence/browser-final-rate-limit.txt
+?? docs/architecture/cart/phase01br-evidence/browser-final-startup-race.txt
+?? docs/architecture/cart/phase01br-evidence/browser-first-six.txt
+?? docs/architecture/cart/phase01br-evidence/browser-focus.txt
+?? docs/architecture/cart/phase01br-evidence/browser-initial-failure.txt
+?? docs/architecture/cart/phase01br-evidence/browser-regression.json
+?? docs/architecture/cart/phase01br-evidence/browser-regression.txt
+?? docs/architecture/cart/phase01br-evidence/browser-script-lint.txt
+?? docs/architecture/cart/phase01br-evidence/cleanup.json
+?? docs/architecture/cart/phase01br-evidence/design-system.json
+?? docs/architecture/cart/phase01br-evidence/environment.txt
+?? docs/architecture/cart/phase01br-evidence/final-status.txt
+?? docs/architecture/cart/phase01br-evidence/focus-diagnostic.txt
+?? docs/architecture/cart/phase01br-evidence/focused-tests.txt
+?? docs/architecture/cart/phase01br-evidence/format.txt
+?? docs/architecture/cart/phase01br-evidence/initial-tests.txt
+?? docs/architecture/cart/phase01br-evidence/layout-run.txt
+?? docs/architecture/cart/phase01br-evidence/layout.json
+?? docs/architecture/cart/phase01br-evidence/lint.txt
+?? docs/architecture/cart/phase01br-evidence/migration-history.txt
+?? docs/architecture/cart/phase01br-evidence/migrations.txt
+?? docs/architecture/cart/phase01br-evidence/mobile-cart.png
+?? docs/architecture/cart/phase01br-evidence/performance-run.txt
+?? docs/architecture/cart/phase01br-evidence/performance.json
+?? docs/architecture/cart/phase01br-evidence/populated-mobile-cart.png
+?? docs/architecture/cart/phase01br-evidence/preservation.json
+?? docs/architecture/cart/phase01br-evidence/runtime-tests.txt
+?? docs/architecture/cart/phase01br-evidence/storefront-build.txt
+?? docs/architecture/cart/phase01br-evidence/types.txt
+?? docs/architecture/cart/phase01br-evidence/unit-tests.txt
+?? docs/architecture/cart/phase01br-evidence/verification.json
+?? docs/architecture/cart/phase01br-evidence/visibility-run.txt
+?? docs/architecture/cart/phase01br-evidence/visibility.json
+?? docs/architecture/cart/phase01br-evidence/whitespace.txt
+?? docs/architecture/cart/phase01br-evidence/zoom-cart.png
+?? docs/architecture/wishlist/PHASE_06B_FRONTEND_IMPLEMENTATION_REPORT.md
+?? docs/architecture/wishlist/PHASE_07A1_LOCAL_ACCEPTANCE_CLOSURE_REPORT.md
+?? docs/architecture/wishlist/PHASE_07A_ACCEPTANCE_REGISTER.csv
+?? docs/architecture/wishlist/PHASE_07A_LOCAL_ACCEPTANCE_REPORT.md
+?? docs/architecture/wishlist/SHARE_RECOVERY_KEY_RUNBOOK.md
+?? docs/architecture/wishlist/phase07a-evidence/auth-runtime.json
+?? docs/architecture/wishlist/phase07a-evidence/build-status.txt
+?? docs/architecture/wishlist/phase07a-evidence/cleanup.json
+?? docs/architecture/wishlist/phase07a-evidence/http-summary.json
+?? docs/architecture/wishlist/phase07a-evidence/observation-shapes.json
+?? docs/architecture/wishlist/phase07a-evidence/performance.json
+?? docs/architecture/wishlist/phase07a-evidence/preflight.json
+?? docs/architecture/wishlist/phase07a-evidence/quality-results.json
+?? docs/architecture/wishlist/phase07a-evidence/recent-commits.txt
+?? docs/architecture/wishlist/phase07a-evidence/refresh-result.json
+?? docs/architecture/wishlist/phase07a-evidence/responsive.json
+?? docs/architecture/wishlist/phase07a-evidence/token-log-check.json
+?? docs/architecture/wishlist/phase07a-evidence/working-tree.txt
+?? docs/architecture/wishlist/phase07a1-evidence/acceptance-register-before.csv
+?? docs/architecture/wishlist/phase07a1-evidence/admin-fixed-contrast.jpg
+?? docs/architecture/wishlist/phase07a1-evidence/admin-table.jpg
+?? docs/architecture/wishlist/phase07a1-evidence/browser-results.json
+?? docs/architecture/wishlist/phase07a1-evidence/browser-session-expiry.json
+?? docs/architecture/wishlist/phase07a1-evidence/cleanup.json
+?? docs/architecture/wishlist/phase07a1-evidence/comparison-to-07a-final.json
+?? docs/architecture/wishlist/phase07a1-evidence/files-changed.json
+?? docs/architecture/wishlist/phase07a1-evidence/multi-api.json
+?? docs/architecture/wishlist/phase07a1-evidence/preflight.json
+?? docs/architecture/wishlist/phase07a1-evidence/recipient-revoked.jpg
+?? docs/architecture/wishlist/phase07a1-evidence/register-totals.json
+?? docs/architecture/wishlist/phase07a1-evidence/tracked-diff-before.sha256
+?? docs/architecture/wishlist/phase07a1-evidence/verification-commands.txt
+?? docs/architecture/wishlist/phase07a1-evidence/worker-recovery.json
+?? docs/architecture/wishlist/phase07a1-evidence/working-tree-before.txt
+?? docs/architecture/wishlist/phase07a1-evidence/working-tree-final.txt
+?? packages/contracts/src/cart.ts
+?? packages/database/src/cart-credential-closure.test.ts
+?? packages/database/src/cart-foundation.test.ts
+?? packages/database/src/cart-reassessment.test.ts
+?? packages/database/src/cart/availability.ts
+?? packages/database/src/cart/commands.ts
+?? packages/database/src/cart/context.ts
+?? packages/database/src/cart/credentials.ts
+?? packages/database/src/cart/errors.ts
+?? packages/database/src/cart/queries.ts
+?? packages/database/src/cart/receipts.ts
+?? packages/database/src/cart/types.ts
+?? packages/database/src/cart/upgrade-cases.ts
+?? packages/database/src/cart/value.ts
+?? packages/database/src/migrations/3213_cart_foundation.ts
+?? packages/database/src/migrations/3214_cart_credential_retirement.ts
+?? packages/database/src/migrations/3215_cart_integrity.ts
+?? packages/database/src/testing/cart-fixture.ts
+?? packages/database/src/wishlist/share-key-migration.test.ts
+?? packages/database/src/wishlist/share-key-migration.ts
+?? packages/database/src/wishlist/upgrade-cases.ts
+?? scripts/cart-phase01a1-browser.mjs
+?? scripts/cart-phase01a1-runtime.ts
+?? scripts/cart-phase01ar-browser.mjs
+?? scripts/cart-phase01ar-runtime.ts
+?? scripts/cart-phase01b-blocked-cookies.mjs
+?? scripts/cart-phase01b-browser-acceptance.mjs
+?? scripts/cart-phase01b-browser-proxy.mjs
+?? scripts/cart-phase01b-cdp.mjs
+?? scripts/cart-phase01b-runtime.ts
+?? scripts/cart-phase01b-visibility.mjs
+?? scripts/cart-phase01br-blocked-cookies.mjs
+?? scripts/cart-phase01br-browser.mjs
+?? scripts/cart-phase01br-clear-reset.mjs
+?? scripts/cart-phase01br-layout.mjs
+?? scripts/cart-phase01br-performance.mjs
+?? scripts/cart-phase01br-proxy.mjs
+?? scripts/cart-phase01br-runtime.ts
+?? scripts/cart-phase01br-visibility.mjs
+?? scripts/wishlist-phase07a-api.ts
+?? scripts/wishlist-phase07a-auth-smoke.ts
+?? scripts/wishlist-phase07a-catalog.ts
+?? scripts/wishlist-phase07a-config.ts
+?? scripts/wishlist-phase07a-fixture.ts
+?? scripts/wishlist-phase07a-measure.ts
+?? scripts/wishlist-phase07a-worker.ts
+?? scripts/wishlist-phase07a1-bootstrap.ts
+?? scripts/wishlist-phase07a1-browser-proxy.mjs
+?? scripts/wishlist-phase07a1-expire-session.ts
+?? scripts/wishlist-phase07a1-multi-api.ts
+?? scripts/wishlist-phase07a1-reencrypt.ts
+?? scripts/wishlist-phase07a1-worker-recovery.ts

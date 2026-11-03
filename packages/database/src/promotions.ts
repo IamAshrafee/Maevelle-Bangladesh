@@ -556,9 +556,9 @@ export async function listAdminPromotions(
         coalesce(sum(usage.discount_amount) filter (where usage.status='COMMITTED'),0)::text as committed_discount,
         promotion.created_at::text,
         promotion.updated_at::text,
-        coalesce(tp.cnt, 0)::text as target_product_count,
-        coalesce(tc.cnt, 0)::text as target_category_count,
-        coalesce(tv.cnt, 0)::text as target_variant_count
+        coalesce(tp.cnt, '0')::text as target_product_count,
+        coalesce(tc.cnt, '0')::text as target_category_count,
+        coalesce(tv.cnt, '0')::text as target_variant_count
       from promotions.promotions promotion
       join promotions.promotion_revisions revision
         on revision.promotion_id=promotion.id and revision.status='ACTIVE'
@@ -799,10 +799,13 @@ export async function evaluatePromotions(
     organizationId: string;
     lines: readonly PromotionCalculationLine[];
     couponCodes?: readonly string[];
-    at?: Date;
+    /** Guest previews have no verified customer for customer-limited offers. */
+    guestPreview?: true;
+    at?: Date | string;
   },
 ): Promise<readonly PromotionCalculation[]> {
-  const at = input.at ?? new Date();
+  if (!input.lines.length) return [];
+  const at = input.at ?? sql`statement_timestamp()`;
   const requestedCodes = [...new Set((input.couponCodes ?? []).map(normalizeCoupon))];
   const promotions = await sql<{
     promotion_id: string;
@@ -814,19 +817,42 @@ export async function evaluatePromotions(
     benefit_value: string;
     minimum_merchandise_subtotal: string | null;
     coupon_code_id: string | null;
+    targets: { product_id: string | null; variant_id: string | null; category_id: string | null }[];
   }>`
     select promotion.id as promotion_id, promotion.promotion_type, promotion.combinability, promotion.priority,
       revision.id as revision_id, revision.benefit_type, revision.benefit_value::text, revision.minimum_merchandise_subtotal::text,
-      coupon.id as coupon_code_id
+      coupon.id as coupon_code_id, targets.rules as targets
     from promotions.promotions promotion
     join promotions.promotion_revisions revision on revision.promotion_id = promotion.id and revision.status = 'ACTIVE'
     left join lateral (
-      select id from promotions.coupon_codes
-      where promotion_id = promotion.id and status = 'ACTIVE'
-        and normalized_code = any(${requestedCodes})
-      order by id
+      select code.id from promotions.coupon_codes code
+      where code.organization_id = promotion.organization_id and code.promotion_id = promotion.id
+        and promotion.promotion_type = 'COUPON' and code.status = 'ACTIVE'
+        and code.normalized_code = any(${requestedCodes})
+        and (not ${input.guestPreview ?? false}::boolean or (
+          code.usage_limit_per_customer is null
+          and (code.usage_limit_total is null or (
+            select count(*) from promotions.promotion_usage usage
+            where usage.organization_id = code.organization_id and usage.promotion_id = code.promotion_id
+              and usage.coupon_code_id = code.id and usage.status = 'COMMITTED'
+          ) < code.usage_limit_total)
+        ))
+      order by code.id
       limit 1
     ) coupon on true
+    cross join lateral (
+      select coalesce(jsonb_agg(target), '[]'::jsonb) as rules
+      from (
+        select product_id, null::uuid as variant_id, null::uuid as category_id
+        from promotions.promotion_target_products where promotion_revision_id = revision.id
+        union all
+        select null::uuid, variant_id, null::uuid
+        from promotions.promotion_target_variants where promotion_revision_id = revision.id
+        union all
+        select null::uuid, null::uuid, category_id
+        from promotions.promotion_target_categories where promotion_revision_id = revision.id
+      ) target
+    ) targets
     where promotion.organization_id = ${input.organizationId}
       and promotion.status = 'ACTIVE'
       and (promotion.starts_at is null or promotion.starts_at <= ${at})
@@ -839,18 +865,9 @@ export async function evaluatePromotions(
   let exclusiveApplied = false;
   for (const promotion of promotions.rows) {
     if (exclusiveApplied) continue;
-    const targetRows = await sql<{
-      product_id: string | null;
-      variant_id: string | null;
-      category_id: string | null;
-    }>`
-      select product_id, null::uuid as variant_id, null::uuid as category_id from promotions.promotion_target_products where promotion_revision_id = ${promotion.revision_id}
-      union all select null::uuid, variant_id, null::uuid from promotions.promotion_target_variants where promotion_revision_id = ${promotion.revision_id}
-      union all select null::uuid, null::uuid, category_id from promotions.promotion_target_categories where promotion_revision_id = ${promotion.revision_id}
-    `.execute(db);
     const eligible = input.lines.filter((line) => {
-      if (targetRows.rows.length === 0) return true;
-      return targetRows.rows.some(
+      if (promotion.targets.length === 0) return true;
+      return promotion.targets.some(
         (target) =>
           target.product_id === line.productId ||
           target.variant_id === line.variantId ||

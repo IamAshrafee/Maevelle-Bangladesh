@@ -1,0 +1,64 @@
+[
+  {
+    "engine": "Chrome/156.0.8078.74",
+    "percent": 200,
+    "pdp": {
+      "viewport": 640,
+      "outer": 1280,
+      "scroll": 640,
+      "dpr": 2,
+      "cssZoom": "1"
+    },
+    "cart": {
+      "viewport": 640,
+      "outer": 1280,
+      "scroll": 640,
+      "dpr": 2,
+      "cssZoom": "1"
+    },
+    "dialog": {
+      "left": 64,
+      "right": 576,
+      "width": 640,
+      "initialFocus": "Cancel"
+    },
+    "confirm": {
+      "label": "Clear items and coupons",
+      "keyboardVisible": true,
+      "verticallyVisible": true
+    },
+    "focusRestored": true,
+    "status": "PASS"
+  },
+  {
+    "engine": "Chrome/156.0.8078.74",
+    "percent": 400,
+    "pdp": {
+      "viewport": 320,
+      "outer": 1280,
+      "scroll": 320,
+      "dpr": 4,
+      "cssZoom": "1"
+    },
+    "cart": {
+      "viewport": 320,
+      "outer": 1280,
+      "scroll": 320,
+      "dpr": 4,
+      "cssZoom": "1"
+    },
+    "dialog": {
+      "left": 13.33203125,
+      "right": 306.6640625,
+      "width": 320,
+      "initialFocus": "Cancel"
+    },
+    "confirm": {
+      "label": "Clear items and coupons",
+      "keyboardVisible": true,
+      "verticallyVisible": true
+    },
+    "focusRestored": true,
+    "status": "PASS"
+  }
+]

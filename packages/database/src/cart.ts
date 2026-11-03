@@ -8,6 +8,7 @@ export {
   clearGuestCart,
   setGuestCartLineQuantity,
   removeGuestCartLine,
+  replaceGuestCartLineVariant,
   applyGuestCartCoupon,
   removeGuestCartCoupon,
 } from './cart/commands.js';

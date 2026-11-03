@@ -10,11 +10,13 @@ import {
   getGuestCart,
   removeGuestCartCoupon,
   removeGuestCartLine,
+  replaceGuestCartLineVariant,
   setGuestCartLineQuantity,
 } from './cart.js';
 import { mutateGuestCart } from './cart/receipts.js';
 import { createCouponCode, createPromotion } from './promotions.js';
-import { setCurrentVariantPrice } from './pricing.js';
+import { adjustInventory } from './inventory.js';
+import { createPriceDefinition, setCurrentVariantPrice } from './pricing.js';
 import { cartFixture, isolatedCartDatabase } from './testing/cart-fixture.js';
 import { hashToken } from '@maevelle/security';
 
@@ -47,6 +49,294 @@ async function setup() {
   return { ...fixture, ...guest };
 }
 describe('Cart foundation actual PostgreSQL', () => {
+  it('replaces in place, records equal-quantity variant changes and atomically merges', async () => {
+    const f = await setup();
+    const axis = await sql<{ id: string }>`
+      insert into catalog.product_option_axes (organization_id, product_id, code, name)
+      values (${f.organizationId}, ${f.productId}, 'finish', 'Finish') returning id
+    `.execute(database.db);
+    const axisId = axis.rows[0]!.id;
+    const options = await sql<{ id: string; code: string }>`
+      insert into catalog.product_option_values
+        (organization_id, product_id, option_axis_id, code, display_value)
+      values (${f.organizationId}, ${f.productId}, ${axisId}, 'smooth', 'Smooth'),
+        (${f.organizationId}, ${f.productId}, ${axisId}, 'textured', 'Textured')
+      returning id, code
+    `.execute(database.db);
+    const smooth = options.rows.find((option) => option.code === 'smooth')!.id;
+    const textured = options.rows.find((option) => option.code === 'textured')!.id;
+    await sql`update catalog.product_variants set option_signature = ${smooth} where id = ${f.variantId}`.execute(
+      database.db,
+    );
+    const sku = crypto.randomUUID().toUpperCase();
+    const variant = await sql<{ id: string }>`
+      insert into catalog.product_variants (organization_id, product_id, sku, sku_normalized, option_signature)
+      values (${f.organizationId}, ${f.productId}, ${sku}, ${sku}, ${textured})
+      returning id
+    `.execute(database.db);
+    const targetVariantId = variant.rows[0]!.id;
+    await sql`
+      insert into catalog.variant_option_values (organization_id, variant_id, option_axis_id, option_value_id)
+      values (${f.organizationId}, ${f.variantId}, ${axisId}, ${smooth}),
+        (${f.organizationId}, ${targetVariantId}, ${axisId}, ${textured})
+    `.execute(database.db);
+    const location = await sql<{ id: string }>`
+      select id from warehouse.locations where organization_id = ${f.organizationId}
+    `.execute(database.db);
+    await adjustInventory(database.db, {
+      organizationId: f.organizationId,
+      actorId: f.actorId,
+      variantId: targetVariantId,
+      locationId: location.rows[0]!.id,
+      condition: 'SELLABLE',
+      quantityDelta: '4',
+      reasonCode: 'OPENING_BALANCE',
+      idempotencyKey: crypto.randomUUID(),
+    });
+    await createPriceDefinition(database.db, {
+      organizationId: f.organizationId,
+      actorId: f.actorId,
+      variantId: targetVariantId,
+      currency: 'BDT',
+      amount: '123.0000',
+      effectiveFrom: new Date(Date.now() - 60_000),
+    });
+    const scope = { token: f.token, ownerContext: f.cart.ownerContext };
+    const added = await addGuestCartLine(database.db, {
+      ...scope,
+      expectedVersion: f.cart.version,
+      variantId: f.variantId,
+      quantity: '2',
+    });
+    const lineId = added.lines[0]!.id;
+    const input = {
+      ...scope,
+      expectedVersion: added.version,
+      lineId,
+      targetVariantId,
+      quantity: '2',
+      idempotencyKey: crypto.randomUUID(),
+    };
+    const results = await Promise.all([
+      replaceGuestCartLineVariant(database.db, input),
+      replaceGuestCartLineVariant(database.db, input),
+    ]);
+    const replaced = results.find((view) => !view.outcome!.replayed)!;
+    expect(results.filter((view) => view.outcome!.replayed)).toHaveLength(1);
+    expect(replaced.lines[0]).toMatchObject({
+      id: lineId,
+      variantId: targetVariantId,
+      unitPrice: '123.0000',
+    });
+    expect(replaced.outcome!.changes).toEqual([
+      {
+        lineId,
+        variantId: targetVariantId,
+        previousVariantId: f.variantId,
+        previousQuantity: '2',
+        quantity: '2',
+      },
+    ]);
+    const both = await addGuestCartLine(database.db, {
+      ...scope,
+      expectedVersion: replaced.version,
+      variantId: f.variantId,
+      quantity: '1',
+    });
+    const source = both.lines.find((line) => line.variantId === f.variantId)!;
+    const collision = {
+      ...input,
+      lineId: source.id,
+      expectedVersion: both.version,
+      idempotencyKey: crypto.randomUUID(),
+    };
+    await expect(
+      replaceGuestCartLineVariant(database.db, { ...collision, quantity: '3' }),
+    ).rejects.toMatchObject({ code: 'UNAVAILABLE' });
+    expect((await getGuestCart(database.db, f.token)).lines).toEqual(both.lines);
+    const merged = await replaceGuestCartLineVariant(database.db, collision);
+    expect(merged.version).toBe(both.version + 1);
+    expect(merged.lines).toEqual([expect.objectContaining({ id: lineId, quantity: '4.000000' })]);
+    await sql`update warehouse.locations set status = 'INACTIVE' where id = ${location.rows[0]!.id}`.execute(
+      database.db,
+    );
+    const reevaluated = await getGuestCart(database.db, f.token);
+    expect(reevaluated.lines[0]!.availability).toBe('UNAVAILABLE');
+    expect(reevaluated.version).toBe(merged.version);
+    expect(reevaluated.calculationFingerprint).not.toBe(merged.calculationFingerprint);
+  });
+  it('retains an invalidated configuration as removable intent and rejects adding it again', async () => {
+    const f = await setup();
+    const input = { token: f.token, variantId: f.variantId, quantity: '1', expectedVersion: 1 };
+    const added = await addGuestCartLine(database.db, input);
+    await sql`
+      insert into catalog.product_option_axes (organization_id, product_id, code, name)
+      values (${f.organizationId}, ${f.productId}, 'new-axis', 'New axis')
+    `.execute(database.db);
+    const current = await getGuestCart(database.db, f.token);
+    expect(current.version).toBe(added.version);
+    expect(current.calculationFingerprint).not.toBe(added.calculationFingerprint);
+    expect(current.commerceReview?.issues).toEqual([
+      {
+        code: 'INVALID_CONFIGURATION',
+        lineId: added.lines[0]!.id,
+        action: 'REPLACE_OR_REMOVE',
+      },
+    ]);
+    expect(current.lines[0]).toMatchObject({
+      availability: 'UNAVAILABLE',
+      sku: '',
+      options: [],
+      unitPrice: null,
+    });
+    await expect(
+      addGuestCartLine(database.db, { ...input, expectedVersion: added.version }),
+    ).rejects.toMatchObject({ code: 'INVALID_CONFIGURATION' });
+    const removed = await removeGuestCartLine(database.db, {
+      token: f.token,
+      lineId: added.lines[0]!.id,
+      expectedVersion: added.version,
+    });
+    expect(removed.lines).toEqual([]);
+  });
+
+  it('uses one commerce snapshot during a mutation while later reads reprice', async () => {
+    const f = await setup();
+    const added = await addGuestCartLine(database.db, {
+      token: f.token,
+      variantId: f.variantId,
+      quantity: '1',
+      expectedVersion: 1,
+    });
+    const view = await mutateGuestCart(
+      database.db,
+      {
+        token: f.token,
+        expectedVersion: added.version,
+        idempotencyKey: crypto.randomUUID(),
+      },
+      'snapshot_test',
+      async (transaction) => {
+        await setCurrentVariantPrice(database.db, {
+          organizationId: f.organizationId,
+          actorId: f.actorId,
+          variantId: f.variantId,
+          currency: 'BDT',
+          amount: '125.0000',
+        });
+        return getGuestCart(transaction, f.token);
+      },
+    );
+    expect(view.lines[0]!.unitPrice).toBe('100.0000');
+    const current = await getGuestCart(database.db, f.token);
+    expect(current.lines[0]!.unitPrice).toBe('125.0000');
+    expect(current.version).toBe(view.version);
+    expect(current.calculationFingerprint).not.toBe(view.calculationFingerprint);
+  });
+  it('caps stacked discounts and keeps an expired coupon selected without a benefit', async () => {
+    const f = await setup();
+    const automatic = {
+      organizationId: f.organizationId,
+      actorId: f.actorId,
+      benefitType: 'FIXED_AMOUNT_DISCOUNT',
+      combinability: 'STACKABLE',
+    } as const;
+    await createPromotion(database.db, {
+      ...automatic,
+      name: 'Automatic first',
+      promotionType: 'AUTOMATIC',
+      benefitValue: '70',
+      priority: 10,
+      productIds: [f.productId],
+    });
+    const promotion = await createPromotion(database.db, {
+      ...automatic,
+      name: 'Coupon second',
+      promotionType: 'COUPON',
+      benefitValue: '90',
+      variantIds: [f.variantId],
+    });
+    await createCouponCode(database.db, {
+      organizationId: f.organizationId,
+      actorId: f.actorId,
+      promotionId: promotion.id,
+      code: 'STACK90',
+    });
+    const added = await addGuestCartLine(database.db, {
+      token: f.token,
+      variantId: f.variantId,
+      quantity: '1',
+      expectedVersion: 1,
+    });
+    const selected = await applyGuestCartCoupon(database.db, {
+      token: f.token,
+      couponCode: 'STACK90',
+      expectedVersion: added.version,
+    });
+    expect(selected).toMatchObject({ discountTotal: '100.0000', merchandiseNet: '0.0000' });
+    expect(selected.commerceReview?.coupons).toEqual([
+      { code: 'STACK90', status: 'EFFECTIVE', discount: '30.0000' },
+    ]);
+    await sql`update promotions.promotions set ends_at = now() - interval '1 second'
+      where id = ${promotion.id}`.execute(database.db);
+    const expired = await getGuestCart(database.db, f.token);
+    expect(expired.version).toBe(selected.version);
+    expect(expired.calculationFingerprint).not.toBe(selected.calculationFingerprint);
+    expect(expired.commerceReview?.coupons).toEqual([
+      { code: 'STACK90', status: 'NO_CURRENT_BENEFIT', discount: '0.0000' },
+    ]);
+    expect(expired.merchandiseNet).toBe('30.0000');
+  });
+  it('does not promise exhausted or customer-limited coupon benefits to a guest', async () => {
+    const f = await setup();
+    const scope = { organizationId: f.organizationId, actorId: f.actorId };
+    const promotion = await createPromotion(database.db, {
+      ...scope,
+      name: 'Limited offer',
+      promotionType: 'COUPON',
+      benefitType: 'FIXED_AMOUNT_DISCOUNT',
+      benefitValue: '10',
+      combinability: 'STACKABLE',
+    });
+    const exhausted = await createCouponCode(database.db, {
+      ...scope,
+      promotionId: promotion.id,
+      code: 'EXHAUSTED',
+      usageLimitTotal: 1,
+    });
+    await createCouponCode(database.db, {
+      ...scope,
+      promotionId: promotion.id,
+      code: 'CUSTOMERONLY',
+      usageLimitPerCustomer: 1,
+    });
+    await sql`
+      insert into promotions.promotion_usage
+        (organization_id, promotion_id, promotion_revision_id, coupon_code_id, discount_amount, status)
+      values (${f.organizationId}, ${promotion.id}, ${promotion.revisionId}, ${exhausted.id}, 10, 'COMMITTED')
+    `.execute(database.db);
+    const added = await addGuestCartLine(database.db, {
+      token: f.token,
+      variantId: f.variantId,
+      quantity: '1',
+      expectedVersion: 1,
+    });
+    const first = await applyGuestCartCoupon(database.db, {
+      token: f.token,
+      couponCode: 'EXHAUSTED',
+      expectedVersion: added.version,
+    });
+    const both = await applyGuestCartCoupon(database.db, {
+      token: f.token,
+      couponCode: 'CUSTOMERONLY',
+      expectedVersion: first.version,
+    });
+    expect(both.discountTotal).toBe('0.0000');
+    expect(both.commerceReview?.coupons).toEqual([
+      { code: 'CUSTOMERONLY', status: 'NO_CURRENT_BENEFIT', discount: '0.0000' },
+      { code: 'EXHAUSTED', status: 'NO_CURRENT_BENEFIT', discount: '0.0000' },
+    ]);
+  });
   it('S03/S04 sequential and concurrent replay commits one outcome and outbox fact', async () => {
     const f = await setup();
     const input = {

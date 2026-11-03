@@ -4,6 +4,7 @@ export type CartCommand =
   | { kind: 'clear' }
   | { kind: 'add'; variantId: string; quantity: string }
   | { kind: 'set'; lineId: string; quantity: string }
+  | { kind: 'replace'; lineId: string; targetVariantId: string; quantity: string }
   | { kind: 'remove'; lineId: string }
   | { kind: 'apply-coupon'; couponCode: string }
   | { kind: 'remove-coupon'; couponCode: string };

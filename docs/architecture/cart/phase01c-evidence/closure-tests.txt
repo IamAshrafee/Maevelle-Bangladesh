@@ -1,0 +1,31 @@
+
+ RUN  v5.0.5 /Users/ashrafee/Documents/GitHub/Maevelle Bangladesh
+
+ ❯ packages/database/src/orders.test.ts (23 tests | 1 failed) 1761ms
+   ❯ atomic guest checkout and COD Orders (23)
+     ❯ Delivery Pricing Management & Simulation (1)
+       × manages delivery pricing rules, joins geographic metadata, and simulates quotes 23ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  packages/database/src/orders.test.ts > atomic guest checkout and COD Orders > Delivery Pricing Management & Simulation > manages delivery pricing rules, joins geographic metadata, and simulates quotes
+OrderDomainError: An active delivery pricing rule already has this country, geography, and priority.
+ ❯ packages/database/src/orders/delivery-pricing.ts:220:13
+    218|     `.execute(transaction);
+    219|     if (conflicting.rows[0])
+    220|       throw new OrderDomainError(
+       |             ^
+    221|         'VALIDATION_FAILED',
+    222|         'An active delivery pricing rule already has this country, geo…
+ ❯ node_modules/.pnpm/kysely@0.29.5/node_modules/kysely/dist/kysely.js:680:32
+ ❯ DefaultConnectionProvider.provideConnection node_modules/.pnpm/kysely@0.29.5/node_modules/kysely/dist/driver/default-connection-provider.js:10:20
+ ❯ packages/database/src/orders.test.ts:1351:30
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed | 19 passed (20)
+      Tests  1 failed | 189 passed (190)
+   Start at  11:35:59
+   Duration  28.49s (tests 88%, import 10%, transform 1%)
+
