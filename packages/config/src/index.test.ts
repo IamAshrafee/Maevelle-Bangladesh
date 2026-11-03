@@ -11,6 +11,15 @@ const validEnvironment = {
 };
 
 describe('parseConfig', () => {
+  it('accepts only one literal IP for the optional trusted API gateway', () => {
+    expect(parseConfig(validEnvironment).apiTrustedGatewayIp).toBeUndefined();
+    expect(
+      parseConfig({ ...validEnvironment, API_TRUSTED_GATEWAY_IP: '2001:db8::1' }).apiTrustedGatewayIp,
+    ).toBe('2001:db8::1');
+    for (const value of ['private_ranges', '192.0.2.0/24', '192.0.2.1,192.0.2.2', 'fe80::1%eth0'])
+      expect(() => parseConfig({ ...validEnvironment, API_TRUSTED_GATEWAY_IP: value }))
+        .toThrow('API_TRUSTED_GATEWAY_IP must be one literal IP address.');
+  });
   it('parses valid runtime configuration with safe defaults', () => {
     const config = parseConfig(validEnvironment);
 

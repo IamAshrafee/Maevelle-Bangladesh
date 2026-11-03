@@ -10,6 +10,7 @@ import { resolveCorrelationId } from '@maevelle/observability';
 import { incrementAuthStorageValue } from '@maevelle/database/platform';
 import type { ShopperAuthEmailSender } from './auth/shopper-auth.js';
 
+import { rateLimitClientIp } from './rate-limit-client.js';
 import { registerHealthRoutes } from './routes/health.js';
 import { registerAuthRoutes } from './routes/auth.js';
 
@@ -39,6 +40,8 @@ function matchesExpectedOrigin(
   }
 }
 
+const shopperAuthPrefix = '/shopper-auth/';
+
 export function buildApi(options: BuildApiOptions) {
   const rateAttempts = new Map<string, { count: number; resetAt: number }>();
   const loggerOptions =
@@ -49,9 +52,10 @@ export function buildApi(options: BuildApiOptions) {
         : { logger: true };
   const app = Fastify({
     ...loggerOptions,
-    // Cart paths can contain customer-specific coupon codes.
+    // Cart and Shopper Auth URLs can contain coupon codes and bearer secrets.
     logController: new LogController({
-      disableRequestLogging: (request) => /^\/storefront\/v1\/carts(?:[/?]|$)/.test(request.url),
+      disableRequestLogging: (request) =>
+        request.url.startsWith(shopperAuthPrefix) || /^\/storefront\/v1\/carts(?:[/?]|$)/.test(request.url),
     }),
     bodyLimit: 1_048_576,
     routerOptions: { maxParamLength: 160 },
@@ -92,7 +96,9 @@ export function buildApi(options: BuildApiOptions) {
     const method = request.method.toUpperCase();
     const origin = request.headers.origin;
     const path = request.url.split('?', 1)[0] ?? '';
-    const shopperPrivate = path.startsWith('/shopper-auth/')
+    const shopperAuth = path.startsWith(shopperAuthPrefix);
+    if (shopperAuth) reply.header('cache-control', 'private, no-store');
+    const shopperPrivate = shopperAuth
       || path === '/storefront/v1/wishlist'
       || path === '/storefront/v1/wishlist/saved-state'
       || path === '/storefront/v1/wishlist/merges'
@@ -126,14 +132,26 @@ export function buildApi(options: BuildApiOptions) {
         : path.startsWith('/storefront/v1/wishlist/items/')
           ? { maximum: 120, seconds: 60 }
         : { maximum: 120, seconds: 60 };
+      // A bearer in the reset URL must not create a separate rate bucket.
+      const ratePath = path.startsWith('/shopper-auth/reset-password/')
+        ? '/shopper-auth/reset-password/:token'
+        : path.replace(/\/[0-9a-f-]{36}$/i, '/:id');
+      const clientIp = rateLimitClientIp(request, options.config.apiTrustedGatewayIp);
+      if (!clientIp)
+        return reply.code(503).send({
+          error: { code: 'UNAVAILABLE', message: 'Request protection is temporarily unavailable.' },
+        });
       const key = createHmac('sha256', options.config.betterAuthSecret)
-        .update(`shopper-rate:v1:${request.ip}:${path.replace(/\/[0-9a-f-]{36}$/i, '/:id')}`)
+        .update(`shopper-rate:v1:${clientIp}:${ratePath}`)
         .digest('hex');
       let attempts: number;
       try {
         attempts = await incrementAuthStorageValue(options.database.db, key, policy.seconds);
       } catch (error) {
-        request.log.error({ err: error, path }, 'shopper rate limiter unavailable');
+        request.log.error(
+          shopperAuth ? { path: shopperAuthPrefix } : { err: error, path: ratePath },
+          'shopper rate limiter unavailable',
+        );
         return reply.code(503).send({
           error: { code: 'UNAVAILABLE', message: 'Request protection is temporarily unavailable.' },
         });
@@ -249,7 +267,10 @@ export function buildApi(options: BuildApiOptions) {
           requestId: request.id,
         },
       });
-    request.log.error({ err: error, requestId: request.id }, 'Unhandled API request error.');
+    const diagnostics = request.url.startsWith(shopperAuthPrefix)
+      ? { requestId: request.id, route: request.routeOptions.url }
+      : { err: error, requestId: request.id };
+    request.log.error(diagnostics, 'Unhandled API request error.');
     return reply.status(500).send({
       error: {
         code: 'INTERNAL_ERROR',

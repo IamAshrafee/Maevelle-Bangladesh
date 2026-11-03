@@ -1,3 +1,4 @@
+import { isIP } from 'node:net';
 import { existsSync } from 'node:fs';
 import { dirname, isAbsolute, join, resolve } from 'node:path';
 
@@ -12,6 +13,7 @@ export interface RuntimeConfig {
   readonly databasePoolMax: number;
   readonly apiHost: string;
   readonly apiPort: number;
+  readonly apiTrustedGatewayIp?: string;
   readonly logLevel: LogLevel;
   readonly workerHeartbeatIntervalMs: number;
   readonly betterAuthSecret: string;
@@ -289,6 +291,9 @@ export function parseConfig(environment: Environment): RuntimeConfig {
   }
 
   const nodeEnv = nodeEnvValue as NodeEnvironment;
+  const apiTrustedGatewayIp = environment.API_TRUSTED_GATEWAY_IP?.trim();
+  if (apiTrustedGatewayIp && (!isIP(apiTrustedGatewayIp) || apiTrustedGatewayIp.includes('%')))
+    throw new ConfigurationError('API_TRUSTED_GATEWAY_IP must be one literal IP address.');
   const primaryDatabaseUrl = requiredPostgresUrl(environment, 'DATABASE_URL');
   const shareRecovery = wishlistShareRecovery(environment);
   const testDatabaseUrl = optionalPostgresUrl(environment, 'TEST_DATABASE_URL');
@@ -496,6 +501,7 @@ export function parseConfig(environment: Environment): RuntimeConfig {
     ...(testDatabaseUrl ? { testDatabaseUrl } : {}),
     databasePoolMax: integer(environment, 'DATABASE_POOL_MAX', 10, 1, 50),
     apiHost,
+    ...(apiTrustedGatewayIp ? { apiTrustedGatewayIp } : {}),
     apiPort: integer(environment, 'API_PORT', 3000, 1, 65_535),
     logLevel: logLevelValue as LogLevel,
     workerHeartbeatIntervalMs: integer(

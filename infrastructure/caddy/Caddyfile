@@ -1,13 +1,29 @@
 {
   auto_https off
   admin off
+  log {
+    format filter {
+      wrap json
+      fields {
+        request>uri delete
+        request>headers delete
+        resp_headers delete
+      }
+    }
+  }
+  servers {
+    trusted_proxies static {$MAEVELLE_NGINX_PEER}
+    trusted_proxies_strict
+  }
 }
 
 :80 {
   encode zstd gzip
 
   handle_path /api/* {
-    reverse_proxy api:3000
+    reverse_proxy api:3000 {
+      header_up X-Maevelle-Client-IP {client_ip}
+    }
   }
 
   handle /admin* {

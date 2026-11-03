@@ -2,13 +2,13 @@
   "program": "Maevelle Product Completion V2",
   "version": 2,
   "active_area": "storefront-cart",
-  "active_substage": "CART_PHASE_04C_CROSS_DOMAIN_LOCAL_CLOSURE",
+  "active_substage": "CART_PHASE_08_RELEASE_HANDOFF",
   "active_status": "IN_PROGRESS",
   "baseline_commit": "d2cce2c",
   "last_checkpoint_commit": "c3413e3",
   "last_verified_commit": "16f648a",
-  "last_completed_action": "Closed the focused local cross-domain Cart gate and fixed owner-scoped Wishlist reconciliation after a concurrent write.",
-  "next_action": "Phase 07 hardening. Verify persistent migration and restore, deployed proxy and roles, privacy policy, accessibility, and representative concurrency.",
+  "last_completed_action": "Verified local Cart and Shopper Auth quota isolation and Caddy 502 log redaction.",
+  "next_action": "Obtain authorization for the exact-ledger recovery rehearsal and deployed ingress verification, then close owner and human acceptance gates.",
   "interrupted": false,
   "blocked_by": [
     "SIZING_OWNER_RESPONSIVE_AND_ACCESSIBILITY_ACCEPTANCE_PENDING",
@@ -22,7 +22,8 @@
     "WISHLIST_KEY_CUSTODY_AND_RETIREMENT_APPROVAL_PENDING",
     "CART_LEGACY_PERSISTENT_CUTOVER_AND_RESTORE_CONTINUITY_UNVERIFIED",
     "CART_PRODUCTION_ROLE_PROXY_RETENTION_AND_VOLUME_GATES_OPEN",
-    "CART_PHASE01C_HUMAN_AT_HARDWARE_AND_BROWSER_BREADTH_OPEN"
+    "CART_PHASE01C_HUMAN_AT_HARDWARE_AND_BROWSER_BREADTH_OPEN",
+    "CART_DEPLOYED_TRUSTED_INGRESS_AND_HISTORICAL_LOG_REVIEW_PENDING"
   ],
   "owner_review_status": "PENDING",
   "verified_complete_areas": [

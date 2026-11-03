@@ -1,7 +1,8 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import Fastify, { type FastifyInstance } from 'fastify';
 import { parseConfig, type RuntimeConfig } from '@maevelle/config';
-import { createDatabase } from '@maevelle/database';
+import { createHmac } from 'node:crypto';
+import { createDatabase, sql } from '@maevelle/database';
 import { createLogger } from '@maevelle/observability';
 import { runMigrations } from '@maevelle/database/migrate';
 import { registerCartRoutes } from './routes/cart.js';
@@ -714,4 +715,83 @@ it('C05 assembled API logs redact Cart coupon paths and credentials', async () =
   expect(output).toContain('request completed');
   expect(output.includes(canary)).toBe(false);
   expect(output.includes(cookie(guest).split('=')[1]!)).toBe(false);
+});
+
+it('keeps Shopper Auth link secrets out of assembled API logs and disables caching on rejection', async () => {
+  const logs: string[] = [];
+  const logger = createLogger(
+    { component: 'api', level: 'info' },
+    { write: (line: string) => { logs.push(line); } },
+  );
+  const assembled = buildApi({
+    database: db,
+    config: cfg,
+    logger,
+    shopperAuthEmailSender: async () => {},
+  });
+  apps.push(assembled);
+  const canary = 'phase07-private-auth-link-canary';
+  const peer = '192.0.2.77';
+  const responses = await Promise.all([
+    assembled.inject({ url: `/shopper-auth/verify-email?token=${canary}` }),
+    assembled.inject({ url: `/shopper-auth/reset-password/${canary}`, remoteAddress: peer }),
+    assembled.inject({ url: `/shopper-auth/reset-password/${canary}-other`, remoteAddress: peer }),
+    assembled.inject({ method: 'POST', url: `/shopper-auth/reset-password?token=${canary}` }),
+  ]);
+  expect(logs.join('')).not.toContain(canary);
+  expect(responses.at(-1)!.statusCode).toBe(403);
+  for (const response of responses)
+    expect(response.headers['cache-control']).toBe('private, no-store');
+  const bucket = createHmac('sha256', cfg.betterAuthSecret)
+    .update(`shopper-rate:v1:${peer}:/shopper-auth/reset-password/:token`)
+    .digest('hex');
+  const result = await sql<{ count: string }>`
+    select counter_value::text as count from iam.auth_kv_store where key_hash = ${bucket}
+  `.execute(db.db);
+  expect(result.rows[0]?.count).toBe('2');
+});
+
+it('isolates Cart quotas behind one trusted gateway and ignores client forwarding claims', async () => {
+  const gateway = '192.0.2.80';
+  const config = { ...cfg, apiTrustedGatewayIp: gateway };
+  const assembled = buildApi({ database: db, config, logger: false });
+  apps.push(assembled);
+
+  const create = (peer: string, client?: string, forwarded = '198.51.100.99') =>
+    assembled.inject({
+      method: 'POST',
+      url: '/storefront/v1/carts',
+      remoteAddress: peer,
+      headers: {
+        ...headers(),
+        'x-forwarded-for': forwarded,
+        ...(client === undefined ? {} : { 'x-maevelle-client-ip': client }),
+      },
+      payload: {},
+    });
+
+  for (let attempt = 0; attempt < 20; attempt++)
+    expect((await create(gateway, '198.51.100.1')).statusCode).toBe(201);
+  expect((await create(gateway, '198.51.100.1', '198.51.100.2')).statusCode).toBe(429);
+  expect((await create(gateway, '::ffff:c633:6401')).statusCode).toBe(429);
+  expect((await create(gateway, '198.51.100.2')).statusCode).toBe(201);
+  expect((await create('192.0.2.81', '198.51.100.1')).statusCode).toBe(201);
+  expect((await create(gateway, '198.51.100.3, 198.51.100.4')).statusCode).toBe(503);
+  expect((await create(gateway)).statusCode).toBe(503);
+
+  const authPath = '/shopper-auth/get-session';
+  for (const client of ['198.51.100.1', '198.51.100.2']) {
+    await assembled.inject({
+      url: authPath,
+      remoteAddress: gateway,
+      headers: { 'x-maevelle-client-ip': client },
+    });
+    const bucket = createHmac('sha256', config.betterAuthSecret)
+      .update(`shopper-rate:v1:${client}:${authPath}`)
+      .digest('hex');
+    const counter = await sql<{ count: string }>`
+      select counter_value::text as count from iam.auth_kv_store where key_hash = ${bucket}
+    `.execute(db.db);
+    expect(counter.rows[0]?.count).toBe('1');
+  }
 });

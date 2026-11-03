@@ -4,6 +4,7 @@ import type { RuntimeConfig } from '@maevelle/config';
 import type { DatabaseClient } from '@maevelle/database';
 import { CartDomainError } from '@maevelle/database/cart';
 import { incrementAuthStorageValue } from '@maevelle/database/platform';
+import { rateLimitClientIp } from '../rate-limit-client.js';
 import { CartRequestError } from './cart-context.js';
 
 /** Common protection applies equally to reads, commands, establishment and recovery. */
@@ -46,8 +47,11 @@ export function protectCartRoutes(
       ['/storefront/v1/carts', '/storefront/v1/carts/account'].includes(request.url.split('?')[0]!);
     const bucket = create ? 'initialize' : write ? 'mutate' : 'read';
     const maximum = create ? 20 : write ? 120 : 240;
+    const clientIp = rateLimitClientIp(request, config.apiTrustedGatewayIp);
+    if (!clientIp)
+      throw new CartRequestError('UNAVAILABLE', 503, 'Request protection is temporarily unavailable.');
     const key = createHmac('sha256', config.betterAuthSecret)
-      .update(`cart-rate:v1:${config.storefrontOrganizationCode}:${request.ip}:${bucket}`)
+      .update(`cart-rate:v1:${config.storefrontOrganizationCode}:${clientIp}:${bucket}`)
       .digest('hex');
     const attempts = await incrementAuthStorageValue(database.db, key, 60);
     if (attempts > maximum) {

@@ -1,5 +1,9 @@
 # Current Focus
 
+Shopping Cart Phase 08 production release is **BLOCKED**. The [release handoff](../architecture/cart/PHASE_08_RELEASE_HANDOFF.md) records the locally verified ingress fixes and the authorized recovery, ingress, policy and human acceptance gates.
+
+Shopping Cart Phase 07 is **PARTIAL** locally and production remains **BLOCKED**. The [release-readiness report](../architecture/cart/PHASE_07_RELEASE_READINESS.md) records the Shopper Auth fix, isolated recovery evidence, and Phase 08 gates.
+
 Shopping Cart Phase 04-C passed focused local integration closure. The [Phase 04-C evidence and Phase 07 handoff](../architecture/cart/PHASE_04B_STOREFRONT_INTEGRATION_REPORT.md#phase-04-c-focused-closure) records the Wishlist reconciliation fix, competing Move and replay evidence, and the remaining release gates. Production remains blocked.
 
 Shopping Cart Phase 06 adds the Admin Cart Analytics report for committed changes and consented browser observations. See the [reporting contract](../domains/analytics/analytics-reporting-architecture.md#admin-cart-analytics-phase-06). Retention and rollout approvals remain open.
