@@ -59,6 +59,7 @@ beforeEach(() => {
   vi.stubGlobal('document', Object.assign(documentTarget, { visibilityState: 'visible' }));
   vi.stubGlobal('navigator', {});
   vi.stubGlobal('addEventListener', windowTarget.addEventListener.bind(windowTarget));
+  vi.stubGlobal('dispatchEvent', windowTarget.dispatchEvent.bind(windowTarget));
   vi.stubGlobal(
     'BroadcastChannel',
     class {
@@ -211,4 +212,73 @@ it('drops the old account projection when a late read follows an account switch'
   await Promise.resolve();
   expect(cartStore.getSnapshot().confirmed).toEqual(accountB);
   stop();
+});
+
+it('rechecks verified authority after a sibling tab disappears during sign-in', async () => {
+  const { cartStore } = await import('./browser-runtime');
+  const stop = cartStore.subscribe(vi.fn());
+  try {
+    await cartStore.refresh();
+    const event = Object.assign(new Event('storage'), {
+      key: 'maevelle_cart_identity_v1',
+      newValue: JSON.stringify({ phase: 'begin', nonce: 'abandoned-transition' }),
+    });
+    dispatchEvent(event);
+    expect(cartStore.getSnapshot().confirmed).toBeNull();
+    const account = { ...view, expiresAt: null };
+    mocks.session.mockResolvedValue('A'.repeat(43));
+    mocks.createAccountApi.mockReturnValue({ get: vi.fn(async () => account) });
+    await vi.advanceTimersByTimeAsync(25_000);
+    expect(cartStore.getSnapshot().confirmed).toEqual(account);
+  } finally {
+    stop();
+  }
+});
+
+it('keeps a storage-denied merge in memory for the original account and reports its recovery limits', async () => {
+  const a = 'A'.repeat(43);
+  const b = 'B'.repeat(43);
+  const account = { ...view, expiresAt: null };
+  const other = { ...account, ownerContext: crypto.randomUUID() };
+  const mutate = vi.fn().mockRejectedValueOnce(new TypeError('Lost merge response'));
+  mutate.mockResolvedValue({
+    ...account,
+    outcome: { operation: 'merge_guest', committedVersion: '1', changes: [] },
+  });
+  vi.spyOn(window.sessionStorage, 'setItem').mockImplementation(() => {
+    throw new DOMException('Storage denied', 'SecurityError');
+  });
+  mocks.session.mockResolvedValue(a);
+  mocks.createAccountApi.mockImplementation((partition) => ({
+    get: vi.fn(async () => (partition === a ? account : other)),
+    mutate,
+  }));
+  const { cartStore } = await import('./browser-runtime');
+  const stop = cartStore.subscribe(vi.fn());
+  try {
+    await cartStore.refresh();
+    await expect(
+      cartStore.mergeGuest({
+        ownerContext: account.ownerContext,
+        version: account.version,
+        guestCartId: crypto.randomUUID(),
+        guestOwnerContext: crypto.randomUUID(),
+        reviewFingerprint: 'F'.repeat(43),
+      }),
+    ).rejects.toThrow('Lost merge response');
+    expect(cartStore.getSnapshot().recoveryPersisted).toBe(false);
+    const submitted = mutate.mock.calls[0]![0];
+    for (const partition of [b, a]) {
+      cartStore.ownerTransition('begin');
+      mocks.session.mockResolvedValue(partition);
+      cartStore.ownerTransition('settled');
+      await cartStore.refresh();
+      expect(cartStore.getSnapshot().pending).toEqual(partition === a ? submitted : null);
+    }
+    expect(cartStore.getSnapshot().recoveryPersisted).toBe(false);
+    await cartStore.retryPending();
+    expect(mutate.mock.calls[1]![0]).toEqual(submitted);
+  } finally {
+    stop();
+  }
 });

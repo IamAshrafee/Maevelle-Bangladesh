@@ -182,10 +182,12 @@ export function createCartController(deps: Dependencies) {
   function restorePending() {
     if (restored) return;
     restored = true;
-    const intent = unresolvedIntent ?? journal.read();
+    const persisted = journal.read();
+    const intent = unresolvedIntent ?? persisted;
     if (intent)
       publish({
         pending: intent,
+        recoveryPersisted: persisted?.key === intent.key,
         sync: 'uncertain',
         issue: {
           code: 'RECOVERED_INTENT',

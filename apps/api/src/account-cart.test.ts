@@ -358,6 +358,25 @@ it('reviews both owners, consolidates and moves lines, and replays exactly after
     requestedQuantity: 3,
   });
   expect((await current(a)).version).toBe(account.version);
+  const promotionEnd = (expired: boolean) =>
+    sql`
+    update promotions.promotions promotion
+    set ends_at=case when ${expired} then clock_timestamp()-interval '1 second' else null end
+    from promotions.coupon_codes coupon
+    where coupon.promotion_id=promotion.id and coupon.organization_id=${fixture.organizationId}
+      and coupon.normalized_code='ACCOUNT03A'
+  `.execute(isolation.database.db);
+  await promotionEnd(true);
+  try {
+    const changed = await preview(account, guestCart, combined);
+    expect(changed.accountRevision).toBe(review.accountRevision);
+    expect(changed.guestRevision).toBe(review.guestRevision);
+    expect(changed.projected?.discountTotal).toBe('0.0000');
+    const stale = await inject('POST', accountBase + '/merge/commit', combined, approval(review));
+    expect(stale.json().error.code).toBe('MERGE_STALE');
+  } finally {
+    await promotionEnd(false);
+  }
   const key = crypto.randomUUID();
   const body = approval(review);
   const responses = await Promise.all([
@@ -400,6 +419,12 @@ it('reviews both owners, consolidates and moves lines, and replays exactly after
       )
     ).json().error.code,
   ).toBe('IDEMPOTENCY_CONFLICT');
+  await sql`update platform.idempotency_records set expires_at=now()-interval '1 second'
+    where id=${firstOutcome.receiptId}`.execute(isolation.database.db);
+  const expired = await inject('POST', accountBase + '/merge/commit', a, body, key);
+  expect(expired.statusCode).toBe(409);
+  expect(expired.json().error.code).toBe('INTENT_EXPIRED');
+  expect((await current(a)).version).toBe(merged.version + 1);
   const fact = await sql<{
     status: string;
     credential_state: string;
@@ -438,6 +463,36 @@ it('rejects stale commerce, rolls back partial writes, and allows only one desti
   );
   expect(stale.statusCode).toBe(409);
   expect(stale.json().error.code).toBe('MERGE_STALE');
+  const repriced = await preview(account, cart, `${a}; ${cookie}`);
+  const changeStock = (quantityDelta: string) =>
+    adjustInventory(db, {
+      organizationId: fixture.organizationId,
+      actorId: fixture.actorId,
+      variantId: variant2,
+      locationId,
+      condition: 'SELLABLE',
+      quantityDelta,
+      reasonCode: 'CORRECTION',
+      idempotencyKey: crypto.randomUUID(),
+    });
+  await changeStock('-148');
+  try {
+    const shortfall = await preview(account, cart, `${a}; ${cookie}`);
+    expect(shortfall.accountRevision).toBe(repriced.accountRevision);
+    expect(shortfall.guestRevision).toBe(repriced.guestRevision);
+    expect(shortfall.projected?.commerceReview?.issues).toContainEqual(
+      expect.objectContaining({ code: 'INSUFFICIENT_CURRENT_STOCK', suggestedQuantity: 2 }),
+    );
+    const rejected = await inject(
+      'POST',
+      accountBase + '/merge/commit',
+      `${a}; ${cookie}`,
+      approval(repriced),
+    );
+    expect(rejected.json().error.code).toBe('MERGE_STALE');
+  } finally {
+    await changeStock('148');
+  }
   const reviewed = await preview(account, cart, `${a}; ${cookie}`);
   const key = crypto.randomUUID();
   await sql`

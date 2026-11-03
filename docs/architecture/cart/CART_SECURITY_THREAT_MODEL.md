@@ -1,5 +1,7 @@
 # Cart security threat model
 
+See the [Phase 03-C integrated acceptance report](PHASE_03C_INTEGRATED_ACCEPTANCE.md) for current lifecycle, merge recovery and ownership evidence.
+
 See the [Phase 03B Storefront report](PHASE_03B_STOREFRONT_IMPLEMENTATION.md) for the implemented authenticated Bag, explicit guest review, and owner-scoped recovery.
 
 See [Phase 03A account ownership and merge acceptance](PHASE_03A_ACCOUNT_CART_IMPLEMENTATION.md) for the implemented backend contract, tested races and open security and release gates.

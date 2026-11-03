@@ -1,5 +1,7 @@
 # Current Focus
 
+Shopping Cart Phase 03-C local integrated acceptance is **PARTIAL** and production release is **BLOCKED**. See the [Phase 03-C acceptance report](../architecture/cart/PHASE_03C_INTEGRATED_ACCEPTANCE.md) for lifecycle fixes, browser and PostgreSQL evidence, and the remaining acceptance steps.
+
 Shopping Cart Phase 03B implements the authenticated Bag and explicit guest merge review. Local integrated acceptance is **PARTIAL** and production release is **BLOCKED**. See the [Phase 03B report and verification priorities](../architecture/cart/PHASE_03B_STOREFRONT_IMPLEMENTATION.md).
 
 Shopping Cart Phase 03A implements persistent account ownership, shared Cart operations, and explicit guest merge review and replay. Local backend acceptance is **PARTIAL** and production release is **BLOCKED**. See the [implementation report and Phase 03B contract](../architecture/cart/PHASE_03A_ACCOUNT_CART_IMPLEMENTATION.md).

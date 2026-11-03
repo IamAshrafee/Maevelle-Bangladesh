@@ -178,9 +178,20 @@ function createRuntime() {
       Math.max(0, 500 - (Date.now() - lastHint)),
     );
   }
+  let localAuthHold = false;
+  let remoteHoldTimer: ReturnType<typeof setTimeout> | undefined;
   function identity(phase: 'begin' | 'settled', broadcast = false, signedOut = false) {
+    if (!broadcast && localAuthHold) return;
+    if (broadcast) localAuthHold = phase === 'begin';
+    clearTimeout(remoteHoldTimer);
     authHold = phase === 'begin';
-    if (signedOut && phase === 'settled') allowGuest = true;
+    if (phase === 'begin') allowGuest = false;
+    else if (signedOut) allowGuest = true;
+    if (authHold && !broadcast) {
+      // A sibling may close before sending its completion hint. Resume by
+      // verifying the actual session, without treating silence as sign-out.
+      remoteHoldTimer = setTimeout(() => identity('settled'), 20_000);
+    }
     authorityResolved = false;
     authorityAbort?.abort();
     controller.ownerTransition(true);
@@ -324,6 +335,8 @@ function createRuntime() {
         if (!partition) refresh();
       }, 30_000);
       cleanup = () => {
+        clearTimeout(remoteHoldTimer);
+        if (!localAuthHold) authHold = false;
         authorityAbort?.abort();
         authorityCheck = null;
         authorityResolved = false;

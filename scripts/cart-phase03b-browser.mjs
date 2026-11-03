@@ -103,6 +103,24 @@ try {
     "fetch('/api/storefront/v1/carts/current').then(r=>r.json()).then(r=>r.data)",
   );
   assert.equal(guest.lines.length, 2);
+  const guestDevice = await newDevice();
+  await add(guestDevice, 'Smooth');
+  const secondGuest = await guestDevice.evaluate(
+    "fetch('/api/storefront/v1/carts/current').then(r=>r.json()).then(r=>r.data)",
+  );
+  const { cookies } = await guestDevice.call('Network.getCookies', { urls: [base] });
+  const secondSlot = cookies.find(
+    ({ name }) => name === 'maevelle_cart_' + secondGuest.id.replaceAll('-', ''),
+  );
+  assert.ok(secondSlot);
+  const imported = await main.call('Network.setCookie', {
+    url: base,
+    name: secondSlot.name,
+    value: secondSlot.value,
+    httpOnly: true,
+    sameSite: 'Lax',
+  });
+  assert.equal(imported.success, true);
   await signIn(main);
   await main.navigate(base + '/cart');
   await until('persistent account bag after sign-in', () => text(main, 'Items in bag · 1'));
@@ -116,6 +134,7 @@ try {
   assert.equal(guestReads, 0);
   assert.equal((await read(main)).id, original.id);
   await main.navigate(base + '/cart/merge');
+  await until('two independently issued guest slots', () => text(main, 'Review guest bag 2'));
   await clickButton(main, 'Review guest bag 1');
   await until('reviewed collision', () => text(main, '1 in account bag + 1 in guest bag = 2'));
   assert.equal((await read(main)).version, original.version);
@@ -192,7 +211,11 @@ try {
   await main.navigate(base + '/account');
   await clickButton(main, 'Sign out');
   await until('signed out', () => text(main, 'You are signed out.'));
-  await add(main, 'Smooth');
+  const remaining = await main.evaluate(
+    "fetch('/api/storefront/v1/carts/current').then(r=>r.json()).then(r=>r.data)",
+  );
+  assert.equal(remaining.id, secondGuest.id);
+  assert.equal(remaining.version, secondGuest.version);
   await signIn(main, 'b');
   await main.navigate(base + '/cart');
   await until('separate account empty bag', () =>
@@ -230,6 +253,7 @@ try {
       staleReviewRequiresNewConsent: true,
       crossDeviceAndAccountSwitch: true,
       emptyAccountReviewAndLostSession: true,
+      unrelatedGuestSlotPreserved: true,
       initialAccountBagReads: cartReads,
       initialGuestBagReads: guestReads,
     }),
