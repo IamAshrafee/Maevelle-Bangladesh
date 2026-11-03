@@ -1,5 +1,7 @@
 # Cart scenario register
 
+See [Phase 02-C integrated acceptance](PHASE_02C_INTEGRATED_ACCEPTANCE.md) for the current guest commerce and ownership evidence.
+
 For current executed Phase 01-C coverage, see the [integrated scenario results](PHASE_01C_SCENARIO_RESULTS.md). The entries below retain their original design scope and identifiers.
 
 Phase01B execution evidence: [browser results](PHASE_01B_BROWSER_SCENARIO_RESULTS.md) maps actual Chrome cases to this register; [acceptance](PHASE_01B_ACCEPTANCE_REGISTER.md) records limited foundation coverage. This does not mark all59 design scenarios executed.

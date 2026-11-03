@@ -106,7 +106,7 @@ export async function getGuestCart(db: Kysely<DatabaseSchema>, token: string): P
   ]);
   const computedLines = lines.rows.map((line) => {
     const price = line.visible && line.configured ? prices.get(line.variant_id) : undefined;
-    const ats = stock.get(line.variant_id) ?? '0';
+    const ats = availableWholeUnits(stock.get(line.variant_id) ?? '0');
     const lineQuantity = quantity(line.quantity);
     const availability: CartView['lines'][number]['availability'] = !(
       line.visible && line.configured
@@ -114,13 +114,15 @@ export async function getGuestCart(db: Kysely<DatabaseSchema>, token: string): P
       ? 'UNAVAILABLE'
       : !price
         ? 'UNPRICED'
-        : availableWholeUnits(ats) < lineQuantity
-          ? availableWholeUnits(ats) === 0n
+        : ats < lineQuantity
+          ? ats === 0n
             ? 'UNAVAILABLE'
             : 'INSUFFICIENT_CURRENT_STOCK'
           : 'AVAILABLE';
     const gross = price ? money(parseMoney(price.amount) * lineQuantity) : '0.0000';
-    return { ...line, price, gross, availability };
+    const suggestedQuantity =
+      availability === 'INSUFFICIENT_CURRENT_STOCK' ? Number(ats) : undefined;
+    return { ...line, price, gross, availability, suggestedQuantity };
   });
   const calculations = await evaluatePromotions(db, {
     guestPreview: true,
@@ -157,6 +159,9 @@ export async function getGuestCart(db: Kysely<DatabaseSchema>, token: string): P
           line.availability === 'INSUFFICIENT_CURRENT_STOCK'
             ? 'REDUCE_OR_REPLACE_OR_REMOVE'
             : 'REPLACE_OR_REMOVE',
+        ...(line.suggestedQuantity === undefined
+          ? {}
+          : { suggestedQuantity: line.suggestedQuantity }),
       });
     const discount = discountByLine.get(line.id) ?? 0n;
     const gross = parseMoney(line.gross);
@@ -213,6 +218,7 @@ export async function getGuestCart(db: Kysely<DatabaseSchema>, token: string): P
         line.price?.compareAtAmount ?? null,
         line.availability,
         line.configured,
+        line.suggestedQuantity,
       ]),
       coupons: coupons.rows.map((coupon) => coupon.normalized_code),
       discounts: calculations.map((calculation) => [

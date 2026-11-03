@@ -45,6 +45,8 @@ Production cookie recommendation: `__Host-maevelle_cart`, Secure, HttpOnly, Same
 
 Mint empty guest cart only on explicit initialize/add intent with origin check and rate limit, never for crawler/header GET. GET without cookie returns an ephemeral empty view and does not write. Clearing cookies loses guest restoration; account sign-in recovers account Cart only. Offer explicit sign-in guidance, no fingerprint-based recovery. Cookie theft remains a bearer-token risk; allow rotation on suspicious lifecycle changes and revoke on merge/expiry. No guest credential grants account Cart access.
 
+The [Phase 03A handoff](PHASE_03A_ACCOUNT_CART_HANDOFF.md) identifies the implemented owner constraints, guest-only coupling and proposed authenticated merge transaction.
+
 ## Account and frontend ownership
 
 Account Cart references shopper account, not email or raw Admin user. One active tenant/account/currency cart; concurrent creation resolves unique conflict. Cross-device GET/focus/manual reload obtains current state; no WebSocket requirement. Every browser response is accepted only for matching owner partition, owner generation and nondecreasing revision. UI abort is advisory: it cannot undo a server commit.

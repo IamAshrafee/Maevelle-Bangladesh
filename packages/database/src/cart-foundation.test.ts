@@ -200,6 +200,49 @@ describe('Cart foundation actual PostgreSQL', () => {
     expect(removed.lines).toEqual([]);
   });
 
+  it('suggests an actionable stock reduction without relaxing mutation validation', async () => {
+    const f = await setup();
+    const added = await addGuestCartLine(database.db, {
+      token: f.token,
+      variantId: f.variantId,
+      quantity: '3',
+      expectedVersion: 1,
+    });
+    const location = await sql<{ id: string }>`select id from warehouse.locations
+      where organization_id = ${f.organizationId} and code = 'TEST'`.execute(database.db);
+    await adjustInventory(database.db, {
+      organizationId: f.organizationId,
+      actorId: f.actorId,
+      variantId: f.variantId,
+      locationId: location.rows[0]!.id,
+      condition: 'SELLABLE',
+      quantityDelta: '-39',
+      reasonCode: 'CORRECTION',
+      idempotencyKey: crypto.randomUUID(),
+    });
+    const current = await getGuestCart(database.db, f.token);
+    const lineId = added.lines[0]!.id;
+    expect(current.intentRevision).toBe(added.intentRevision);
+    expect(current.calculationFingerprint).not.toBe(added.calculationFingerprint);
+    expect(current.commerceReview?.issues).toEqual([
+      {
+        code: 'INSUFFICIENT_CURRENT_STOCK',
+        lineId,
+        action: 'REDUCE_OR_REPLACE_OR_REMOVE',
+        suggestedQuantity: 1,
+      },
+    ]);
+    const command = { token: f.token, lineId, expectedVersion: added.version };
+    await expect(
+      setGuestCartLineQuantity(database.db, { ...command, quantity: '2' }),
+    ).rejects.toMatchObject({ code: 'UNAVAILABLE' });
+    const recovered = await setGuestCartLineQuantity(database.db, { ...command, quantity: '1' });
+    expect(recovered.version).toBe(added.version + 1);
+    expect(recovered.lines[0]).toMatchObject({ id: lineId, availability: 'AVAILABLE' });
+    expect(Number(recovered.lines[0]!.quantity)).toBe(1);
+    expect(recovered.commerceReview?.issues).toEqual([]);
+  });
+
   it('uses one commerce snapshot during a mutation while later reads reprice', async () => {
     const f = await setup();
     const added = await addGuestCartLine(database.db, {

@@ -37,6 +37,7 @@ export type CartCommerceIssueDto =
         'UNAVAILABLE' | 'UNPRICED' | 'INSUFFICIENT_CURRENT_STOCK' | 'INVALID_CONFIGURATION';
       readonly lineId: string;
       readonly action: 'REPLACE_OR_REMOVE' | 'REDUCE_OR_REPLACE_OR_REMOVE';
+      readonly suggestedQuantity?: number;
     };
 
 export interface GuestCartViewDto {

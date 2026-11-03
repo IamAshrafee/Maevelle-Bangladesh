@@ -167,6 +167,9 @@ try {
   await until('coupon benefit', () => status('current discount'));
   const discounted = await read();
   assert.equal(discounted.commerceReview.coupons[0].status, 'EFFECTIVE');
+  assert.equal(discounted.merchandiseGross, '246.0000');
+  assert.equal(discounted.discountTotal, '24.6000');
+  assert.equal(discounted.merchandiseNet, '221.4000');
 
   const sibling = await chromium.tab(base + '/cart', { browserContextId });
   await until('other tab loads the same bag', () =>
@@ -208,13 +211,57 @@ try {
     assert.notEqual(changed.calculationFingerprint, beforeChange.calculationFingerprint);
     assert.equal(changed.lines[0].unitPrice, '157.0000');
 
+    await changeFixture('reduce-stock');
+    await until('stock shortfall', () =>
+      status('Reduce the quantity or choose another selection.'),
+    );
+    const shortfall = await read();
+    assert.equal(shortfall.intentRevision, changed.intentRevision);
+    assert.notEqual(shortfall.calculationFingerprint, changed.calculationFingerprint);
+    assert.equal(Number(shortfall.lines[0].quantity), 3);
+    assert.equal(
+      shortfall.commerceReview.issues.find((issue) => issue.code === 'INSUFFICIENT_CURRENT_STOCK')
+        ?.suggestedQuantity,
+      1,
+    );
+    await click(button('Reduce quantity to 1'));
+    await until('stock recovered', async () => {
+      const current = await read();
+      return (
+        Number(current?.lines[0]?.quantity) === 1 &&
+        !(await status('Reduce the quantity or choose another selection.'))
+      );
+    });
+
+    const beforeClear = await read();
+    await click(button('Clear bag'));
+    await until('clear confirmation opens', () =>
+      tab.evaluate('Boolean(document.querySelector("dialog[open]"))'),
+    );
+    await click(button('Clear items and coupons', 'document.querySelector("dialog[open]")'));
+    await until('atomic clear', async () => {
+      const current = await read();
+      return (
+        current?.version === beforeClear.version + 1 &&
+        current.ownerContext === beforeClear.ownerContext &&
+        current.lines.length === 0 &&
+        current.commerceReview.coupons.length === 0
+      );
+    });
+
+    await tab.navigate(`${base}/products/${handle}`);
+    await click(button('Smooth'));
+    await click(add);
+    await until('add after clear', () => status('Added to your bag.'));
+    await tab.navigate(base + '/cart');
+    await until('bag after adding again', () => status('Items in bag · 1'));
     await changeFixture('invalidate');
     await until('invalid configuration is retained', () => status('This selection has changed.'));
     assert.equal((await read()).lines[0].availability, 'UNAVAILABLE');
     await click(button('Change selection'));
     await until('no public options', () => status('No other current selection is listed.'));
     await click(button('Remove Synthetic selectable clip from bag'));
-    await until('safe removal', () => status('Your bag has coupons but no items.'));
+    await until('safe removal', () => status('Your bag is empty'));
   }
 
   await tab.navigate(base + '/checkout');

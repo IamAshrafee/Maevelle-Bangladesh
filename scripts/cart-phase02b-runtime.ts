@@ -110,6 +110,19 @@ try {
       where organization_id = ${organizationId} and id = ${promotion.id}`.execute(database.db);
     return { data: { updated: true } };
   });
+  app.post('/__fixture/reduce-stock', async () => {
+    await adjustInventory(database.db, {
+      organizationId,
+      actorId,
+      variantId: target,
+      locationId: location.rows[0]!.id,
+      condition: 'SELLABLE',
+      quantityDelta: '-3',
+      reasonCode: 'CORRECTION',
+      idempotencyKey: crypto.randomUUID(),
+    });
+    return { data: { updated: true } };
+  });
   app.post('/__fixture/invalidate', async () => {
     await sql`insert into catalog.product_option_axes (organization_id, product_id, code, name)
       values (${organizationId}, ${productId}, 'new-axis', 'New option')`.execute(database.db);

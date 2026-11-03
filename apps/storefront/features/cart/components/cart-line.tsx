@@ -34,6 +34,8 @@ export function CartLine({
   const issue = cart.commerceReview?.issues.find(
     (item) => 'lineId' in item && item.lineId === line.id,
   );
+  const suggestedQuantity =
+    issue && 'suggestedQuantity' in issue ? issue.suggestedQuantity : undefined;
   const code = issue?.code ?? line.availability;
   const quantity = wholeQuantity(line.quantity);
   const url = line.productHandle ? `/products/${encodeURIComponent(line.productHandle)}` : null;
@@ -87,7 +89,19 @@ export function CartLine({
         </p>
       )}
       <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+        {surface === 'page' && suggestedQuantity !== undefined && (
+          <Button
+            variant="outline"
+            disabled={busy}
+            onClick={() =>
+              void cartStore.setQuantity(line.id, String(suggestedQuantity)).catch(() => undefined)
+            }
+          >
+            Reduce quantity to {suggestedQuantity}
+          </Button>
+        )}
         {surface === 'page' &&
+          suggestedQuantity === undefined &&
           (code === 'AVAILABLE' ||
             issue?.action === 'REDUCE_OR_REPLACE_OR_REMOVE' ||
             code === 'INSUFFICIENT_CURRENT_STOCK') && (
