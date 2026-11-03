@@ -4,6 +4,7 @@ import { useMemo, useState, useSyncExternalStore } from 'react';
 import { wishlistStore } from './wishlist-store';
 import { FREE_DELIVERY_THRESHOLD, type WishlistCategory, type WishlistItem } from './types';
 import { requestStorefrontClient } from '@/lib/api/client/http';
+import { emitWishlistObservation } from '@/lib/analytics/wishlist-telemetry';
 
 export function useWishlist() {
   const wishlist = useSyncExternalStore(wishlistStore.subscribe, wishlistStore.getSnapshot, wishlistStore.getServerSnapshot);
@@ -19,6 +20,12 @@ export function useWishlist() {
   const addItem = (item: WishlistItem, preferredVariantId?: string | null) => {
     try {
       const saved = wishlistStore.save(item, preferredVariantId);
+      if (saved && wishlist.mode !== 'account') {
+        void emitWishlistObservation({
+          name: 'WISHLIST_GUEST_SAVE_OBSERVED',
+          mode: 'GUEST',
+        });
+      }
       showToast(saved ? wishlist.mode === 'account' ? `Saving “${item.title}” to your account…`
         : `“${item.title}” saved in this browser` : 'The wishlist is not ready. Try again.');
       return saved;
@@ -31,6 +38,12 @@ export function useWishlist() {
     const item = fallback ?? wishlistStore.getSnapshot().items.find((entry) => entry.id === id);
     if (!item || wishlistStore.membership(id) !== true) return;
     if (wishlistStore.remove(id)) {
+      if (wishlist.mode !== 'account') {
+        void emitWishlistObservation({
+          name: 'WISHLIST_GUEST_REMOVE_OBSERVED',
+          mode: 'GUEST',
+        });
+      }
       setRemoval({ item, ownerGeneration: wishlistStore.getSnapshot().ownerGeneration });
       showToast(wishlist.mode === 'account' ? `Removing “${item.title}” from your account…`
         : `“${item.title}” removed from this browser`);

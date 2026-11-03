@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { cx } from '@/components/ui/classnames';
 import { requestStorefrontClient } from '@/lib/api/client/http';
 import { useWishlist } from '@/features/wishlist/use-wishlist';
+import { emitWishlistObservation } from '@/lib/analytics/wishlist-telemetry';
 import { WishlistDesktopView } from './wishlist-desktop-view';
 import { WishlistMobileView } from './wishlist-mobile-view';
 import { WishlistSharingPanel } from './wishlist-sharing-panel';
@@ -33,6 +34,14 @@ export function WishlistPageShell({ className, mode: viewMode = 'auto', inDrawer
   const [sharingOpen, setSharingOpen] = useState(false);
   const ids = items.map((item) => item.id).join(',');
   useEffect(() => { setSharingOpen(false); }, [ownerGeneration]);
+
+  useEffect(() => {
+    if (mode !== 'guest' && mode !== 'account') return;
+    void emitWishlistObservation({
+      name: 'WISHLIST_PAGE_VIEWED',
+      mode: mode === 'account' ? 'ACCOUNT' : 'GUEST',
+    });
+  }, [mode]);
 
   useEffect(() => {
     if (!ids) { catalogCache.current.clear(); setCatalog(new Map()); setLoadError(false); setLoadingCatalog(false); return; }

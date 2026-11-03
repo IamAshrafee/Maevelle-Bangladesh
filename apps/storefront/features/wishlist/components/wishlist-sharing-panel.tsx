@@ -25,6 +25,7 @@ import {
 } from '../share-client';
 import { AccountShareHistory } from './account-share-history';
 import { GuestShareHistory } from './guest-share-history';
+import { emitWishlistObservation } from '@/lib/analytics/wishlist-telemetry';
 
 export function WishlistSharingPanel({
   items,
@@ -57,6 +58,12 @@ export function WishlistSharingPanel({
     new Map<string, { productId: string; preferredVariantId: string | null }>(),
   );
   const owner = mode === 'account' ? ownerPartition : 'guest';
+  useEffect(() => {
+    void emitWishlistObservation({
+      name: 'WISHLIST_SHARE_OPENED',
+      mode: mode === 'account' ? 'ACCOUNT' : 'GUEST',
+    });
+  }, [mode]);
   useEffect(() => {
     epoch.current++;
     selectedDetails.current.clear();
@@ -142,6 +149,11 @@ export function WishlistSharingPanel({
       return;
     }
     setSelection(nextSelection);
+    void emitWishlistObservation({
+      name: 'WISHLIST_SCOPE_SELECTED',
+      mode: mode === 'account' ? 'ACCOUNT' : 'GUEST',
+      scope: nextSelection === 'all' ? 'ALL' : 'SELECTED',
+    });
     setSelected(ids);
     setDays(nextDays);
     setResult(null);
@@ -274,21 +286,35 @@ export function WishlistSharingPanel({
             <div className="mt-4 flex flex-wrap gap-2">
               <Button
                 autoFocus
-                onClick={() =>
+                onClick={() => {
+                  void emitWishlistObservation({
+                    name: 'WISHLIST_COPY_ATTEMPTED',
+                    mode: mode === 'account' ? 'ACCOUNT' : 'GUEST',
+                  });
                   void copyPublicLink(result.viewToken)
-                    .then(() => setMessage('Link copied.'))
-                    .catch(() => setMessage('Could not copy the link. Try device sharing.'))
-                }
+                    .then(() => {
+                      setMessage('Link copied.');
+                      void emitWishlistObservation({
+                        name: 'WISHLIST_COPY_SUCCEEDED',
+                        mode: mode === 'account' ? 'ACCOUNT' : 'GUEST',
+                      });
+                    })
+                    .catch(() => setMessage('Could not copy the link. Try device sharing.'));
+                }}
               >
                 Copy link
               </Button>
               <Button
-                onClick={() =>
+                onClick={() => {
+                  void emitWishlistObservation({
+                    name: 'WISHLIST_NATIVE_SHARE_INVOKED',
+                    mode: mode === 'account' ? 'ACCOUNT' : 'GUEST',
+                  });
                   void nativeShare(result.viewToken).catch((error) => {
                     if (!(error instanceof Error && error.name === 'AbortError'))
                       setMessage(shareError(error));
-                  })
-                }
+                  });
+                }}
                 variant="outline"
               >
                 Device share
@@ -296,6 +322,12 @@ export function WishlistSharingPanel({
               <a
                 className="inline-flex min-h-9 items-center px-2 text-xs text-primary underline"
                 href={`https://wa.me/?text=${encodeURIComponent(`Here are some Maevelle favorites I thought you'd love. ${shareUrl(result.viewToken)}`)}`}
+                onClick={() => {
+                  void emitWishlistObservation({
+                    name: 'WISHLIST_WHATSAPP_SELECTED',
+                    mode: mode === 'account' ? 'ACCOUNT' : 'GUEST',
+                  });
+                }}
                 rel="noreferrer"
                 target="_blank"
               >

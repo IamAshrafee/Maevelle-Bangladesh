@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useSyncExternalStore } from 'react';
 import { ProductCard } from '@/components/commerce/product-card';
 import { publicMediaPath } from '@/lib/media/url';
 import { requestStorefrontClient } from '@/lib/api/client/http';
@@ -9,10 +9,25 @@ import { Button } from '@/components/ui/button';
 import type { WishlistPublicShareDto, WishlistSharedProductDto } from '@maevelle/contracts';
 import { useWishlist } from '../use-wishlist';
 import { wishlistStore } from '../wishlist-store';
+import { recipientNoPendingFeedback } from '../recipient-save-feedback';
+import { emitWishlistObservation } from '@/lib/analytics/wishlist-telemetry';
 
 type Product = WishlistSharedProductDto;
 
+const subscribeToFragment = (listener: () => void) => {
+  window.addEventListener('hashchange', listener);
+  return () => window.removeEventListener('hashchange', listener);
+};
+const readFragment = () => window.location.hash.slice(1);
+const serverFragment = () => '';
+
 export function SharedWishlist() {
+  const token = useSyncExternalStore(subscribeToFragment, readFragment, serverFragment);
+  // A new capability owns a new UI lifecycle, including pending recipient feedback.
+  return <SharedWishlistCollection key={token} token={token} />;
+}
+
+function SharedWishlistCollection({ token }: { readonly token: string }) {
   const [products, setProducts] = useState<readonly Product[] | null>(null);
   const [unavailableCount, setUnavailableCount] = useState(0);
   const [retryKey, setRetryKey] = useState(0);
@@ -45,7 +60,6 @@ export function SharedWishlist() {
     setSavingOne(null);
   }, [savingOne, ownerGeneration, pendingIds, isInWishlist, sync]);
   useEffect(() => {
-    const token = window.location.hash.slice(1);
     if (!/^[A-Za-z0-9_-]{43}$/.test(token)) {
       setState('unavailable');
       return;
@@ -62,6 +76,7 @@ export function SharedWishlist() {
             body: JSON.stringify({ token }),
           },
         );
+        if (controller.signal.aborted) return;
         setProducts(share.products);
         setUnavailableCount(share.unavailableCount);
         setState('ready');
@@ -75,8 +90,19 @@ export function SharedWishlist() {
       }
     })();
     return () => controller.abort();
-  }, [retryKey]);
+  }, [retryKey, token]);
+  useEffect(() => {
+    if (state !== 'ready' || (mode !== 'guest' && mode !== 'account')) return;
+    void emitWishlistObservation({
+      name: 'WISHLIST_RECIPIENT_VIEWED',
+      mode: mode === 'account' ? 'ACCOUNT' : 'GUEST',
+    });
+  }, [state, mode]);
   function save(product: Product) {
+    void emitWishlistObservation({
+      name: 'WISHLIST_SAVE_ONE_INITIATED',
+      mode: mode === 'account' ? 'ACCOUNT' : 'GUEST',
+    });
     const saved = addItem(
       {
         id: product.id,
@@ -106,6 +132,10 @@ export function SharedWishlist() {
   }
   async function saveAll() {
     if (savingAll) return;
+    void emitWishlistObservation({
+      name: 'WISHLIST_SAVE_ALL_INITIATED',
+      mode: mode === 'account' ? 'ACCOUNT' : 'GUEST',
+    });
     const startingOwner = ownerGeneration;
     setSavingAll(true);
     let queued = 0;
@@ -185,7 +215,12 @@ export function SharedWishlist() {
         }
       } else
         setMessage(
-          `${queued} saved in this browser, ${existing} already saved, ${failed} could not be saved.`,
+          recipientNoPendingFeedback(
+            mode === 'account' ? 'account' : 'guest',
+            queued,
+            existing,
+            failed,
+          ),
         );
     }
     setSavingAll(false);
@@ -266,7 +301,16 @@ export function SharedWishlist() {
           ) : null}
           <div className="mt-6 grid gap-x-4 gap-y-8 grid-cols-2 lg:grid-cols-3">
             {products?.map((product) => (
-              <div className="min-w-0" key={product.id}>
+              <div
+                className="min-w-0"
+                key={product.id}
+                onClickCapture={() => {
+                  void emitWishlistObservation({
+                    name: 'WISHLIST_PRODUCT_OPENED',
+                    mode: mode === 'account' ? 'ACCOUNT' : 'GUEST',
+                  });
+                }}
+              >
                 <ProductCard
                   badge={product.available ? undefined : 'Out of stock'}
                   badgeType="neutral"
