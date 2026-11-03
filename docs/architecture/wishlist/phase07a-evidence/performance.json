@@ -1,0 +1,62 @@
+{
+  "measuredAt": "2026-11-01T19:34:13.323Z",
+  "transport": "loopback HTTP, sequential, warm API, 20 samples per endpoint",
+  "reports": {
+    "summary": {
+      "samples": 20,
+      "p50Ms": 9.28,
+      "p95Ms": 38.77,
+      "result": {
+        "savedItems": 326,
+        "lists": 4,
+        "nonemptyLists": 4,
+        "distinctProducts": 108,
+        "availableItems": 10,
+        "outOfStockItems": 316,
+        "unavailableItems": 0
+      }
+    },
+    "activity": {
+      "samples": 20,
+      "p50Ms": 7.92,
+      "p95Ms": 20.27
+    },
+    "products": {
+      "samples": 20,
+      "p50Ms": 8.69,
+      "p95Ms": 9.43
+    },
+    "categories": {
+      "samples": 20,
+      "p50Ms": 8.76,
+      "p95Ms": 11.91
+    },
+    "sharing": {
+      "samples": 20,
+      "p50Ms": 9.9,
+      "p95Ms": 20.48
+    },
+    "operations": {
+      "samples": 20,
+      "p50Ms": 7.3,
+      "p95Ms": 8.28
+    }
+  },
+  "truth": [
+    {
+      "saved_items": 326,
+      "distinct_products": 108,
+      "nonempty_lists": 4
+    }
+  ],
+  "observations": [
+    {
+      "event_name": "WISHLIST_PAGE_VIEWED",
+      "count": 1
+    },
+    {
+      "event_name": "WISHLIST_SHARE_OPENED",
+      "count": 1
+    }
+  ]
+}

@@ -1,0 +1,17 @@
+{
+  "entries": 62,
+  "before": {
+    "PASS": 33,
+    "FAIL": 1,
+    "NOT VERIFIED": 3,
+    "PARTIAL": 22,
+    "BLOCKED": 3
+  },
+  "after": {
+    "PASS": 37,
+    "FAIL": 1,
+    "NOT VERIFIED": 2,
+    "PARTIAL": 20,
+    "BLOCKED": 2
+  }
+}

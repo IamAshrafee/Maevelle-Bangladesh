@@ -1,0 +1,16 @@
+{
+  "assignmentContainer": "maevelle-wishlist-07a1-pg18 stopped; --rm removed assignment container/tmpfs data",
+  "remainingContainers": [
+    "codex-wishlist-visual-pg18 127.0.0.1:55440->5432/tcp"
+  ],
+  "acceptanceListeningPorts": [],
+  "existingContainer": "codex-wishlist-visual-pg18 remains running on55440; no restart/migration/data access",
+  "temporaryTrigger": "Dropped by Worker rehearsal finally block",
+  "temporaryProcesses": "API/Next/proxy sessions stopped; child Workers and second API stopped by rehearsal finally blocks",
+  "browserTabs": "Attempted explicit temporary-tab closure; browser cleanup call timed out and reset handles. Full tab closure unconfirmed; user staging tab never controlled.",
+  "runtimeFiles": "Synthetic keys/mailbox/fixtures retained privately outside Git under /tmp; no persistent secret or root changed",
+  "git": "No reset/clean/stash/commit; prior dirty files retained",
+  "environmentsTouched": [
+    "local assignment-owned disposable PostgreSQL18 and synthetic loopback services only"
+  ]
+}

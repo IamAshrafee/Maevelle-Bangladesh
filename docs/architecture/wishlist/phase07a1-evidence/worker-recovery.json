@@ -1,0 +1,20 @@
+{
+  "beforeCommitKill": {
+    "facts": 0,
+    "receipts": 0
+  },
+  "afterCommitKill": {
+    "facts": 1,
+    "receipts": 1
+  },
+  "concurrentRestartAndRedelivery": {
+    "facts": 1,
+    "receipts": 1
+  },
+  "poison": [
+    {
+      "attempts": 1
+    }
+  ],
+  "note": "Actual Worker processes killed with SIGKILL; the paused PostgreSQL backend was then terminated to force immediate disconnect detection. Facts and receipts acknowledge atomically; there is no separate queue acknowledgment step. Cleanup interruption and large-backlog memory remain separate gates."
+}

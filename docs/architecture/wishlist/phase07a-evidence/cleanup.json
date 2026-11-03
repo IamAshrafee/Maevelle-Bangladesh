@@ -1,0 +1,32 @@
+{
+  "assignmentContainerWasVerified": {
+    "name": "codex-wishlist-07a-pg18",
+    "postgres": "18.6",
+    "tmpfs": "/var/lib/postgresql",
+    "bind": "127.0.0.1:55442"
+  },
+  "containers": {
+    "codex-wishlist-07a-pg18": "removed / absent",
+    "codex-wishlist-visual-pg18": "running",
+    "maevellebangladesh-postgres-1": "exited"
+  },
+  "assignmentPorts": {
+    "3000": "no listener",
+    "3001": "no listener",
+    "3002": "no listener",
+    "55442": "no listener"
+  },
+  "stoppedOwnedPids": [
+    66916,
+    68170,
+    62370,
+    61904
+  ],
+  "faultInjection": "cleared before cleanup",
+  "browserViewport": "reset",
+  "chromeTestTabs": "closed",
+  "inAppTestTabs": "explicit close unavailable after connection error; temporary tabs left for automatic end-of-turn cleanup",
+  "persistentVolumesDeleted": false,
+  "stagingProductionVpsTouched": false,
+  "commitCreated": false
+}

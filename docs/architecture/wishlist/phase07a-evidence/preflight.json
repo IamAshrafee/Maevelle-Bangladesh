@@ -1,0 +1,20 @@
+{
+  "head": "aa290065407030e85b5b6847efd22fb437a65279",
+  "branch": "main",
+  "files": {
+    "apps/admin/components/analytics/views/wishlist-view.tsx": "8cba30d7fd114100fe711f31832f16e84d37c82a04fe72268beff5eaadaef827",
+    "apps/admin/lib/analytics/wishlist-api.ts": "47cf0b8b5f1cbc8c1d64c639bc8fb4df3aa808a20474e9b31e0d870687759ddd",
+    "apps/admin/src/wishlist-analytics.test.tsx": "97995769699bcb93f36b24026508beb48f91b1186800eda73874f41028d3a758",
+    "apps/storefront/lib/analytics/wishlist-telemetry.test.ts": "2069689be8963363949918cb75f822c46522dd50b85f61f2c1f5a537e9f09572",
+    "apps/storefront/lib/analytics/wishlist-telemetry.ts": "46c164480f44f7b755f03dcd2baeedf5ae834a7eace5009bba15964f46a78f55",
+    "docs/architecture/wishlist/PHASE_06B_FRONTEND_IMPLEMENTATION_REPORT.md": "0eb3d9de668f7cca93f1767e73355293c0a0da44a617f1d169c9694199de361a",
+    "apps/admin/components/admin-shell.tsx": "e25c57677945d1b30a8b19d24b33647474ef084dbb59c1fe7096fb521ead3153",
+    "apps/admin/components/analytics/analytics-filter-toolbar.tsx": "840f97d141dbe427d61072cff666688df2870ab1a8510c33bd4e4451fd337774",
+    "apps/admin/components/analytics/analytics-workspace.tsx": "26f9e3736b4c07070374aa481b42e6318976a3d2cf100554625438ba6dcf147a",
+    "apps/admin/lib/analytics/types.ts": "3df6f4c875b0ef3048397160f27b57a571a9de9d0cc6de49d7a44d4d81db7884",
+    "apps/storefront/features/wishlist/components/shared-wishlist.tsx": "7ba09be394546824eaf4fc88e921db557b3e0be7eaf6ada48361780884a73a0d",
+    "apps/storefront/features/wishlist/components/wishlist-page-shell.tsx": "ee9a87730f0881a80e22ff431d8fc71680f94c87a897d469b9c38699a972bbe0",
+    "apps/storefront/features/wishlist/components/wishlist-sharing-panel.tsx": "17102beb843720e1afeafd9e2b398afad0a0dc461889748363492153e1fad0d6",
+    "apps/storefront/features/wishlist/use-wishlist.ts": "5db7f803d13795f54088d3ca2a163bb6047495353517fdc76197f830823cfb6d"
+  }
+}

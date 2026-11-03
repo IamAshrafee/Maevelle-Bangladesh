@@ -1,0 +1,16 @@
+{
+  "registration": 200,
+  "unverifiedLogin": 403,
+  "verification": 302,
+  "repeatedVerification": 302,
+  "login": 200,
+  "privateWishlist": 200,
+  "resetRequest": 200,
+  "passwordReset": 200,
+  "repeatedReset": 400,
+  "oldSession": 401,
+  "oldPassword": 401,
+  "newPassword": 200,
+  "signOut": 200,
+  "signedOutWishlist": 401
+}

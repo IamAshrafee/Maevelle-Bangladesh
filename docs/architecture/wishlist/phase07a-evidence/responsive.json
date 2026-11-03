@@ -1,0 +1,80 @@
+[
+  {
+    "surface": "wishlist",
+    "requested": 320,
+    "loadedImages": 100,
+    "pageWidth": 320,
+    "width": 320
+  },
+  {
+    "surface": "wishlist",
+    "requested": 375,
+    "loadedImages": 100,
+    "pageWidth": 375,
+    "width": 375
+  },
+  {
+    "surface": "wishlist",
+    "requested": 430,
+    "loadedImages": 100,
+    "pageWidth": 430,
+    "width": 430
+  },
+  {
+    "surface": "wishlist",
+    "requested": 768,
+    "loadedImages": 100,
+    "pageWidth": 768,
+    "width": 768
+  },
+  {
+    "surface": "wishlist",
+    "requested": 1024,
+    "loadedImages": 100,
+    "pageWidth": 1024,
+    "width": 1024
+  },
+  {
+    "surface": "wishlist",
+    "requested": 1440,
+    "loadedImages": 100,
+    "pageWidth": 1440,
+    "width": 1440
+  },
+  {
+    "surface": "admin",
+    "requested": 320,
+    "pageWidth": 320,
+    "width": 320
+  },
+  {
+    "surface": "admin",
+    "requested": 375,
+    "pageWidth": 375,
+    "width": 375
+  },
+  {
+    "surface": "admin",
+    "requested": 430,
+    "pageWidth": 430,
+    "width": 430
+  },
+  {
+    "surface": "admin",
+    "requested": 768,
+    "pageWidth": 768,
+    "width": 768
+  },
+  {
+    "surface": "admin",
+    "requested": 1024,
+    "pageWidth": 1024,
+    "width": 1024
+  },
+  {
+    "surface": "admin",
+    "requested": 1440,
+    "pageWidth": 1440,
+    "width": 1440
+  }
+]

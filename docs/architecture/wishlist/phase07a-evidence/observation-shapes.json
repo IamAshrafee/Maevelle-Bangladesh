@@ -1,0 +1,64 @@
+[
+  {
+    "name": "WISHLIST_PAGE_VIEWED",
+    "data": {
+      "mode": "ACCOUNT"
+    },
+    "analyticsConsent": "GRANTED",
+    "keys": [
+      "schemaVersion",
+      "eventId",
+      "name",
+      "origin",
+      "occurredAt",
+      "sessionId",
+      "consent",
+      "data"
+    ],
+    "dataKeys": [
+      "mode"
+    ]
+  },
+  {
+    "name": "WISHLIST_SHARE_OPENED",
+    "data": {
+      "mode": "ACCOUNT"
+    },
+    "analyticsConsent": "GRANTED",
+    "keys": [
+      "schemaVersion",
+      "eventId",
+      "name",
+      "origin",
+      "occurredAt",
+      "sessionId",
+      "consent",
+      "data"
+    ],
+    "dataKeys": [
+      "mode"
+    ]
+  },
+  {
+    "name": "WISHLIST_SCOPE_SELECTED",
+    "data": {
+      "mode": "ACCOUNT",
+      "scope": "SELECTED"
+    },
+    "analyticsConsent": "GRANTED",
+    "keys": [
+      "schemaVersion",
+      "eventId",
+      "name",
+      "origin",
+      "occurredAt",
+      "sessionId",
+      "consent",
+      "data"
+    ],
+    "dataKeys": [
+      "mode",
+      "scope"
+    ]
+  }
+]

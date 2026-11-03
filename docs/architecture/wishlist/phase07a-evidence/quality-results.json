@@ -1,0 +1,59 @@
+{
+  "baseHead": "aa290065407030e85b5b6847efd22fb437a65279",
+  "commands": {
+    "typecheck": "pnpm exec tsc --build --pretty false",
+    "backend_build": "pnpm exec tsc --build tsconfig.build.json --pretty false",
+    "admin_build": "pnpm --filter @maevelle/admin build",
+    "storefront_build": "pnpm --filter @maevelle/storefront build",
+    "upgrade": "TEST_DATABASE_URL=postgresql://wishlist_07a@127.0.0.1:55442/maevelle_test pnpm test:migration-upgrade",
+    "lint": "pnpm exec eslint apps/admin/components/admin-shell.tsx apps/admin/components/analytics/analytics-filter-toolbar.tsx apps/admin/components/analytics/analytics-workspace.tsx apps/admin/components/analytics/views/wishlist-view.tsx apps/admin/components/analytics/use-wishlist-analytics.ts apps/admin/lib/analytics/wishlist*.ts apps/admin/lib/analytics/date-presets.test.ts apps/admin/src/wishlist-analytics.test.tsx apps/api/src/shopper-auth.test.ts apps/storefront/features/wishlist apps/storefront/lib/analytics/wishlist-telemetry.ts apps/storefront/lib/analytics/wishlist-telemetry.test.ts packages/database/src/upgrade-cases.ts packages/database/src/upgrade-test-cli.ts packages/database/src/wishlist/upgrade-cases.ts scripts/wishlist-phase07a-*.ts",
+    "additional_lint": "pnpm exec eslint scripts/wishlist-phase07a-auth-smoke.ts",
+    "guards": [
+      "pnpm check:migrations",
+      "pnpm check:secrets",
+      "git diff --check"
+    ]
+  },
+  "finalResult": "PASS targeted checks",
+  "tests": {
+    "files": 23,
+    "passed": 117,
+    "failed": 0,
+    "skipped": 0
+  },
+  "sourceHashes": {
+    "apps/admin/components/analytics/use-wishlist-analytics.ts": "49fe81b027e41bded201055960f8d332e7d39701c09037c08e9657d75d2638eb",
+    "apps/admin/components/analytics/views/wishlist-view.tsx": "41c98f808e333348111cb4b64e97a22d7dcedc3f2b2d2ae48c8dfb04790a1753",
+    "apps/admin/lib/analytics/date-presets.test.ts": "e6fe3a7cc47ccecf2a424de23451b367ba817d6b188cb743447dc4fd31aed1f9",
+    "apps/admin/lib/analytics/wishlist-api.ts": "7e8625228208b7a4cae4493b8e7c592f3fccb266f830b9a0b77eeb78968ce95a",
+    "apps/admin/lib/analytics/wishlist-coverage.test.ts": "0214cc478a4c48ee4ddeb1e9af879f8710a4db7d8312372482ac5ab4ba8272ff",
+    "apps/admin/lib/analytics/wishlist-coverage.ts": "de1e940b293276d9bff9f322db6f4316dba59acd8e7e140363e79a1857a49da6",
+    "apps/admin/lib/analytics/wishlist-report-loader.test.ts": "78be685dbdd88c7882926ec7a1f47b0f42ee55afc14209d0ef66e92d6f6d54aa",
+    "apps/admin/lib/analytics/wishlist-report-loader.ts": "72cd85bb47f9c2137951b75f1e880d3878fdea18cb6f4bba019b5303cdab422a",
+    "apps/admin/src/wishlist-analytics.test.tsx": "b533735c172df1b6e9622dcdeb4ef2eaf933b3ef8e74f9ca75687dde3af8b0a6",
+    "apps/storefront/features/wishlist/recipient-save-feedback.test.ts": "9341087b31f3ccc7901982c569c96acaa35aa08d76931916499274a69e61c25b",
+    "apps/storefront/features/wishlist/recipient-save-feedback.ts": "f6b5d0d6d3d26d87000b41daa9af6e9347e610e84cb76dc628c510bacfecda71",
+    "apps/storefront/lib/analytics/wishlist-telemetry.test.ts": "470bfff81d6ea67afa3fe1e2bdd8a0520c6e1c88808968a2007fec061a193e5e",
+    "apps/storefront/lib/analytics/wishlist-telemetry.ts": "8ea663a03544031477d6bfa9979469bb4eb417b5ea9785673844a5bdadf25e9d",
+    "packages/database/src/wishlist/upgrade-cases.ts": "be7afa7c3b2d14322b65f1ab36e379961653e394ede7d6ddaa6e48f56e0ff68a",
+    "scripts/wishlist-phase07a-api.ts": "4712d884779fc24ad01c7d6fe9c514cd9a59520d5e79d33ffd82ba3a6b06ffc7",
+    "scripts/wishlist-phase07a-auth-smoke.ts": "3ff18bd6e3d6b1c4837043c7a03ddb957d34fc72f551d4c8b2c9b0b42b19e456",
+    "scripts/wishlist-phase07a-catalog.ts": "53ff8e4d50f747e57ab55ff73817eb02d1dba3e94df28838e95968ced686bea7",
+    "scripts/wishlist-phase07a-config.ts": "4d97455b1593273ed765070547205cc6c62e596feff1d21476efdbbdd31d986f",
+    "scripts/wishlist-phase07a-fixture.ts": "285f70eb5b4db24686b2df6bf1581d8d934641965f01a80ae8c61cd26f744808",
+    "scripts/wishlist-phase07a-measure.ts": "dad82e69375fa1dfce9a0edbc6d3e08a96c6fa32bc40cdd5afb161834000bbaa",
+    "scripts/wishlist-phase07a-worker.ts": "f5d2daf569e61e37c67a381a5c782183e487afcdc96bab0a0b1a29ec1f06c173",
+    "apps/admin/components/admin-shell.tsx": "ead443a0546c8d445db28c236ec88a9b7136d6c67facde7754ce529eb9f01b68",
+    "apps/admin/components/analytics/analytics-filter-toolbar.tsx": "713d4e5cb71be2585ee168c5f599738319b6e5ddfb1281fff9f2b74a1f39e1a3",
+    "apps/admin/components/analytics/analytics-workspace.tsx": "f0685c7614a49946d8a991e27e68eec517c5e83da6d4b3a7d0b7d681fd394ec5",
+    "apps/admin/lib/analytics/types.ts": "412a4f66579d311bbb0e12a40ccd316ac2caf65ad5813246be5834cab75a4d0b",
+    "apps/api/src/shopper-auth.test.ts": "8d1f35eb79fa06d841207a403209fa0c3cdc51c393c9845ce456967df47e2484",
+    "apps/storefront/features/wishlist/components/shared-wishlist.tsx": "c12080705f7b9290bec34dbcb447345b84e9e5d430d8a28c86d0a928678fb9b6",
+    "apps/storefront/features/wishlist/components/wishlist-page-shell.tsx": "e240c65b163b249240f95be63eb3b9b945df0d672b45f334153d956274747e7e",
+    "apps/storefront/features/wishlist/components/wishlist-sharing-panel.tsx": "17102beb843720e1afeafd9e2b398afad0a0dc461889748363492153e1fad0d6",
+    "apps/storefront/features/wishlist/use-wishlist.ts": "5db7f803d13795f54088d3ca2a163bb6047495353517fdc76197f830823cfb6d",
+    "packages/database/src/upgrade-cases.ts": "2aeb99d243fde3de87ec89d702fa1ac16be4c0316f6fd3a991bfec7255118e38",
+    "packages/database/src/upgrade-test-cli.ts": "8ea110f5f266086000b753ef71101814a3dc68fbcd6128e97e7231abd4c411a5"
+  },
+  "additionalVerification": "Final auth test formatting-only diff reduction:10 passed/1 file; ESLint passed."
+}

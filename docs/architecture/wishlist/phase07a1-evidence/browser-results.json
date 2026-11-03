@@ -1,0 +1,104 @@
+{
+  "browser": "Chrome",
+  "fixture": "Disposable PostgreSQL18 with real API/Next apps; loopback test proxy injects browser faults",
+  "passed": [
+    "Quota failure truthfully tab-only",
+    "Restore storage then Retry persists across reload",
+    "Separate-tab distinct product saves converge after refresh",
+    "Corrupt journal ignored on reload without losing two valid items",
+    "Lost committed guest share response recovered with Retry earlier creation",
+    "Guest share expiry extension",
+    "Explicit guest claim and account recovery",
+    "Claim preserves original public viewing link",
+    "23 account history rows after Load more",
+    "Explicit rotation invalidates old link; replacement opens",
+    "Revocation invalidates replacement link",
+    "Database TTL cutoff rejects account management with session-expired feedback",
+    "Refresh and account B transition show zero items in both tabs, with no A list",
+    "Keyboard Enter opens sharing and activates Admin Data Table",
+    "Admin retained ownership label corrected and browser-verified",
+    "Admin shared primary button measured in light and dark design-system lab"
+  ],
+  "notCompleted": [
+    "Concurrent conflicting save/remove and compaction browser matrix",
+    "Storage-denied and session-storage-denied matrix",
+    "All account pending-request/logout/merge/rotation-loss cases",
+    "All recipient catalog/failure cases",
+    "All13 producer interactions and in-flight consent withdrawal",
+    "VoiceOver, full keyboard/focus/live-region audit,200%/400% zoom,reduced-motion,orientation",
+    "Browser rendering/CLS/heap workload measurements"
+  ],
+  "colors": {
+    "storefrontPrimary": {
+      "fg": [
+        255,
+        255,
+        255
+      ],
+      "bg": [
+        126,
+        14,
+        53
+      ],
+      "ratio": 10.49
+    },
+    "storefrontCopy": {
+      "fg": [
+        30,
+        27,
+        25
+      ],
+      "bg": [
+        255,
+        255,
+        255
+      ],
+      "ratio": 17.13
+    },
+    "adminPrimaryBefore": {
+      "fg": [
+        255,
+        255,
+        255
+      ],
+      "bg": [
+        13,
+        148,
+        136
+      ],
+      "ratio": 3.74
+    },
+    "adminPrimaryLightAfter": {
+      "fg": [
+        15,
+        23,
+        42
+      ],
+      "bg": [
+        13,
+        148,
+        136
+      ],
+      "ratio": 4.77
+    },
+    "adminPrimaryDarkAfter": {
+      "fg": [
+        4,
+        47,
+        46
+      ],
+      "bg": [
+        20,
+        184,
+        166
+      ],
+      "ratio": 5.81
+    }
+  },
+  "limitations": [
+    "IAB fault-proxy hydration stalled; Chrome used instead",
+    "Injected test toolbar is excluded from product visual judgment",
+    "Synthetic login helper creates real provider sessions but does not test browser sign-up/reset forms",
+    "No native share or WhatsApp delivery performed"
+  ]
+}

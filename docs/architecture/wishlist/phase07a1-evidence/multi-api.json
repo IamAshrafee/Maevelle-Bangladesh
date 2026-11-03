@@ -1,0 +1,146 @@
+{
+  "results": [
+    {
+      "port": 3002,
+      "status": 404
+    },
+    {
+      "port": 3006,
+      "status": 404
+    },
+    {
+      "port": 3002,
+      "status": 404
+    },
+    {
+      "port": 3006,
+      "status": 404
+    },
+    {
+      "port": 3002,
+      "status": 404
+    },
+    {
+      "port": 3006,
+      "status": 404
+    },
+    {
+      "port": 3002,
+      "status": 404
+    },
+    {
+      "port": 3006,
+      "status": 404
+    },
+    {
+      "port": 3002,
+      "status": 404
+    },
+    {
+      "port": 3006,
+      "status": 404
+    },
+    {
+      "port": 3002,
+      "status": 404
+    },
+    {
+      "port": 3006,
+      "status": 404
+    },
+    {
+      "port": 3002,
+      "status": 404
+    },
+    {
+      "port": 3006,
+      "status": 404
+    },
+    {
+      "port": 3002,
+      "status": 404
+    },
+    {
+      "port": 3006,
+      "status": 404
+    },
+    {
+      "port": 3002,
+      "status": 404
+    },
+    {
+      "port": 3006,
+      "status": 404
+    },
+    {
+      "port": 3002,
+      "status": 404
+    },
+    {
+      "port": 3006,
+      "status": 404
+    },
+    {
+      "port": 3002,
+      "status": 404
+    },
+    {
+      "port": 3006,
+      "status": 404
+    },
+    {
+      "port": 3002,
+      "status": 404
+    },
+    {
+      "port": 3006,
+      "status": 404
+    },
+    {
+      "port": 3002,
+      "status": 404
+    },
+    {
+      "port": 3006,
+      "status": 404
+    },
+    {
+      "port": 3002,
+      "status": 404
+    },
+    {
+      "port": 3006,
+      "status": 404
+    },
+    {
+      "port": 3002,
+      "status": 404
+    },
+    {
+      "port": 3006,
+      "status": 404
+    },
+    {
+      "port": 3002,
+      "status": 429
+    },
+    {
+      "port": 3006,
+      "status": 429
+    },
+    {
+      "port": 3002,
+      "status": 429
+    },
+    {
+      "port": 3006,
+      "status": 429
+    },
+    {
+      "port": 3002,
+      "status": 429
+    }
+  ],
+  "bothInstancesBlocked": true,
+  "scope": "Guest management limiter only; email/observation multi-instance paths remain unmeasured."
+}

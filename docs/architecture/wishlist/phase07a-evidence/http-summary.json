@@ -1,0 +1,302 @@
+[
+  {
+    "method": "DELETE",
+    "route": "/storefront/v1/wishlist/items/:productId",
+    "status": 200,
+    "count": 2
+  },
+  {
+    "method": "GET",
+    "route": "/admin/analytics/overview",
+    "status": 403,
+    "count": 4
+  },
+  {
+    "method": "GET",
+    "route": "/admin/analytics/wishlist/activity",
+    "status": 200,
+    "count": 59
+  },
+  {
+    "method": "GET",
+    "route": "/admin/analytics/wishlist/activity",
+    "status": 403,
+    "count": 7
+  },
+  {
+    "method": "GET",
+    "route": "/admin/analytics/wishlist/categories",
+    "status": 200,
+    "count": 59
+  },
+  {
+    "method": "GET",
+    "route": "/admin/analytics/wishlist/categories",
+    "status": 403,
+    "count": 7
+  },
+  {
+    "method": "GET",
+    "route": "/admin/analytics/wishlist/operations",
+    "status": 200,
+    "count": 59
+  },
+  {
+    "method": "GET",
+    "route": "/admin/analytics/wishlist/operations",
+    "status": 403,
+    "count": 7
+  },
+  {
+    "method": "GET",
+    "route": "/admin/analytics/wishlist/products",
+    "status": 200,
+    "count": 59
+  },
+  {
+    "method": "GET",
+    "route": "/admin/analytics/wishlist/products",
+    "status": 403,
+    "count": 7
+  },
+  {
+    "method": "GET",
+    "route": "/admin/analytics/wishlist/sharing",
+    "status": 200,
+    "count": 59
+  },
+  {
+    "method": "GET",
+    "route": "/admin/analytics/wishlist/sharing",
+    "status": 403,
+    "count": 7
+  },
+  {
+    "method": "GET",
+    "route": "/admin/analytics/wishlist/summary",
+    "status": 200,
+    "count": 58
+  },
+  {
+    "method": "GET",
+    "route": "/admin/analytics/wishlist/summary",
+    "status": 403,
+    "count": 7
+  },
+  {
+    "method": "GET",
+    "route": "/admin/analytics/wishlist/summary",
+    "status": 503,
+    "count": 1
+  },
+  {
+    "method": "GET",
+    "route": "/admin/context",
+    "status": 200,
+    "count": 20
+  },
+  {
+    "method": "GET",
+    "route": "/admin/context",
+    "status": 401,
+    "count": 3
+  },
+  {
+    "method": "GET",
+    "route": "/admin/notifications/inbox/unread-count",
+    "status": 403,
+    "count": 60
+  },
+  {
+    "method": "GET",
+    "route": "/admin/operations/overview",
+    "status": 403,
+    "count": 4
+  },
+  {
+    "method": "GET",
+    "route": "/admin/orders",
+    "status": 403,
+    "count": 4
+  },
+  {
+    "method": "GET",
+    "route": "/media/public/:assetId",
+    "status": 200,
+    "count": 6
+  },
+  {
+    "method": "GET",
+    "route": "/media/public/:assetId",
+    "status": 302,
+    "count": 58
+  },
+  {
+    "method": "GET",
+    "route": "/media/public/:assetId",
+    "status": 304,
+    "count": 12
+  },
+  {
+    "method": "GET",
+    "route": "/media/public/:assetId",
+    "status": 500,
+    "count": 14
+  },
+  {
+    "method": "GET",
+    "route": "/products/:productId/reviews",
+    "status": 200,
+    "count": 3
+  },
+  {
+    "method": "GET",
+    "route": "/storefront/v1/carts/current",
+    "status": 404,
+    "count": 94
+  },
+  {
+    "method": "GET",
+    "route": "/storefront/v1/categories",
+    "status": 200,
+    "count": 8
+  },
+  {
+    "method": "GET",
+    "route": "/storefront/v1/context",
+    "status": 200,
+    "count": 7
+  },
+  {
+    "method": "GET",
+    "route": "/storefront/v1/products/:handle",
+    "status": 200,
+    "count": 3
+  },
+  {
+    "method": "GET",
+    "route": "/storefront/v1/products/:handle/recommendations",
+    "status": 200,
+    "count": 1
+  },
+  {
+    "method": "GET",
+    "route": "/storefront/v1/products/:handle/size-guide",
+    "status": 200,
+    "count": 1
+  },
+  {
+    "method": "GET",
+    "route": "/storefront/v1/search",
+    "status": 200,
+    "count": 2
+  },
+  {
+    "method": "GET",
+    "route": "/storefront/v1/shopper/session",
+    "status": 200,
+    "count": 22
+  },
+  {
+    "method": "GET",
+    "route": "/storefront/v1/shopper/session",
+    "status": 401,
+    "count": 15
+  },
+  {
+    "method": "GET",
+    "route": "/storefront/v1/wishlist",
+    "status": 200,
+    "count": 39
+  },
+  {
+    "method": "GET",
+    "route": "/storefront/v1/wishlist/account-shares",
+    "status": 200,
+    "count": 6
+  },
+  {
+    "method": "HEAD",
+    "route": "/media/public/:assetId",
+    "status": 302,
+    "count": 2
+  },
+  {
+    "method": "POST",
+    "route": "/auth/*",
+    "status": 200,
+    "count": 9
+  },
+  {
+    "method": "POST",
+    "route": "/auth/*",
+    "status": 404,
+    "count": 2
+  },
+  {
+    "method": "POST",
+    "route": "/shopper-auth/*",
+    "status": 200,
+    "count": 2
+  },
+  {
+    "method": "POST",
+    "route": "/storefront/v1/analytics/events",
+    "status": 202,
+    "count": 3
+  },
+  {
+    "method": "POST",
+    "route": "/storefront/v1/wishlist/account-shares",
+    "status": 200,
+    "count": 1
+  },
+  {
+    "method": "POST",
+    "route": "/storefront/v1/wishlist/account-shares",
+    "status": 422,
+    "count": 1
+  },
+  {
+    "method": "POST",
+    "route": "/storefront/v1/wishlist/merges",
+    "status": 200,
+    "count": 2
+  },
+  {
+    "method": "POST",
+    "route": "/storefront/v1/wishlist/merges",
+    "status": 409,
+    "count": 1
+  },
+  {
+    "method": "POST",
+    "route": "/storefront/v1/wishlist/products",
+    "status": 200,
+    "count": 13
+  },
+  {
+    "method": "POST",
+    "route": "/storefront/v1/wishlist/saved-state",
+    "status": 200,
+    "count": 4
+  },
+  {
+    "method": "POST",
+    "route": "/storefront/v1/wishlist/shares",
+    "status": 200,
+    "count": 1
+  },
+  {
+    "method": "POST",
+    "route": "/storefront/v1/wishlist/shares/open",
+    "status": 200,
+    "count": 8
+  },
+  {
+    "method": "PUT",
+    "route": "/storefront/v1/wishlist/items/:productId",
+    "status": 200,
+    "count": 2
+  }
+]

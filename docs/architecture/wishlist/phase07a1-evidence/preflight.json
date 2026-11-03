@@ -1,0 +1,21 @@
+{
+  "head": "aa290065407030e85b5b6847efd22fb437a65279",
+  "branch": "main",
+  "comparison_to_07a_initial_not_final": {
+    "apps/admin/components/analytics/views/wishlist-view.tsx": "changed_since_07A_initial_preflight",
+    "apps/admin/lib/analytics/wishlist-api.ts": "changed_since_07A_initial_preflight",
+    "apps/admin/src/wishlist-analytics.test.tsx": "changed_since_07A_initial_preflight",
+    "apps/storefront/lib/analytics/wishlist-telemetry.test.ts": "changed_since_07A_initial_preflight",
+    "apps/storefront/lib/analytics/wishlist-telemetry.ts": "changed_since_07A_initial_preflight",
+    "docs/architecture/wishlist/PHASE_06B_FRONTEND_IMPLEMENTATION_REPORT.md": "unchanged",
+    "apps/admin/components/admin-shell.tsx": "changed_since_07A_initial_preflight",
+    "apps/admin/components/analytics/analytics-filter-toolbar.tsx": "changed_since_07A_initial_preflight",
+    "apps/admin/components/analytics/analytics-workspace.tsx": "changed_since_07A_initial_preflight",
+    "apps/admin/lib/analytics/types.ts": "changed_since_07A_initial_preflight",
+    "apps/storefront/features/wishlist/components/shared-wishlist.tsx": "changed_since_07A_initial_preflight",
+    "apps/storefront/features/wishlist/components/wishlist-page-shell.tsx": "changed_since_07A_initial_preflight",
+    "apps/storefront/features/wishlist/components/wishlist-sharing-panel.tsx": "unchanged",
+    "apps/storefront/features/wishlist/use-wishlist.ts": "unchanged"
+  },
+  "note": "07A stored an initial hash inventory, not a final hash inventory. HEAD unchanged. Existing final evidence and dirty source preserved."
+}

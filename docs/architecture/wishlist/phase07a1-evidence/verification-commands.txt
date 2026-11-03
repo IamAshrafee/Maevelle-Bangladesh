@@ -1,0 +1,32 @@
+Working directory: /Users/ashrafee/Documents/GitHub/Maevelle Bangladesh
+All PostgreSQL execution used the assignment-owned loopback55442 tmpfs instance.
+
+Final targeted regression (exit0,141 tests/26 files):
+TEST_DATABASE_URL=postgresql://wishlist_07a@127.0.0.1:55442/maevelle_test pnpm exec vitest run packages/database/src/migrate.test.ts packages/database/src/wishlist packages/database/src/wishlist-sharing.test.ts packages/database/src/analytics/wishlist packages/database/src/analytics.test.ts apps/api/src/shopper-auth.test.ts apps/api/src/wishlist-analytics.test.ts apps/api/src/app.test.ts apps/worker/src/worker.test.ts apps/storefront/features/wishlist apps/storefront/components/commerce/wishlist-button.test.tsx apps/storefront/lib/analytics apps/admin/lib/analytics/wishlist-report-loader.test.ts apps/admin/lib/analytics/wishlist-coverage.test.ts apps/admin/lib/analytics/date-presets.test.ts apps/admin/src/wishlist-analytics.test.tsx apps/admin/src/admin-capabilities.test.tsx apps/admin/src/primary-action-contrast.test.tsx packages/config/src/index.test.ts
+
+Builds/types (exit0):
+pnpm exec tsc --build tsconfig.build.json --pretty false
+pnpm exec tsc --build --pretty false
+pnpm --filter @maevelle/admin build
+STOREFRONT_INTERNAL_API_URL=http://127.0.0.1:3002 pnpm --filter @maevelle/storefront build
+
+Upgrade (exit0; initial invocation without opt-in refused before mutation):
+UPGRADE_TEST_ALLOW=1 TEST_DATABASE_URL=postgresql://wishlist_07a@127.0.0.1:55442/maevelle_test pnpm test:migration-upgrade
+
+Targeted lint:
+pnpm exec eslint packages/config/src/index.ts packages/config/src/index.test.ts packages/database/src/wishlist/share-crypto.ts packages/database/src/wishlist/share-crypto.test.ts packages/database/src/wishlist/share-key-migration.ts packages/database/src/wishlist/share-key-migration.test.ts packages/database/src/wishlist/share-lifecycle.ts packages/database/src/analytics/wishlist/wishlist-analytics.test.ts apps/api/src/routes/auth.ts apps/api/src/routes/wishlist.ts apps/api/src/routes/account-wishlist-shares.ts apps/api/src/shopper-auth.test.ts apps/admin/components/analytics/views/wishlist-view.tsx apps/admin/components/analytics/analytics-workspace.tsx apps/admin/components/ui/button.tsx apps/admin/src/primary-action-contrast.test.tsx scripts/wishlist-phase07a1-*
+
+Operational rehearsals (exit0):
+pnpm exec tsx scripts/wishlist-phase07a1-worker-recovery.ts
+pnpm exec tsx scripts/wishlist-phase07a1-multi-api.ts
+pnpm exec tsx scripts/wishlist-phase07a1-expire-session.ts
+pnpm exec tsx scripts/wishlist-phase07a1-reencrypt.ts 10
+# Five non-empty batches, then:
+pnpm exec tsx scripts/wishlist-phase07a1-reencrypt.ts 10 --check-retirement
+
+Guards:
+pnpm check:migrations
+pnpm check:secrets
+git diff --check
+
+Browser actions: cua_repl Chrome UI, real local API/Next pages; actual results and explicit omissions in browser-results.json. The proxy is a local test fixture, not deployed application code. No unattended full-browser-suite claim.
