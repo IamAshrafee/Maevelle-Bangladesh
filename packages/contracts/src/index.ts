@@ -4094,7 +4094,9 @@ export type MediaAssetTypeDto = 'IMAGE' | 'DOCUMENT';
 
 export interface MediaUploadPolicyDto {
   readonly maxUploadBytes: number;
-  readonly acceptedMimeTypes: readonly ('image/jpeg' | 'image/png' | 'image/webp' | 'application/pdf')[];
+  readonly acceptedMimeTypes: readonly (
+    'image/jpeg' | 'image/png' | 'image/webp' | 'application/pdf'
+  )[];
 }
 
 export interface MediaLibraryItemDto {
@@ -5109,7 +5111,9 @@ export interface MediaRuntimeDto {
   readonly storageProvider: 'local' | 's3';
   readonly storageLabel: string;
   readonly deploymentMaxUploadBytes: number;
-  readonly acceptedMimeTypes: readonly ('image/jpeg' | 'image/png' | 'image/webp' | 'application/pdf')[];
+  readonly acceptedMimeTypes: readonly (
+    'image/jpeg' | 'image/png' | 'image/webp' | 'application/pdf'
+  )[];
   readonly reviewMaxUploadBytes: number;
 }
 
@@ -6230,3 +6234,12 @@ export type {
 } from './inventory/replenishment.js';
 export * from './crm.js';
 export * from './wishlist-analytics.js';
+
+export type {
+  CartOwnerDto,
+  CartMutationOutcomeDto,
+  GuestCartViewDto,
+  GuestCartMutationPreconditionDto,
+  ClearGuestCartRequestDto,
+  CartSessionForgottenDto,
+} from './cart.js';

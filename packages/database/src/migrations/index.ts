@@ -1,3 +1,6 @@
+import * as cartIntegrity from './3215_cart_integrity.js';
+import * as cartCredentialRetirement from './3214_cart_credential_retirement.js';
+import * as cartFoundation from './3213_cart_foundation.js';
 import * as wishlistAnalytics from './3212_wishlist_analytics.js';
 import type { Migration, MigrationProvider } from 'kysely/migration';
 
@@ -128,6 +131,9 @@ export const migrations = {
   '3210_wishlist_share_lifecycle': wishlistShareLifecycle,
   '3211_wishlist_share_receipt_tombstones': wishlistShareReceiptTombstones,
   '3212_wishlist_analytics': wishlistAnalytics,
+  '3213_cart_foundation': cartFoundation,
+  '3214_cart_credential_retirement': cartCredentialRetirement,
+  '3215_cart_integrity': cartIntegrity,
 } satisfies Record<string, Migration>;
 
 export const migrationProvider: MigrationProvider = {

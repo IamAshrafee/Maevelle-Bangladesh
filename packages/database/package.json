@@ -4,6 +4,10 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./testing/cart": {
+      "types": "./src/testing/cart-fixture.ts",
+      "default": "./dist/src/testing/cart-fixture.js"
+    },
     ".": {
       "types": "./src/index.ts",
       "default": "./dist/src/index.js"

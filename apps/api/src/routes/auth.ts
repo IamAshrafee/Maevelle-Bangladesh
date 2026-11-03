@@ -222,8 +222,8 @@ export function registerAuthRoutes(
   registerCrmRoutes(app, database, auth);
   registerPricingRoutes(app, database, auth);
   registerPromotionRoutes(app, database, auth);
-  registerCartRoutes(app, database);
-  registerOrderRoutes(app, database, auth, config);
+  registerCartRoutes(app, database, config, resolveShopper);
+  registerOrderRoutes(app, database, auth, config, resolveShopper);
   registerPaymentRoutes(app, database, auth);
   registerFulfillmentDeliveryRoutes(app, database, auth, config);
   registerProcurementRoutes(app, database, auth);

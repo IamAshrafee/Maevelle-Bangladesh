@@ -190,7 +190,9 @@ export async function setCurrentVariantPrice(
     await sql`update pricing.price_definitions set status='ARCHIVED',updated_at=now(),version=version+1
       where organization_id=${input.organizationId} and variant_id=${input.variantId}::uuid
         and currency_code=${input.currency} and status='ACTIVE'
-        and effective_from<=now() and (effective_to is null or effective_to>now())`.execute(transaction);
+        and effective_from<=now() and (effective_to is null or effective_to>now())`.execute(
+      transaction,
+    );
     const result = await sql<{
       id: string;
       variant_id: string;
@@ -277,7 +279,23 @@ export async function resolveVariantPrice(
   db: Kysely<DatabaseSchema>,
   input: { organizationId: string; variantId: string; currency: string; at?: Date },
 ): Promise<ResolvedPrice | undefined> {
+  return (await resolveVariantPrices(db, { ...input, variantIds: [input.variantId] })).get(
+    input.variantId,
+  );
+}
+
+/** Same authoritative temporal selection as the single resolver, in one bounded query. */
+export async function resolveVariantPrices(
+  db: Kysely<DatabaseSchema>,
+  input: { organizationId: string; variantIds: readonly string[]; currency: string; at?: Date },
+): Promise<ReadonlyMap<string, ResolvedPrice>> {
   assertCurrency(input.currency);
+  if (input.variantIds.length === 0) return new Map();
+  if (input.variantIds.length > 100)
+    throw new PricingDomainError(
+      'VALIDATION_FAILED',
+      'Price evaluation is limited to 100 variants.',
+    );
   const at = input.at ?? new Date();
   const result = await sql<{
     id: string;
@@ -286,27 +304,28 @@ export async function resolveVariantPrice(
     compare_at_amount: string | null;
     currency_code: string;
   }>`
-    select id, variant_id, amount::text, compare_at_amount::text, currency_code
+    select distinct on (variant_id) id, variant_id, amount::text, compare_at_amount::text, currency_code
     from pricing.price_definitions
     where organization_id = ${input.organizationId}
-      and variant_id = ${input.variantId}
+      and variant_id = any(${[...input.variantIds]}::uuid[])
       and currency_code = ${input.currency}
       and status = 'ACTIVE'
       and effective_from <= ${at}
       and (effective_to is null or effective_to > ${at})
-    order by effective_from desc, id desc
-    limit 1
+    order by variant_id, effective_from desc, id desc
   `.execute(db);
-  const row = result.rows[0];
-  return row
-    ? {
+  return new Map(
+    result.rows.map((row) => [
+      row.variant_id,
+      {
         priceDefinitionId: row.id,
         variantId: row.variant_id,
         amount: row.amount,
         compareAtAmount: row.compare_at_amount,
         currency: row.currency_code,
-      }
-    : undefined;
+      },
+    ]),
+  );
 }
 
 export async function listVariantPrices(

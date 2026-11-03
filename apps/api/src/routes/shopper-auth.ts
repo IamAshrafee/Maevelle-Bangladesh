@@ -31,7 +31,7 @@ export function registerShopperAuthRoutes(
   config: RuntimeConfig,
   database: DatabaseClient,
   sendEmail: ShopperAuthEmailSender | null,
-): (request: FastifyRequest) => Promise<ShopperPrincipal | null> {
+): (request: FastifyRequest, strict?: boolean) => Promise<ShopperPrincipal | null> {
   if (!sendEmail) {
     app.all('/shopper-auth/*', async (_request, reply) =>
       reply.code(503).send({
@@ -41,24 +41,31 @@ export function registerShopperAuthRoutes(
     return async () => null;
   }
   const auth = createShopperAuth(config, database, sendEmail);
-  const resolveSession = async (request: FastifyRequest) => {
-    const session = await auth.api.getSession({ headers: headers(request) }).catch(() => null);
+  const resolveSession = async (request: FastifyRequest, strict = false) => {
+    const lookup = auth.api.getSession({ headers: headers(request) });
+    const session = strict ? await lookup : await lookup.catch(() => null);
     if (!session?.user?.id || !session.user.emailVerified) return null;
     const context = await resolveStorefrontContext(database.db, config.storefrontOrganizationCode);
-    if (!context) return null;
+    if (!context) {
+      if (strict) throw new Error('Shopper storefront context unavailable.');
+      return null;
+    }
     const principal = await resolveOrEnrollShopper(
       database.db,
       context.organizationId,
       session.user.id,
     );
-    if (!principal) return null;
+    if (!principal) {
+      if (strict) throw new Error('Verified shopper mapping unavailable.');
+      return null;
+    }
     const partition = createHmac('sha256', config.betterAuthSecret)
       .update(`shopper-client-partition:v1:${principal.organizationId}:${principal.accountId}`)
       .digest('base64url');
     return { principal, partition };
   };
-  const resolve = async (request: FastifyRequest): Promise<ShopperPrincipal | null> =>
-    (await resolveSession(request))?.principal ?? null;
+  const resolve = async (request: FastifyRequest, strict = false): Promise<ShopperPrincipal | null> =>
+    (await resolveSession(request, strict))?.principal ?? null;
 
   app.all('/shopper-auth/*', async (request, reply) => {
     const path = (request.raw.url?.split('?', 1)[0] ?? '').slice('/shopper-auth'.length);

@@ -13,14 +13,16 @@ export interface ApiRuntime {
 }
 
 export async function startApiServer(config: RuntimeConfig = loadConfig()): Promise<ApiRuntime> {
+  const logger = createLogger({ component: 'api', level: config.logLevel });
   const database = createDatabase({
     connectionString: config.databaseUrl,
     maxConnections: config.databasePoolMax,
+    onConnectionError: (code) => logger.error({ code }, 'Database connection lost'),
   });
   const app = buildApi({
     database,
     config,
-    logger: createLogger({ component: 'api', level: config.logLevel }),
+    logger,
   });
   let closePromise: Promise<void> | undefined;
 

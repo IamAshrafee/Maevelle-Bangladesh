@@ -195,6 +195,9 @@ export async function placeOrder(
     const cart = await getGuestCart(transaction, input.cartToken);
     if (cart.id !== checkout.cart_id)
       throw new OrderDomainError('NOT_FOUND', 'Checkout was not found.');
+    // Cart now redacts withdrawn merchandise; preserve the existing Checkout review outcome.
+    if (cart.lines.some((line) => !line.productHandle))
+      throw new OrderDomainError('CHECKOUT_CHANGED', 'One or more Cart items are no longer sellable.');
     if (cart.lines.some((line) => line.availability !== 'AVAILABLE' || !line.unitPrice))
       throw new OrderDomainError('OUT_OF_STOCK', 'One or more items are no longer available.');
     const contact =

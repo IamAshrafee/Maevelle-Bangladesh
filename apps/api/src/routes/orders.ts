@@ -52,7 +52,8 @@ import { findActiveAdminContext, isCheckoutEnabledForToken } from '@maevelle/dat
 
 import type { createAuth } from '../auth/auth.js';
 
-const cartCookie = 'maevelle_cart';
+import { checkoutCartContext } from './checkout-cart-context.js';
+import type { CartShopperResolver } from './cart-context.js';
 const checkoutCookie = 'maevelle_checkout';
 type Auth = ReturnType<typeof createAuth>;
 type OrderListQuery = NonNullable<Parameters<typeof listOrders>[2]>;
@@ -157,9 +158,11 @@ export function registerOrderRoutes(
   database: DatabaseClient,
   auth: Auth,
   config?: RuntimeConfig,
+  resolveShopper?: CartShopperResolver,
 ): void {
+  const cartTokens = checkoutCartContext(app, database, config, resolveShopper);
   app.post('/storefront/v1/checkouts', async (request, reply) => {
-    const cartToken = token(request.headers, cartCookie);
+    const cartToken = cartTokens.get(request);
     if (!cartToken)
       return reply.code(404).send({ error: { code: 'NOT_FOUND', message: 'Cart was not found.' } });
     try {
@@ -172,7 +175,7 @@ export function registerOrderRoutes(
   });
   app.get('/storefront/v1/checkouts/current', async (request, reply) => {
     const checkoutToken = token(request.headers, checkoutCookie);
-    const cartToken = token(request.headers, cartCookie);
+    const cartToken = cartTokens.get(request);
     if (!checkoutToken || !cartToken)
       return reply
         .code(404)
@@ -195,7 +198,7 @@ export function registerOrderRoutes(
     },
     async (request, reply) => {
       const checkoutToken = token(request.headers, checkoutCookie);
-      const cartToken = token(request.headers, cartCookie);
+      const cartToken = cartTokens.get(request);
       if (!checkoutToken || !cartToken)
         return reply
           .code(404)
@@ -236,7 +239,7 @@ export function registerOrderRoutes(
     },
     async (request, reply) => {
       const checkoutToken = token(request.headers, checkoutCookie);
-      const cartToken = token(request.headers, cartCookie);
+      const cartToken = cartTokens.get(request);
       if (!checkoutToken || !cartToken)
         return reply
           .code(404)
@@ -260,7 +263,7 @@ export function registerOrderRoutes(
   );
   app.get('/storefront/v1/checkouts/current/payment-methods', async (request, reply) => {
     const checkoutToken = token(request.headers, checkoutCookie);
-    const cartToken = token(request.headers, cartCookie);
+    const cartToken = cartTokens.get(request);
     if (!checkoutToken || !cartToken)
       return reply
         .code(404)
@@ -289,7 +292,7 @@ export function registerOrderRoutes(
     },
     async (request, reply) => {
       const checkoutToken = token(request.headers, checkoutCookie);
-      const cartToken = token(request.headers, cartCookie);
+      const cartToken = cartTokens.get(request);
       if (!checkoutToken || !cartToken)
         return reply
           .code(404)
@@ -314,7 +317,7 @@ export function registerOrderRoutes(
     { schema: { body: Type.Object({ version: Type.Integer({ minimum: 1 }) }) } },
     async (request, reply) => {
       const checkoutToken = token(request.headers, checkoutCookie);
-      const cartToken = token(request.headers, cartCookie);
+      const cartToken = cartTokens.get(request);
       if (!checkoutToken || !cartToken)
         return reply
           .code(404)
@@ -394,7 +397,7 @@ export function registerOrderRoutes(
     },
     async (request, reply) => {
       const checkoutToken = token(request.headers, checkoutCookie);
-      const cartToken = token(request.headers, cartCookie);
+      const cartToken = cartTokens.get(request);
       const key = request.headers['idempotency-key'];
       if (!checkoutToken || !cartToken)
         return reply

@@ -11,14 +11,16 @@ import { createWorker, type WorkerRuntime } from './worker.js';
 import { createResendEmailProvider } from './resend-email-provider.js';
 
 export async function startWorker(config: RuntimeConfig = loadConfig()): Promise<WorkerRuntime> {
+  const logger = createLogger({ component: 'worker', level: config.logLevel });
   const database = createDatabase({
     connectionString: config.databaseUrl,
     maxConnections: config.databasePoolMax,
+    onConnectionError: (code) => logger.error({ code }, 'Database connection lost'),
   });
   const worker = createWorker({
     database,
     heartbeatIntervalMs: config.workerHeartbeatIntervalMs,
-    logger: createLogger({ component: 'worker', level: config.logLevel }),
+    logger,
     encryptionKey: {
       id: 'runtime-auth-key',
       value: Buffer.from(config.authEncryptionKey, 'base64'),

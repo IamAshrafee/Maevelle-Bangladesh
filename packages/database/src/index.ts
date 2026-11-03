@@ -15,6 +15,8 @@ export type MaevelleTransaction = Transaction<DatabaseSchema>;
 export interface DatabaseOptions {
   readonly connectionString: string;
   readonly maxConnections?: number;
+  /** Safe operational code only; never a raw driver error or connection string. */
+  readonly onConnectionError?: (code: 'DATABASE_CONNECTION_LOST') => void;
 }
 
 export interface DatabaseClient {
@@ -46,6 +48,11 @@ export function createDatabase(options: DatabaseOptions): DatabaseClient {
     connectionString: options.connectionString,
     ...(options.maxConnections === undefined ? {} : { max: options.maxConnections }),
   });
+  // pg can emit between queries on a checked-out transaction. Consume that
+  // event; queries still reject and PostgreSQL rolls the transaction back.
+  const connectionLost = () => options.onConnectionError?.('DATABASE_CONNECTION_LOST');
+  pool.on('error', connectionLost);
+  pool.on('connect', (client) => { client.on('error', connectionLost); });
   const db = new Kysely<DatabaseSchema>({
     dialect: new PostgresDialect({ pool }),
   });

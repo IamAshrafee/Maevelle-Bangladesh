@@ -835,6 +835,7 @@ export async function evaluatePromotions(
     order by promotion.priority desc, promotion.id, revision.id, coupon.id
   `.execute(db);
   const applied: PromotionCalculation[] = [];
+  const allocated = new Map<string, bigint>();
   let exclusiveApplied = false;
   for (const promotion of promotions.rows) {
     if (exclusiveApplied) continue;
@@ -856,11 +857,14 @@ export async function evaluatePromotions(
           (target.category_id !== null && line.categoryIds.includes(target.category_id)),
       );
     });
-    const eligibleGross = eligible.reduce((sum, line) => sum + toScaled(line.gross), 0n);
+    const remainingLines = eligible.map((line) => ({ ...line,
+      gross: fromScaled(toScaled(line.gross) - (allocated.get(line.lineId) ?? 0n)),
+    }));
+    const eligibleGross = remainingLines.reduce((sum, line) => sum + toScaled(line.gross), 0n);
     if (eligibleGross === 0n) continue;
     if (
       promotion.minimum_merchandise_subtotal &&
-      eligibleGross < toScaled(promotion.minimum_merchandise_subtotal)
+      eligible.reduce((sum, line) => sum + toScaled(line.gross), 0n) < toScaled(promotion.minimum_merchandise_subtotal)
     ) {
       continue;
     }
@@ -869,7 +873,9 @@ export async function evaluatePromotions(
       promotion.benefit_type === 'PERCENTAGE_DISCOUNT'
         ? (eligibleGross * benefit) / (100n * moneyScale)
         : benefit;
-    const allocations = allocateDiscount(fromScaled(rawDiscount), eligible);
+    const allocations = allocateDiscount(fromScaled(rawDiscount), remainingLines);
+    for (const allocation of allocations)
+      allocated.set(allocation.lineId, (allocated.get(allocation.lineId) ?? 0n) + toScaled(allocation.amount));
     const discount = allocations.reduce((sum, allocation) => sum + toScaled(allocation.amount), 0n);
     if (discount === 0n) continue;
     applied.push({

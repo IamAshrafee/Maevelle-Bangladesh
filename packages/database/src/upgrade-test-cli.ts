@@ -65,18 +65,26 @@ try {
     .filter((name) => name > baselineLast)
     .sort();
   assert.deepEqual(pending, expectedPending);
+  for (const name of Object.keys(upgradeCases)) {
+    assert.ok(pending.includes(name), `Upgrade fixture ${name} has no pending migration`);
+  }
+  const executed: string[] = [];
+  // Each fixture must see the immediately preceding schema. Later migrations
+  // legitimately depend on tables introduced earlier in this same upgrade.
   for (const name of pending) {
     const upgradeCase = upgradeCases[name];
     assert.ok(upgradeCase, `Missing upgrade fixture for ${name}`);
     await upgradeCase.before(database.db, organizationId);
+    const result = await migrator.migrateTo(name);
+    if (result.error) throw result.error;
+    executed.push(
+      ...(result.results ?? [])
+        .filter((entry) => entry.status === 'Success' && entry.direction === 'Up')
+        .map((entry) => entry.migrationName),
+    );
+    await upgradeCase.after(database.db, organizationId);
   }
-  for (const name of Object.keys(upgradeCases)) {
-    assert.ok(pending.includes(name), `Upgrade fixture ${name} has no pending migration`);
-  }
-
-  const result = await runMigrations(database.db);
-  assert.deepEqual(result.executed, pending);
-  for (const name of pending) await upgradeCases[name]!.after(database.db, organizationId);
+  assert.deepEqual(executed, pending);
   const preserved = await sql<{ count: string }>`
     select count(*)::text as count from platform.organizations o
       join platform.number_sequences n on n.organization_id = o.id
