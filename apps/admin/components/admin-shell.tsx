@@ -312,6 +312,7 @@ const navigation: readonly NavGroup[] = [
         href: '/analytics',
         icon: ChartNoAxesCombined,
         capability: 'analytics.view',
+        keywords: 'analytics reports business intelligence wishlist saves demand sharing products cohorts',
       },
       {
         label: 'Costing & margins',
@@ -893,7 +894,7 @@ export function AdminShell({ children }: { children: ReactNode }) {
       <div className="flex-1 flex flex-col min-w-0 pb-16 md:pb-0">
         {/* Sticky Chrome Topbar */}
         <header className="sticky top-0 z-30 h-14 flex items-center justify-between gap-3 px-4 sm:px-6 border-b border-border/80 bg-background/85 backdrop-blur-md transition-colors">
-          <div className="flex items-center gap-2">
+          <div className="flex min-w-0 flex-1 items-center gap-2">
             <button
               type="button"
               className="md:hidden p-2 text-muted-foreground hover:text-foreground rounded-lg hover:bg-muted"
@@ -907,7 +908,7 @@ export function AdminShell({ children }: { children: ReactNode }) {
             <button
               type="button"
               onClick={() => setPaletteOpen(true)}
-              className="flex items-center gap-2 h-9 w-48 sm:w-72 lg:w-96 rounded-full border border-border/80 bg-card/60 hover:bg-card px-3.5 text-xs text-muted-foreground hover:text-foreground hover:border-primary/40 shadow-2xs transition-colors cursor-pointer"
+              className="flex min-w-0 items-center gap-2 h-9 w-48 sm:w-72 lg:w-96 rounded-full border border-border/80 bg-card/60 hover:bg-card px-3.5 text-xs text-muted-foreground hover:text-foreground hover:border-primary/40 shadow-2xs transition-colors cursor-pointer"
             >
               <Search className="size-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
               <span className="flex-1 text-left truncate">Search orders, customers, stock…</span>
@@ -918,7 +919,7 @@ export function AdminShell({ children }: { children: ReactNode }) {
           </div>
 
           {/* Topbar Right Actions */}
-          <div className="flex items-center gap-2 sm:gap-3">
+          <div className="flex shrink-0 items-center gap-2 sm:gap-3">
             <NotificationBell />
 
             <div className="hidden sm:flex flex-col items-end leading-none border-l border-border pl-3">

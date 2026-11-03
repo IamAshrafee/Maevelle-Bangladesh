@@ -3,32 +3,24 @@
 import * as React from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import {
-  BarChart3,
-  Bell,
   Boxes,
   Building2,
-  Calendar,
   CreditCard,
-  Download,
   Eye,
-  FolderTree,
-  Globe,
-  HeartHandshake,
+  Heart,
   LayoutDashboard,
   Megaphone,
   PackageSearch,
   RotateCcw,
   Settings,
   ShoppingBag,
-  Sparkles,
   Truck,
   Users,
 } from 'lucide-react';
 
-import { useAdminCapability } from '@/components/admin-capabilities';
-import { Button } from '@/components/ui/button';
+import { useAdminContext } from '@/components/admin-capabilities';
 import { RefreshButton } from '@/components/ui/refresh-button';
-import { AdminPage, PageActions, PageHeader, PageSection } from '@/components/ui/page-shell';
+import { AdminPage, PageHeader } from '@/components/ui/page-shell';
 import { AnalyticsFilterToolbar } from './analytics-filter-toolbar';
 import { CustomersView } from './views/customers-view';
 import { DeliveryView } from './views/delivery-view';
@@ -42,9 +34,9 @@ import { SalesView } from './views/sales-view';
 import { SettingsView } from './views/settings-view';
 import { StorefrontView } from './views/storefront-view';
 import { SupplyView } from './views/supply-view';
+import { WishlistView } from './views/wishlist-view';
 import {
   getDateRangeFromPreset,
-  type AnalyticsFreshnessDto,
   type AnalyticsViewKey,
   type DateRangePreset,
   type DateRangeSelection,
@@ -62,10 +54,16 @@ const VIEW_NAVIGATION: readonly {
   { id: 'products', label: 'Products & SKUs', icon: PackageSearch },
   { id: 'customers', label: 'Customers & LTV', icon: Users },
   { id: 'inventory', label: 'Inventory', icon: Boxes },
-  { id: 'finance', label: 'Finance & Profitability', icon: CreditCard, capability: 'analytics.financial.view' },
+  {
+    id: 'finance',
+    label: 'Finance & Profitability',
+    icon: CreditCard,
+    capability: 'analytics.financial.view',
+  },
   { id: 'supply', label: 'Supply & Procurement', icon: Building2 },
   { id: 'delivery', label: 'Delivery & Logistics', icon: Truck },
   { id: 'storefront', label: 'Storefront Funnel', icon: Eye },
+  { id: 'wishlist', label: 'Wishlist & Demand', icon: Heart, capability: 'analytics.view' },
   { id: 'marketing', label: 'Marketing & UTM', icon: Megaphone },
   { id: 'operations', label: 'Returns & Ops', icon: RotateCcw },
   { id: 'settings', label: 'Data Status & Settings', icon: Settings },
@@ -73,8 +71,21 @@ const VIEW_NAVIGATION: readonly {
 
 export function AnalyticsWorkspace() {
   const router = useRouter();
+  const adminContext = useAdminContext();
+  const [wishlistRefreshVersion, setWishlistRefreshVersion] = React.useState(0);
   const pathname = usePathname();
   const searchParams = useSearchParams();
+
+  const ownerKey = `${adminContext.actorId}:${adminContext.organizationId}`;
+  const [reportTimezone, setReportTimezone] = React.useState({
+    owner: ownerKey,
+    timezone: 'Asia/Dhaka',
+  });
+  const timezone = reportTimezone.owner === ownerKey ? reportTimezone.timezone : 'Asia/Dhaka';
+  const handleTimezoneChange = React.useCallback(
+    (value: string) => setReportTimezone({ owner: ownerKey, timezone: value }),
+    [ownerKey],
+  );
 
   // 1. URL State Parsing
   const activeView: AnalyticsViewKey = React.useMemo(() => {
@@ -91,7 +102,7 @@ export function AnalyticsWorkspace() {
     const currParam = searchParams.get('currency');
 
     if (presetParam && presetParam !== 'CUSTOM') {
-      const { from, to } = getDateRangeFromPreset(presetParam);
+      const { from, to } = getDateRangeFromPreset(presetParam, timezone);
       return {
         preset: presetParam,
         from: fromParam ?? from,
@@ -111,7 +122,7 @@ export function AnalyticsWorkspace() {
       };
     }
 
-    const { from, to } = getDateRangeFromPreset('LAST_30_DAYS');
+    const { from, to } = getDateRangeFromPreset('LAST_30_DAYS', timezone);
     return {
       preset: 'LAST_30_DAYS',
       from,
@@ -119,7 +130,7 @@ export function AnalyticsWorkspace() {
       granularity: granParam ?? 'DAY',
       currency: currParam ?? 'BDT',
     };
-  }, [searchParams]);
+  }, [searchParams, timezone]);
 
   // 2. URL State Updater
   const updateUrl = React.useCallback(
@@ -154,13 +165,21 @@ export function AnalyticsWorkspace() {
         title="Analytics & Business Intelligence"
         description="Comprehensive commercial reporting, period-over-period comparisons, and cross-domain operational intelligence. Derived from authoritative transactional source facts."
         actions={
-          <RefreshButton tooltip="Refresh analytics data" />
+          <RefreshButton
+            tooltip="Refresh analytics data"
+            onRefresh={() => {
+              if (activeView === 'wishlist') setWishlistRefreshVersion((value) => value + 1);
+              else router.refresh();
+            }}
+          />
         }
       />
 
       {/* Local Workspace Subnavigation */}
       <div className="flex items-center gap-1.5 overflow-x-auto pb-1 -mt-2 border-b border-border/70 scrollbar-none">
-        {VIEW_NAVIGATION.map((item) => {
+        {VIEW_NAVIGATION.filter(
+          (item) => !item.capability || adminContext.capabilities.includes(item.capability),
+        ).map((item) => {
           const isActive = activeView === item.id;
           const Icon = item.icon;
           return (
@@ -171,7 +190,7 @@ export function AnalyticsWorkspace() {
               className={cn(
                 'inline-flex items-center gap-2 rounded-lg px-3 py-2 text-xs sm:text-sm font-medium whitespace-nowrap transition-colors duration-150 cursor-pointer select-none',
                 isActive
-                  ? 'bg-primary text-primary-foreground font-semibold shadow-2xs'
+                  ? 'bg-primary text-foreground dark:text-primary-foreground font-semibold shadow-2xs'
                   : 'text-muted-foreground hover:bg-muted/60 hover:text-foreground',
               )}
             >
@@ -184,6 +203,7 @@ export function AnalyticsWorkspace() {
 
       {/* Global Filter Toolbar */}
       <AnalyticsFilterToolbar
+        timezone={activeView === 'wishlist' ? timezone : 'Asia/Dhaka'}
         selection={selection}
         onChange={handleSelectionChange}
         showGranularity={activeView === 'overview' || activeView === 'sales'}
@@ -203,6 +223,21 @@ export function AnalyticsWorkspace() {
         {activeView === 'supply' && <SupplyView selection={selection} />}
         {activeView === 'delivery' && <DeliveryView selection={selection} />}
         {activeView === 'storefront' && <StorefrontView selection={selection} />}
+        {activeView === 'wishlist' && (
+          <WishlistView
+            key={`${adminContext.actorId}:${adminContext.organizationId}`}
+            refreshVersion={wishlistRefreshVersion}
+            onTimezoneChange={handleTimezoneChange}
+            selection={selection}
+            onSwitchPreset={(preset) =>
+              handleSelectionChange({
+                ...selection,
+                preset,
+                ...getDateRangeFromPreset(preset, timezone),
+              })
+            }
+          />
+        )}
         {activeView === 'marketing' && <MarketingView selection={selection} />}
         {activeView === 'operations' && <OperationsView selection={selection} />}
         {activeView === 'settings' && <SettingsView selection={selection} />}

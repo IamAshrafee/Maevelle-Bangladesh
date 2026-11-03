@@ -32,6 +32,16 @@ import type {
   SalesReportTotalsDto,
   StorefrontReportTotalsDto,
   SupplyReportTotalsDto,
+  WishlistAnalyticsMetadataDto,
+  WishlistAnalyticsPageDto,
+  WishlistAnalyticsQueryDto,
+  WishlistAnalyticsResponseDto,
+  WishlistCategoryInterestDto,
+  WishlistOperationsDto,
+  WishlistProductInterestDto,
+  WishlistSharingDto,
+  WishlistSummaryDto,
+  WishlistTrendDto,
 } from '@maevelle/contracts';
 
 export type {
@@ -68,6 +78,16 @@ export type {
   SalesReportTotalsDto,
   StorefrontReportTotalsDto,
   SupplyReportTotalsDto,
+  WishlistAnalyticsMetadataDto,
+  WishlistAnalyticsPageDto,
+  WishlistAnalyticsQueryDto,
+  WishlistAnalyticsResponseDto,
+  WishlistCategoryInterestDto,
+  WishlistOperationsDto,
+  WishlistProductInterestDto,
+  WishlistSharingDto,
+  WishlistSummaryDto,
+  WishlistTrendDto,
 };
 
 export type AnalyticsViewKey =
@@ -82,13 +102,15 @@ export type AnalyticsViewKey =
   | 'storefront'
   | 'marketing'
   | 'operations'
-  | 'settings';
+  | 'settings'
+  | 'wishlist';
 
 export type DateRangePreset =
   | 'TODAY'
   | 'YESTERDAY'
   | 'LAST_7_DAYS'
   | 'LAST_30_DAYS'
+  | 'LAST_90_DAYS'
   | 'THIS_MONTH'
   | 'LAST_MONTH'
   | 'THIS_YEAR'
@@ -134,47 +156,64 @@ export function toIsoDate(date: Date): string {
   return `${year}-${month}-${day}`;
 }
 
-export function getDateRangeFromPreset(preset: DateRangePreset): { from: string; to: string } {
-  const now = new Date();
-  const today = toIsoDate(now);
+export function getDateRangeFromPreset(
+  preset: DateRangePreset,
+  timezone = 'Asia/Dhaka',
+  instant = new Date(),
+): { from: string; to: string } {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: timezone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(instant);
+  const part = (name: string) => Number(parts.find((value) => value.type === name)!.value);
+  const now = new Date(Date.UTC(part('year'), part('month') - 1, part('day')));
+  const iso = (date: Date) => date.toISOString().slice(0, 10);
+  const today = iso(now);
 
   switch (preset) {
     case 'TODAY':
       return { from: today, to: today };
     case 'YESTERDAY': {
       const yesterday = new Date(now);
-      yesterday.setDate(now.getDate() - 1);
-      const str = toIsoDate(yesterday);
+      yesterday.setUTCDate(now.getUTCDate() - 1);
+      const str = iso(yesterday);
       return { from: str, to: str };
     }
     case 'LAST_7_DAYS': {
       const start = new Date(now);
-      start.setDate(now.getDate() - 6);
-      return { from: toIsoDate(start), to: today };
+      start.setUTCDate(now.getUTCDate() - 6);
+      return { from: iso(start), to: today };
     }
     case 'LAST_30_DAYS': {
       const start = new Date(now);
-      start.setDate(now.getDate() - 29);
-      return { from: toIsoDate(start), to: today };
+      start.setUTCDate(now.getUTCDate() - 29);
+      return { from: iso(start), to: today };
+    }
+    case 'LAST_90_DAYS': {
+      const start = new Date(now);
+      start.setUTCDate(now.getUTCDate() - 89);
+      return { from: iso(start), to: today };
     }
     case 'THIS_MONTH': {
-      const start = new Date(now.getFullYear(), now.getMonth(), 1);
-      return { from: toIsoDate(start), to: today };
+      const start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+      return { from: iso(start), to: today };
     }
     case 'LAST_MONTH': {
-      const start = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-      const end = new Date(now.getFullYear(), now.getMonth(), 0);
-      return { from: toIsoDate(start), to: toIsoDate(end) };
+      const start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, 1));
+      const end = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 0));
+      return { from: iso(start), to: iso(end) };
     }
     case 'THIS_YEAR': {
-      const start = new Date(now.getFullYear(), 0, 1);
-      return { from: toIsoDate(start), to: today };
+      const start = new Date(Date.UTC(now.getUTCFullYear(), 0, 1));
+      return { from: iso(start), to: today };
     }
     case 'CUSTOM':
     default: {
       const start = new Date(now);
-      start.setDate(now.getDate() - 29);
-      return { from: toIsoDate(start), to: today };
+      start.setUTCDate(now.getUTCDate() - 29);
+      return { from: iso(start), to: today };
     }
   }
 }

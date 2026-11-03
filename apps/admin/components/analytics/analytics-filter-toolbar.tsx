@@ -1,15 +1,7 @@
 'use client';
 
 import * as React from 'react';
-import {
-  Calendar,
-  Clock,
-  Download,
-  Filter,
-  Globe,
-  RotateCcw,
-  Sparkles,
-} from 'lucide-react';
+import { Calendar, Clock, Download, Globe, RotateCcw } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { NativeSelect } from '@/components/ui/native-select';
@@ -39,6 +31,7 @@ const PRESET_LABELS: Record<DateRangePreset, string> = {
   YESTERDAY: 'Yesterday',
   LAST_7_DAYS: 'Last 7 days',
   LAST_30_DAYS: 'Last 30 days',
+  LAST_90_DAYS: 'Last 90 days',
   THIS_MONTH: 'This month',
   LAST_MONTH: 'Last month',
   THIS_YEAR: 'This year',
@@ -67,7 +60,7 @@ export function AnalyticsFilterToolbar({
       return;
     }
     setCustomOpen(false);
-    const { from, to } = getDateRangeFromPreset(preset);
+    const { from, to } = getDateRangeFromPreset(preset, timezone);
     onChange({
       ...selection,
       preset,
@@ -92,7 +85,7 @@ export function AnalyticsFilterToolbar({
   };
 
   const handleReset = () => {
-    const { from, to } = getDateRangeFromPreset('LAST_30_DAYS');
+    const { from, to } = getDateRangeFromPreset('LAST_30_DAYS', timezone);
     setCustomOpen(false);
     onChange({
       preset: 'LAST_30_DAYS',
@@ -133,9 +126,7 @@ export function AnalyticsFilterToolbar({
             <div className="w-28 sm:w-32">
               <NativeSelect
                 value={selection.granularity}
-                onChange={(e) =>
-                  handleGranularityChange(e.target.value as AnalyticsGranularityDto)
-                }
+                onChange={(e) => handleGranularityChange(e.target.value as AnalyticsGranularityDto)}
                 className="h-9 text-xs sm:text-sm bg-background"
               >
                 <option value="DAY">Daily</option>
@@ -169,16 +160,23 @@ export function AnalyticsFilterToolbar({
         <div className="flex flex-wrap items-center gap-2">
           {/* Timezone pill */}
           <Tooltip>
-            <TooltipTrigger render={<div className="inline-flex items-center gap-1.5 rounded-md border border-border/70 bg-muted/30 px-2.5 py-1 text-xs text-muted-foreground select-none cursor-help" />}>
+            <TooltipTrigger
+              render={
+                <button
+                  type="button"
+                  aria-label={`Operational timezone: ${timezone}`}
+                  className="inline-flex items-center gap-1.5 rounded-md border border-border/70 bg-muted/30 px-2.5 py-1 text-xs text-muted-foreground select-none cursor-help"
+                />
+              }
+            >
               <Globe className="size-3.5 text-primary" />
               <span className="font-mono font-medium">{timezone}</span>
-              <span className="text-[10px] text-muted-foreground/80">(UTC+6)</span>
             </TooltipTrigger>
             <TooltipContent side="top" className="max-w-xs text-xs">
               <p className="font-semibold text-foreground">Operational Timezone</p>
               <p className="mt-0.5 text-muted-foreground">
-                All daily and weekly buckets align to Bangladesh Standard Time (UTC+6). Transactions
-                around midnight are counted by their local business date.
+                All daily and weekly buckets align to {timezone}. Transactions around midnight are
+                counted by their local business date.
               </p>
             </TooltipContent>
           </Tooltip>
@@ -247,7 +245,10 @@ export function AnalyticsFilterToolbar({
             />
           </div>
           <span className="text-[11px] text-muted-foreground">
-            Inclusive dates evaluated as <code className="font-mono text-foreground font-semibold">[{selection.from} to {selection.to}]</code>
+            Inclusive dates evaluated as{' '}
+            <code className="font-mono text-foreground font-semibold">
+              [{selection.from} to {selection.to}]
+            </code>
           </span>
         </div>
       ) : null}
