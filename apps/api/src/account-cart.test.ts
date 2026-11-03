@@ -247,6 +247,22 @@ it('establishes one persistent account Cart, scopes edits, and rejects stale dev
   expect(creations.map((response) => response.json().data.id)).toEqual([original.id, original.id]);
   expect(original.expiresAt).toBeNull();
   expect(creations[0]!.headers['set-cookie']).toBeUndefined();
+  const mapping = await sql<{ owner_account_id: string; owner_user_id: string }>`
+    select owner_account_id,owner_user_id from cart.carts where id=${original.id}
+  `.execute(isolation.database.db);
+  const owner = mapping.rows[0]!;
+  let discoveryStatus: number | undefined;
+  await isolation.database.db.transaction().execute(async (tx) => {
+    // Model the shared authority locks held by a concurrent Wishlist operation.
+    await sql`select id from customers.customer_accounts where id=${owner.owner_account_id} for share`.execute(
+      tx,
+    );
+    await sql`select id from iam.users where id=${owner.owner_user_id} for share`.execute(tx);
+    void inject('GET', accountBase + '/merge/guests', a).then((response) => {
+      discoveryStatus = response.statusCode;
+    });
+    await vi.waitFor(() => expect(discoveryStatus).toBe(200), { timeout: 1000, interval: 20 });
+  });
   const other = await inject('POST', accountBase, b, {});
   expect(other.statusCode, other.body).toBe(200);
   expect(other.json().data.id).not.toBe(original.id);

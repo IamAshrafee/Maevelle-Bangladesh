@@ -86,9 +86,18 @@ function OpenCartDrawer({ onClose }: { onClose: () => void }) {
             </div>
           ) : (
             (cart || snapshot.mode === 'empty') && (
-              <p className="py-5 text-sm text-on-surface-variant">
-                There are no items in your bag.
-              </p>
+              <div className="space-y-3 py-6 text-center">
+                <p className="text-sm text-on-surface-variant">
+                  There are no items in your bag.
+                </p>
+                <Link
+                  className="inline-flex min-h-12 items-center justify-center rounded-xl border border-border-subtle px-4 text-sm font-semibold text-primary transition-[background-color,transform] duration-150 active:scale-98 hover:bg-surface-container"
+                  href="/categories"
+                  onClick={onClose}
+                >
+                  Continue shopping
+                </Link>
+              </div>
             )
           )}
         </div>
@@ -100,7 +109,7 @@ function OpenCartDrawer({ onClose }: { onClose: () => void }) {
             </p>
           )}
           <Link
-            className="flex min-h-12 items-center justify-center rounded-xl bg-primary px-4 font-semibold text-white hover:bg-primary-hover"
+            className="flex min-h-12 items-center justify-center rounded-xl bg-primary px-4 font-semibold text-on-primary transition-[background-color,transform] duration-150 active:scale-98 hover:bg-primary-hover"
             href="/cart"
             onClick={onClose}
           >

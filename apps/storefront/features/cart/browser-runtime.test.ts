@@ -228,7 +228,9 @@ it('rechecks verified authority after a sibling tab disappears during sign-in', 
     const account = { ...view, expiresAt: null };
     mocks.session.mockResolvedValue('A'.repeat(43));
     mocks.createAccountApi.mockReturnValue({ get: vi.fn(async () => account) });
-    await vi.advanceTimersByTimeAsync(25_000);
+    await vi.advanceTimersByTimeAsync(15_000);
+    dispatchEvent(event);
+    await vi.advanceTimersByTimeAsync(5_000);
     expect(cartStore.getSnapshot().confirmed).toEqual(account);
   } finally {
     stop();
@@ -278,6 +280,28 @@ it('keeps a storage-denied merge in memory for the original account and reports 
     expect(cartStore.getSnapshot().recoveryPersisted).toBe(false);
     await cartStore.retryPending();
     expect(mutate.mock.calls[1]![0]).toEqual(submitted);
+  } finally {
+    stop();
+  }
+});
+
+it('keeps a local auth transition fenced when a sibling announces completion', async () => {
+  const { cartStore } = await import('./browser-runtime');
+  const stop = cartStore.subscribe(vi.fn());
+  try {
+    await cartStore.refresh();
+    cartStore.ownerTransition('begin');
+    dispatchEvent(
+      Object.assign(new Event('storage'), {
+        key: 'maevelle_cart_identity_v1',
+        newValue: JSON.stringify({ phase: 'settled', signedOut: true, nonce: 'other-tab' }),
+      }),
+    );
+    await vi.advanceTimersByTimeAsync(25_000);
+    expect(cartStore.getSnapshot().confirmed).toBeNull();
+    cartStore.ownerTransition('settled');
+    await cartStore.refresh();
+    expect(cartStore.getSnapshot().confirmed).toEqual(view);
   } finally {
     stop();
   }

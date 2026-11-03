@@ -18,6 +18,7 @@ export function CartVariantEditor({
 }) {
   const inputId = useId();
   const select = useRef<HTMLSelectElement>(null);
+  const closeButton = useRef<HTMLButtonElement>(null);
   const trigger = useRef<HTMLButtonElement>(null);
   const request = useRef(0);
   const restoreFocus = useRef(false);
@@ -33,7 +34,7 @@ export function CartVariantEditor({
   const stale = observedVersion !== cart.version;
 
   useEffect(() => {
-    if (phase === 'ready') select.current?.focus();
+    if (phase !== 'closed') (select.current ?? closeButton.current)?.focus();
     if (phase === 'closed' && restoreFocus.current) {
       restoreFocus.current = false;
       trigger.current?.focus();
@@ -89,6 +90,13 @@ export function CartVariantEditor({
     <form
       className="space-y-3 rounded-xl bg-surface-container-low p-3"
       onSubmit={submit}
+      onKeyDown={(event) => {
+        if (event.key === 'Escape' && !saving) {
+          event.preventDefault();
+          event.stopPropagation();
+          close();
+        }
+      }}
       aria-busy={phase === 'loading' || saving}
     >
       {phase === 'loading' && <p role="status">Loading current selections…</p>}
@@ -149,7 +157,7 @@ export function CartVariantEditor({
             Check selections
           </Button>
         )}
-        <Button variant="ghost" disabled={saving} onClick={close}>
+        <Button ref={closeButton} variant="ghost" disabled={saving} onClick={close}>
           Close editor
         </Button>
       </div>

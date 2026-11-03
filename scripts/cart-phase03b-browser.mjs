@@ -8,12 +8,40 @@ if (!handle || !/^cart-[a-z0-9-]+-choices$/.test(handle))
 const base = 'http://localhost:3000';
 const current = '/api/storefront/v1/carts/account/current';
 const chromium = await browser(9228);
+const discovery = [];
+const pendingDiagnostics = [];
+const stopDiscovery = chromium.listen(({ method, params, sessionId }) => {
+  if (method !== 'Network.responseReceived') return;
+  const url = new URL(params.response.url);
+  if (url.pathname !== '/api/storefront/v1/carts/account/merge/guests') return;
+  const entry = { status: params.response.status };
+  discovery.push(entry);
+  if (entry.status === 503) {
+    pendingDiagnostics.push(
+      chromium
+        .send(
+          'Network.getResponseBody',
+          {
+            requestId: params.requestId,
+          },
+          sessionId,
+        )
+        .then(({ body }) => {
+          const { error } = JSON.parse(body);
+          Object.assign(entry, { code: error?.code, requestId: error?.requestId });
+        })
+        .catch(() => undefined),
+    );
+  }
+});
 const contexts = [];
+const extended = process.env.CART_03D_EXTENDED === '1';
+let restoreZoom;
 
-async function newDevice() {
-  const { browserContextId } = await chromium.send('Target.createBrowserContext');
-  contexts.push(browserContextId);
-  const tab = await chromium.tab('about:blank', { browserContextId });
+async function newDevice(useDefault = false) {
+  const context = useDefault ? {} : await chromium.send('Target.createBrowserContext');
+  if (context.browserContextId) contexts.push(context.browserContextId);
+  const tab = await chromium.tab('about:blank', context);
   await tab.call('Emulation.setDeviceMetricsOverride', {
     width: 390,
     height: 844,
@@ -39,6 +67,16 @@ async function click(tab, expression, label) {
   await tab.evaluate(`${expression}.click()`);
 }
 const clickButton = (tab, label) => click(tab, button(label), label);
+
+async function inspectFirstGuest(tab) {
+  const first = button('Review guest bag 1');
+  const retry = button('Check for guest bags again');
+  await until('guest discovery response', () => tab.evaluate(`Boolean(${first} || ${retry})`));
+  if (await tab.evaluate(`Boolean(${retry})`)) {
+    await click(tab, retry, 'Retry guest discovery');
+  }
+  await click(tab, first, 'Review guest bag 1');
+}
 
 async function signIn(tab, name = 'a') {
   await tab.navigate(base + '/account');
@@ -90,7 +128,7 @@ async function recordCommit(tab, loseResponse) {
 }
 
 try {
-  const main = await newDevice();
+  const main = await newDevice(extended);
   const device = await newDevice();
   await signIn(device);
   assert.equal(await read(device), undefined);
@@ -133,9 +171,25 @@ try {
   ).length;
   assert.equal(guestReads, 0);
   assert.equal((await read(main)).id, original.id);
+  if (extended) {
+    const sibling = await chromium.tab(base + '/account');
+    await sibling.evaluate(`(() => {
+      const send = window.fetch.bind(window);
+      window.fetch = (url, options) => String(url).endsWith('/shopper-auth/sign-out')
+        ? new Promise(() => {}) : send(url, options);
+    })()`);
+    await clickButton(sibling, 'Sign out');
+    await until(
+      'sibling auth hold hides the account Bag',
+      async () => !(await text(main, 'Items in bag · 1')),
+    );
+    await sibling.close();
+    await wait(() => text(main, 'Items in bag · 1'), 26_000);
+    assert.equal((await read(main)).id, original.id);
+  }
   await main.navigate(base + '/cart/merge');
   await until('two independently issued guest slots', () => text(main, 'Review guest bag 2'));
-  await clickButton(main, 'Review guest bag 1');
+  await inspectFirstGuest(main);
   await until('reviewed collision', () => text(main, '1 in account bag + 1 in guest bag = 2'));
   assert.equal((await read(main)).version, original.version);
   await click(
@@ -153,7 +207,7 @@ try {
     `[...document.querySelectorAll('main a')].find(e=>e.textContent.trim()==='Review guest bags')`,
     'Review guest bags',
   );
-  await clickButton(main, 'Review guest bag 1');
+  await inspectFirstGuest(main);
   await until('review ready again', () => text(main, 'Your combined bag'));
   const changed =
     await device.evaluate(`fetch(${JSON.stringify(current + '/lines/' + original.lines[0].id)}, {
@@ -165,7 +219,7 @@ try {
   await until('stale review requires new consent', () =>
     text(main, 'Review the latest bags before trying again.'),
   );
-  await clickButton(main, 'Review guest bag 1');
+  await inspectFirstGuest(main);
   await until('new collision proposal', () => text(main, '2 in account bag + 1 in guest bag = 3'));
   for (const width of [320, 390, 768, 1440]) {
     await main.call('Emulation.setDeviceMetricsOverride', {
@@ -226,7 +280,7 @@ try {
   assert.equal(await read(main), undefined);
   assert.equal((await read(device)).id, original.id);
   await main.navigate(base + '/cart/merge');
-  await clickButton(main, 'Review guest bag 1');
+  await inspectFirstGuest(main);
   await until('explicitly established empty account to review guest selections', () =>
     text(main, 'Your combined bag'),
   );
@@ -242,9 +296,160 @@ try {
       'document.body.innerText.includes("Sign in again to access your account bag.") && !document.body.innerText.includes("Your combined bag")',
     ),
   );
+  let extendedEvidence;
+  if (extended) {
+    const seeded = await fetch('http://127.0.0.1:3002/__fixture/long-review', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ cartId: secondGuest.id }),
+    });
+    assert.equal(seeded.status, 200);
+    await signIn(main, 'b');
+    await main.call('Emulation.clearDeviceMetricsOverride');
+    await main.call('Emulation.setEmulatedMedia', {
+      features: [{ name: 'prefers-reduced-motion', value: 'reduce' }],
+    });
+    const settings = await chromium.tab('chrome://settings/appearance');
+    const zoom = `(() => {
+      const find = root => root.querySelector('#zoomLevel') ||
+        [...root.querySelectorAll('*')].map(node=>node.shadowRoot).filter(Boolean).map(find).find(Boolean);
+      return find(document);
+    })()`;
+    await until('Chrome native zoom selector', () =>
+      settings.evaluate(`Boolean(${zoom}?.options?.length)`),
+    );
+    const initialZoom = await settings.evaluate(`${zoom}.value`);
+    restoreZoom = async () => {
+      const reset = await chromium.tab('chrome://settings/appearance');
+      await until('Chrome zoom reset', () => reset.evaluate(`Boolean(${zoom}?.options?.length)`));
+      await reset.evaluate(`(() => {
+        const control = ${zoom};
+        control.value = ${JSON.stringify(initialZoom)};
+        control.dispatchEvent(new Event('change',{bubbles:true,composed:true}));
+      })()`);
+      await reset.close();
+    };
+    const zoomResults = [];
+    for (const ratio of [2, 4]) {
+      await settings.evaluate(`(() => {
+        const control = ${zoom};
+        control.value = [...control.options].find(option=>option.textContent.trim()==='${ratio * 100}%').value;
+        control.dispatchEvent(new Event('change',{bubbles:true,composed:true}));
+      })()`);
+      await main.navigate(base + '/cart/merge');
+      await until('native zoom applied', () => main.evaluate(`devicePixelRatio===${ratio}`));
+      await inspectFirstGuest(main);
+      await until('long merge proposal', () =>
+        main.evaluate(
+          'document.querySelectorAll("section[aria-labelledby=merge-lines] li").length===41',
+        ),
+      );
+      assert.equal(await main.evaluate('document.activeElement?.getAttribute("role")'), 'status');
+      const bounds = await main.evaluate(
+        '({ width:innerWidth, outer:outerWidth, scroll:document.documentElement.scrollWidth, reduced:matchMedia("(prefers-reduced-motion: reduce)").matches })',
+      );
+      assert.ok(Math.abs(bounds.width * ratio - bounds.outer) <= 8);
+      assert.ok(bounds.scroll <= bounds.width + 1);
+      assert.ok(bounds.reduced);
+      const { nodes } = await main.call('Accessibility.getFullAXTree');
+      assert.ok(
+        nodes.some(
+          (node) => node.role?.value === 'heading' && node.name?.value === 'Your combined bag',
+        ),
+      );
+      assert.ok(
+        nodes.some(
+          (node) =>
+            node.role?.value === 'button' &&
+            node.name?.value === 'Review guest bag 1' &&
+            node.properties?.some(
+              (property) => property.name === 'pressed' && property.value.value === 'true',
+            ),
+        ),
+      );
+      for (let step = 0; step < 2; step++) {
+        for (const type of ['keyDown', 'keyUp'])
+          await main.call('Input.dispatchKeyEvent', {
+            type,
+            key: 'Tab',
+            code: 'Tab',
+            windowsVirtualKeyCode: 9,
+          });
+      }
+      assert.equal(
+        await main.evaluate('document.activeElement?.textContent.trim()'),
+        'Merge into my account bag',
+      );
+      assert.ok(await main.evaluate('document.activeElement.matches(":focus-visible")'));
+      zoomResults.push({ percent: ratio * 100, width: bounds.width, lines: 41 });
+    }
+    await settings.close();
+    const before = await read(main);
+    await main.evaluate(`(() => {
+      const save = Storage.prototype.setItem;
+      Storage.prototype.setItem = function(key, value) {
+        if (this === sessionStorage) throw new DOMException('Synthetic storage denial', 'SecurityError');
+        return save.call(this, key, value);
+      };
+      const send = window.fetch.bind(window);
+      window.mergeRequests = [];
+      window.fetch = (url, options) => {
+        if (String(url).endsWith('/merge/commit')) {
+          window.mergeRequests.push({ body: options.body, key: options.headers['idempotency-key'] });
+          if (window.mergeRequests.length === 1) return Promise.reject(new TypeError('Synthetic interruption before dispatch'));
+        }
+        return send(url, options);
+      };
+    })()`);
+    await clickButton(main, 'Merge into my account bag');
+    await until('memory-only recovery warning', () =>
+      text(main, 'Browser storage is unavailable for this action.'),
+    );
+    assert.equal((await read(main)).version, before.version);
+    for (const name of ['a', 'b']) {
+      const status = await main.evaluate(`(async () => {
+        const post = (route, body) => fetch('/api/shopper-auth/'+route, {
+          method:'POST', headers:{'content-type':'application/json'}, body:JSON.stringify(body),
+        });
+        await post('sign-out', {});
+        const response = await post('sign-in/email', {
+          email:'cart-shopper-${name}@example.test', password:'synthetic-cart-browser-password',
+        });
+        window.dispatchEvent(new StorageEvent('storage',{key:'maevelle_shopper_auth_signal'}));
+        return response.status;
+      })()`);
+      assert.equal(status, 200);
+      if (name === 'a') {
+        await until('different account reconciled', () =>
+          main.evaluate(
+            '[...document.querySelectorAll("button")].some(e=>e.ariaLabel==="View shopping bag (4 items)")',
+          ),
+        );
+        assert.equal(await text(main, 'Retry same action'), false);
+      } else {
+        await until('original account memory-only recovery restored', () =>
+          text(main, 'Browser storage is unavailable for this action.'),
+        );
+      }
+    }
+    await clickButton(main, 'Retry same action');
+    await until('memory-only retry confirmed', () =>
+      text(main, 'Guest bag merged into your account bag.'),
+    );
+    const requests = await main.evaluate('window.mergeRequests');
+    assert.equal(requests.length, 2);
+    assert.deepEqual(requests[0], requests[1]);
+    assert.equal((await read(main)).version, before.version + 1);
+    extendedEvidence = {
+      zoomResults,
+      abandonedSiblingAuthRecovered: true,
+      preDispatchInterruptionAndStorageDeniedSwitch: true,
+    };
+  }
   console.log(
     JSON.stringify({
       result: 'PASS',
+      ...extendedEvidence,
       browser: chromium.version,
       widths: [320, 390, 768, 1440],
       distinctLinePreserved: true,
@@ -259,6 +464,10 @@ try {
     }),
   );
 } finally {
+  stopDiscovery();
+  await Promise.all(pendingDiagnostics);
+  console.log(JSON.stringify({ discovery }));
+  await restoreZoom?.();
   for (const browserContextId of contexts)
     await chromium.send('Target.disposeBrowserContext', { browserContextId });
   chromium.close();

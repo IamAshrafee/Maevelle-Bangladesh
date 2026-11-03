@@ -1,5 +1,9 @@
 # Current Focus
 
+Shopping Cart Phase 03D.1 closed the reproduced guest-discovery deadlock and verified the combined Cart UI in Chromium. Local acceptance remains **PARTIAL** and production release is **BLOCKED**. See the [reliability closure report](../architecture/cart/PHASE_03D1_RELIABILITY_CLOSURE.md).
+
+Shopping Cart Phase 03D local acceptance is **PARTIAL** and production release is **BLOCKED**. See the [targeted browser and recovery acceptance report](../architecture/cart/PHASE_03D_TARGETED_ACCEPTANCE.md) for native zoom, live recovery and the remaining human acceptance procedure.
+
 Shopping Cart Phase 03-C local integrated acceptance is **PARTIAL** and production release is **BLOCKED**. See the [Phase 03-C acceptance report](../architecture/cart/PHASE_03C_INTEGRATED_ACCEPTANCE.md) for lifecycle fixes, browser and PostgreSQL evidence, and the remaining acceptance steps.
 
 Shopping Cart Phase 03B implements the authenticated Bag and explicit guest merge review. Local integrated acceptance is **PARTIAL** and production release is **BLOCKED**. See the [Phase 03B report and verification priorities](../architecture/cart/PHASE_03B_STOREFRONT_IMPLEMENTATION.md).

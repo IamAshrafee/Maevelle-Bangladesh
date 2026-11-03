@@ -111,6 +111,21 @@ try {
         }
       : {}),
   });
+  if (process.env.CART_FIXTURE_DIAGNOSTICS === '1') {
+    app.addHook('onError', async (request, _reply, error) => {
+      const route = request.routeOptions.url;
+      if (route?.startsWith('/storefront/v1/carts')) {
+        console.log(
+          JSON.stringify({
+            requestId: request.id,
+            route,
+            errorCode: error.code ?? 'unclassified',
+            errorType: error.name,
+          }),
+        );
+      }
+    });
+  }
   app.post('/__fixture/reprice-and-expire', async () => {
     await setCurrentVariantPrice(database.db, {
       organizationId,
@@ -141,6 +156,32 @@ try {
       values (${organizationId}, ${productId}, 'new-axis', 'New option')`.execute(database.db);
     return { data: { updated: true } };
   });
+  if (process.env.CART_FIXTURE_LONG_REVIEW === '1') {
+    app.post('/__fixture/long-review', async (request, reply) => {
+      const cartId = (request.body as { cartId?: string } | undefined)?.cartId;
+      if (!cartId || !/^[0-9a-f-]{36}$/.test(cartId)) return reply.code(400).send({});
+      await sql`
+        with guest as (
+          select id from cart.carts where id=${cartId} and organization_id=${organizationId}
+            and status='ACTIVE' and credential_state='SLOT_V1'
+        ), products as (
+          insert into catalog.products(organization_id,product_type_id,handle,title,status,publication_status,published_at)
+          select p.organization_id,p.product_type_id,'long-review-'||n,
+            'Synthetic long proposal selection '||n,'ACTIVE','PUBLISHED',now()
+          from catalog.products p cross join generate_series(1,40) n
+          where p.id=${productId} and exists(select 1 from guest)
+          returning id,organization_id,handle
+        ), variants as (
+          insert into catalog.product_variants(organization_id,product_id,sku,sku_normalized,option_signature)
+          select organization_id,id,upper(handle),upper(handle),'default' from products
+          returning id,organization_id
+        )
+        insert into cart.cart_lines(organization_id,cart_id,variant_id,quantity)
+        select organization_id,guest.id,variants.id,1 from variants cross join guest
+      `.execute(database.db);
+      return { data: { updated: true } };
+    });
+  }
   if (shopperFixtures) {
     for (const email of ['cart-shopper-a@example.test', 'cart-shopper-b@example.test']) {
       const signup = await app.inject({

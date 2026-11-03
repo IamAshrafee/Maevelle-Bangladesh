@@ -52,7 +52,7 @@ export function CartSummary({ cart, busy }: { cart: CartView; busy: boolean }) {
           <input
             id={input}
             name="couponCode"
-            className="min-h-12 min-w-0 flex-1 basis-32 rounded-xl border border-border bg-surface px-3"
+            className="min-h-12 min-w-0 flex-1 basis-32 rounded-xl border border-border bg-surface px-3 text-base"
             autoComplete="off"
             autoCapitalize="characters"
             spellCheck={false}

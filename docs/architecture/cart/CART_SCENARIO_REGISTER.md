@@ -1,5 +1,9 @@
 # Cart scenario register
 
+See [Phase 03D.1 reliability closure](PHASE_03D1_RELIABILITY_CLOSURE.md) for guest-discovery lock-cycle evidence and combined Cart UI verification.
+
+See the [Phase 03D targeted acceptance report](PHASE_03D_TARGETED_ACCEPTANCE.md) for long proposal, browser zoom and auth and network recovery evidence.
+
 See the [Phase 03-C integrated acceptance report](PHASE_03C_INTEGRATED_ACCEPTANCE.md) for current lifecycle, merge recovery and ownership evidence.
 
 See the [Phase 03B Storefront report](PHASE_03B_STOREFRONT_IMPLEMENTATION.md) for the implemented authenticated Bag, explicit guest review, and owner-scoped recovery.

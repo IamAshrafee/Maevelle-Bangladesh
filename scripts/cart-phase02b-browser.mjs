@@ -122,6 +122,21 @@ try {
       `[...document.querySelectorAll("main select option")].some(option=>option.value===${JSON.stringify(target.variantId)})`,
     ),
   );
+  await tab.call('Input.dispatchKeyEvent', {
+    type: 'keyDown',
+    key: 'Escape',
+    code: 'Escape',
+    windowsVirtualKeyCode: 27,
+  });
+  await until('variant editor Escape restores focus', () =>
+    tab.evaluate(
+      'document.activeElement.textContent.trim()==="Change selection" && !document.querySelector("main select")',
+    ),
+  );
+  await click(button('Change selection'));
+  await until('reopened variant options', () =>
+    tab.evaluate('Boolean(document.querySelector("main select"))'),
+  );
   await tab.evaluate(`(()=>{
     const select=document.querySelector("main select");
     select.value=${JSON.stringify(target.variantId)};
@@ -159,6 +174,11 @@ try {
   assert.equal(attempts.length, 2);
   assert.deepEqual(attempts[0], attempts[1]);
 
+  assert.ok(
+    await tab.evaluate(
+      `parseFloat(getComputedStyle(document.querySelector('input[name="couponCode"]')).fontSize) >= 16`,
+    ),
+  );
   await tab.evaluate(`(()=>{
     const input=document.querySelector('input[name="couponCode"]');
     input.value="CART01B10";
@@ -249,6 +269,12 @@ try {
       );
     });
 
+    const emptyTrigger = `[...document.querySelectorAll('button[aria-label^="View shopping bag"]')].find(e=>e.getClientRects().length)`;
+    await click(emptyTrigger, 'empty Bag drawer');
+    await until('empty drawer continue shopping', () =>
+      tab.evaluate(`Boolean(document.querySelector('dialog[open] a[href="/categories"]'))`),
+    );
+    await click(button('Close shopping bag'), 'close empty Bag');
     await tab.navigate(`${base}/products/${handle}`);
     await click(button('Smooth'));
     await click(add);
@@ -260,6 +286,15 @@ try {
     assert.equal((await read()).lines[0].availability, 'UNAVAILABLE');
     await click(button('Change selection'));
     await until('no public options', () => status('No other current selection is listed.'));
+    await tab.call('Input.dispatchKeyEvent', {
+      type: 'keyDown',
+      key: 'Escape',
+      code: 'Escape',
+      windowsVirtualKeyCode: 27,
+    });
+    await until('unavailable editor Escape restores focus', () =>
+      tab.evaluate('document.activeElement.textContent.trim()==="Change selection"'),
+    );
     await click(button('Remove Synthetic selectable clip from bag'));
     await until('safe removal', () => status('Your bag is empty'));
   }

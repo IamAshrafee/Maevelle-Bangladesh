@@ -181,7 +181,8 @@ function createRuntime() {
   let localAuthHold = false;
   let remoteHoldTimer: ReturnType<typeof setTimeout> | undefined;
   function identity(phase: 'begin' | 'settled', broadcast = false, signedOut = false) {
-    if (!broadcast && localAuthHold) return;
+    // Repeated sibling hints must not extend the first reconciliation deadline.
+    if (!broadcast && (localAuthHold || (authHold && phase === 'begin'))) return;
     if (broadcast) localAuthHold = phase === 'begin';
     clearTimeout(remoteHoldTimer);
     authHold = phase === 'begin';

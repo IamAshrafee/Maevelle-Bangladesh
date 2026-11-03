@@ -9,6 +9,35 @@ export interface ShopperPrincipal {
   readonly userId: string;
 }
 
+async function findMappedShopper(
+  db: Kysely<DatabaseSchema>,
+  organizationId: string,
+  userId: string,
+): Promise<ShopperPrincipal | null | undefined> {
+  const existing = await sql<{
+    id: string;
+    customer_id: string;
+    status: string;
+    customer_status: string;
+    user_active: boolean;
+  }>`
+      select account.id::text,account.customer_id::text,account.status,
+        customer.status as customer_status,
+        (identity.status='ACTIVE' and identity.email_verified=true) as user_active
+      from customers.customer_accounts account
+      join customers.customers customer
+        on customer.organization_id=account.organization_id and customer.id=account.customer_id
+      join iam.users identity on identity.id=account.user_id
+      where account.organization_id=${organizationId} and account.user_id=${userId}::uuid
+    `.execute(db);
+  const link = existing.rows[0];
+  return !link
+    ? undefined
+    : link.user_active && link.status === 'ACTIVE' && link.customer_status === 'ACTIVE'
+      ? { organizationId, accountId: link.id, customerId: link.customer_id, userId }
+      : null;
+}
+
 /**
  * Called only after a shopper-realm session has been verified. Never searches
  * CRM contacts by email or phone: historical contacts need a separate claim.
@@ -18,6 +47,10 @@ export async function resolveOrEnrollShopper(
   organizationId: string,
   userId: string,
 ): Promise<ShopperPrincipal | null> {
+  // Established sessions are read-only. Holding a user lock while waiting for
+  // an account lock inverts the authority locks taken by Wishlist mutations.
+  const mapped = await findMappedShopper(db, organizationId, userId);
+  if (mapped !== undefined) return mapped;
   return db.transaction().execute(async (tx) => {
     const identity = await sql<{ id: string; name: string }>`
       select id::text,name from iam.users
@@ -26,25 +59,8 @@ export async function resolveOrEnrollShopper(
     `.execute(tx);
     const user = identity.rows[0];
     if (!user) return null;
-    const existing = await sql<{
-      id: string;
-      customer_id: string;
-      status: string;
-      customer_status: string;
-    }>`
-      select account.id::text,account.customer_id::text,account.status,
-        customer.status as customer_status
-      from customers.customer_accounts account
-      join customers.customers customer
-        on customer.organization_id=account.organization_id and customer.id=account.customer_id
-      where account.organization_id=${organizationId} and account.user_id=${userId}::uuid
-      for update of account
-    `.execute(tx);
-    const link = existing.rows[0];
-    if (link)
-      return link.status === 'ACTIVE' && link.customer_status === 'ACTIVE'
-        ? { organizationId, accountId: link.id, customerId: link.customer_id, userId }
-        : null;
+    const existing = await findMappedShopper(tx, organizationId, userId);
+    if (existing !== undefined) return existing;
 
     const customer = await sql<{ id: string }>`
       insert into customers.customers
