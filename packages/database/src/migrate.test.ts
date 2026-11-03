@@ -14,6 +14,18 @@ function quoteIdentifier(identifier: string): string {
   return `"${identifier}"`;
 }
 
+// These inventories are independent of the migrations so unexpected relations fail too.
+async function expectSchemaTables(
+  db: ReturnType<typeof createDatabase>['db'],
+  schema: string,
+  expected: readonly string[],
+): Promise<void> {
+  const tables = await sql<{ table_name: string }>`
+    select table_name from information_schema.tables where table_schema = ${schema} order by table_name
+  `.execute(db);
+  expect(tables.rows.map((row) => row.table_name), `Relations in schema ${schema}`).toEqual(expected);
+}
+
 describe('clean PostgreSQL migration path', () => {
   it('migrates a disposable empty database to the current schema and is safe to rerun', async () => {
     expect(configuredDatabaseName).toBe('maevelle_test');
@@ -77,10 +89,7 @@ describe('clean PostgreSQL migration path', () => {
         select schema_name from information_schema.schemata where schema_name = 'finance'
       `.execute(database.db);
       expect(financeSchema.rows.map((row) => row.schema_name)).toEqual(['finance']);
-      const financeTables = await sql<{ table_name: string }>`
-        select table_name from information_schema.tables where table_schema = 'finance' order by table_name
-      `.execute(database.db);
-      expect(financeTables.rows.map((row) => row.table_name)).toEqual([
+      await expectSchemaTables(database.db, 'finance', [
         'capital_contributors',
         'capital_events',
         'cod_settlement_allocations',
@@ -102,10 +111,7 @@ describe('clean PostgreSQL migration path', () => {
         select schema_name from information_schema.schemata where schema_name = 'reviews'
       `.execute(database.db);
       expect(reviewsSchema.rows.map((row) => row.schema_name)).toEqual(['reviews']);
-      const reviewTables = await sql<{ table_name: string }>`
-        select table_name from information_schema.tables where table_schema = 'reviews' order by table_name
-      `.execute(database.db);
-      expect(reviewTables.rows.map((row) => row.table_name)).toEqual([
+      await expectSchemaTables(database.db, 'reviews', [
         'merchant_responses',
         'product_rating_summary',
         'review_access_tokens',
@@ -117,11 +123,9 @@ describe('clean PostgreSQL migration path', () => {
         select schema_name from information_schema.schemata where schema_name = 'analytics'
       `.execute(database.db);
       expect(analyticsSchema.rows.map((row) => row.schema_name)).toEqual(['analytics']);
-      const analyticsTables = await sql<{ table_name: string }>`
-        select table_name from information_schema.tables where table_schema = 'analytics' order by table_name
-      `.execute(database.db);
-      expect(analyticsTables.rows.map((row) => row.table_name)).toEqual([
+      await expectSchemaTables(database.db, 'analytics', [
         'analytics_refresh_runs',
+        'cart_mutations',
         'cash_facts',
         'cost_facts',
         'customer_facts',
@@ -143,6 +147,7 @@ describe('clean PostgreSQL migration path', () => {
         'wishlist_outcomes',
         'wishlist_processing_failures',
       ]);
+      await expectSchemaTables(database.db, 'cart', ['cart_coupons', 'cart_lines', 'carts']);
       const tables = await sql<{ table_name: string }>`
         select table_name from information_schema.tables
         where table_schema = 'platform' and table_name in ('organizations', 'idempotency_records', 'outbox_events')
@@ -162,9 +167,6 @@ describe('clean PostgreSQL migration path', () => {
         union all
         select table_name from information_schema.tables
         where table_schema = 'inventory' and table_name in ('inventory_items', 'inventory_levels', 'inventory_movement_lines', 'inventory_reservations', 'inventory_reservation_allocations', 'stocktake_sessions')
-        union all
-        select table_name from information_schema.tables
-        where table_schema = 'cart' and table_name in ('carts', 'cart_lines')
         union all
         select table_name from information_schema.tables
         where table_schema = 'customers' and table_name in ('customers', 'customer_phones', 'customer_addresses')
@@ -216,8 +218,6 @@ describe('clean PostgreSQL migration path', () => {
         'acquisition_cost_results',
         'allocation_targets',
         'audit_events',
-        'cart_lines',
-        'carts',
         'checkout_sessions',
         'cod_collection_instructions',
         'cogs_adjustments',
