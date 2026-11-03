@@ -38,6 +38,15 @@ export function registerShopperAuthRoutes(
         error: { code: 'AUTH_UNAVAILABLE', message: 'Customer accounts are not available yet.' },
       }),
     );
+    app.get('/storefront/v1/shopper/session', async (_request, reply) => {
+      reply.header('cache-control', 'private, no-store');
+      return reply.code(401).send({
+        error: {
+          code: 'UNAUTHENTICATED',
+          message: 'Sign in to your Maevelle account.',
+        },
+      });
+    });
     return async () => null;
   }
   const auth = createShopperAuth(config, database, sendEmail);
