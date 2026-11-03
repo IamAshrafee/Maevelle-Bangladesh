@@ -67,7 +67,7 @@ it('upgrades a populated database and projects only committed revisions under co
       (organization_id,event_type,event_version,aggregate_type,aggregate_id,aggregate_version,payload,occurred_at)
     values (${organizationId},'cart.intent.mutated',1,'cart',${cart.id},1,'{}',now())
   `.execute(db);
-  expect((await runMigrations(db)).executed).toEqual(['3217_cart_analytics']);
+  expect((await runMigrations(db)).executed).toEqual(['3217_cart_analytics', '3218_cart_observations']);
 
   const input = {
     token,

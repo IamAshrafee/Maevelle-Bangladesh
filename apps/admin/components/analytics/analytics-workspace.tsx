@@ -1,6 +1,7 @@
 'use client';
 
 import * as React from 'react';
+import dynamic from 'next/dynamic';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import {
   Boxes,
@@ -20,7 +21,7 @@ import {
 
 import { useAdminContext } from '@/components/admin-capabilities';
 import { RefreshButton } from '@/components/ui/refresh-button';
-import { AdminPage, PageHeader } from '@/components/ui/page-shell';
+import { AdminPage, ErrorState, LoadingState, PageHeader } from '@/components/ui/page-shell';
 import { AnalyticsFilterToolbar } from './analytics-filter-toolbar';
 import { CustomersView } from './views/customers-view';
 import { DeliveryView } from './views/delivery-view';
@@ -43,6 +44,10 @@ import {
 } from '@/lib/analytics/types';
 import { cn } from '@/lib/utils';
 
+const CartView = dynamic(() => import('./views/cart-view').then((module) => module.CartView), {
+  loading: () => <LoadingState message="Loading Cart Analytics…" />,
+});
+
 const VIEW_NAVIGATION: readonly {
   readonly id: AnalyticsViewKey;
   readonly label: string;
@@ -63,6 +68,7 @@ const VIEW_NAVIGATION: readonly {
   { id: 'supply', label: 'Supply & Procurement', icon: Building2 },
   { id: 'delivery', label: 'Delivery & Logistics', icon: Truck },
   { id: 'storefront', label: 'Storefront Funnel', icon: Eye },
+  { id: 'cart', label: 'Cart Analytics', icon: ShoppingBag, capability: 'analytics.view' },
   { id: 'wishlist', label: 'Wishlist & Demand', icon: Heart, capability: 'analytics.view' },
   { id: 'marketing', label: 'Marketing & UTM', icon: Megaphone },
   { id: 'operations', label: 'Returns & Ops', icon: RotateCcw },
@@ -72,7 +78,7 @@ const VIEW_NAVIGATION: readonly {
 export function AnalyticsWorkspace() {
   const router = useRouter();
   const adminContext = useAdminContext();
-  const [wishlistRefreshVersion, setWishlistRefreshVersion] = React.useState(0);
+  const [reportRefreshVersion, setReportRefreshVersion] = React.useState(0);
   const pathname = usePathname();
   const searchParams = useSearchParams();
 
@@ -168,7 +174,7 @@ export function AnalyticsWorkspace() {
           <RefreshButton
             tooltip="Refresh analytics data"
             onRefresh={() => {
-              if (activeView === 'wishlist') setWishlistRefreshVersion((value) => value + 1);
+              if (activeView === 'wishlist' || activeView === 'cart') setReportRefreshVersion((value) => value + 1);
               else router.refresh();
             }}
           />
@@ -187,6 +193,7 @@ export function AnalyticsWorkspace() {
               key={item.id}
               type="button"
               onClick={() => handleViewChange(item.id)}
+              aria-current={isActive ? 'page' : undefined}
               className={cn(
                 'inline-flex items-center gap-2 rounded-lg px-3 py-2 text-xs sm:text-sm font-medium whitespace-nowrap transition-colors duration-150 cursor-pointer select-none',
                 isActive
@@ -207,7 +214,7 @@ export function AnalyticsWorkspace() {
         selection={selection}
         onChange={handleSelectionChange}
         showGranularity={activeView === 'overview' || activeView === 'sales'}
-        onExportClick={() => handleViewChange('settings')}
+        {...(activeView === 'cart' ? {} : { onExportClick: () => handleViewChange('settings') })}
       />
 
       {/* Active Reporting View */}
@@ -223,10 +230,22 @@ export function AnalyticsWorkspace() {
         {activeView === 'supply' && <SupplyView selection={selection} />}
         {activeView === 'delivery' && <DeliveryView selection={selection} />}
         {activeView === 'storefront' && <StorefrontView selection={selection} />}
+        {activeView === 'cart' &&
+          (adminContext.capabilities.includes('analytics.view') ? (
+            <CartView
+              key={ownerKey}
+              from={selection.from}
+              to={selection.to}
+              organizationId={adminContext.organizationId}
+              refreshVersion={reportRefreshVersion}
+            />
+          ) : (
+            <ErrorState title="Cart Analytics access denied" />
+          ))}
         {activeView === 'wishlist' && (
           <WishlistView
             key={`${adminContext.actorId}:${adminContext.organizationId}`}
-            refreshVersion={wishlistRefreshVersion}
+            refreshVersion={reportRefreshVersion}
             onTimezoneChange={handleTimezoneChange}
             selection={selection}
             onSwitchPreset={(preset) =>

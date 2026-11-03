@@ -90,6 +90,7 @@ function setup(overrides: Partial<CartApi> = {}, storage = memory()) {
     ...overrides,
   };
   const notify = vi.fn();
+  const observe = vi.fn();
   const c = createCartController({
     api,
     journal: createCartJournal(storage, () => 1000),
@@ -97,8 +98,9 @@ function setup(overrides: Partial<CartApi> = {}, storage = memory()) {
     uuid: () => crypto.randomUUID(),
     now: () => 1000,
     notify,
+    observe,
   });
-  return { c, api, notify, storage };
+  return { c, api, notify, storage, observe };
 }
 describe('unified Cart coordination', () => {
   it('requires a fresh configuration review when the observed Cart revision changed', async () => {
@@ -186,7 +188,10 @@ describe('unified Cart coordination', () => {
   });
   it('double activation shares a submitted intent; later separate activation gets another key', async () => {
     const d = deferred<GuestCartViewDto>();
-    const { c, api } = setup({ mutate: vi.fn(() => d.promise) });
+    const { c, api, observe } = setup({ mutate: vi.fn(() => d.promise) });
+    observe.mockImplementationOnce(() => {
+      throw new Error('telemetry unavailable');
+    });
     const a = c.addItem(variant, 1),
       b = c.addItem(variant, 1);
     await vi.waitFor(() => expect(api.mutate).toHaveBeenCalledTimes(1));
@@ -202,6 +207,14 @@ describe('unified Cart coordination', () => {
       },
     });
     await Promise.all([a, b]);
+    expect(observe.mock.calls).toEqual([
+      [
+        {
+          name: 'CART_COMMAND_INITIATED',
+          data: { mode: 'GUEST', command: 'ADD' },
+        },
+      ],
+    ]);
     (api.get as ReturnType<typeof vi.fn>).mockResolvedValue(projection(2, 1));
     await c.addItem(variant, 1);
     const args = (api.mutate as ReturnType<typeof vi.fn>).mock.calls;
@@ -225,13 +238,21 @@ describe('unified Cart coordination', () => {
         },
       };
     });
-    const { c } = setup({ mutate });
+    const { c, observe } = setup({ mutate });
     await expect(c.addItem(variant, 1)).rejects.toThrow('lost');
     expect(c.getSnapshot().sync).toBe('uncertain');
     expect(c.getSnapshot().confirmed?.lines).toHaveLength(0);
     await c.retryPending();
     expect(mutate.mock.calls[0]![0]).toEqual(mutate.mock.calls[1]![0]);
     expect(c.getCartCount()).toBe(1);
+    expect(observe.mock.calls).toEqual([
+      [
+        {
+          name: 'CART_COMMAND_INITIATED',
+          data: { mode: 'GUEST', command: 'ADD' },
+        },
+      ],
+    ]);
   });
   it('an unknown action blocks new intentions until reviewed', async () => {
     const { c, api } = setup({
@@ -285,7 +306,7 @@ describe('unified Cart coordination', () => {
     expect(notify).not.toHaveBeenCalled();
   });
   it('server stale rejection refreshes and requires review, with no blind second mutation', async () => {
-    const { c, api } = setup({
+    const { c, api, observe } = setup({
       mutate: vi.fn(async () => {
         throw error('STALE_VERSION');
       }),
@@ -294,6 +315,15 @@ describe('unified Cart coordination', () => {
     await expect(c.setQuantity(line, '2')).rejects.toMatchObject({ code: 'STALE_VERSION' });
     expect(api.mutate).toHaveBeenCalledTimes(1);
     expect(c.getSnapshot().issue?.recovery).toBe('review');
+    expect(observe.mock.calls).toEqual([
+      [{ name: 'CART_COMMAND_INITIATED', data: { mode: 'GUEST', command: 'QUANTITY' } }],
+      [
+        {
+          name: 'CART_COMMAND_REJECTED',
+          data: { mode: 'GUEST', command: 'QUANTITY', reason: 'STALE' },
+        },
+      ],
+    ]);
   });
   it('an external revision seen before a prepared desired set requires renewed user intent', async () => {
     const { c, api } = setup();

@@ -1,5 +1,6 @@
 'use client';
 
+import { emitCartObservation } from '@/lib/analytics/cart-telemetry';
 import { cartApi, createCartApi } from './api';
 import { createCartController, type CartController } from './controller';
 import { createCartJournal } from './pending-journal';
@@ -144,6 +145,9 @@ function createRuntime() {
       }
     },
     surface: () => window.location.pathname,
+    observe: (interaction) => {
+      void emitCartObservation(interaction);
+    },
     sessionSignal: (phase) => {
       post({ kind: 'session', phase });
       try {

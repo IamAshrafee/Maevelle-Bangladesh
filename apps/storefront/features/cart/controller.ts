@@ -1,6 +1,11 @@
-import type { CartMergeCommitRequestDto } from '@maevelle/contracts';
+import type {
+  CartInteraction,
+  CartMergeCommitRequestDto,
+  CartObservationCommand,
+} from '@maevelle/contracts';
 import { StorefrontClientApiError } from '@/lib/api/client/http';
 import { forgetGuestSession } from './session-recovery';
+import { cartObservationCommand, cartRejectionReason } from './observation';
 import { createCartActivity } from './activity';
 import type { CartApi } from './api';
 import { CART_INTENT_MAX_AGE, type CartJournal } from './pending-journal';
@@ -23,6 +28,7 @@ interface Dependencies {
   notify(context: string, revision: number): void;
   wishlistChanged?(partition: string): void;
   surface?: () => string;
+  observe?: (interaction: CartInteraction) => void;
   now?: () => number;
   uuid?: () => string;
 }
@@ -328,6 +334,13 @@ export function createCartController(deps: Dependencies) {
     initFlight = task;
     return task;
   }
+  function observe(interaction: CartInteraction) {
+    try {
+      deps.observe?.(interaction);
+    } catch {
+      // Measurement cannot affect the commerce command.
+    }
+  }
   function requireNoPending() {
     if (state.pending || unresolvedIntent)
       throw new CartCoordinationError(
@@ -340,6 +353,7 @@ export function createCartController(deps: Dependencies) {
     e: number,
     recovering = false,
     surface = deps.surface?.(),
+    observationCommand?: CartObservationCommand,
   ): Promise<CartView> {
     current(e);
     if (now() - intent.createdAt > CART_INTENT_MAX_AGE)
@@ -348,6 +362,8 @@ export function createCartController(deps: Dependencies) {
         'This action is too old to replay. Review the bag before a new action.',
       );
     const ticket = ++issued;
+    const mode = partition ? 'ACCOUNT' : 'GUEST';
+    let attempted = false;
     submitted = true;
     unresolvedIntent = intent;
     publish({
@@ -360,6 +376,10 @@ export function createCartController(deps: Dependencies) {
     try {
       const view = await deps.coordinate(() => {
         current(e);
+        if (observationCommand) {
+          attempted = true;
+          observe({ name: 'CART_COMMAND_INITIATED', data: { mode, command: observationCommand } });
+        }
         return activity.track(api.mutate(intent));
       });
       current(e);
@@ -405,6 +425,12 @@ export function createCartController(deps: Dependencies) {
       return view;
     } catch (error) {
       if (e !== epoch) throw error;
+      const reason = attempted && observationCommand ? cartRejectionReason(error) : null;
+      if (reason && observationCommand)
+        observe({
+          name: 'CART_COMMAND_REJECTED',
+          data: { mode, command: observationCommand, reason },
+        });
       const policy = cartIssue(error, now(), true);
       if (isUncertain(error) || policy.recovery === 'same-intent') {
         publish({
@@ -452,6 +478,7 @@ export function createCartController(deps: Dependencies) {
     command: CartCommand,
     observed?: Pick<CartView, 'ownerContext' | 'version'>,
     expectedPartition?: string | null,
+    observationCommand = cartObservationCommand(command),
   ): Promise<CartView> {
     if (expectedPartition !== undefined && (ownerPending || expectedPartition !== partition))
       return Promise.reject(
@@ -543,6 +570,7 @@ export function createCartController(deps: Dependencies) {
           e,
           false,
           surface,
+          observationCommand,
         );
       })
       .finally(() => {
@@ -569,7 +597,7 @@ export function createCartController(deps: Dependencies) {
       variantId: string,
       quantity: string,
       observed?: Pick<CartView, 'ownerContext' | 'version'>,
-    ) => command({ kind: 'add', variantId, quantity }, observed, null),
+    ) => command({ kind: 'add', variantId, quantity }, observed, null, 'WISHLIST_ADD'),
     transferWishlistItem: (
       request: WishlistTransfer,
       ownerPartition: string,

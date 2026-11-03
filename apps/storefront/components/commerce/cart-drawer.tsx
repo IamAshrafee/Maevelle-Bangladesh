@@ -5,6 +5,7 @@ import { useEffect, useId, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { CartLine } from '@/features/cart/components/cart-line';
 import { cartIsBusy, confirmedCartCount } from '@/features/cart/types';
+import { useCartObservation } from '@/features/cart/use-cart-observation';
 import { useCartSnapshot } from '@/features/cart/use-cart';
 import { formatMoney } from '@/lib/format/money';
 
@@ -14,6 +15,7 @@ export function CartDrawer({ isOpen, onClose }: { isOpen: boolean; onClose: () =
 
 function OpenCartDrawer({ onClose }: { onClose: () => void }) {
   const snapshot = useCartSnapshot();
+  useCartObservation(snapshot.owner, 'DRAWER', true);
   const cart = snapshot.confirmed;
   const title = useId();
   const dialog = useRef<HTMLDialogElement>(null);

@@ -181,4 +181,24 @@ export const cartUpgradeCases: Record<string, UpgradeCase> = {
       assert.deepEqual(result.rows, [{ legacy: 1, projected: 0 }]);
     },
   },
+  '3218_cart_observations': {
+    async before(db, organizationId) {
+      await sql`
+        insert into analytics.storefront_events
+          (organization_id,event_id,schema_version,event_name,origin,analytics_consent,marketing_consent,payload,occurred_at)
+        values (${organizationId},uuidv7(),1,'VIEW_CART','BROWSER','GRANTED','DENIED','{}',now())
+      `.execute(db);
+    },
+    async after(db, organizationId) {
+      const rows = await sql<{ event_name: string }>`
+        select event_name from analytics.storefront_events where organization_id=${organizationId}
+      `.execute(db);
+      assert.ok(rows.rows.some((event) => event.event_name === 'VIEW_CART'));
+      await sql`
+        insert into analytics.storefront_events
+          (organization_id,event_id,schema_version,event_name,origin,analytics_consent,marketing_consent,payload,occurred_at)
+        values (${organizationId},uuidv7(),1,'CART_VIEWED','BROWSER','GRANTED','DENIED','{"mode":"GUEST","surface":"PAGE"}',now())
+      `.execute(db);
+    },
+  },
 };

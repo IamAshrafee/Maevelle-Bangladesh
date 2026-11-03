@@ -20,7 +20,8 @@ export function AnalyticsConsent() {
     >
       <p className="text-sm font-semibold text-on-surface">Help us improve Maevelle</p>
       <p className="mt-1 text-sm text-on-surface-variant">
-        May we count product views and selections? Your choice does not affect shopping.
+        May we count interactions with products, your Wishlist, and your shopping bag to improve
+        Maevelle? Your choice does not affect shopping.
       </p>
       <div className="mt-3 flex flex-wrap gap-2">
         <Button

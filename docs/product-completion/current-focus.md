@@ -1,5 +1,9 @@
 # Current Focus
 
+Shopping Cart Phase 06 adds the Admin Cart Analytics report for committed changes and consented browser observations. See the [reporting contract](../domains/analytics/analytics-reporting-architecture.md#admin-cart-analytics-phase-06). Resume Phase 04-C Cart acceptance next. Retention and rollout approvals remain open.
+
+Shopping Cart Phase 05B integrates consented Storefront Bag observations with the existing ingestion path. See the [observation contract](../domains/analytics/analytics-reporting-architecture.md#consented-cart-observations-phase-05b) for Phase 06 reporting semantics and remaining policy decisions.
+
 Shopping Cart Phase 05A adds a locally verified operational analytics projection and internal aggregate query. See the [Cart analytics contract](../domains/analytics/analytics-reporting-architecture.md#cart-operational-analytics-phase-05a) for the Phase 05B consent-aware observation handoff, Phase 06 reporting boundary, and open rollout policy. Phase 04-C acceptance remains open.
 
 Shopping Cart Phase 04B integrates private Account Wishlist Add and Move, guest Add, shared recipient shopping and recommendation-to-PDP shopping through the existing Cart controller. Local acceptance is **PARTIAL** and production release is **BLOCKED**. See the [Storefront integration report](../architecture/cart/PHASE_04B_STOREFRONT_INTEGRATION_REPORT.md) for Phase 04-C priorities.

@@ -103,7 +103,8 @@ export type AnalyticsViewKey =
   | 'marketing'
   | 'operations'
   | 'settings'
-  | 'wishlist';
+  | 'wishlist'
+  | 'cart';
 
 export type DateRangePreset =
   | 'TODAY'

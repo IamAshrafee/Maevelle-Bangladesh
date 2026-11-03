@@ -1,7 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { buildWishlistObservation, emitWishlistObservation } from './wishlist-telemetry';
 import { wishlistObservationNames } from '@maevelle/contracts';
-import { saveCommerceConsent } from './consent';
+import { emitCartObservation } from './cart-telemetry';
+import { currentCommerceConsent, saveCommerceConsent } from './consent';
 
 class MemoryStorage implements Storage {
   private rows = new Map<string, string>();
@@ -255,4 +256,45 @@ describe('Storefront Wishlist Behavioral Telemetry', () => {
     ).resolves.toBe(false);
     expect(globalThis.fetch).not.toHaveBeenCalled();
   });
+});
+
+it('Cart telemetry renews legacy grants and sends only anonymous first-party observations', async () => {
+  const target = Object.assign(new EventTarget(), { localStorage: new MemoryStorage() });
+  const fetch = vi.fn().mockResolvedValue(new Response(null, { status: 202 }));
+  vi.stubGlobal('window', target);
+  vi.stubGlobal('fetch', fetch);
+  try {
+    const observation = {
+      name: 'CART_COMMAND_INITIATED',
+      data: { mode: 'ACCOUNT', command: 'WISHLIST_MOVE', privateId: 'secret' },
+    } as const;
+    target.localStorage.setItem(
+      'maevelle_commerce_consent_v1',
+      JSON.stringify({
+        ...currentCommerceConsent(),
+        analytics: 'GRANTED',
+      }),
+    );
+    expect(await emitCartObservation(observation)).toBe(false);
+    expect(fetch).not.toHaveBeenCalled();
+    saveCommerceConsent('GRANTED');
+    expect(await emitCartObservation(observation)).toBe(true);
+    const [url, options] = fetch.mock.calls[0]!;
+    expect(url).toBe('/api/storefront/v1/analytics/events');
+    expect(options).toMatchObject({ credentials: 'omit', referrerPolicy: 'no-referrer' });
+    expect(JSON.parse(options.body)).toEqual({
+      name: 'CART_COMMAND_INITIATED',
+      data: { mode: 'ACCOUNT', command: 'WISHLIST_MOVE' },
+      eventId: expect.any(String),
+      occurredAt: expect.any(String),
+      schemaVersion: 1,
+      origin: 'BROWSER',
+      consent: currentCommerceConsent(),
+    });
+    saveCommerceConsent('DENIED');
+    expect(await emitCartObservation(observation)).toBe(false);
+    expect(fetch).toHaveBeenCalledTimes(1);
+  } finally {
+    vi.unstubAllGlobals();
+  }
 });

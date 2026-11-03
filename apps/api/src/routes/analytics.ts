@@ -1,5 +1,7 @@
 import { analyticsAdmin } from './analytics-admin.js';
 import { registerWishlistAnalyticsRoutes } from './wishlist-analytics.js';
+import { registerCartAnalyticsRoutes } from './cart-analytics.js';
+
 import type { FastifyInstance } from 'fastify';
 import { Type } from 'typebox';
 
@@ -7,6 +9,9 @@ import type { DatabaseClient } from '@maevelle/database';
 import {
   AnalyticsQueryError,
   WishlistObservationError,
+  CartObservationError,
+  isCartObservationName,
+  validateCartObservation,
   validateWishlistObservation,
   AnalyticsIngestionError,
   analyticsDrilldown,
@@ -67,7 +72,15 @@ export function registerAnalyticsRoutes(
     '/storefront/v1/analytics/events',
     {
       preValidation: async (request, reply) => {
-        const body = request.body as { name?: unknown } | null;
+        const body = request.body as { name?: unknown; sessionId?: unknown } | null;
+        if (isCartObservationName(body?.name)) {
+          if (Buffer.byteLength(JSON.stringify(body)) > 4096)
+            return reply.code(413).send({ error: { code: 'PAYLOAD_TOO_LARGE', message: 'Cart observations are limited to 4 KiB.' } });
+          try { validateCartObservation(body); }
+          catch { return reply.code(422).send({ error: { code: 'INVALID_ANALYTICS_EVENT', message: 'Invalid Cart observation.' } }); }
+        } else if (body?.sessionId === undefined && typeof body?.name === 'string' && !body.name.startsWith('WISHLIST_')) {
+          return reply.code(400).send({ error: { code: 'INVALID_ANALYTICS_EVENT', message: 'A browser analytics event requires a sessionId.' } });
+        }
         if (typeof body?.name === 'string' && body.name.startsWith('WISHLIST_')) {
           if (Buffer.byteLength(JSON.stringify(body))>4096) return reply.code(413).send({ error: { code: 'PAYLOAD_TOO_LARGE', message: 'Wishlist observations are limited to 4 KiB.' } });
           try { validateWishlistObservation(body); }
@@ -81,7 +94,7 @@ export function registerAnalyticsRoutes(
           eventId: Type.String({ format: 'uuid' }),
           occurredAt: Type.String({ format: 'date-time' }),
           origin: Type.Literal('BROWSER'),
-          sessionId: Type.String({ format: 'uuid' }),
+          sessionId: Type.Optional(Type.String({ format: 'uuid' })),
           anonymousId: Type.Optional(Type.String({ format: 'uuid' })),
           consent: Type.Object({
             necessary: Type.Literal('GRANTED'),
@@ -122,7 +135,7 @@ export function registerAnalyticsRoutes(
         );
         return reply.code(202).send({ data: receipt });
       } catch (error) {
-        if (error instanceof AnalyticsIngestionError || error instanceof WishlistObservationError)
+        if (error instanceof AnalyticsIngestionError || error instanceof WishlistObservationError || error instanceof CartObservationError)
           return reply.code(422).send({
             error: { code: error.code, message: error.message },
           });
@@ -132,6 +145,8 @@ export function registerAnalyticsRoutes(
   );
 
   registerWishlistAnalyticsRoutes(app, database, auth);
+  registerCartAnalyticsRoutes(app, database, auth);
+
 
   app.get('/admin/analytics/overview', async (request, reply) => {
     const active = await analyticsAdmin(database, auth, request.headers, 'analytics.financial.view');

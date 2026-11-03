@@ -6428,11 +6428,54 @@ events before rollout. Apply additive migration 3217 before enabling the new
 API and Worker. A prior release can run against the additive schema, but its
 v1 writes leave a measurement gap. Keep v2 receipts for forward recovery.
 
-Phase 05B should use the existing consent-aware Storefront observation path for
-views, attempts, safe rejection categories and recovery UI interactions. The
-`CartInteractionName` contract is a vocabulary for that handoff, with ingestion
-validation and consent enforcement still to be wired. Keep observation IDs
-separate and reuse a server receipt's event UUID if a future approved provider
-mapping requires deduplication. Existing behavioral `ADD_TO_CART` and
-`REMOVE_FROM_CART` observations must remain separate from operational totals.
-Phase 06 can wrap the aggregate query in an Analytics-authorized Admin API.
+Existing behavioral `ADD_TO_CART` and `REMOVE_FROM_CART` observations remain
+separate from operational totals.
+
+### Consented Cart observations (Phase 05B)
+
+The existing first-party Storefront ingestion endpoint stores the Cart
+observation vocabulary in `analytics.storefront_events`. Migration 3218
+expands the accepted names. Apply it before enabling ingestion and deploy
+the API before the Storefront. Existing observation names and v1 commerce
+history stay separate.
+
+- `CART_VIEWED` counts one visible episode of the drawer, Bag page, or rendered
+  merge review. `CART_RECOVERY_VIEWED` counts when recovery controls are shown.
+- `CART_COMMAND_INITIATED` counts the first actual submission of an intent.
+  `CART_COMMAND_REJECTED` records a coarse category for a definitive client
+  error on that submission. Local preflight failures, uncertain responses and
+  recovered replays do not create rejection or success observations.
+- Data is limited to guest/account mode and the applicable surface, command
+  or rejection category. There is no Cart, session, product or shopper ID,
+  attribution or provider publication. Observed mode is browser-reported.
+- Consent v2 describes Bag and Wishlist measurement. Legacy denials carry
+  forward and legacy grants require a fresh choice. Requests omit credentials
+  and referrer, reuse one event ID across a bounded retry, and stop retrying
+  when consent changes. The browser keeps no offline telemetry queue.
+
+### Admin Cart Analytics (Phase 06)
+
+The Cart Analytics tab and `GET /admin/analytics/cart` require an active Admin
+membership with `analytics.view`. The API uses the verified organization context,
+returns only aggregates, and disables caching. The read model uses one PostgreSQL
+snapshot and requires the existing 3217 and 3218 migrations.
+
+- Inclusive `from` and `to` calendar dates use Asia/Dhaka, up to 366 days. Optional
+  `currency` filters committed changes, distinct Carts, units and value. The
+  browser counts have no currency. The operation selector narrows the breakdown.
+- Committed activity counts projected changed revisions. Distinct active Carts
+  count each Cart once for the entire filtered period. Net units sum destination
+  deltas, including units carried over by guest merges. Operation rows distinguish
+  guest and account Carts, Wishlist ADD and MOVE, coupon changes and committed merges.
+- Gross and net merchandise values are event-weighted averages of post-change
+  snapshots per currency. They describe evaluated merchandise and must not be
+  interpreted as sales, lost revenue, or value per shopper.
+- Browser metrics count granted-consent views, submitted attempts, definitive
+  rejections and episodes showing recovery controls. Daily Bag views and committed
+  changes are charted separately. Neither stream supplies a shopper conversion
+  denominator or establishes abandonment. Browser observations are best effort.
+- First and last records describe the selected data. They do not establish
+  instrumentation dates or continuous coverage. The report shows pending and
+  dead-lettered Cart projection receipts in the date range across all currencies.
+  Historic v1 mutations are not backfilled. Retention and deletion approvals
+  remain pending, and no automatic cleanup is introduced.

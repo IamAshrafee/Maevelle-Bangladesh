@@ -7,6 +7,7 @@ export async function getCartActivity(
   db: Kysely<DatabaseSchema>,
   organizationId: string,
   period: { readonly from: Date; readonly to: Date },
+  currency?: string,
 ): Promise<CartActivityTotals & { readonly breakdown: readonly CartActivityBreakdown[] }> {
   const duration = period.to.getTime() - period.from.getTime();
   if (!(duration > 0 && duration <= 366 * 86_400_000))
@@ -19,6 +20,7 @@ export async function getCartActivity(
       coalesce(sum(unit_delta),0)::text as "netUnitChange"
     from analytics.cart_mutations
     where organization_id=${organizationId} and occurred_at>=${period.from} and occurred_at<${period.to}
+    ${currency ? sql`and currency=${currency}` : sql``}
     group by grouping sets ((),(operation,owner,wishlist_action,currency))
     order by operation nulls first,owner,wishlist_action,currency
   `.execute(db);

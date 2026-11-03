@@ -10,6 +10,7 @@ import { cartStore } from '../browser-runtime';
 import { cartIssue } from '../errors';
 import { listMergeGuests, previewMerge } from '../merge-api';
 import { cartIsBusy } from '../types';
+import { useCartObservation } from '../use-cart-observation';
 import { useCartSnapshot } from '../use-cart';
 import { CartMergePlan } from './cart-merge-plan';
 
@@ -52,6 +53,7 @@ function MergeWorkspace({ partition }: { partition: string }) {
   const [guests, setGuests] = useState<readonly CartMergeGuestContextDto[] | null>(null);
   const [selected, setSelected] = useState<CartMergeGuestContextDto | null>(null);
   const [review, setReview] = useState<CartMergePreviewDto | null>(null);
+  useCartObservation(state.owner, 'MERGE_REVIEW', review !== null);
   const [notice, setNotice] = useState('');
   const [busy, setBusy] = useState(false);
   const [listRequest, setListRequest] = useState(0);

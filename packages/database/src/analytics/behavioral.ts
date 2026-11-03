@@ -1,4 +1,5 @@
-import { wishlistObservationNames } from '@maevelle/contracts';
+import { cartInteractionNames, wishlistObservationNames } from '@maevelle/contracts';
+import { isCartObservationName, validateCartObservation } from './cart/observations.js';
 import { validateWishlistObservation } from './wishlist/observations.js';
 import { sql, type Kysely } from 'kysely';
 
@@ -6,6 +7,7 @@ import type { DatabaseSchema } from '../index.js';
 
 export const storefrontEventNames = [
   ...wishlistObservationNames,
+  ...cartInteractionNames,
   'PRODUCT_VIEWED',
   'PRODUCT_LIST_VIEWED',
   'PRODUCT_SELECTED',
@@ -136,6 +138,8 @@ export async function ingestStorefrontEvent(
   organizationId: string,
   input: StorefrontEventInput,
 ): Promise<StorefrontEventReceipt> {
+  const cartObservation = isCartObservationName(input.name);
+  if (cartObservation) validateCartObservation(input);
   if (wishlistObservationNames.includes(input.name as never)) validateWishlistObservation(input);
   if (input.origin === 'BROWSER' && input.consent.analytics !== 'GRANTED') {
     if (input.sessionId)
@@ -146,7 +150,7 @@ export async function ingestStorefrontEvent(
   }
   if (!storefrontEventNames.includes(input.name))
     throw new AnalyticsIngestionError('Unsupported storefront analytics event.');
-  if (input.origin === 'BROWSER' && !input.sessionId)
+  if (input.origin === 'BROWSER' && !cartObservation && !input.sessionId)
     throw new AnalyticsIngestionError('A browser analytics event requires a sessionId.');
   const occurredAt = new Date(input.occurredAt);
   if (Number.isNaN(occurredAt.valueOf()) || occurredAt.valueOf() > Date.now() + 300_000)

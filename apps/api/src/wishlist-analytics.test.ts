@@ -106,6 +106,9 @@ describe('registered Wishlist analytics routes', () => {
         (await app.inject({ url: path, headers: { authorization: 'test-admin' } })).statusCode,
       ).toBe(403);
     }
+    const cartPath = `/admin/analytics/cart?${period}`;
+    expect((await app.inject({ url: cartPath })).statusCode).toBe(403);
+    expect((await app.inject({ url: cartPath, headers: { authorization: 'test-admin' } })).statusCode).toBe(403);
     await sql`insert into iam.membership_capability_grants(membership_id,capability_code) values (${membershipId}::uuid,'analytics.view')`.execute(
       database.db,
     );
@@ -218,4 +221,150 @@ describe('registered Wishlist analytics routes', () => {
       ).json().data.metadata.unavailable,
     ).toContain('VERIFIED_SHARE_SAVE_ATTRIBUTION');
   });
+});
+
+it('records consented Cart observations without credentials, session linkage or commerce outcomes', async () => {
+  const { sessionId, ...envelope } = event();
+  const payload = {
+    ...envelope,
+    name: 'CART_COMMAND_INITIATED',
+    consent: { ...envelope.consent, preferences: 'DENIED' },
+    data: { mode: 'ACCOUNT', command: 'WISHLIST_MOVE' },
+  };
+  const post = (body: object) =>
+    app.inject({
+      method: 'POST',
+      url: '/storefront/v1/analytics/events',
+      payload: body,
+    });
+  const recorded = await post(payload);
+  expect(recorded.statusCode, recorded.body).toBe(202);
+  expect(recorded.json().data).toMatchObject({ accepted: true, duplicate: false });
+  expect((await post(payload)).json().data.duplicate).toBe(true);
+  expect(
+    (
+      await post({
+        ...payload,
+        eventId: crypto.randomUUID(),
+        consent: { ...payload.consent, analytics: 'DENIED' },
+      })
+    ).json().data.accepted,
+  ).toBe(false);
+  for (const invalid of [
+    { ...payload, sessionId },
+    { ...payload, attribution: { touch: 'FIRST' } },
+    { ...payload, origin: 'SERVER' },
+    { ...payload, data: { ...payload.data, couponCode: 'private' } },
+    { ...payload, data: { ...payload.data, mode: 'GUEST' } },
+    { ...payload, name: 'CART_COMMAND_SUCCEEDED' },
+  ]) {
+    expect([400, 422]).toContain((await post(invalid)).statusCode);
+  }
+  const rows = await sql`
+    select session_id,anonymous_id,cart_id,product_id,marketing_consent,payload
+    from analytics.storefront_events where organization_id=${org} and event_name='CART_COMMAND_INITIATED'
+  `.execute(database.db);
+  expect(rows.rows).toEqual([
+    {
+      session_id: null,
+      anonymous_id: null,
+      cart_id: null,
+      product_id: null,
+      marketing_consent: 'DENIED',
+      payload: payload.data,
+    },
+  ]);
+  const business = await sql<{ count: number }>`
+    select count(*)::int as count from platform.outbox_events
+    where organization_id=${org} and event_type='cart.intent.mutated'
+  `.execute(database.db);
+  expect(business.rows[0]?.count).toBe(0);
+});
+
+it('reports separate tenant-scoped Cart aggregates with Dhaka date and committed currency filters', async () => {
+  const db = database.db;
+  const cartId = crypto.randomUUID();
+  const eventAt = '2026-08-20T18:00:00Z';
+  const pendingId = crypto.randomUUID();
+
+  // Three projected revisions for one Cart, one foreign revision and one at the exclusive end.
+  await sql`
+    with events as (
+      insert into platform.outbox_events
+        (organization_id,event_type,event_version,aggregate_type,aggregate_id,aggregate_version,payload,occurred_at)
+      select tenant,'cart.intent.mutated',2,'cart',cart,revision,'{}',at
+      from (values
+        (${org}::uuid,${cartId}::uuid,1,${eventAt}::timestamptz),
+        (${org}::uuid,${cartId}::uuid,2,${eventAt}::timestamptz),
+        (${org}::uuid,${cartId}::uuid,3,${eventAt}::timestamptz),
+        (${other}::uuid,${cartId}::uuid,4,${eventAt}::timestamptz),
+        (${org}::uuid,${cartId}::uuid,5,'2026-08-21T18:00:00Z'::timestamptz)
+      ) as fixture(tenant,cart,revision,at)
+      returning id,organization_id,aggregate_version,occurred_at
+    )
+    insert into analytics.cart_mutations
+      (outbox_event_id,organization_id,cart_id,occurred_at,operation,owner,currency,unit_delta,
+       units_after,lines_after,merchandise_gross_after,merchandise_net_after)
+    select id,organization_id,${cartId},occurred_at,
+      case when aggregate_version=2 then 'remove_line' else 'add_line' end,'GUEST',
+      case when aggregate_version=3 then 'USD' else 'BDT' end,
+      case when aggregate_version=2 then -1 else 2 end,
+      2,1,aggregate_version*10,aggregate_version*8 from events
+  `.execute(db);
+  await sql`
+    with event as (
+      insert into platform.outbox_events
+        (organization_id,event_type,event_version,aggregate_type,aggregate_id,aggregate_version,payload,occurred_at)
+      values (${org},'cart.intent.mutated',2,'cart',${pendingId},1,'{}',${eventAt}) returning id
+    )
+    insert into platform.event_consumer_receipts(outbox_event_id,consumer_name,status)
+    select id,'analytics.cart.v1','PENDING' from event
+  `.execute(db);
+  await sql`
+    insert into analytics.storefront_events
+      (organization_id,event_id,schema_version,event_name,origin,analytics_consent,marketing_consent,payload,occurred_at)
+    values
+      (${org},${crypto.randomUUID()},1,'CART_VIEWED','BROWSER','GRANTED','DENIED','{"mode":"GUEST","surface":"PAGE"}',${eventAt}),
+      (${org},${crypto.randomUUID()},1,'CART_VIEWED','BROWSER','DENIED','DENIED','{}',${eventAt}),
+      (${other},${crypto.randomUUID()},1,'CART_VIEWED','BROWSER','GRANTED','DENIED','{}',${eventAt})
+  `.execute(db);
+
+  const query = 'from=2026-08-21&to=2026-08-21';
+  const get = (params: string, organizationId = org) => app.inject({
+    url: `/admin/analytics/cart?${params}`,
+    headers: { authorization: 'test-admin', 'x-organization-id': organizationId },
+  });
+  const full = await get(query);
+  expect(full.statusCode, full.body).toBe(200);
+  expect(full.headers['cache-control']).toBe('private, no-store');
+  expect(full.body).not.toContain(cartId);
+  expect(full.body).not.toContain(pendingId);
+  expect(full.json().data.committed).toMatchObject({
+    mutations: '3', distinctCarts: '1', netUnitChange: '3', pending: '1', failed: '0',
+    trend: [{ day: '2026-08-21', count: '3' }],
+    currencies: ['BDT', 'USD'],
+    firstRecordedAt: '2026-08-20T18:00:00.000Z',
+  });
+  const filtered = await get(`${query}&currency=BDT`);
+  expect(filtered.statusCode, filtered.body).toBe(200);
+  expect(filtered.json().data.committed).toMatchObject({
+    mutations: '2', distinctCarts: '1', netUnitChange: '1',
+    values: [{ currency: 'BDT', averageGross: '15.0000', averageNet: '12.0000' }],
+  });
+  const observations = full.json().data.observations;
+  expect(observations.viewsTrend).toEqual([{ day: '2026-08-21', count: '1' }]);
+  expect(observations.counts).toContainEqual({ name: 'CART_VIEWED', count: '1' });
+  expect(filtered.json().data.observations).toEqual(observations);
+  expect((await get(query, other)).statusCode).toBe(403);
+  for (const invalid of [
+    'from=2026-02-30&to=2026-03-01',
+    'from=2025-08-19&to=2026-08-21',
+    `${query}&currency=bad!`,
+    `${query}&cartId=${cartId}`,
+  ]) expect((await get(invalid)).statusCode).toBe(422);
+
+  const empty = await get('from=2026-08-19&to=2026-08-19');
+  expect(empty.statusCode, empty.body).toBe(200);
+  expect(empty.json().data.committed).toMatchObject({ mutations: '0', trend: [], firstRecordedAt: null });
+  expect(empty.json().data.observations).toMatchObject({ viewsTrend: [], firstRecordedAt: null });
 });

@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { cartStore } from '../browser-runtime';
+import { useCartObservation } from '../use-cart-observation';
 import type { CartSnapshot } from '../types';
 
 export function CartRecoveryActions({
@@ -22,6 +23,7 @@ export function CartRecoveryActions({
     !state.pending &&
     state.sync !== 'resetting';
   const retryAt = state.issue?.retryAt ?? 0;
+  useCartObservation(state.owner, 'RECOVERY', pending || canReset);
   const [clock, setClock] = useState(Date.now);
   useEffect(() => {
     const timer = setTimeout(

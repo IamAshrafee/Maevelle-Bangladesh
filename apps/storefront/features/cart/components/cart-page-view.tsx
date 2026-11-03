@@ -8,10 +8,12 @@ import { CartSummary } from './cart-summary';
 import { cartIsBusy, confirmedCartCount } from '../types';
 import { useEffect } from 'react';
 import { cartStore } from '../browser-runtime';
+import { useCartObservation } from '../use-cart-observation';
 import { useCartSnapshot } from '../use-cart';
 
 export function CartPageView() {
   const snapshot = useCartSnapshot();
+  useCartObservation(snapshot.owner, 'PAGE', true);
   useEffect(() => {
     void cartStore.refresh().catch(() => undefined);
   }, []);
