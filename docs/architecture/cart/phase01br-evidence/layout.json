@@ -1,0 +1,103 @@
+{
+  "engine": "Chrome/156.0.8078.74",
+  "results": [
+    {
+      "name": "Reflow 320px",
+      "status": "PASS",
+      "detail": {
+        "viewport": 320,
+        "scroll": 320,
+        "header": [
+          {
+            "width": 320,
+            "height": 65
+          }
+        ]
+      }
+    },
+    {
+      "name": "Reflow 390px",
+      "status": "PASS",
+      "detail": {
+        "viewport": 390,
+        "scroll": 390,
+        "header": [
+          {
+            "width": 390,
+            "height": 65
+          }
+        ]
+      }
+    },
+    {
+      "name": "Reflow 640px",
+      "status": "PASS",
+      "detail": {
+        "viewport": 640,
+        "scroll": 640,
+        "header": [
+          {
+            "width": 640,
+            "height": 65
+          }
+        ]
+      }
+    },
+    {
+      "name": "Reflow 768px",
+      "status": "PASS",
+      "detail": {
+        "viewport": 768,
+        "scroll": 768,
+        "header": [
+          {
+            "width": 768,
+            "height": 65
+          }
+        ]
+      }
+    },
+    {
+      "name": "Reflow 1280px",
+      "status": "PASS",
+      "detail": {
+        "viewport": 1280,
+        "scroll": 1280,
+        "header": [
+          {
+            "width": 1280,
+            "height": 174
+          }
+        ]
+      }
+    },
+    {
+      "name": "Reported 640px viewport / CSS zoom2 regression",
+      "status": "PASS",
+      "detail": {
+        "viewport": 640,
+        "scroll": 640
+      }
+    },
+    {
+      "name": "400% equivalent 320px CSS viewport from 1280px window; not native browser zoom",
+      "status": "PASS",
+      "detail": {
+        "viewport": 320,
+        "scroll": 320
+      }
+    },
+    {
+      "name": "Reduced-motion preference",
+      "status": "PASS"
+    },
+    {
+      "name": "Browser accessibility-tree status region",
+      "status": "PASS",
+      "detail": {
+        "statusRegions": 1
+      }
+    }
+  ],
+  "limitations": "CSS zoom/effective viewport tests are distinct from native browser zoom. No hardware touch or assistive-technology session."
+}

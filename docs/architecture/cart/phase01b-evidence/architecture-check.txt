@@ -1,0 +1,2 @@
+$ node scripts/check-architecture.mjs
+Architecture check passed for 13 workspace packages.

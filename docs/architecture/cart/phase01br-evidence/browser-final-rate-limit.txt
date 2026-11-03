@@ -1,0 +1,16 @@
+PASS BR18 Clear selected coupons and items together through the customer UI
+FAIL BR19 Empty Clear is a consumed no-op and exact same-key replay preserves revision: Condition timed out {"active":"<body class=\"lv1K4W_variable y9V_sW_variable -RLyRq_variable\"><div hidden=\"\"><!--$--><!--/$--></div><a class=\"fixed left-4 top-4 z-50 -translate-y-24 rounded-xl bg-primary px-5 py-3 font-label-md text-xs font-semibold text-white shadow-lg transition-","focus":true,"feedback":"Shopping bag\n\nYour bag is receiving too many requests. Wait a moment before retrying.","dialogs":0}
+PASS BR20 Double activation of Clear confirms one intention and one request
+PASS BR21 Clear followed by explicit Add reuses valid authority and starts a new intention
+PASS BR22 Response lost after committed Clear is recovered with the exact saved intent
+PASS BR23 Stale confirmation cannot Clear a newer quantity without renewed intention
+PASS BR24 Clear synchronizes another tab header using bounded nonsecret hints
+PASS BR25 Actual database expiry offers deliberate cookie forgetting without automatic initialization
+PASS BR26 Browser credential eviction fails closed until explicit new-bag recovery
+PASS BR27 Reset racing a late bootstrap response fences both tabs without adopting the returned bag
+PASS BR28 Real keyboard confirmation, Escape, focus containment and restoration
+PASS BR29 Offline Clear preflight fails without a mutation; reconnect rereads authoritative state
+PASS BR30 503 Clear honors Retry-After and preserves the same intention for explicit retry
+FAIL BR31 Actual transport timeout after committed Clear recovers without duplicate effects: Condition timed out {"active":"<div class=\"mx-auto w-full min-w-0 max-w-7xl break-words px-4 sm:px-6\" id=\"cart-feedback\" tabindex=\"-1\"><div class=\"relative flex items-start gap-3 rounded-xl border p-3.5 sm:p-4 text-xs shadow-2xs transition-[background-color,border-color] duration-","focus":true,"feedback":"Shopping bag\n\nWe could not confirm this action. It may already be saved. Retry the same action to check its result without adding it twice.\n\nRetry same action\nStop recovery and review","dialogs":0}
+FAIL BR32 Too many browser capability slots offer deliberate bounded session recovery: Condition timed out {"active":"<body class=\"lv1K4W_variable y9V_sW_variable -RLyRq_variable\"><div hidden=\"\"><!--$--><!--/$--></div><a class=\"fixed left-4 top-4 z-50 -translate-y-24 rounded-xl bg-primary px-5 py-3 font-label-md text-xs font-semibold text-white shadow-lg transition-","focus":true,"feedback":"Shopping bag\n\nYour bag is receiving too many requests. Wait a moment before retrying.","dialogs":0}
+FAIL BR33 Closing a tab after commit and reopening reads current state without replaying or duplicating it: Condition timed out {"active":"<body class=\"lv1K4W_variable y9V_sW_variable -RLyRq_variable\"><div hidden=\"\"><!--$--><!--/$--></div><a class=\"fixed left-4 top-4 z-50 -translate-y-24 rounded-xl bg-primary px-5 py-3 font-label-md text-xs font-semibold text-white shadow-lg transition-","focus":true,"feedback":"Shopping bag\n\nYour bag is receiving too many requests. Wait a moment before retrying.","dialogs":0}

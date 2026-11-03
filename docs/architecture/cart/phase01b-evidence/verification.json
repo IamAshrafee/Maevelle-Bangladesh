@@ -1,0 +1,175 @@
+{
+  "date": "2026-11-02",
+  "phaseStatus": "PARTIAL",
+  "acceptance": {
+    "PASS": 14,
+    "PARTIAL": 2,
+    "FAIL": 0,
+    "BLOCKED": 1
+  },
+  "initial": {
+    "branch": "main",
+    "head": "aa290065407030e85b5b6847efd22fb437a65279",
+    "trackedDirty": 35,
+    "untrackedStatusEntries": 45
+  },
+  "final": {
+    "branch": "main",
+    "head": "aa290065407030e85b5b6847efd22fb437a65279",
+    "trackedDirty": 45,
+    "untrackedStatusEntries": 61
+  },
+  "preservation": {
+    "baselineFiles": 1971,
+    "byteIdentical": 1958,
+    "missing": [],
+    "intentionalChanges": [
+      {
+        "path": "docs/architecture/cart/CART_SCENARIO_REGISTER.md",
+        "beforeSha256": "800a3b534b130c5a2115f0091d4c37a9ddaaf7517490f880acd51fede792a470",
+        "afterSha256": "ea827a14ec5a0e57ceb4103049ef4e4d9931b94d2cf34a047ee2f50976ccb8eb"
+      },
+      {
+        "path": "docs/architecture/cart/CART_SECURITY_THREAT_MODEL.md",
+        "beforeSha256": "e0af1b3069d879d00ad87d0fdf02d0ece6ecd5c0285e83bb93b6c28654005c68",
+        "afterSha256": "b785b02eda70517454385a40610fe2b0f9905b50f6440a4018bdff4031baee7c"
+      },
+      {
+        "path": "docs/architecture/cart/README.md",
+        "beforeSha256": "75bee3e012cf34d569c10987281807a98fcfeea3cd67517f5fa8d8b69fd79684",
+        "afterSha256": "05e461876f6c4991aed90fd2016aea83216e1cc3ee11b707da35d2e67d146797"
+      },
+      {
+        "path": "apps/storefront/app/cart/page.tsx",
+        "beforeSha256": "905a555e6b7ba2558e8938c1d45d8e5c3b162f29f0bc363dde68505b15329d6a",
+        "afterSha256": "e7ffe679c9705b134472a8e0fce8c20d06728e9bc28852e7d5098e6ab6fdb32d"
+      },
+      {
+        "path": "apps/storefront/app/layout.tsx",
+        "beforeSha256": "688c11c0f3c758bfd09b2416ae3e0196125e92ebb8e46f7f104c64da68b793f4",
+        "afterSha256": "1ac73a2ee076868f6cad69e37ce6ac685b36f17b44957d894b84f97459f7777d"
+      },
+      {
+        "path": "apps/storefront/components/layout/desktop-navbar.tsx",
+        "beforeSha256": "83cd3ff9c7712e2f515c7e5b40d3544a400e0f730402e9df867f4312ab4720cf",
+        "afterSha256": "ccefe55f04f5789695a1c2f3e69361ed748fec02b0c3346e9f721c39368c7d88"
+      },
+      {
+        "path": "apps/storefront/components/layout/header-client-shell.tsx",
+        "beforeSha256": "4b1befd359e84124dfe8c167ed57b7a25b7461d21a1a5bb9d5b35bbb435b8974",
+        "afterSha256": "ad29beeee202c4a208fb6aee5f54ee84730835304f99e7b9858c9b422872fd66"
+      },
+      {
+        "path": "apps/storefront/components/layout/mobile-navbar.tsx",
+        "beforeSha256": "b71b2cb657285bd6e7bfae433bce3d12f67f34de91d80e5c7f31b926777eef07",
+        "afterSha256": "c6b8d40b88d05007ee3fc627e82783d1adbe7a3504f30ee375718aff3c2d72ef"
+      },
+      {
+        "path": "apps/storefront/components/product-page-client.tsx",
+        "beforeSha256": "fb4344ecab42e10f526cbf1ca4664f1fe1a60473b840764d6ff4556b16285bae",
+        "afterSha256": "8566efbc784b6ccac6ad943daa493cb464083140428e3a4e23ead9386cc7b924"
+      },
+      {
+        "path": "apps/storefront/features/account/shopper-account.tsx",
+        "beforeSha256": "05c1f2b8b61208547ac357fabc50f109ed3f61346e3cf1de2769940345643c77",
+        "afterSha256": "3a9266242aa018694795447d5a7878ea2b30b9a4c1c73cb34282021628662569"
+      },
+      {
+        "path": "apps/storefront/features/cart/use-cart-count.ts",
+        "beforeSha256": "4ce38137e48a95e0643858b2393023c75327ef12ee8b13b30fe0e654420e3775",
+        "afterSha256": "31d5212013f99d1fc8ecc6202d09c8dc5a4be70dc33baf55dfcc0c9db135dc10"
+      },
+      {
+        "path": "apps/storefront/features/pdp/pdp-view.tsx",
+        "beforeSha256": "a899b8f32b872b4276a32f4947768c8212e3b4e9e3ca1f822d06305f01925647",
+        "afterSha256": "b8017469d5fb1f5ac524f5aba45b5f92f8d7e92204f8cd540c57b44414767696"
+      },
+      {
+        "path": "apps/storefront/lib/api/client/http.ts",
+        "beforeSha256": "7bd313bc70300da30c48a980b4908b45cb2a41297a4b0923e83c27318c7d01da",
+        "afterSha256": "f8c9e8d22d9d2711a266969cc827659578f017d15204073730e7006d70dcab8d"
+      }
+    ],
+    "unrelatedExistingFilesChanged": 0
+  },
+  "bundle": {
+    "before": {
+      "javascript_chunks": 27,
+      "total_js_bytes": 1272387,
+      "total_gzip_bytes": 349843
+    },
+    "after": {
+      "javascript_chunks": 27,
+      "total_js_bytes": 1291362,
+      "total_gzip_bytes": 355591
+    },
+    "delta": {
+      "javascript_chunks": 0,
+      "total_js_bytes": 18975,
+      "total_gzip_bytes": 5748
+    }
+  },
+  "checks": [
+    {
+      "command": "pnpm exec vitest run apps/storefront/features/cart/controller.test.ts apps/storefront/features/cart/pending-journal.test.ts apps/storefront/features/pdp/pdp-product-details.test.tsx tooling/architecture-boundaries.test.mjs",
+      "status": "PASS",
+      "tests": 34,
+      "files": 4
+    },
+    {
+      "command": "pnpm exec tsc --project apps/storefront/tsconfig.json --noEmit --pretty false",
+      "status": "PASS"
+    },
+    {
+      "command": "pnpm exec eslint apps/storefront/features/cart apps/storefront/features/pdp/pdp-view.tsx apps/storefront/components/product-page-client.tsx apps/storefront/components/layout/header-client-shell.tsx apps/storefront/components/layout/desktop-navbar.tsx apps/storefront/components/layout/mobile-navbar.tsx apps/storefront/features/account/shopper-account.tsx apps/storefront/app/cart/page.tsx apps/storefront/app/layout.tsx apps/storefront/lib/api/client/http.ts scripts/cart-phase01b-*",
+      "status": "PASS"
+    },
+    {
+      "command": "pnpm --filter @maevelle/storefront build",
+      "status": "PASS"
+    },
+    {
+      "command": "pnpm check:architecture",
+      "status": "PASS",
+      "packages": 13
+    },
+    {
+      "command": "git diff --check",
+      "status": "PASS"
+    },
+    {
+      "command": "node scripts/cart-phase01b-browser-acceptance.mjs",
+      "status": "PASS",
+      "scenarios": 17
+    },
+    {
+      "command": "node scripts/cart-phase01b-blocked-cookies.mjs",
+      "status": "PASS",
+      "scenarios": 1
+    },
+    {
+      "command": "node scripts/cart-phase01b-visibility.mjs",
+      "status": "PASS",
+      "scenarios": 1
+    }
+  ],
+  "environment": {
+    "browser": "Chrome/156.0.8078.74",
+    "next": "16.4.2",
+    "react": "19.2.8",
+    "database": "PostgreSQL18.6",
+    "container": "maevelle-cart01a-pg18",
+    "purposeLabel": "cart01a-isolated",
+    "binding": "127.0.0.1:55441",
+    "databaseName": "maevelle_cart01b_cdaf4d23358047189e6a965b3e9841d6",
+    "dataMount": "tmpfs /var/lib/postgresql",
+    "destructiveCommands": false
+  },
+  "limits": [
+    "Inherited High legacy guest cookie boundary remains open",
+    "Atomic Clear API absent",
+    "CSS zoom2 at640px recorded706px global header width",
+    "No manual screen-reader, physical touch or Safari/Firefox certification",
+    "Main browser harness models visible independent windows with CDP focus emulation; separate hidden/visible test executed"
+  ]
+}

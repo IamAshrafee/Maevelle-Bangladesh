@@ -1,0 +1,9 @@
+{
+  "status": "PASS",
+  "route": "/design-system",
+  "dialogCancelFirst": true,
+  "escapeCloses": true,
+  "focusRestored": true,
+  "engine": "Chrome/156.0.8078.74",
+  "harnessNote": "Focused trigger before activation; synthetic element.click alone does not model native focus."
+}

@@ -1,0 +1,1 @@
+PASS BR18 Clear selected coupons and items together through the customer UI

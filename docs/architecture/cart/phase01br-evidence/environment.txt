@@ -1,0 +1,6 @@
+{"maevelle.purpose":"cart01br-isolated"} {"5432/tcp":[{"HostIp":"127.0.0.1","HostPort":"55443"}]} {"/var/lib/postgresql":""}
+ current_database | current_user |                                                         version                                                          
+------------------+--------------+--------------------------------------------------------------------------------------------------------------------------
+ maevelle_test    | cart01br     | PostgreSQL 18.6 (Debian 18.6-1.pgdg13+2) on aarch64-unknown-linux-gnu, compiled by gcc (Debian 14.2.0-19) 14.2.0, 64-bit
+(1 row)
+

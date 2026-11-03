@@ -1,0 +1,2 @@
+$ node scripts/check-migration-history.mjs
+Migration history valid: 64 registered, 51 immutable baseline migrations.

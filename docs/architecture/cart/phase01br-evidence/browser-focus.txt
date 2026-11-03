@@ -1,0 +1,2 @@
+FAIL BR18 Clear selected coupons and items together through the customer UI: Condition timed out
+PASS BR28 Real keyboard confirmation, Escape, focus containment and restoration

@@ -1,14 +1,14 @@
 {
   "program": "Maevelle Product Completion V2",
   "version": 2,
-  "active_area": "storefront-wishlist",
-  "active_substage": "WISHLIST_ANALYTICS_BACKEND_LOCALLY_VERIFIED_PARTIAL",
+  "active_area": "storefront-cart",
+  "active_substage": "CART_PHASE_01BR_LOCAL_FRONTEND_PARTIAL",
   "active_status": "IN_PROGRESS",
   "baseline_commit": "d2cce2c",
   "last_checkpoint_commit": "16f648a",
   "last_verified_commit": "16f648a",
-  "last_completed_action": "Phase 06A backend implemented and locally verified: transactional Wishlist/share outcomes, bounded analytics processing, aggregate Admin APIs, strict consented observation contracts and focused PostgreSQL/API/Worker tests. Full acceptance remains partial; see Phase 06A report.",
-  "next_action": "Owner may separately authorize Phase 06B against the Phase 06A handoff. Preserve earlier Wishlist browser/security gates; close privacy, staging, generic upgrade-harness and representative-load acceptance before release. Do not start Phase 07 automatically.",
+  "last_completed_action": "Cart01B-R frontend: one controller adopts atomic Clear and deliberate session forgetting; exact replay/unknown-intent, reset/reload, owner/PDP and lifecycle fences; bounded lock/queue/backoff; shared confirmations and responsive/touch fixes. See01BR report and final verification artifacts.",
+  "next_action": "Close recorded AT/device/native-zoom and historical timing-artifact provenance gaps; preserve01A-R operational cutover/restore/role/proxy and Wishlist gates. Read01BR report before separately assigned02A commerce work. No commit/push/deploy authorized.",
   "interrupted": false,
   "blocked_by": [
     "SIZING_OWNER_RESPONSIVE_AND_ACCESSIBILITY_ACCEPTANCE_PENDING",
@@ -17,7 +17,12 @@
     "LIVE_META_ACTIVATION_AND_ACCEPTANCE_UNVERIFIED",
     "PERSISTENT_SCHEMA_BACKUP_AND_RESTORE_UNVERIFIED",
     "PRIVACY_LEGAL_AND_SECURE_DELIVERY_APPROVAL_PENDING",
-    "REPRESENTATIVE_VOLUME_PERFORMANCE_UNVERIFIED"
+    "REPRESENTATIVE_VOLUME_PERFORMANCE_UNVERIFIED",
+    "WISHLIST_PHASE_07A_ACCESSIBILITY_AND_FAILURE_BROWSER_GATES_OPEN",
+    "WISHLIST_KEY_CUSTODY_AND_RETIREMENT_APPROVAL_PENDING",
+    "CART_LEGACY_PERSISTENT_CUTOVER_AND_RESTORE_CONTINUITY_UNVERIFIED",
+    "CART_PRODUCTION_ROLE_PROXY_RETENTION_AND_VOLUME_GATES_OPEN",
+    "CART_PHASE01BR_AT_DEVICE_NATIVE_ZOOM_AND_TIMING_ARTIFACT_PROVENANCE_OPEN"
   ],
   "owner_review_status": "PENDING",
   "verified_complete_areas": [

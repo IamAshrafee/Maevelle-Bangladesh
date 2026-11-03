@@ -1,0 +1,29 @@
+{
+  "date": "2026-11-02",
+  "timezone": "Asia/Dhaka",
+  "scope": "read-only source audit and new Cart planning documents",
+  "branch": "main",
+  "head": "aa290065407030e85b5b6847efd22fb437a65279",
+  "baseline_modified_tracked": 23,
+  "baseline_untracked_paths": 37,
+  "preexisting_file_hashes_verified": 1931,
+  "preexisting_content_preserved": true,
+  "new_git_status_entries": [
+    "?? docs/architecture/cart/"
+  ],
+  "required_markdown_documents": 17,
+  "local_links_checked": 120,
+  "source_line_links_checked": 55,
+  "scenarios": 59,
+  "threats": 30,
+  "phase00_acceptance": {
+    "PASS": 21,
+    "PARTIAL": 3,
+    "FAIL": 0,
+    "BLOCKED": 0
+  },
+  "git_diff_check_exit_code": 0,
+  "validation_errors": [],
+  "application_tests_builds_browser_database_deployment": "Not run; planning only",
+  "planning_verdict": "PARTIAL: D15 bootstrap protocol, Meta primary docs, business/privacy policies remain open"
+}

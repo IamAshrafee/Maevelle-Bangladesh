@@ -1,0 +1,29 @@
+{
+  "engine": "Chrome/156.0.8078.74",
+  "results": [
+    {
+      "name": "BR01 late independent bootstrap cannot overwrite acknowledged intent; explicit selection resolves both slots",
+      "status": "PASS"
+    },
+    {
+      "name": "BR02 production slots are HttpOnly Secure host-only Lax with no JavaScript token visibility",
+      "status": "PASS"
+    },
+    {
+      "name": "BR03 actual browser Clear duplicate/replay commits one outcome and stale revisions fail",
+      "status": "PASS"
+    },
+    {
+      "name": "BR04 explicit recovery expires actual HttpOnly slots and preserves stored carts/receipts",
+      "status": "PASS"
+    },
+    {
+      "name": "BR05 browser rejects first-party cookies; cold mutation cannot commit against returned public context",
+      "status": "PASS"
+    }
+  ],
+  "blockedReasons": [
+    "UserPreferences"
+  ],
+  "limitations": "Guest API protocol only; no Storefront UI, accessibility, Safari/Firefox, device eviction or background suspension acceptance."
+}

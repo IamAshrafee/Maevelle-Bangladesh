@@ -1,0 +1,95 @@
+{
+  "branch": "main",
+  "head": "aa290065407030e85b5b6847efd22fb437a65279",
+  "initialStatusEntries": 106,
+  "initialTrackedModified": 45,
+  "initialUntrackedEntries": 61,
+  "finalStatusEntries": 112,
+  "baselineFiles": 2004,
+  "unchangedExistingFiles": 1989,
+  "missing": [],
+  "unexpectedChanges": [],
+  "existingFilesChanged": {
+    "apps/api/src/cart-foundation.test.ts": {
+      "before": "0b776555659e738716e2052376e22b8def4efd647fcbb83e12abc09668e8d532",
+      "after": "f70bb9c44ec9258067e1924b153b9f709e577ce50899cea568214d4d3328ce99"
+    },
+    "apps/api/src/routes/cart-context.ts": {
+      "before": "8b002383e554649fb8e2008805a00925f226dafd1764fb35bb56654dd3807e13",
+      "after": "1ae04f8f45e6686ee3d1a76d10f88aee15140933df8e068c483ad99b37b331df"
+    },
+    "docs/architecture/cart/CART_API_CONTRACTS.md": {
+      "before": "4af4b2dfa265eff2bb9518dd7a4ab00c76a7cdb3e3420b7a9ead62663ee6c769",
+      "after": "3be93b3647a847f07e0906421ef87793989ce03a45edcee5b3b2e12a8a626291"
+    },
+    "docs/architecture/cart/CART_CHECKOUT_HANDOFF_CONTRACT.md": {
+      "before": "52bbc83fe1d5d187119cc29fa6e070cc7b21d0afdd30fbd7c3828383d5a49e45",
+      "after": "135cf9858fb035dfbb39f093be594da21d21caf438b80a3e1e2439a3e257f57a"
+    },
+    "docs/architecture/cart/CART_SCENARIO_REGISTER.md": {
+      "before": "ea827a14ec5a0e57ceb4103049ef4e4d9931b94d2cf34a047ee2f50976ccb8eb",
+      "after": "0851ce8f1801b03a87c711d222542a6e5fdd721ff109780e284ebdf0c062dc59"
+    },
+    "docs/architecture/cart/CART_SECURITY_THREAT_MODEL.md": {
+      "before": "b785b02eda70517454385a40610fe2b0f9905b50f6440a4018bdff4031baee7c",
+      "after": "2e777f49e12fa53eacbec5c71c0808d2753b52a4625ed7c231defe4c9779dc15"
+    },
+    "docs/architecture/cart/README.md": {
+      "before": "05e461876f6c4991aed90fd2016aea83216e1cc3ee11b707da35d2e67d146797",
+      "after": "6b91c9290abfe08b47e072e20e213bf4a129f1312134d214100bbe3bd57e6ed0"
+    },
+    "packages/database/src/cart-foundation.test.ts": {
+      "before": "d32202ca511a057da7487c47af120636959d7d66944bef815248f08c532468de",
+      "after": "0ea7458c07dd0afebd6a4f7b08462c7dade11caceb9c894a83bb535ee3c8cd07"
+    },
+    "packages/database/src/cart/context.ts": {
+      "before": "f4987943da6a75c9314bb00c5b3106e8762742d0088684ce923c6a3ca697f193",
+      "after": "4a4a9afbefdc15154a7281020b74ecc2ea2a9d14d9f246d19962d97596b26314"
+    },
+    "packages/database/src/testing/cart-fixture.ts": {
+      "before": "751f00e552a0331876aad88940b60f81c5c41f382387e45823044f44821e93d5",
+      "after": "33e2eca81ec3c5d90dea99d6ae38ec275d05f6f06b52955ced71041df245a6fa"
+    },
+    "apps/api/src/routes/auth.ts": {
+      "before": "67a01034bb6c5f99ae9d4bb1e4619867b5e8d6fe220955020b3e5010bc455c7f",
+      "after": "cbdcdd53b977a357114bca45cffff9eec8c2f0b2db541f9dfd800e7cc9576e20"
+    },
+    "apps/api/src/routes/orders.ts": {
+      "before": "e648898e6a84437900f42dde3624d7c7eb253eb82b731594e85c4670f24da25e",
+      "after": "e025d23b5ffcc1555c889bfba7cbabe31fe55fbb017afae3ee158b75b88bc493"
+    },
+    "apps/api/src/routes/shopper-auth.ts": {
+      "before": "b1e8bef302aad0e7db99932aefa09ba61fd3737660f2541f662399ccd0e014e4",
+      "after": "bd617686576bd6c5a6912d08123b012cdb5635c37f3758020bfb098b061ad7aa"
+    },
+    "packages/database/src/migrations/index.ts": {
+      "before": "1b2e0f17ebb8ba56d1e37e183f044e4b1239717649f40693d5d164cd420c0ca5",
+      "after": "c83520c2459d621874aa01f7661bdefa8b53fb71a303641b04080cefe43da6cc"
+    },
+    "packages/database/src/upgrade-cases.ts": {
+      "before": "2aeb99d243fde3de87ec89d702fa1ac16be4c0316f6fd3a991bfec7255118e38",
+      "after": "6f65dc2ec1599b455dd3042ce1095816fb8fd769eb3ecf92c6691f81be3281c3"
+    }
+  },
+  "newFiles": [
+    "apps/api/src/cart-credential-closure.test.ts",
+    "apps/api/src/routes/checkout-cart-context.ts",
+    "docs/architecture/cart/PHASE_01A1_ACCEPTANCE_REGISTER.md",
+    "docs/architecture/cart/PHASE_01A1_COMPATIBILITY_MATRIX.md",
+    "docs/architecture/cart/PHASE_01A1_IMPLEMENTATION_REPORT.md",
+    "docs/architecture/cart/PHASE_01A1_LEGACY_CREDENTIAL_AUDIT.md",
+    "docs/architecture/cart/PHASE_01A1_SECURITY_MIGRATION_DESIGN.md",
+    "docs/architecture/cart/PHASE_01A1_TEST_EVIDENCE.md",
+    "docs/architecture/cart/phase01a1-evidence/baseline-status.txt",
+    "docs/architecture/cart/phase01a1-evidence/browser.json",
+    "docs/architecture/cart/phase01a1-evidence/final-status.txt",
+    "docs/architecture/cart/phase01a1-evidence/phase01b-regression.json",
+    "packages/database/src/cart-credential-closure.test.ts",
+    "packages/database/src/cart/credentials.ts",
+    "packages/database/src/cart/upgrade-cases.ts",
+    "packages/database/src/migrations/3214_cart_credential_retirement.ts",
+    "scripts/cart-phase01a1-browser.mjs",
+    "scripts/cart-phase01a1-runtime.ts"
+  ],
+  "noCommitPushDeployOrSharedDatabaseChange": true
+}

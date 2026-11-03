@@ -1,0 +1,95 @@
+{
+  "engine": "Chrome/156.0.8078.74",
+  "profile": "Production build; local loopback fault proxy with identity encoding; one touch-emulated390px PDP sample",
+  "ordinaryCartRequests": [
+    {
+      "method": "GET",
+      "path": "/api/storefront/v1/carts/current"
+    }
+  ],
+  "firstAddCartRequests": [
+    {
+      "method": "GET",
+      "path": "/api/storefront/v1/carts/current"
+    },
+    {
+      "method": "POST",
+      "path": "/api/storefront/v1/carts"
+    },
+    {
+      "method": "GET",
+      "path": "/api/storefront/v1/carts/current"
+    },
+    {
+      "method": "POST",
+      "path": "/api/storefront/v1/carts/current/lines"
+    }
+  ],
+  "observedScriptResources": [
+    {
+      "path": "/_next/static/chunks/0bce3aoejm111.js",
+      "decodedBytes": 28873,
+      "transferBytes": 29173
+    },
+    {
+      "path": "/_next/static/chunks/turbopack-3-ry682tkyiqk.js",
+      "decodedBytes": 10030,
+      "transferBytes": 10330
+    },
+    {
+      "path": "/_next/static/chunks/2ompzf_8y8jgr.js",
+      "decodedBytes": 13928,
+      "transferBytes": 14228
+    },
+    {
+      "path": "/_next/static/chunks/2d50etmt0nw51.js",
+      "decodedBytes": 34086,
+      "transferBytes": 34386
+    },
+    {
+      "path": "/_next/static/chunks/1dkej-7yjuhm5.js",
+      "decodedBytes": 60822,
+      "transferBytes": 61122
+    },
+    {
+      "path": "/_next/static/chunks/1rns2trax4dmb.js",
+      "decodedBytes": 537,
+      "transferBytes": 837
+    },
+    {
+      "path": "/_next/static/chunks/14avjo-hgif1_.js",
+      "decodedBytes": 168340,
+      "transferBytes": 168640
+    },
+    {
+      "path": "/_next/static/chunks/10366wdks-vs1.js",
+      "decodedBytes": 74837,
+      "transferBytes": 75137
+    },
+    {
+      "path": "/_next/static/chunks/3a54ol0ny1qqm.js",
+      "decodedBytes": 62727,
+      "transferBytes": 63027
+    },
+    {
+      "path": "/_next/static/chunks/2kxzx-cowk9_l.js",
+      "decodedBytes": 229807,
+      "transferBytes": 230107
+    },
+    {
+      "path": "/_next/static/chunks/1-_1dmd80rlp0.js",
+      "decodedBytes": 21434,
+      "transferBytes": 21734
+    },
+    {
+      "path": "/_next/static/chunks/0kbupxvupmeu2.js",
+      "decodedBytes": 62370,
+      "transferBytes": 62670
+    }
+  ],
+  "decodedScriptBytes": 767791,
+  "estimatedLocalGzipScriptBytes": 212807,
+  "firstAddConfirmedHeaderLatencyMs": 141.61725,
+  "touchEmulation": "PASS: actual CDP touch start/end activates existing PDP Add; not hardware verification",
+  "limits": "No before/after bundle baseline, CWV, CLS, React Profiler, real mobile CPU/network or concurrency-load claim. Latency includes80ms polling granularity."
+}

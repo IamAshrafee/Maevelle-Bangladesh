@@ -1,0 +1,6 @@
+PASS B01 ordinary PDP reads without guest creation
+FAIL B02 first Add and shared header count: Condition timed out
+FAIL B03 response lost after commit; exact receipt replay: Condition timed out
+FAIL B04 reload recovers uncertain intent without auto mutation: Condition timed out
+FAIL B05 Cart page quantity and removal compatibility: Condition timed out
+FAIL B06 two tabs stale desired state requires review: Cannot read properties of undefined (reading 'lines')

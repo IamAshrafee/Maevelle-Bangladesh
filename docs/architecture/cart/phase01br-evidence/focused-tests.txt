@@ -1,0 +1,12 @@
+
+ RUN  v5.0.5 /Users/ashrafee/Documents/GitHub/Maevelle Bangladesh
+
+
+ Test Files  17 passed (17)
+      Tests  148 passed (148)
+   Start at  02:30:48
+   Duration  19.23s (tests 86%, import 12%, transform 2%)
+
+    Isolate  17 workers spawned · ~73ms startup each (spawn + environment, per file)
+             at least ~1.17s faster with isolate: false — reuses workers across files instead of one per file
+

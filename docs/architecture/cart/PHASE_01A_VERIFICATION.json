@@ -1,0 +1,636 @@
+{
+  "date": "2026-11-02",
+  "timezone": "Asia/Dhaka",
+  "phase": "01A",
+  "status": "PARTIAL",
+  "acceptance": {
+    "PASS": 15,
+    "PARTIAL": 1,
+    "FAIL": 0,
+    "BLOCKED": 0
+  },
+  "branch": "main",
+  "head": "aa290065407030e85b5b6847efd22fb437a65279",
+  "initial_status": [
+    " M apps/admin/components/admin-shell.tsx",
+    " M apps/admin/components/analytics/analytics-filter-toolbar.tsx",
+    " M apps/admin/components/analytics/analytics-workspace.tsx",
+    " M apps/admin/components/ui/button.tsx",
+    " M apps/admin/lib/analytics/types.ts",
+    " M apps/api/src/routes/account-wishlist-shares.ts",
+    " M apps/api/src/routes/auth.ts",
+    " M apps/api/src/routes/wishlist.ts",
+    " M apps/api/src/shopper-auth.test.ts",
+    " M apps/storefront/features/wishlist/components/shared-wishlist.tsx",
+    " M apps/storefront/features/wishlist/components/wishlist-page-shell.tsx",
+    " M apps/storefront/features/wishlist/components/wishlist-sharing-panel.tsx",
+    " M apps/storefront/features/wishlist/use-wishlist.ts",
+    " M docs/product-completion/current-focus.md",
+    " M docs/product-completion/state.json",
+    " M packages/config/src/index.test.ts",
+    " M packages/config/src/index.ts",
+    " M packages/database/src/analytics/wishlist/wishlist-analytics.test.ts",
+    " M packages/database/src/upgrade-cases.ts",
+    " M packages/database/src/upgrade-test-cli.ts",
+    " M packages/database/src/wishlist/share-crypto.test.ts",
+    " M packages/database/src/wishlist/share-crypto.ts",
+    " M packages/database/src/wishlist/share-lifecycle.ts",
+    "?? apps/admin/components/analytics/use-wishlist-analytics.ts",
+    "?? apps/admin/components/analytics/views/wishlist-view.tsx",
+    "?? apps/admin/lib/analytics/date-presets.test.ts",
+    "?? apps/admin/lib/analytics/wishlist-api.ts",
+    "?? apps/admin/lib/analytics/wishlist-coverage.test.ts",
+    "?? apps/admin/lib/analytics/wishlist-coverage.ts",
+    "?? apps/admin/lib/analytics/wishlist-report-loader.test.ts",
+    "?? apps/admin/lib/analytics/wishlist-report-loader.ts",
+    "?? apps/admin/src/primary-action-contrast.test.tsx",
+    "?? apps/admin/src/wishlist-analytics.test.tsx",
+    "?? apps/storefront/features/wishlist/recipient-save-feedback.test.ts",
+    "?? apps/storefront/features/wishlist/recipient-save-feedback.ts",
+    "?? apps/storefront/lib/analytics/wishlist-telemetry.test.ts",
+    "?? apps/storefront/lib/analytics/wishlist-telemetry.ts",
+    "?? docs/architecture/cart/",
+    "?? docs/architecture/wishlist/PHASE_06B_FRONTEND_IMPLEMENTATION_REPORT.md",
+    "?? docs/architecture/wishlist/PHASE_07A1_LOCAL_ACCEPTANCE_CLOSURE_REPORT.md",
+    "?? docs/architecture/wishlist/PHASE_07A_ACCEPTANCE_REGISTER.csv",
+    "?? docs/architecture/wishlist/PHASE_07A_LOCAL_ACCEPTANCE_REPORT.md",
+    "?? docs/architecture/wishlist/SHARE_RECOVERY_KEY_RUNBOOK.md",
+    "?? docs/architecture/wishlist/phase07a-evidence/",
+    "?? docs/architecture/wishlist/phase07a1-evidence/",
+    "?? packages/database/src/wishlist/share-key-migration.test.ts",
+    "?? packages/database/src/wishlist/share-key-migration.ts",
+    "?? packages/database/src/wishlist/upgrade-cases.ts",
+    "?? scripts/wishlist-phase07a-api.ts",
+    "?? scripts/wishlist-phase07a-auth-smoke.ts",
+    "?? scripts/wishlist-phase07a-catalog.ts",
+    "?? scripts/wishlist-phase07a-config.ts",
+    "?? scripts/wishlist-phase07a-fixture.ts",
+    "?? scripts/wishlist-phase07a-measure.ts",
+    "?? scripts/wishlist-phase07a-worker.ts",
+    "?? scripts/wishlist-phase07a1-bootstrap.ts",
+    "?? scripts/wishlist-phase07a1-browser-proxy.mjs",
+    "?? scripts/wishlist-phase07a1-expire-session.ts",
+    "?? scripts/wishlist-phase07a1-multi-api.ts",
+    "?? scripts/wishlist-phase07a1-reencrypt.ts",
+    "?? scripts/wishlist-phase07a1-worker-recovery.ts"
+  ],
+  "final_status": [
+    " M apps/admin/components/admin-shell.tsx",
+    " M apps/admin/components/analytics/analytics-filter-toolbar.tsx",
+    " M apps/admin/components/analytics/analytics-workspace.tsx",
+    " M apps/admin/components/ui/button.tsx",
+    " M apps/admin/lib/analytics/types.ts",
+    " M apps/api/src/routes/account-wishlist-shares.ts",
+    " M apps/api/src/routes/auth.ts",
+    " M apps/api/src/routes/cart.ts",
+    " M apps/api/src/routes/orders.ts",
+    " M apps/api/src/routes/shopper-auth.ts",
+    " M apps/api/src/routes/wishlist.ts",
+    " M apps/api/src/server.ts",
+    " M apps/api/src/shopper-auth.test.ts",
+    " M apps/storefront/features/wishlist/components/shared-wishlist.tsx",
+    " M apps/storefront/features/wishlist/components/wishlist-page-shell.tsx",
+    " M apps/storefront/features/wishlist/components/wishlist-sharing-panel.tsx",
+    " M apps/storefront/features/wishlist/use-wishlist.ts",
+    " M apps/worker/src/server.ts",
+    " M docs/product-completion/current-focus.md",
+    " M docs/product-completion/state.json",
+    " M packages/config/src/index.test.ts",
+    " M packages/config/src/index.ts",
+    " M packages/contracts/src/index.ts",
+    " M packages/database/package.json",
+    " M packages/database/src/analytics/wishlist/wishlist-analytics.test.ts",
+    " M packages/database/src/cart.ts",
+    " M packages/database/src/index.ts",
+    " M packages/database/src/migrations/index.ts",
+    " M packages/database/src/orders/placement.ts",
+    " M packages/database/src/promotions.ts",
+    " M packages/database/src/upgrade-cases.ts",
+    " M packages/database/src/upgrade-test-cli.ts",
+    " M packages/database/src/wishlist/share-crypto.test.ts",
+    " M packages/database/src/wishlist/share-crypto.ts",
+    " M packages/database/src/wishlist/share-lifecycle.ts",
+    "?? apps/admin/components/analytics/use-wishlist-analytics.ts",
+    "?? apps/admin/components/analytics/views/wishlist-view.tsx",
+    "?? apps/admin/lib/analytics/date-presets.test.ts",
+    "?? apps/admin/lib/analytics/wishlist-api.ts",
+    "?? apps/admin/lib/analytics/wishlist-coverage.test.ts",
+    "?? apps/admin/lib/analytics/wishlist-coverage.ts",
+    "?? apps/admin/lib/analytics/wishlist-report-loader.test.ts",
+    "?? apps/admin/lib/analytics/wishlist-report-loader.ts",
+    "?? apps/admin/src/primary-action-contrast.test.tsx",
+    "?? apps/admin/src/wishlist-analytics.test.tsx",
+    "?? apps/api/src/cart-foundation.test.ts",
+    "?? apps/api/src/routes/cart-context.ts",
+    "?? apps/storefront/features/wishlist/recipient-save-feedback.test.ts",
+    "?? apps/storefront/features/wishlist/recipient-save-feedback.ts",
+    "?? apps/storefront/lib/analytics/wishlist-telemetry.test.ts",
+    "?? apps/storefront/lib/analytics/wishlist-telemetry.ts",
+    "?? docs/architecture/cart/",
+    "?? docs/architecture/wishlist/PHASE_06B_FRONTEND_IMPLEMENTATION_REPORT.md",
+    "?? docs/architecture/wishlist/PHASE_07A1_LOCAL_ACCEPTANCE_CLOSURE_REPORT.md",
+    "?? docs/architecture/wishlist/PHASE_07A_ACCEPTANCE_REGISTER.csv",
+    "?? docs/architecture/wishlist/PHASE_07A_LOCAL_ACCEPTANCE_REPORT.md",
+    "?? docs/architecture/wishlist/SHARE_RECOVERY_KEY_RUNBOOK.md",
+    "?? docs/architecture/wishlist/phase07a-evidence/",
+    "?? docs/architecture/wishlist/phase07a1-evidence/",
+    "?? packages/contracts/src/cart.ts",
+    "?? packages/database/src/cart-foundation.test.ts",
+    "?? packages/database/src/cart/",
+    "?? packages/database/src/migrations/3213_cart_foundation.ts",
+    "?? packages/database/src/testing/",
+    "?? packages/database/src/wishlist/share-key-migration.test.ts",
+    "?? packages/database/src/wishlist/share-key-migration.ts",
+    "?? packages/database/src/wishlist/upgrade-cases.ts",
+    "?? scripts/wishlist-phase07a-api.ts",
+    "?? scripts/wishlist-phase07a-auth-smoke.ts",
+    "?? scripts/wishlist-phase07a-catalog.ts",
+    "?? scripts/wishlist-phase07a-config.ts",
+    "?? scripts/wishlist-phase07a-fixture.ts",
+    "?? scripts/wishlist-phase07a-measure.ts",
+    "?? scripts/wishlist-phase07a-worker.ts",
+    "?? scripts/wishlist-phase07a1-bootstrap.ts",
+    "?? scripts/wishlist-phase07a1-browser-proxy.mjs",
+    "?? scripts/wishlist-phase07a1-expire-session.ts",
+    "?? scripts/wishlist-phase07a1-multi-api.ts",
+    "?? scripts/wishlist-phase07a1-reencrypt.ts",
+    "?? scripts/wishlist-phase07a1-worker-recovery.ts"
+  ],
+  "baseline_files": 1950,
+  "unchanged_baseline_files": 1930,
+  "changed_baseline_paths": [
+    "docs/architecture/cart/CART_API_CONTRACTS.md",
+    "docs/architecture/cart/CART_DOMAIN_AND_DATA_MODEL.md",
+    "docs/architecture/cart/CART_MASTER_SPEC.md",
+    "docs/architecture/cart/CART_SCENARIO_REGISTER.md",
+    "docs/architecture/cart/CART_SECURITY_THREAT_MODEL.md",
+    "docs/architecture/cart/CART_SYSTEM_ARCHITECTURE.md",
+    "docs/architecture/cart/README.md",
+    "apps/api/src/routes/auth.ts",
+    "apps/api/src/routes/cart.ts",
+    "apps/api/src/routes/orders.ts",
+    "apps/api/src/routes/shopper-auth.ts",
+    "apps/api/src/server.ts",
+    "apps/worker/src/server.ts",
+    "packages/contracts/src/index.ts",
+    "packages/database/package.json",
+    "packages/database/src/cart.ts",
+    "packages/database/src/index.ts",
+    "packages/database/src/migrations/index.ts",
+    "packages/database/src/orders/placement.ts",
+    "packages/database/src/promotions.ts"
+  ],
+  "unrelated_baseline_changes": [],
+  "preexisting_dirty_auth_preserved": true,
+  "new_paths": [
+    "apps/api/src/cart-foundation.test.ts",
+    "apps/api/src/routes/cart-context.ts",
+    "docs/architecture/cart/PHASE_01A_ACCEPTANCE_REGISTER.md",
+    "docs/architecture/cart/PHASE_01A_BOOTSTRAP_PROTOCOL.md",
+    "docs/architecture/cart/PHASE_01A_IMPACT_AND_COMPATIBILITY.md",
+    "docs/architecture/cart/PHASE_01A_IMPLEMENTATION_REPORT.md",
+    "docs/architecture/cart/PHASE_01A_RECEIPT_AND_OWNER_CONTRACT.md",
+    "packages/contracts/src/cart.ts",
+    "packages/database/src/cart-foundation.test.ts",
+    "packages/database/src/cart/availability.ts",
+    "packages/database/src/cart/commands.ts",
+    "packages/database/src/cart/context.ts",
+    "packages/database/src/cart/errors.ts",
+    "packages/database/src/cart/legacy-receipts.ts",
+    "packages/database/src/cart/queries.ts",
+    "packages/database/src/cart/receipts.ts",
+    "packages/database/src/cart/types.ts",
+    "packages/database/src/cart/value.ts",
+    "packages/database/src/migrations/3213_cart_foundation.ts",
+    "packages/database/src/testing/cart-fixture.ts"
+  ],
+  "tests": {
+    "foundation": {
+      "passed": 35,
+      "failed": 0,
+      "unselected_or_skipped": 0,
+      "total": 35,
+      "cases": [
+        {
+          "file": "apps/api/src/cart-foundation.test.ts",
+          "name": "Cart API guest bootstrap and security with PostgreSQL S59 late competing initialization never overwrites acknowledged authority",
+          "status": "passed"
+        },
+        {
+          "file": "apps/api/src/cart-foundation.test.ts",
+          "name": "Cart API guest bootstrap and security with PostgreSQL S59 two tab-equivalent clients can acknowledge both intents, with explicit safe reconciliation",
+          "status": "passed"
+        },
+        {
+          "file": "apps/api/src/cart-foundation.test.ts",
+          "name": "Cart API guest bootstrap and security with PostgreSQL S01/S59 initialization retries with cookie reuse authority without Set-Cookie",
+          "status": "passed"
+        },
+        {
+          "file": "apps/api/src/cart-foundation.test.ts",
+          "name": "Cart API guest bootstrap and security with PostgreSQL S04/S59 lost initialization response, rejected cookie and early add fail safely",
+          "status": "passed"
+        },
+        {
+          "file": "apps/api/src/cart-foundation.test.ts",
+          "name": "Cart API guest bootstrap and security with PostgreSQL S03/S04 explicit replay returns committed outcome with fresh view after simulated lost response",
+          "status": "passed"
+        },
+        {
+          "file": "apps/api/src/cart-foundation.test.ts",
+          "name": "Cart API guest bootstrap and security with PostgreSQL S02 legacy PDP add without explicit key is also replay safe",
+          "status": "passed"
+        },
+        {
+          "file": "apps/api/src/cart-foundation.test.ts",
+          "name": "Cart API guest bootstrap and security with PostgreSQL S17 owner switch rejects old precondition even when new credential is valid",
+          "status": "passed"
+        },
+        {
+          "file": "apps/api/src/cart-foundation.test.ts",
+          "name": "Cart API guest bootstrap and security with PostgreSQL S36 public Cart ID/context alone and forged session tokens never authorize access",
+          "status": "passed"
+        },
+        {
+          "file": "apps/api/src/cart-foundation.test.ts",
+          "name": "Cart API guest bootstrap and security with PostgreSQL S36 configured tenant/currency reject client substitution and foreign capability",
+          "status": "passed"
+        },
+        {
+          "file": "apps/api/src/cart-foundation.test.ts",
+          "name": "Cart API guest bootstrap and security with PostgreSQL S37 exact origin/Fetch Metadata and JSON protections do not trust forwarded headers",
+          "status": "passed"
+        },
+        {
+          "file": "apps/api/src/cart-foundation.test.ts",
+          "name": "Cart API guest bootstrap and security with PostgreSQL S12 unknown fields, malformed UUID/quantity, oversized/malformed JSON are bounded errors",
+          "status": "passed"
+        },
+        {
+          "file": "apps/api/src/cart-foundation.test.ts",
+          "name": "Cart API guest bootstrap and security with PostgreSQL S38 two API instances share creation quotas and honor Retry-After",
+          "status": "passed"
+        },
+        {
+          "file": "apps/api/src/cart-foundation.test.ts",
+          "name": "Cart API guest bootstrap and security with PostgreSQL T05/T16 production cookies are host-only, HttpOnly and Secure; response bodies have no credential",
+          "status": "passed"
+        },
+        {
+          "file": "apps/api/src/cart-foundation.test.ts",
+          "name": "Cart API guest bootstrap and security with PostgreSQL D16 actual verified shopper identity never falls back to guest; logout/expired/renamed Admin cookie fail closed",
+          "status": "passed"
+        },
+        {
+          "file": "apps/api/src/cart-foundation.test.ts",
+          "name": "Cart API guest bootstrap and security with PostgreSQL D16 auth lookup and protection-store outages reject rather than creating anonymous authority",
+          "status": "passed"
+        },
+        {
+          "file": "apps/api/src/cart-foundation.test.ts",
+          "name": "Cart API guest bootstrap and security with PostgreSQL D16 closed protection-store connection fails safely before credential issuance",
+          "status": "passed"
+        },
+        {
+          "file": "apps/api/src/cart-foundation.test.ts",
+          "name": "Cart API guest bootstrap and security with PostgreSQL legacy Checkout creation accepts one new guest slot without altering Checkout behavior",
+          "status": "passed"
+        },
+        {
+          "file": "packages/database/src/cart-foundation.test.ts",
+          "name": "Cart foundation actual PostgreSQL S03/S04 sequential and concurrent replay commits one outcome and outbox fact",
+          "status": "passed"
+        },
+        {
+          "file": "packages/database/src/cart-foundation.test.ts",
+          "name": "Cart foundation actual PostgreSQL S03 same key changed quantity conflicts; owners and tenants have separate scopes",
+          "status": "passed"
+        },
+        {
+          "file": "packages/database/src/cart-foundation.test.ts",
+          "name": "Cart foundation actual PostgreSQL S19 competing edits serialize and report current revision",
+          "status": "passed"
+        },
+        {
+          "file": "packages/database/src/cart-foundation.test.ts",
+          "name": "Cart foundation actual PostgreSQL S07/S13 every existing mutation replays including quantity/remove/coupon selection",
+          "status": "passed"
+        },
+        {
+          "file": "packages/database/src/cart-foundation.test.ts",
+          "name": "Cart foundation actual PostgreSQL S08 evaluation changes while immutable outcome/revision do not",
+          "status": "passed"
+        },
+        {
+          "file": "packages/database/src/cart-foundation.test.ts",
+          "name": "Cart foundation actual PostgreSQL S04 immutable committed quantity outcome remains distinct from the current projection",
+          "status": "passed"
+        },
+        {
+          "file": "packages/database/src/cart-foundation.test.ts",
+          "name": "Cart foundation actual PostgreSQL S07 desired-state no-op receipts do not invent intent revisions/events",
+          "status": "passed"
+        },
+        {
+          "file": "packages/database/src/cart-foundation.test.ts",
+          "name": "Cart foundation actual PostgreSQL S53 rollback includes partial domain writes, receipt claim and outbox",
+          "status": "passed"
+        },
+        {
+          "file": "packages/database/src/cart-foundation.test.ts",
+          "name": "Cart foundation actual PostgreSQL S53 actual PostgreSQL connection termination rolls back and same intent can recover safely",
+          "status": "passed"
+        },
+        {
+          "file": "packages/database/src/cart-foundation.test.ts",
+          "name": "Cart foundation actual PostgreSQL S03 expired receipt stays consumed and cannot reexecute",
+          "status": "passed"
+        },
+        {
+          "file": "packages/database/src/cart-foundation.test.ts",
+          "name": "Cart foundation actual PostgreSQL S36 tenant/currency/context and public ID cannot authorize mutations",
+          "status": "passed"
+        },
+        {
+          "file": "packages/database/src/cart-foundation.test.ts",
+          "name": "Cart foundation actual PostgreSQL S11 unpublished read redacts metadata, options, media and prices; remove remains possible",
+          "status": "passed"
+        },
+        {
+          "file": "packages/database/src/cart-foundation.test.ts",
+          "name": "Cart foundation actual PostgreSQL S36 database scoped foreign keys reject mismatched tenant lines",
+          "status": "passed"
+        },
+        {
+          "file": "packages/database/src/cart-foundation.test.ts",
+          "name": "Cart foundation actual PostgreSQL S12 domain bounds reject huge/fractional/zero quantities before SQL work",
+          "status": "passed"
+        },
+        {
+          "file": "packages/database/src/cart-foundation.test.ts",
+          "name": "Cart foundation actual PostgreSQL T08/S33 owning Promotions caps stacks against remaining gross",
+          "status": "passed"
+        },
+        {
+          "file": "packages/database/src/cart-foundation.test.ts",
+          "name": "Cart foundation actual PostgreSQL migration 3213 upgrades populated prior schema and is ledger-repeatable",
+          "status": "passed"
+        },
+        {
+          "file": "packages/database/src/index.test.ts",
+          "name": "database infrastructure connects to the dedicated test database and executes SELECT 1",
+          "status": "passed"
+        },
+        {
+          "file": "packages/database/src/index.test.ts",
+          "name": "database infrastructure rolls back database changes when a transaction fails",
+          "status": "passed"
+        }
+      ]
+    },
+    "legacy-cart": {
+      "passed": 1,
+      "failed": 0,
+      "unselected_or_skipped": 5,
+      "total": 6,
+      "cases": [
+        {
+          "file": "packages/database/src/commerce-foundation.test.ts",
+          "name": "commercial foundation invariants imports versioned Geography deterministically, searches aliases, and prevents a hierarchy cycle",
+          "status": "skipped"
+        },
+        {
+          "file": "packages/database/src/commerce-foundation.test.ts",
+          "name": "commercial foundation invariants keeps customer identity tenant-scoped, permits shared contacts, and accepts resolved or manual addresses",
+          "status": "skipped"
+        },
+        {
+          "file": "packages/database/src/commerce-foundation.test.ts",
+          "name": "commercial foundation invariants resolves tenant-scoped exact prices and evaluates provisional coupons without recording usage",
+          "status": "skipped"
+        },
+        {
+          "file": "packages/database/src/commerce-foundation.test.ts",
+          "name": "commercial foundation invariants keeps guest carts opaque, authoritative, and non-reserving across concurrent cart intent",
+          "status": "passed"
+        },
+        {
+          "file": "packages/database/src/commerce-foundation.test.ts",
+          "name": "Customers Domain Extensions (Phase 3) supports full customer detail and status updates",
+          "status": "skipped"
+        },
+        {
+          "file": "packages/database/src/commerce-foundation.test.ts",
+          "name": "Customers Domain Extensions (Phase 3) supports notes, tags, and contact deletion",
+          "status": "skipped"
+        }
+      ]
+    },
+    "orders": {
+      "passed": 22,
+      "failed": 0,
+      "unselected_or_skipped": 1,
+      "total": 23,
+      "cases": [
+        {
+          "file": "packages/database/src/orders.test.ts",
+          "name": "atomic guest checkout and COD Orders commits immutable snapshots and one reservation without physically deducting stock, then releases once on cancellation",
+          "status": "passed"
+        },
+        {
+          "file": "packages/database/src/orders.test.ts",
+          "name": "atomic guest checkout and COD Orders allows only one real PostgreSQL last-unit winner with no residual failed Order",
+          "status": "passed"
+        },
+        {
+          "file": "packages/database/src/orders.test.ts",
+          "name": "atomic guest checkout and COD Orders makes duplicate same-key submission canonical, rejects fingerprint reuse, and completes a checkout only once",
+          "status": "passed"
+        },
+        {
+          "file": "packages/database/src/orders.test.ts",
+          "name": "atomic guest checkout and COD Orders rolls back every Order side effect after a test-only failure following reservation",
+          "status": "passed"
+        },
+        {
+          "file": "packages/database/src/orders.test.ts",
+          "name": "atomic guest checkout and COD Orders blocks stale price, catalog, and inventory state without creating partial Orders",
+          "status": "passed"
+        },
+        {
+          "file": "packages/database/src/orders.test.ts",
+          "name": "atomic guest checkout and COD Orders returns a semantic stock error when available inventory is not at a STOCK_HOLDING location",
+          "status": "passed"
+        },
+        {
+          "file": "packages/database/src/orders.test.ts",
+          "name": "atomic guest checkout and COD Orders serializes final coupon redemption so the losing real transaction leaves no Order",
+          "status": "passed"
+        },
+        {
+          "file": "packages/database/src/orders.test.ts",
+          "name": "atomic guest checkout and COD Orders allocates unique, monotonic Order numbers under concurrent checkout completion",
+          "status": "passed"
+        },
+        {
+          "file": "packages/database/src/orders.test.ts",
+          "name": "atomic guest checkout and COD Orders Manual Orders and Fulfillment creates a manual order successfully",
+          "status": "passed"
+        },
+        {
+          "file": "packages/database/src/orders.test.ts",
+          "name": "atomic guest checkout and COD Orders Manual Orders and Fulfillment adds an order note",
+          "status": "passed"
+        },
+        {
+          "file": "packages/database/src/orders.test.ts",
+          "name": "atomic guest checkout and COD Orders Order Completion and Status Transitions prevents completing an order that is already completed (idempotency)",
+          "status": "passed"
+        },
+        {
+          "file": "packages/database/src/orders.test.ts",
+          "name": "atomic guest checkout and COD Orders Order Completion and Status Transitions rejects version mismatch on resumeOrderFromHold",
+          "status": "passed"
+        },
+        {
+          "file": "packages/database/src/orders.test.ts",
+          "name": "atomic guest checkout and COD Orders Order Completion and Status Transitions prevents concurrent stock reservation on last unit",
+          "status": "passed"
+        },
+        {
+          "file": "packages/database/src/orders.test.ts",
+          "name": "atomic guest checkout and COD Orders Order Completion and Status Transitions resolves merged alias orders in listOrders",
+          "status": "passed"
+        },
+        {
+          "file": "packages/database/src/orders.test.ts",
+          "name": "atomic guest checkout and COD Orders Order Completion and Status Transitions cancels one unpaid unfulfilled line and reconciles totals, payment, and stock",
+          "status": "passed"
+        },
+        {
+          "file": "packages/database/src/orders.test.ts",
+          "name": "atomic guest checkout and COD Orders Order Completion and Status Transitions corrects a pre-fulfillment delivery snapshot with immutable before/after evidence",
+          "status": "passed"
+        },
+        {
+          "file": "packages/database/src/orders.test.ts",
+          "name": "atomic guest checkout and COD Orders Order Completion and Status Transitions retries an auto-completion event when order completion fails",
+          "status": "passed"
+        },
+        {
+          "file": "packages/database/src/orders.test.ts",
+          "name": "atomic guest checkout and COD Orders Orders Dedicated Domain Capabilities, Verifications, Timeline & Risk records and lists order verification events with outbox and audit trails",
+          "status": "passed"
+        },
+        {
+          "file": "packages/database/src/orders.test.ts",
+          "name": "atomic guest checkout and COD Orders Orders Dedicated Domain Capabilities, Verifications, Timeline & Risk records cancellation initiatedBy (MERCHANT vs CUSTOMER) and reflects in order detail",
+          "status": "passed"
+        },
+        {
+          "file": "packages/database/src/orders.test.ts",
+          "name": "atomic guest checkout and COD Orders Orders Dedicated Domain Capabilities, Verifications, Timeline & Risk aggregates a unified business timeline across order, verifications, and cancellation",
+          "status": "passed"
+        },
+        {
+          "file": "packages/database/src/orders.test.ts",
+          "name": "atomic guest checkout and COD Orders Orders Dedicated Domain Capabilities, Verifications, Timeline & Risk evaluates delivery risk with explainable signals and duplicate detection",
+          "status": "passed"
+        },
+        {
+          "file": "packages/database/src/orders.test.ts",
+          "name": "atomic guest checkout and COD Orders Orders Dedicated Domain Capabilities, Verifications, Timeline & Risk returns capabilities, verifications, risk summary, and timeline in admin order detail",
+          "status": "passed"
+        },
+        {
+          "file": "packages/database/src/orders.test.ts",
+          "name": "atomic guest checkout and COD Orders Delivery Pricing Management & Simulation manages delivery pricing rules, joins geographic metadata, and simulates quotes",
+          "status": "skipped"
+        }
+      ]
+    }
+  },
+  "existing_shopper_auth_test": {
+    "passed": 12,
+    "failed": 0,
+    "command": "TEST_DATABASE_URL=<owned-instance>/maevelle_test pnpm exec vitest run apps/api/src/shopper-auth.test.ts"
+  },
+  "selected_total_passed": 70,
+  "broader_initial_regression_remaining": [
+    "Unchanged listAdminPromotions: COALESCE text/integer SQL failure",
+    "Unchanged Delivery Pricing fixture conflicts with existing baseline rule"
+  ],
+  "isolated_runtime": {
+    "container": "maevelle-cart01a-pg18",
+    "label": "maevelle.purpose=cart01a-isolated",
+    "host": "127.0.0.1",
+    "port": 55441,
+    "storage": "tmpfs /var/lib/postgresql",
+    "postgres_version_num": 180006,
+    "databases": "new randomly named maevelle_cart01a_* plus disposable owned templates only",
+    "existing_wishlist_container": "untouched"
+  },
+  "compile_and_lint": "Backend production builds and standard focused composite type build; API/database noncomposite checks and focused eslint passed (tool evidence in chat).",
+  "safe_checks": {
+    "diff_check": {
+      "exit_code": 0,
+      "output": ""
+    },
+    "architecture": {
+      "exit_code": 0,
+      "output": "Architecture check passed for 13 workspace packages."
+    },
+    "migration_history": {
+      "exit_code": 0,
+      "output": "Migration history valid: 62 registered, 51 immutable baseline migrations."
+    }
+  },
+  "local_document_links_checked": 24,
+  "implementation_sha256": {
+    "apps/api/src/cart-foundation.test.ts": "0b776555659e738716e2052376e22b8def4efd647fcbb83e12abc09668e8d532",
+    "apps/api/src/routes/auth.ts": "67a01034bb6c5f99ae9d4bb1e4619867b5e8d6fe220955020b3e5010bc455c7f",
+    "apps/api/src/routes/cart-context.ts": "8b002383e554649fb8e2008805a00925f226dafd1764fb35bb56654dd3807e13",
+    "apps/api/src/routes/cart.ts": "7578c4716a02780aa719f040b54f2c39290d8436704c567a81fa16f3e599bd94",
+    "apps/api/src/routes/orders.ts": "e648898e6a84437900f42dde3624d7c7eb253eb82b731594e85c4670f24da25e",
+    "apps/api/src/routes/shopper-auth.ts": "b1e8bef302aad0e7db99932aefa09ba61fd3737660f2541f662399ccd0e014e4",
+    "apps/api/src/server.ts": "350d1e9f6a70fc834062e3d6c1469b9579115f82768461e20a2a2f02a72096c1",
+    "apps/worker/src/server.ts": "efa497adcf55432f80055dcfe65a95fbb3732cc9c5d19793231ae0fcb672adf8",
+    "packages/contracts/src/cart.ts": "d0ac738c1b8118fdbeb95a4b3e52a3786695e7b355f3bc04b543d4f0685355d0",
+    "packages/contracts/src/index.ts": "826f60a31d3b5072b5f2f9fdc902b3b571cf629933781ce2d33c07750defc7c7",
+    "packages/database/package.json": "45ce649032622d642d3b20742b5f7cb558b7a781e36ca9c29451f15a0bd76c33",
+    "packages/database/src/cart-foundation.test.ts": "d32202ca511a057da7487c47af120636959d7d66944bef815248f08c532468de",
+    "packages/database/src/cart.ts": "868fe118607a1cef10fc6fc168b6ddfd9ee78956f48a4e980bf6f8631451fd4c",
+    "packages/database/src/cart/availability.ts": "0965ef44c9a77ce37d7eaff5cd0037a0c03858d2325ff6c76522f668da8adaa2",
+    "packages/database/src/cart/commands.ts": "e584b926a4a78492e3c254897d3adf188b587fb997ad4b9383dfcfdc3a2a1e3d",
+    "packages/database/src/cart/context.ts": "f4987943da6a75c9314bb00c5b3106e8762742d0088684ce923c6a3ca697f193",
+    "packages/database/src/cart/errors.ts": "c627ebffeca3a7ff1961075ed1a0b8548d30f5b896517286d9c01a6b0af4df55",
+    "packages/database/src/cart/legacy-receipts.ts": "ee6217ee93c70c948b202b59272dbaa6859e2b1fd469fc6874e18f41f68058cd",
+    "packages/database/src/cart/queries.ts": "a516ba2176cf7cac21ee0d14ef17bb561073f1d308704ae1b8754caf603fccdd",
+    "packages/database/src/cart/receipts.ts": "a3f5a9d8c8e731fd43f15cca1fade729880445e0942561e61dfcc311d20d420d",
+    "packages/database/src/cart/types.ts": "fb6575775c2f391e9630a6b69403610db313e3b9f8abaa5965253f7b74f93f90",
+    "packages/database/src/cart/value.ts": "93f882cd66e6539d8abebae674f3ad65e498ac41407eb340ffbaa43282565c5a",
+    "packages/database/src/index.ts": "84831e1e25df1efaddd9f70d5ac17d59366341a82dc61885f33a4dc269a76169",
+    "packages/database/src/migrations/3213_cart_foundation.ts": "579843a4db970f40e3d5d50d18e18215fcaaa78feee4f6e413aaedcef36d543f",
+    "packages/database/src/migrations/index.ts": "1b2e0f17ebb8ba56d1e37e183f044e4b1239717649f40693d5d164cd420c0ca5",
+    "packages/database/src/orders/placement.ts": "1d1e7afa0c33fc8edf668c2d26fe8abca163a306eb28502cb6e3f1b02eda2052",
+    "packages/database/src/promotions.ts": "0e10e7bd579752ea5fa6564e9a12c6e00bbfd691c00098422362a50aa384e56f",
+    "packages/database/src/testing/cart-fixture.ts": "751f00e552a0331876aad88940b60f81c5c41f382387e45823044f44821e93d5"
+  },
+  "validation_errors": [],
+  "not_run": [
+    "real browser",
+    "representative load/CWV",
+    "provider tracking",
+    "staging/VPS/deployment",
+    "full test suite"
+  ],
+  "prohibited_actions_performed": [],
+  "documentation_sha256": {
+    "docs/architecture/cart/PHASE_01A_ACCEPTANCE_REGISTER.md": "3e81964135173798449ea69da95aeca86b0244f53c19722b5d84ff00b66e4ded",
+    "docs/architecture/cart/PHASE_01A_BOOTSTRAP_PROTOCOL.md": "36c30b7321afee6fd645c92f38b7cdc9884c7a8e655e8b45ee4181afcbe58218",
+    "docs/architecture/cart/PHASE_01A_IMPACT_AND_COMPATIBILITY.md": "5f874622b62939c2d2b8d57239e2a1c63b4a1d6b1941efc88d580e8130e92f7c",
+    "docs/architecture/cart/PHASE_01A_IMPLEMENTATION_REPORT.md": "3836ea3888f0feeb70b8e2488a3be76ae908b1ccc3adfbf8a11dd70c770aca7b",
+    "docs/architecture/cart/PHASE_01A_RECEIPT_AND_OWNER_CONTRACT.md": "282f6ed790ba95d86216fa2ad9c6c17fca27e91932a31da7e2b3ad9537d656cd"
+  },
+  "remaining_foundation_gate": "01A-10: signed-in legacy compatibility and fixed-cookie adoption/retirement/owner-precondition parity; High legacy credential boundary not waived"
+}

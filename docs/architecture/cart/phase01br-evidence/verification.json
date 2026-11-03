@@ -1,0 +1,52 @@
+{
+  "status": "PASS for executed local checks; overall acceptance PARTIAL",
+  "focusedTests": {
+    "passed": 148,
+    "files": 17,
+    "failed": 0,
+    "skipped": 0,
+    "artifact": "focused-tests.txt"
+  },
+  "functionalBrowserCases": {
+    "passed": 34,
+    "regression": 17,
+    "clearResetLifecycle": 16,
+    "visibility": "PASS"
+  },
+  "blockedCookiePolicy": {
+    "status": "PASS",
+    "engine": "Chrome/156.0.8078.74",
+    "blockedReasons": [
+      "UserPreferences"
+    ],
+    "cookieCount": 0,
+    "noFalseSuccess": true
+  },
+  "layoutAX": {
+    "checks": 9,
+    "allPass": true
+  },
+  "designSystem": {
+    "status": "PASS",
+    "route": "/design-system",
+    "dialogCancelFirst": true,
+    "escapeCloses": true,
+    "focusRestored": true,
+    "engine": "Chrome/156.0.8078.74",
+    "harnessNote": "Focused trigger before activation; synthetic element.click alone does not model native focus."
+  },
+  "checks": {
+    "storefrontTypecheck": "PASS",
+    "scopedESLint": "PASS",
+    "browserScriptESLint": "PASS",
+    "productionStorefrontBuild": "PASS",
+    "architecture": "PASS:13 packages",
+    "migrationHistory": "PASS:64 registered,51 immutable baseline",
+    "gitDiffCheck": "PASS"
+  },
+  "limitations": [
+    "Native zoom, real assistive technology, hardware touch and multi-engine acceptance unperformed.",
+    "Historical performance artifact provenance exception remains explicit.",
+    "No deployment or production-readiness claim."
+  ]
+}

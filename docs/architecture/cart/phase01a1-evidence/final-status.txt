@@ -1,0 +1,112 @@
+ M apps/admin/components/admin-shell.tsx
+ M apps/admin/components/analytics/analytics-filter-toolbar.tsx
+ M apps/admin/components/analytics/analytics-workspace.tsx
+ M apps/admin/components/ui/button.tsx
+ M apps/admin/lib/analytics/types.ts
+ M apps/api/src/routes/account-wishlist-shares.ts
+ M apps/api/src/routes/auth.ts
+ M apps/api/src/routes/cart.ts
+ M apps/api/src/routes/orders.ts
+ M apps/api/src/routes/shopper-auth.ts
+ M apps/api/src/routes/wishlist.ts
+ M apps/api/src/server.ts
+ M apps/api/src/shopper-auth.test.ts
+ M apps/storefront/app/cart/page.tsx
+ M apps/storefront/app/layout.tsx
+ M apps/storefront/components/layout/desktop-navbar.tsx
+ M apps/storefront/components/layout/header-client-shell.tsx
+ M apps/storefront/components/layout/mobile-navbar.tsx
+ M apps/storefront/components/product-page-client.tsx
+ M apps/storefront/features/account/shopper-account.tsx
+ M apps/storefront/features/cart/use-cart-count.ts
+ M apps/storefront/features/pdp/pdp-view.tsx
+ M apps/storefront/features/wishlist/components/shared-wishlist.tsx
+ M apps/storefront/features/wishlist/components/wishlist-page-shell.tsx
+ M apps/storefront/features/wishlist/components/wishlist-sharing-panel.tsx
+ M apps/storefront/features/wishlist/use-wishlist.ts
+ M apps/storefront/lib/api/client/http.ts
+ M apps/worker/src/server.ts
+ M docs/product-completion/current-focus.md
+ M docs/product-completion/state.json
+ M packages/config/src/index.test.ts
+ M packages/config/src/index.ts
+ M packages/contracts/src/index.ts
+ M packages/database/package.json
+ M packages/database/src/analytics/wishlist/wishlist-analytics.test.ts
+ M packages/database/src/cart.ts
+ M packages/database/src/index.ts
+ M packages/database/src/migrations/index.ts
+ M packages/database/src/orders/placement.ts
+ M packages/database/src/promotions.ts
+ M packages/database/src/upgrade-cases.ts
+ M packages/database/src/upgrade-test-cli.ts
+ M packages/database/src/wishlist/share-crypto.test.ts
+ M packages/database/src/wishlist/share-crypto.ts
+ M packages/database/src/wishlist/share-lifecycle.ts
+?? apps/admin/components/analytics/use-wishlist-analytics.ts
+?? apps/admin/components/analytics/views/wishlist-view.tsx
+?? apps/admin/lib/analytics/date-presets.test.ts
+?? apps/admin/lib/analytics/wishlist-api.ts
+?? apps/admin/lib/analytics/wishlist-coverage.test.ts
+?? apps/admin/lib/analytics/wishlist-coverage.ts
+?? apps/admin/lib/analytics/wishlist-report-loader.test.ts
+?? apps/admin/lib/analytics/wishlist-report-loader.ts
+?? apps/admin/src/primary-action-contrast.test.tsx
+?? apps/admin/src/wishlist-analytics.test.tsx
+?? apps/api/src/cart-credential-closure.test.ts
+?? apps/api/src/cart-foundation.test.ts
+?? apps/api/src/routes/cart-context.ts
+?? apps/api/src/routes/checkout-cart-context.ts
+?? apps/storefront/features/cart/api.ts
+?? apps/storefront/features/cart/browser-runtime.ts
+?? apps/storefront/features/cart/components/
+?? apps/storefront/features/cart/controller.test.ts
+?? apps/storefront/features/cart/controller.ts
+?? apps/storefront/features/cart/errors.ts
+?? apps/storefront/features/cart/pending-journal.test.ts
+?? apps/storefront/features/cart/pending-journal.ts
+?? apps/storefront/features/cart/types.ts
+?? apps/storefront/features/cart/use-cart.ts
+?? apps/storefront/features/wishlist/recipient-save-feedback.test.ts
+?? apps/storefront/features/wishlist/recipient-save-feedback.ts
+?? apps/storefront/lib/analytics/wishlist-telemetry.test.ts
+?? apps/storefront/lib/analytics/wishlist-telemetry.ts
+?? docs/architecture/cart/
+?? docs/architecture/wishlist/PHASE_06B_FRONTEND_IMPLEMENTATION_REPORT.md
+?? docs/architecture/wishlist/PHASE_07A1_LOCAL_ACCEPTANCE_CLOSURE_REPORT.md
+?? docs/architecture/wishlist/PHASE_07A_ACCEPTANCE_REGISTER.csv
+?? docs/architecture/wishlist/PHASE_07A_LOCAL_ACCEPTANCE_REPORT.md
+?? docs/architecture/wishlist/SHARE_RECOVERY_KEY_RUNBOOK.md
+?? docs/architecture/wishlist/phase07a-evidence/
+?? docs/architecture/wishlist/phase07a1-evidence/
+?? packages/contracts/src/cart.ts
+?? packages/database/src/cart-credential-closure.test.ts
+?? packages/database/src/cart-foundation.test.ts
+?? packages/database/src/cart/
+?? packages/database/src/migrations/3213_cart_foundation.ts
+?? packages/database/src/migrations/3214_cart_credential_retirement.ts
+?? packages/database/src/testing/
+?? packages/database/src/wishlist/share-key-migration.test.ts
+?? packages/database/src/wishlist/share-key-migration.ts
+?? packages/database/src/wishlist/upgrade-cases.ts
+?? scripts/cart-phase01a1-browser.mjs
+?? scripts/cart-phase01a1-runtime.ts
+?? scripts/cart-phase01b-blocked-cookies.mjs
+?? scripts/cart-phase01b-browser-acceptance.mjs
+?? scripts/cart-phase01b-browser-proxy.mjs
+?? scripts/cart-phase01b-cdp.mjs
+?? scripts/cart-phase01b-runtime.ts
+?? scripts/cart-phase01b-visibility.mjs
+?? scripts/wishlist-phase07a-api.ts
+?? scripts/wishlist-phase07a-auth-smoke.ts
+?? scripts/wishlist-phase07a-catalog.ts
+?? scripts/wishlist-phase07a-config.ts
+?? scripts/wishlist-phase07a-fixture.ts
+?? scripts/wishlist-phase07a-measure.ts
+?? scripts/wishlist-phase07a-worker.ts
+?? scripts/wishlist-phase07a1-bootstrap.ts
+?? scripts/wishlist-phase07a1-browser-proxy.mjs
+?? scripts/wishlist-phase07a1-expire-session.ts
+?? scripts/wishlist-phase07a1-multi-api.ts
+?? scripts/wishlist-phase07a1-reencrypt.ts
+?? scripts/wishlist-phase07a1-worker-recovery.ts

@@ -1,0 +1,17 @@
+FAIL B01 ordinary PDP reads without guest creation: Condition timed out
+FAIL B02 first Add and shared header count: Cannot read properties of undefined (reading 'id')
+FAIL B03 response lost after commit; exact receipt replay: Cannot read properties of undefined (reading 'id')
+FAIL B04 reload recovers uncertain intent without auto mutation: Cannot read properties of undefined (reading 'id')
+FAIL B05 Cart page quantity and removal compatibility: Cannot read properties of undefined (reading 'navigate')
+FAIL B06 two tabs stale desired state requires review: Cannot read properties of undefined (reading 'evaluate')
+PASS B07 cold tabs delayed Set-Cookie preserves acknowledged bag
+FAIL B08 account sign-in during delayed guest result hides old state: Cannot read properties of undefined (reading 'navigate')
+PASS B09 Web Locks coordinate cold tabs; invalidations reconcile
+FAIL B10 real API no-op coupons, changed-key payload and tampering: Cannot read properties of undefined (reading 'evaluate')
+PASS B11 removed credential fails closed without replacement
+FAIL B12 responsive, reduced motion, keyboard and live feedback: Cannot read properties of undefined (reading 'navigate')
+PASS B13 client route navigation keeps in-flight controller and confirmed count
+PASS B14 storage denial keeps exact in-memory recovery and warns
+PASS B15 account switching remains unavailable without prior guest display
+PASS B16 browser history and public HTML contain no private Cart snapshot
+PASS B17 supported coupon UI apply and remove use real Promotions

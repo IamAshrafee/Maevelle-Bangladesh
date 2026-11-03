@@ -1,0 +1,43 @@
+{
+  "engine": "Chrome/156.0.8078.74",
+  "database": "maevelle_cart01a_558ce40d035d4585b0c75f094e793e10",
+  "transport": "HTTPS localhost; self-signed certificate accepted only in disposable Chrome",
+  "results": [
+    {
+      "name": "C01 actual legacy HttpOnly cookie survives cutover but cannot authorize or lose retained intent",
+      "status": "PASS"
+    },
+    {
+      "name": "C02 replay renamed into genuine browser __Host slot still cannot authorize or adopt",
+      "status": "PASS"
+    },
+    {
+      "name": "C03 production HTTPS slot attributes, server bootstrap round-trip and exact lost-response recovery",
+      "status": "PASS"
+    },
+    {
+      "name": "C04 mixed fixed/new credentials fail closed without deleting current acknowledged bag",
+      "status": "PASS"
+    },
+    {
+      "name": "C05 actual shopper A to B to logout never reads guest or attaches it to account",
+      "status": "PASS"
+    },
+    {
+      "name": "C06 verified account mapping failure stays unavailable and cannot use returned guest cookie",
+      "status": "PASS"
+    },
+    {
+      "name": "C07 concurrent browser retirement and mutation cannot resurrect old token or duplicate intent",
+      "status": "PASS"
+    },
+    {
+      "name": "C08 actual encrypted shopper-session TTL expiry refuses Cart and Checkout without guest fallback",
+      "status": "PASS"
+    },
+    {
+      "name": "C09 delayed actual legacy Set-Cookie cannot overwrite new slot, restore old authority or erase acknowledged quantity",
+      "status": "PASS"
+    }
+  ]
+}
