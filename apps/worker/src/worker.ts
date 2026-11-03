@@ -15,7 +15,11 @@ import {
   processNotificationOutbox,
 } from '@maevelle/database/notifications';
 import type { EncryptionKey } from '@maevelle/security';
-import { processAnalyticsExports, processAnalyticsOutbox } from '@maevelle/database/analytics';
+import {
+  processAnalyticsExports,
+  processAnalyticsOutbox,
+  processCartAnalyticsOutbox,
+} from '@maevelle/database/analytics';
 import { processCatalogImports } from '@maevelle/database/admin-operations';
 import { processIntegrityRuns, scheduleDueIntegrityRuns } from '@maevelle/database/integrity';
 import { deliverPendingInvitationEmails } from '@maevelle/database/iam';
@@ -174,6 +178,7 @@ export function createWorker(options: WorkerOptions): WorkerRuntime {
         smsPolls,
         webhookEvents,
         analytics,
+        cartAnalytics,
         analyticsExports,
         imports,
         search,
@@ -253,6 +258,15 @@ export function createWorker(options: WorkerOptions): WorkerRuntime {
           : Promise.resolve(0),
         runJob(() => createWebhookEventsFromOutbox(options.database.db)),
         runJob(() => processAnalyticsOutbox(options.database.db)),
+        runJob(async () => {
+          const result = await processCartAnalyticsOutbox(options.database.db);
+          if (result.rejected)
+            logger?.info({ rejected: result.rejected }, 'Cart analytics events dead-lettered.');
+          return result.processed;
+        }).catch(() => {
+          logger?.info({}, 'Cart analytics batch failed and will retry.');
+          return 0;
+        }),
         runJob(() => processAnalyticsExports(options.database.db, `worker:${process.pid}`, 1)),
         runJob(() => processCatalogImports(options.database.db)),
         runJob(() => processStorefrontSearchOutbox(options.database.db)),
@@ -354,6 +368,7 @@ export function createWorker(options: WorkerOptions): WorkerRuntime {
           smsPolls,
           webhookEvents,
           analytics,
+          cartAnalytics,
           analyticsExports,
           imports,
           search,

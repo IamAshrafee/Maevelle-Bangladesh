@@ -378,3 +378,6 @@ export * from './analytics/wishlist/processing.js';
 export * from './analytics/wishlist/operations.js';
 
 export * from './analytics/wishlist/observations.js';
+
+export { processCartAnalyticsOutbox } from './analytics/cart/processing.js';
+export { getCartActivity } from './analytics/cart/reporting.js';

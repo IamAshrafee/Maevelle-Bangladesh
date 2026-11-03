@@ -162,4 +162,23 @@ export const cartUpgradeCases: Record<string, UpgradeCase> = {
       await assert.rejects(() => insert(customerId), /cart_active_account_owner/);
     },
   },
+  '3217_cart_analytics': {
+    async before(db, organizationId) {
+      await sql`
+        insert into platform.outbox_events
+          (organization_id,event_type,event_version,aggregate_type,aggregate_id,payload,occurred_at)
+        values (${organizationId},'cart.intent.mutated',1,'cart',${cartId},'{}',now())
+      `.execute(db);
+    },
+    async after(db, organizationId) {
+      const result = await sql<{ legacy: number; projected: number }>`
+        select (select count(*)::int from platform.outbox_events
+          where organization_id=${organizationId} and aggregate_id=${cartId}
+            and event_type='cart.intent.mutated' and event_version=1) as legacy,
+          (select count(*)::int from analytics.cart_mutations
+            where organization_id=${organizationId}) as projected
+      `.execute(db);
+      assert.deepEqual(result.rows, [{ legacy: 1, projected: 0 }]);
+    },
+  },
 };

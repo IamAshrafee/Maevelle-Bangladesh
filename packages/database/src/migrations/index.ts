@@ -1,3 +1,4 @@
+import * as cartAnalytics from './3217_cart_analytics.js';
 import * as accountCart from './3216_account_cart.js';
 import * as cartIntegrity from './3215_cart_integrity.js';
 import * as cartCredentialRetirement from './3214_cart_credential_retirement.js';
@@ -136,6 +137,7 @@ export const migrations = {
   '3214_cart_credential_retirement': cartCredentialRetirement,
   '3215_cart_integrity': cartIntegrity,
   '3216_account_cart': accountCart,
+  '3217_cart_analytics': cartAnalytics,
 } satisfies Record<string, Migration>;
 
 export const migrationProvider: MigrationProvider = {

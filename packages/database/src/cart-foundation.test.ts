@@ -258,7 +258,7 @@ describe('Cart foundation actual PostgreSQL', () => {
         expectedVersion: added.version,
         idempotencyKey: crypto.randomUUID(),
       },
-      'snapshot_test',
+      'set_quantity',
       async (transaction) => {
         await setCurrentVariantPrice(database.db, {
           organizationId: f.organizationId,
@@ -593,7 +593,7 @@ describe('Cart foundation actual PostgreSQL', () => {
       mutateGuestCart(
         database.db,
         { token: f.token, expectedVersion: 1, idempotencyKey: key },
-        'fault',
+        'set_quantity',
         async (tx) => {
           await sql`update cart.carts set version=version+1 where id=${f.cart.id}`.execute(tx);
           throw new Error('Synthetic disconnect before commit');
@@ -612,7 +612,7 @@ describe('Cart foundation actual PostgreSQL', () => {
     const f = await setup();
     const input = { token: f.token, expectedVersion: 1, idempotencyKey: crypto.randomUUID() };
     await expect(
-      mutateGuestCart(database.db, input, 'disconnect', async (tx) => {
+      mutateGuestCart(database.db, input, 'set_quantity', async (tx) => {
         await sql`update cart.carts set version=2 where id=${f.cart.id}`.execute(tx);
         const pid = await sql<{ pid: number }>`select pg_backend_pid() pid`.execute(tx);
         await sql`select pg_terminate_backend(${pid.rows[0]!.pid})`.execute(database.db);
@@ -621,12 +621,12 @@ describe('Cart foundation actual PostgreSQL', () => {
     ).rejects.toThrow();
     expect((await getGuestCart(database.db, f.token)).version).toBe(1);
     expect(connectionErrors).toContain('DATABASE_CONNECTION_LOST');
-    const recovered = await mutateGuestCart(database.db, input, 'disconnect', async (tx) => {
+    const recovered = await mutateGuestCart(database.db, input, 'set_quantity', async (tx) => {
       await sql`update cart.carts set version=2 where id=${f.cart.id}`.execute(tx);
       return getGuestCart(tx, f.token);
     });
     expect(recovered.outcome).toMatchObject({ committedVersion: '2', replayed: false });
-    const replay = await mutateGuestCart(database.db, input, 'disconnect', async () => {
+    const replay = await mutateGuestCart(database.db, input, 'set_quantity', async () => {
       throw new Error('must never reexecute');
     });
     expect(replay.outcome!.replayed).toBe(true);

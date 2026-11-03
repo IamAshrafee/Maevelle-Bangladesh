@@ -6383,3 +6383,56 @@ should affect future behavior according to explicit rules, while preserving hist
 ---
 
 **End of Analytics & Reporting Architecture v0.1**
+
+## Cart operational analytics (Phase 05A)
+
+One `cart.intent.mutated` v2 event and an `analytics.cart.v1` consumer receipt
+commit with each changed Cart revision. The existing mutation response supplies
+the same public event UUID on replay. The Worker projects a bounded batch with
+`SKIP LOCKED`, using the outbox row as the fact's primary key. Projection and
+receipt completion commit together. A database error rolls back the batch for
+retry on a later tick. An invalid or unsupported queued event is dead-lettered
+with a safe code and can be investigated through existing consumer-receipt
+diagnostics. The pending index excludes completed and dead-lettered receipts.
+Version 1 events remain readable as history and have no analytics backfill.
+
+- **Activity.** `getCartActivity` is an internal aggregate query for an authorized
+  organization and a half-open period of up to 366 days. Mutations count changed
+  revisions. Active-in-period means at least one measured mutation. Distinct Cart
+  counts are non-additive across breakdowns and are never shopper counts.
+  Empty provisioning, reads, failed attempts, no-ops and replays contribute zero.
+- **Movement.** Unit change is destination Cart units after minus before. Group
+  by operation. Keep merge volume separate from additions because the incoming
+  units already existed in a guest Cart. Wishlist ADD and MOVE each contribute
+  one transfer and no direct-add event. Variant replacement can change the mix
+  with zero net units. Clear is one operation regardless of units removed.
+- **Value.** Gross and net merchandise snapshots come from the Cart evaluation
+  using authoritative Pricing, in exact four-place decimals and the Cart currency.
+  An unpriced line contributes zero to the evaluated subtotal. Changes between
+  snapshots can reflect repricing as well as intent changes. Never sum snapshots
+  as sales or treat their difference as an isolated price or coupon effect.
+  Coupon application counts a committed selection and can have zero current benefit.
+- **Inactivity.** A Cart is quiet over a selected interval when it has zero
+  measured mutations in that interval. That signal alone says nothing about
+  views, conversion, or lost sales. A future inactive-Cart inventory report
+  needs an explicit eligible cohort, lifecycle exclusions for merged, expired,
+  and converted Carts, and an approved lookback. Current reports cover only
+  projected facts, so a backlog or rollback to a v1 writer creates a coverage gap.
+
+Operational facts retain the Cart ID for distinct counting, with no account,
+guest source, session, coupon code, or Wishlist identifiers. Guest and account
+Cart histories are not stitched into shopper profiles. Cart v2 is excluded from
+generic webhook delivery. There is no provider adapter or automatic retention
+job. Approve retention, access and deletion policy for both facts and source
+events before rollout. Apply additive migration 3217 before enabling the new
+API and Worker. A prior release can run against the additive schema, but its
+v1 writes leave a measurement gap. Keep v2 receipts for forward recovery.
+
+Phase 05B should use the existing consent-aware Storefront observation path for
+views, attempts, safe rejection categories and recovery UI interactions. The
+`CartInteractionName` contract is a vocabulary for that handoff, with ingestion
+validation and consent enforcement still to be wired. Keep observation IDs
+separate and reuse a server receipt's event UUID if a future approved provider
+mapping requires deduplication. Existing behavioral `ADD_TO_CART` and
+`REMOVE_FROM_CART` observations must remain separate from operational totals.
+Phase 06 can wrap the aggregate query in an Analytics-authorized Admin API.

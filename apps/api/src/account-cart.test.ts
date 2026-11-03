@@ -7,6 +7,7 @@ import type {
   GuestCartViewDto,
 } from '@maevelle/contracts';
 import { sql } from '@maevelle/database';
+import { processCartAnalyticsOutbox } from '@maevelle/database/analytics';
 import {
   linkCustomerAccount,
   mergeCustomers,
@@ -461,6 +462,19 @@ it('reviews both owners, consolidates and moves lines, and replays exactly after
     merged_into_id: merged.id,
     events: 1,
   });
+  const db = isolation.database.db;
+  await processCartAnalyticsOutbox(db, 500);
+  const activity = await sql<{ operation: string; unit_delta: number }>`
+    select operation,unit_delta from analytics.cart_mutations
+    where organization_id=${fixture.organizationId} and cart_id=${merged.id}
+    order by outbox_event_id
+  `.execute(db);
+  expect(activity.rows).toEqual([
+    { operation: 'add_line', unit_delta: 2 },
+    { operation: 'apply_coupon', unit_delta: 0 },
+    { operation: 'merge_guest', unit_delta: 3 },
+    { operation: 'remove_coupon', unit_delta: 0 },
+  ]);
 });
 
 it('rejects stale commerce, rolls back partial writes, and allows only one destination account', async () => {
@@ -806,6 +820,18 @@ it('adds without removing, then moves once under competing requests and replays 
     wishlistVersion: move.wishlistVersion + 1,
   });
   expect(removed.statusCode, removed.body).toBe(404);
+  const db = isolation.database.db;
+  await processCartAnalyticsOutbox(db, 500);
+  const activity = await sql<{ wishlist_action: string; unit_delta: number }>`
+    select wishlist_action,unit_delta from analytics.cart_mutations
+    where organization_id=${fixture.organizationId} and cart_id=${latest.id}
+      and operation='wishlist_transfer'
+    order by outbox_event_id
+  `.execute(db);
+  expect(activity.rows).toEqual([
+    { wishlist_action: 'ADD', unit_delta: 1 },
+    { wishlist_action: 'MOVE', unit_delta: 1 },
+  ]);
 });
 
 it('fences account changes, stale Wishlist revisions and rejected commerce', async () => {

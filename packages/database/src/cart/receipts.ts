@@ -1,5 +1,9 @@
 import { sql, type Kysely, type Transaction } from 'kysely';
-import type { CartMutationOutcomeDto } from '@maevelle/contracts';
+import type {
+  CartMutationMeasurement,
+  CartMutationOperation,
+  CartMutationOutcomeDto,
+} from '@maevelle/contracts';
 import type { DatabaseSchema } from '../index.js';
 import { claimIdempotencyRecord, IdempotencyKeyReuseError } from '../platform.js';
 import { findCart, type ResolvedCart } from './context.js';
@@ -26,13 +30,13 @@ function canonical(value: unknown): unknown {
 export function mutateCart<Scope extends CartMutationScope>(
   db: Kysely<DatabaseSchema>,
   input: Scope,
-  operation: string,
+  operation: CartMutationOperation,
   apply: (transaction: Transaction<DatabaseSchema>, cart: ResolvedCart) => Promise<OwnedCartView>,
 ): Promise<CartMutationView<Scope>>;
 export async function mutateCart(
   db: Kysely<DatabaseSchema>,
   input: CartMutationScope,
-  operation: string,
+  operation: CartMutationOperation,
   apply: (transaction: Transaction<DatabaseSchema>, cart: ResolvedCart) => Promise<OwnedCartView>,
 ): Promise<OwnedCartView> {
   if (!Number.isSafeInteger(input.expectedVersion) || input.expectedVersion < 1)
@@ -141,20 +145,44 @@ export async function mutateCart(
               },
             ];
       });
-    const event =
-      view.version === cart.version
-        ? { rows: [] }
-        : await sql<{ event_id: string }>`insert into platform.outbox_events
-      (organization_id,event_type,event_version,aggregate_type,aggregate_id,aggregate_version,payload,occurred_at)
-      values (${cart.organizationId},'cart.intent.mutated',1,'cart',${cart.id},${view.version},
-        ${JSON.stringify({ operation, receiptId: record.id, changes })}::jsonb,now()) returning event_id::text`.execute(
-            tx,
-          );
+    let eventIds: string[] = [];
+    if (view.version !== cart.version) {
+      const measurement: CartMutationMeasurement = {
+        owner: account ? 'ACCOUNT' : 'GUEST',
+        wishlistAction:
+          'action' in input && (input.action === 'ADD' || input.action === 'MOVE')
+            ? input.action
+            : null,
+        currency: view.currency,
+        unitDelta: changes.reduce(
+          (sum, change) => sum + Number(change.quantity) - Number(change.previousQuantity),
+          0,
+        ),
+        unitsAfter: view.lines.reduce((sum, line) => sum + Number(line.quantity), 0),
+        linesAfter: view.lines.length,
+        merchandiseGrossAfter: view.merchandiseGross,
+        merchandiseNetAfter: view.merchandiseNet,
+      };
+      const event = await sql<{ event_id: string }>`
+        with event as (
+          insert into platform.outbox_events
+            (organization_id,event_type,event_version,aggregate_type,aggregate_id,aggregate_version,payload,occurred_at)
+          values (${cart.organizationId},'cart.intent.mutated',2,'cart',${cart.id},${view.version},
+            ${JSON.stringify({ operation, receiptId: record.id, changes, measurement })}::jsonb,clock_timestamp())
+          returning id,event_id
+        ), queued as (
+          insert into platform.event_consumer_receipts(outbox_event_id,consumer_name,status)
+          select id,'analytics.cart.v1','PENDING' from event returning outbox_event_id
+        )
+        select event.event_id::text from event join queued on queued.outbox_event_id=event.id
+      `.execute(tx);
+      eventIds = event.rows.map((row) => row.event_id);
+    }
     const outcome: CartMutationOutcomeDto = {
       receiptId: record.id,
       operation,
       committedVersion: String(view.version),
-      eventIds: event.rows.map((row) => row.event_id),
+      eventIds,
       replayed: false,
       changes,
     };
