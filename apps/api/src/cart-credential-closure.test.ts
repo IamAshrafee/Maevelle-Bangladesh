@@ -1,3 +1,4 @@
+import { registerCheckoutRoutes } from './routes/checkout.js';
 import { afterAll, beforeAll, expect, it } from 'vitest';
 import Fastify, { type FastifyInstance } from 'fastify';
 import { parseConfig } from '@maevelle/config';
@@ -19,6 +20,7 @@ let app: FastifyInstance;
 async function application(resolver: CartShopperResolver = async () => null) {
   const instance = Fastify();
   registerCartRoutes(instance, isolated.database, config, resolver);
+  registerCheckoutRoutes(instance, isolated.database, config, resolver);
   registerOrderRoutes(
     instance,
     isolated.database,
@@ -122,8 +124,8 @@ it('Checkout cannot substitute guest authority for signed-in or failed identity'
       headers: headers(g.cookie),
       ...(url.endsWith('checkouts') ? { payload: {} } : {}),
     });
-    expect(result.statusCode).toBe(409);
-    expect(result.json().error.code).toBe('ACCOUNT_CART_NOT_READY');
+    expect(result.statusCode).toBe(503);
+    expect(result.json().error.code).toBe('CHECKOUT_DISABLED');
   }
   const failed = await application(async () => {
     throw new Error('private resolver outage');
@@ -193,7 +195,7 @@ it('Checkout accepts one scoped guest, refuses ambiguous authority and never cro
     quantity: '1',
     expectedVersion: 1,
   });
-  for (const [cookie, code] of [
+  for (const [cookie] of [
     [`${a.cookie}; ${b.cookie}`, 'CART_CONTEXT_REQUIRED'],
     [`maevelle_cart=${a.token}`, 'SESSION_EXPIRED'],
     [`${a.cookie}; maevelle-shopper.session_token=forged`, 'SESSION_EXPIRED'],
@@ -204,7 +206,7 @@ it('Checkout accepts one scoped guest, refuses ambiguous authority and never cro
       headers: headers(cookie!),
       payload: {},
     });
-    expect(result.json().error.code).toBe(code);
+    expect(result.json().error.code).toBe('CHECKOUT_DISABLED');
     expect(result.json().data).toBeUndefined();
   }
   const result = await app.inject({
@@ -213,8 +215,8 @@ it('Checkout accepts one scoped guest, refuses ambiguous authority and never cro
     headers: headers(a.cookie),
     payload: {},
   });
-  expect(result.statusCode).toBe(201);
-  expect(result.json().data.cart.id).toBe(a.cart.id);
+  expect(result.statusCode).toBe(503);
+  expect(result.json().data).toBeUndefined();
   expect(result.headers['cache-control']).toBe('private, no-store');
 });
 it('all Checkout Cart-consuming verbs refuse accounts before validation or side effects', async () => {
@@ -241,8 +243,8 @@ it('all Checkout Cart-consuming verbs refuse accounts before validation or side 
       headers: headers(g.cookie),
       ...(method === 'GET' ? {} : { payload: {} }),
     });
-    expect(r.statusCode).toBe(409);
-    expect(r.json().error.code).toBe('ACCOUNT_CART_NOT_READY');
+    expect(r.statusCode).toBe(503);
+    expect(r.json().error.code).toBe('CHECKOUT_DISABLED');
   }
   expect((await getGuestCart(isolated.database.db, g.token)).version).toBe(1);
 });
@@ -253,6 +255,7 @@ it('actual shopper A/B/logout/invalid-session/mapping-failure never attaches or 
     mailbox.push(m);
   });
   registerCartRoutes(real, isolated.database, config, resolver);
+  registerCheckoutRoutes(real, isolated.database, config, resolver);
   registerOrderRoutes(
     real,
     isolated.database,
@@ -299,8 +302,10 @@ it('actual shopper A/B/logout/invalid-session/mapping-failure never attaches or 
         headers: headers(`${g.cookie}; ${identity.cookie}`),
         ...(method === 'POST' ? { payload: {} } : {}),
       });
-      expect(r.statusCode).toBe(409);
-      expect(r.json().error.code).toBe('ACCOUNT_CART_NOT_READY');
+      expect(r.statusCode).toBe(url.includes('checkouts') ? 503 : 409);
+      expect(r.json().error.code).toBe(
+        url.includes('checkouts') ? 'CHECKOUT_DISABLED' : 'ACCOUNT_CART_NOT_READY',
+      );
     }
   }
   const [a, b] = identities;

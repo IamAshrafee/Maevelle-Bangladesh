@@ -1,3 +1,7 @@
+import {
+  setShopperStorageValue,
+  revokeShopperStorageValue,
+} from '@maevelle/database/shopper-session-fence';
 import type { DatabaseClient } from '@maevelle/database';
 import {
   consumeAuthStorageValue,
@@ -10,6 +14,7 @@ import { decryptSecret, encryptSecret, hmacSha256 } from '@maevelle/security';
 
 export interface AuthStorageOptions {
   readonly database: DatabaseClient;
+  readonly fenceShopperSessions?: boolean;
   readonly hmacSecret: string;
   readonly encryptionKey: Uint8Array;
 }
@@ -26,17 +31,26 @@ export function createAuthSecondaryStorage(options: AuthStorageOptions) {
       return decode(await getAuthStorageValue(options.database.db, hash(storageKey)));
     },
     async getAndDelete(storageKey: string): Promise<unknown> {
-      return decode(await consumeAuthStorageValue(options.database.db, hash(storageKey)));
+      return decode(
+        await (options.fenceShopperSessions ? revokeShopperStorageValue : consumeAuthStorageValue)(
+          options.database.db,
+          hash(storageKey),
+        ),
+      );
     },
     async set(storageKey: string, value: string, ttl?: number): Promise<void> {
       const expiresAt = ttl === undefined ? null : new Date(Date.now() + ttl * 1000);
-      await setAuthStorageValue(
+      await (options.fenceShopperSessions ? setShopperStorageValue : setAuthStorageValue)(
         options.database.db,
         hash(storageKey),
         Buffer.from(encryptSecret(value, key), 'utf8'),
         expiresAt,
       );
-      if (typeof value === 'string' && value.includes('userId') && !storageKey.startsWith('active-sessions-')) {
+      if (
+        typeof value === 'string' &&
+        value.includes('userId') &&
+        !storageKey.startsWith('active-sessions-')
+      ) {
         try {
           const parsed = JSON.parse(value) as {
             session?: { userId?: string; expiresAt?: string | Date; id?: string };
@@ -45,7 +59,9 @@ export function createAuthSecondaryStorage(options: AuthStorageOptions) {
           const userId = parsed?.session?.userId ?? parsed?.user?.id;
           if (userId) {
             const indexKey = `active-sessions-${userId}`;
-            const currentRaw = decode(await getAuthStorageValue(options.database.db, hash(indexKey)));
+            const currentRaw = decode(
+              await getAuthStorageValue(options.database.db, hash(indexKey)),
+            );
             const currentList = parseJson<StoredSessionIndexEntry[]>(currentRaw) ?? [];
             const now = Date.now();
             const expTime = parsed.session?.expiresAt
@@ -70,7 +86,10 @@ export function createAuthSecondaryStorage(options: AuthStorageOptions) {
       }
     },
     async delete(storageKey: string): Promise<void> {
-      await deleteAuthStorageValue(options.database.db, hash(storageKey));
+      await (options.fenceShopperSessions ? revokeShopperStorageValue : deleteAuthStorageValue)(
+        options.database.db,
+        hash(storageKey),
+      );
     },
     async increment(storageKey: string, ttl: number): Promise<number> {
       return incrementAuthStorageValue(options.database.db, hash(storageKey), ttl);
@@ -195,8 +214,9 @@ export async function listAuthSessionsForUser(options: AuthStorageOptions, userI
   const sessions = await Promise.all(
     entries
       .filter((entry) => entry.expiresAt > Date.now())
-      .map(async (entry) => parseJson<StoredSessionPayload>(await storage.get(entry.token))?.session),
+      .map(
+        async (entry) => parseJson<StoredSessionPayload>(await storage.get(entry.token))?.session,
+      ),
   );
   return sessions.filter((session) => session !== undefined);
 }
-

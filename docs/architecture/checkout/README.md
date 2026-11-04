@@ -2,6 +2,8 @@
 
 Planning baseline: 2026-11-04 (Asia/Dhaka), branch `main`, HEAD `7ca66d1d56aa42d194fa0e2a92cad86d42b4c75f`. Initial tracked/untracked working tree: clean. This package specifies recommended behavior; it does not enable Checkout or establish runtime acceptance.
 
+Phase 01A backend foundation is now implemented and locally verified, with purchases still disabled. See the [implementation report](PHASE_01A_IMPLEMENTATION_REPORT.md) and [actual backend / transaction contract](PHASE_01A_BACKEND_CONTRACT.md). Phase 00 documents below remain the planning baseline.
+
 ## Reading order and authority
 
 | Document | Authoritative subject |

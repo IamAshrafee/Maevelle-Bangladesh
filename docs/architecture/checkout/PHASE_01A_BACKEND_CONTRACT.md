@@ -1,0 +1,67 @@
+# Phase 01A backend and future transaction contract
+
+Implemented foundation only. Public Checkout remains unavailable; no quotes, address fields, Orders, reservations, obligations, payment instructions or purchase events are produced here. Actual DTOs: `packages/contracts/src/checkout.ts`. API: `apps/api/src/routes/checkout.ts`. Domain: `packages/database/src/checkout/`.
+
+## Availability and request protocol
+
+`CHECKOUT_DRAFTS_ENABLED` defaults false. Draft routes require explicit true **and** non-production `NODE_ENV`; production refuses even if the flag is true. Enable only against an isolated local development/test target. No environment file or deployment was changed. Legacy `/checkouts/current*` and number/phone tracking remain hard-disabled independently of database Checkout settings. `/checkout` UI is untouched and unavailable.
+
+Base below is `/storefront/v1`. Writes require the configured exact Origin, acceptable Fetch Metadata, JSON, no unknown fields, a bounded body and UUID `Idempotency-Key` except credential establishment/revocation. Reads/writes are private no-store with no-referrer. Query fields are unsupported. Transport schema failures are 400, missing/expired credential 401, foreign Origin 403, opaque object denial 404, revision/source/key conflict 409, inactive draft mutation 410, oversized body 413, wrong content type 415, source ineligible 422, durable quota 429 with Retry-After, unavailable/gated 503. Errors include machine code/message and request ID on foundation routes, never raw DB diagnostics.
+
+| Endpoint | Available contract |
+| --- | --- |
+| POST `/checkout/guest-sessions` | Body `{}`. Returns `{data:{id,expiresAt}}`, puts a fresh opaque capability only in HttpOnly cookie. This establishes authority; no draft exists yet. No token in DTO. |
+| DELETE `/checkout/guest-sessions/:id` | `{}` plus selected guest authority; revokes that browser principal and clears its cookie. Existing drafts become inaccessible through that credential; no Cart or business state changes. |
+| POST `/checkouts` | `{source:{kind:'BUY_NOW',variantId,quantity:'1'}}` or `{source:{kind:'CART',cartId,cartRevision:'2'}}`. Initiation key replays canonical draft identity under current ownership. |
+| GET `/checkouts/:id` | Authorized restore/current draft with string revision, actual lifecycle/expiry, independent lines, source provenance and `purchaseAvailable:false`. Expired draft remains readable by live owner; it cannot be edited/adopted. |
+| PATCH `/checkouts/:id` | `{revision:'1',source:...}` or `{revision:'1',action:'ABANDON'}`. Exactly one change, same source kind. Ordinary Cart refresh must use same Cart; explicitly adopted Cart permits rebinding to account's reviewed Cart. Key replay precedes revision check and returns current authorized draft. |
+| POST `/checkouts/:id/adoptions` | `{revision:'1'}`, live account session+partition **and** selected guest capability, UUID key. Moves this draft's owner only; old guest loses access to it. Repeated same-key adoption restores account-owned result. |
+
+Guest selects `X-Checkout-Context: <guest-session-id>` and returns its corresponding `maevelle_checkout_guest_<UUID-without-dashes>` cookie (production naming helper uses `__Host-`). A UUID/header alone is not authority. Up to 16 returned guest slots, eight active drafts per principal, body max 1 KiB establishment/adoption or 4 KiB source commands; quantity 1–99 whole units, Cart up to existing 100 lines. Guest TTL one day, draft TTL one hour are explicit development guards, **not** approved production policies. No automatic renewal; start a fresh principal/draft after expiry. Cookie loss during establishment can strand an empty principal but cannot lose an Order or draft: creation requires cookie echo. Durable IP bootstrap quota bounds repeated establishment. Never invent/reissue an old bearer from a public ID.
+
+Account requests return the existing shopper-realm cookie and `X-Shopper-Partition` from `/shopper/session`. The backend derives tenant/account/customer/user and internal session-key proof; none are accepted from JSON. Admin cookies confer no account authority. Suspended/unlinked accounts or blocked customers fail closed. Multiple account sessions may access the same account's drafts; each request needs its own live session. Expired/invalid shopper state never silently becomes guest.
+
+Cart source selects its exact existing cookie slot by explicit Cart ID, reusing strict Cart cookie parsing. The Cart domain verifies liveness/owner/tenant/currency/revision and complete merchandise eligibility **inside** the transaction. Parsing does not require active Cart before receipt replay: lost initiation responses can recover the same draft with only Checkout authority and original source/key. New Cart initiation without valid source authority fails. Buy Now never resolves, creates or edits a Cart; it checks Catalog publication/structural variant eligibility and bounded quantity. It is item intent only, not a current price/stock/delivery promise. Final commercial eligibility belongs to future quotes/placement.
+
+## Adoption, identity and compatibility decisions
+
+New `orders.checkout_drafts` and normalized lines are implementation 2; old `orders.checkout_sessions` remains the legacy Cart/payment-coupled schema. This improves Phase 00's proposed extension: it avoids forcing Buy Now/account drafts through old mandatory Cart/payment fields or making legacy placement consume new records. Historical Orders and their old Checkout FKs remain unchanged. Future commit requires its own forward migration for quote/Order links and COMMITTED state; there is deliberately no speculative placement stub now.
+
+For Buy Now adoption, item intent remains independent. For Cart adoption, original lines/Cart revision remain visible, `sourceReviewRequired:true` makes the unresolved source explicit, and neither guest nor account Cart changes. The account must explicitly refresh/rebind using its current complete Cart, or abandon/start Buy Now. No hidden transfer credential or auto-merge is created. Another guest draft under the same browser principal remains usable; the adopted draft no longer accepts that guest credential. Same-key replay requires both live proofs; if guest proof later expires, the account can GET the adopted draft directly.
+
+Draft source Cart line IDs are snapshot provenance, deliberately not a live FK that would prevent Cart edits/removal. Draft/variant/owner/Cart references use tenant-composite FKs. Draft revisions are bigint strings end-to-end, including beyond JS safe integer; legacy Cart numeric facade fails safely if its revision is no longer representable. No Checkout-owned money/stock columns were added.
+
+## Implemented revocation fence
+
+Better Auth 1.7.12 uses encrypted `iam.auth_kv_store` secondary storage; `iam.sessions` is not the shopper authority. Verified `getSession` contributes the server-only HMAC of its actual session token. Cookie caching remains disabled. See [official session guidance](https://better-auth.com/docs/concepts/session-management) and [secondary storage](https://better-auth.com/docs/concepts/database#secondary-storage); installed internal adapter was also inspected for token-key writes and deletion.
+
+`lockCheckoutAuthority` takes a shared advisory transaction lock on that hashed session key, then verifies/locks the live KV row and current Customer/account/user. Shopper storage set/revoke uses the matching exclusive advisory lock. Revocation atomically inserts `iam.shopper_revoked_storage_keys` and deletes the encrypted record. A delayed refresh checks the tombstone and cannot upsert it back. Session refresh/revoke and Checkout use bounded lock/statement waits. Ordinary account/client JSON never contains the session proof.
+
+Ordering: session fence → Customer → account → user → guest principal for adoption → draft → source Cart. Guest operations start with guest-principal row lock, validate DB-clock expiry/revocation after waiting, then draft/Cart. Account row is exclusive for active-draft capacity and adopted ownership; Customer/user are shared to fence status changes. Revocation won first means stale proof fails; operation won first means it may commit before logout returns. A completed response may arrive later, but no new authorized operation can start from the revoked credential. Client cancellation is still required in Phase 01B for display privacy, not a server substitute.
+
+Foundation uses READ COMMITTED with explicit owner/Cart locks. Repeatable Read was rejected after the real concurrent capacity test showed unchanged owner-row locks could preserve an older count snapshot. Under Read Committed, subsequent capacity/source reads see commits made before lock acquisition. Source Cart lock fences its writers; this is not a price/config consistency guarantee for future quotes.
+
+## Future placement interface contract — not implemented
+
+All participants must accept the **same** `Transaction<DatabaseSchema>`; nested transactions/autonomous writes and external requests are prohibited. Existing concrete interfaces:
+
+| Participant | Existing foundation / required later interface |
+| --- | --- |
+| Authority | `lockCheckoutAuthority(tx, authority)` is implemented/exported and must run before future placement/replay. Resolve proof from live shopper realm; don't construct it from client fields. |
+| Cart | `checkoutCartSnapshotInTransaction(tx, {organizationId,currency,account? ,token?})` implemented: lock and evaluate existing active source, no mutation. Later add semantic `convertAcceptedCartInTransaction` under Cart ownership, requiring exact accepted source and current authority. |
+| Checkout | Own draft/revision/source lines and current owner. Future submission binds immutable accepted quote and full intent digest; successful receipt replay before expiry/source checks after authority. Requires a new unique Checkout→Order constraint/link and COMMITTED lifecycle. |
+| Orders | Extract/create a transaction-aware Order operation accepting validated snapshots/source/quote provenance and transaction. Existing `orders/placement.ts` remains legacy, not the new implementation interface. |
+| Inventory | Reuse `createInventoryReservationInTransaction`; add a domain batch allocation/bridge API so Checkout never inserts allocation tables directly. No source initiation stock hold. |
+| Pricing/Promotions | Reuse common evaluator; later finalize immutable quote/config-writer fence and locked redemption. Do not call current calculations repeatedly and combine inconsistent snapshots. |
+| Payments/Finance | Reuse transaction-aware obligation creation and snapshot approved destination; no received money from COD placement/claims. Refund/receipt semantics stay in those domains. |
+| Platform | Reuse `claimIdempotencyRecord`, audit and outbox in same transaction; draft receipts are `checkout.foundation.*`, never purchase receipts. No provider calls from critical transaction. |
+
+Future lock graph extends authority→draft→Cart→commercial writer fence→sorted coupon counters→sorted inventory item/location levels→Order sequence late→snapshots/receipt/audit/outbox. Existing Order mutations must reconcile Order→intent/claim→reservation/allocation/levels→Finance order before enabling new placement, including timeout/review/cancel/refund races. These are explicit Phase 03–05 obligations, not a claim that all legacy writers already share this graph. Unknown COMMIT uses the same receipt key and current authority, never a fresh automatic Order attempt. Quotes, complete placement and external recovery grants remain unimplemented intentionally.
+
+## Rollout and recovery constraints
+
+Migration 3219 is additive and follows the registered 3218 ledger tail; fresh and populated 3218→3219 exercised only in disposable PostgreSQL 18. Persistent target ledger/grants/backup remain unverified. Run migration once under controlled deployment; no API/Worker startup migration. New API requires 3219 even when draft flag off because shopper revocation fencing uses its table.
+
+Quiesce shopper-auth writers while switching API instances; don't mix old unguarded refresh writers with new revocation tombstones. Pre-01A images are schema-readable but **not safe auth-writer rollback after fenced revocations start**. Keep upgraded auth code during an application rollback, or stop shopper auth/Checkout and repair forward. Preserve tombstones/deletion decisions through backup restore. No prior release is certified as a post-revocation writer fallback. Worker/Admin business records and old Order links require no transformation. Historical confirmation API now requires configured tenant, unexpired committed legacy capability, origin on claims and durable quota; account-cookie substitution is denied. Number+phone public tracking is disabled pending verified recovery. Existing Admin Order operations remain usable.
+
+Retention deletion is intentionally not scheduled: development data expires logically, active caps exclude expired rows, initiation receipts/tombstones remain minimal replay/revocation evidence until approved retention and retry windows exist. Production activation must supply dependency-aware bounded cleanup and a justified privacy policy, rather than deleting tombstones on an arbitrary timer. Existing frontend confirmation can still show its old synthetic fallback after backend failure; it remains a named release blocker for later frontend replacement, never a Phase 01A success surface.

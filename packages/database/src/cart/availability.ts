@@ -1,6 +1,6 @@
 import { sql, type Kysely } from 'kysely';
 import type { DatabaseSchema } from '../index.js';
-import { catalogVariantIsStructurallyValid } from '../catalog-variant-integrity.js';
+import { storefrontVariantEligibility } from '../catalog-variant-integrity.js';
 import { CartDomainError } from './errors.js';
 export async function availableToSell(
   db: Kysely<DatabaseSchema>,
@@ -40,21 +40,9 @@ export async function assertSellableVariant(
   variantId: string,
   productId?: string,
 ): Promise<void> {
-  const variant = await sql<{ configured: boolean }>`
-    select ${catalogVariantIsStructurallyValid({
-      organizationId: sql.ref('variant.organization_id'),
-      productId: sql.ref('variant.product_id'),
-      variantId: sql.ref('variant.id'),
-      optionSignature: sql.ref('variant.option_signature'),
-    })} as configured
-    from catalog.product_variants variant
-    join catalog.products product on product.id = variant.product_id and product.organization_id = variant.organization_id
-    where variant.id = ${variantId} and variant.organization_id = ${organizationId}
-      and (${productId ?? null}::uuid is null or product.id = ${productId ?? null}::uuid)
-      and variant.status = 'ACTIVE' and product.status = 'ACTIVE' and product.publication_status = 'PUBLISHED'
-  `.execute(db);
-  if (!variant.rows[0])
+  const configured = await storefrontVariantEligibility(db, organizationId, variantId, productId);
+  if (configured === null)
     throw new CartDomainError('UNAVAILABLE', 'This Variant is not currently available.');
-  if (!variant.rows[0].configured)
+  if (!configured)
     throw new CartDomainError('INVALID_CONFIGURATION', 'Select a current product configuration.');
 }

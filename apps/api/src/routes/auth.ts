@@ -1,3 +1,4 @@
+import { registerCheckoutRoutes } from './checkout.js';
 import { assertShareRecoveryKeysAvailable } from '@maevelle/database/wishlist-share-lifecycle';
 import { shareKeyRing } from '@maevelle/database/wishlist-share-crypto';
 import type { FastifyInstance } from 'fastify';
@@ -199,9 +200,17 @@ export function registerAuthRoutes(
   registerRecommendationRoutes(app, database, auth, config.storefrontOrganizationCode);
   const recovery = config.wishlistShareRecovery;
   const wishlistKey = recovery
-    ? shareKeyRing(recovery.activeId, recovery.roots, recovery.readLegacy ? config.authEncryptionKey : undefined, recovery.writeLegacy ?? false)
+    ? shareKeyRing(
+        recovery.activeId,
+        recovery.roots,
+        recovery.readLegacy ? config.authEncryptionKey : undefined,
+        recovery.writeLegacy ?? false,
+      )
     : config.authEncryptionKey;
-  if (typeof wishlistKey !== 'string') app.addHook('onReady', async () => { await assertShareRecoveryKeysAvailable(database.db, wishlistKey); });
+  if (typeof wishlistKey !== 'string')
+    app.addHook('onReady', async () => {
+      await assertShareRecoveryKeysAvailable(database.db, wishlistKey);
+    });
   registerWishlistRoutes(app, database, config.storefrontOrganizationCode, wishlistKey);
   const shopperSender = shopperAuthEmailSender ?? createShopperAuthEmailSender(config);
   const resolveShopper = registerShopperAuthRoutes(app, config, database, shopperSender);
@@ -223,6 +232,7 @@ export function registerAuthRoutes(
   registerPricingRoutes(app, database, auth);
   registerPromotionRoutes(app, database, auth);
   registerCartRoutes(app, database, config, resolveShopper);
+  registerCheckoutRoutes(app, database, config, resolveShopper);
   registerOrderRoutes(app, database, auth, config, resolveShopper);
   registerPaymentRoutes(app, database, auth);
   registerFulfillmentDeliveryRoutes(app, database, auth, config);

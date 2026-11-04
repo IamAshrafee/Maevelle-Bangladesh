@@ -45,15 +45,11 @@ export function checkoutCartContext(
   };
   // Bind to registered routes, never to an untrusted raw URL representation.
   app.addHook('onRoute', (route) => {
-    if (
-      route.url !== '/storefront/v1/checkouts' &&
-      !route.url.startsWith('/storefront/v1/checkouts/')
-    )
-      return;
+    if (!route.url.startsWith('/storefront/v1/checkouts/current')) return;
     const existing = route.onRequest;
     route.onRequest = [
-      authorize,
       ...(Array.isArray(existing) ? existing : existing ? [existing] : []),
+      authorize,
     ];
   });
   return tokens;

@@ -1,3 +1,4 @@
+import { checkoutUpgradeCases } from './checkout/upgrade-cases.js';
 import { cartUpgradeCases } from './cart/upgrade-cases.js';
 import { wishlistUpgradeCases } from './wishlist/upgrade-cases.js';
 import assert from 'node:assert/strict';
@@ -24,6 +25,7 @@ let repairAssetId = '';
 export const upgradeCases: Record<string, UpgradeCase> = {
   ...wishlistUpgradeCases,
   ...cartUpgradeCases,
+  ...checkoutUpgradeCases,
   '3212_wishlist_analytics': {
     async before(db, organizationId) {
       await sql`insert into wishlist.shares(id,organization_id,view_token_digest,manage_token_digest,expires_at)

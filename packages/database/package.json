@@ -4,6 +4,14 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./checkout": {
+      "types": "./src/checkout/index.ts",
+      "default": "./dist/src/checkout/index.js"
+    },
+    "./shopper-session-fence": {
+      "types": "./src/shopper-session-fence.ts",
+      "default": "./dist/src/shopper-session-fence.js"
+    },
     "./testing/cart": {
       "types": "./src/testing/cart-fixture.ts",
       "default": "./dist/src/testing/cart-fixture.js"

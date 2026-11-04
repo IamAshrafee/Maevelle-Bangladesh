@@ -1,3 +1,4 @@
+import * as checkoutFoundation from './3219_checkout_foundation.js';
 import * as cartObservations from './3218_cart_observations.js';
 import * as cartAnalytics from './3217_cart_analytics.js';
 import * as accountCart from './3216_account_cart.js';
@@ -140,6 +141,7 @@ export const migrations = {
   '3216_account_cart': accountCart,
   '3217_cart_analytics': cartAnalytics,
   '3218_cart_observations': cartObservations,
+  '3219_checkout_foundation': checkoutFoundation,
 } satisfies Record<string, Migration>;
 
 export const migrationProvider: MigrationProvider = {

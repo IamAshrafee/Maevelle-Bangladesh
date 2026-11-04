@@ -1,3 +1,4 @@
+import { registerCheckoutRoutes } from './routes/checkout.js';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import Fastify, { type FastifyInstance } from 'fastify';
 import { parseConfig, type RuntimeConfig } from '@maevelle/config';
@@ -449,8 +450,9 @@ describe('Cart API guest bootstrap and security with PostgreSQL', () => {
     expect(response.headers['cache-control']).toBe('private, no-store');
     expect(response.headers['retry-after']).toBe('2');
   });
-  it('legacy Checkout creation accepts one new guest slot without altering Checkout behavior', async () => {
+  it('legacy Checkout creation stays disabled while preserving the guest Cart', async () => {
     const compatibility = Fastify({ logger: false });
+    registerCheckoutRoutes(compatibility, db, cfg, async () => null);
     registerOrderRoutes(
       compatibility,
       db,
@@ -469,8 +471,9 @@ describe('Cart API guest bootstrap and security with PostgreSQL', () => {
       headers: headers(cookie(init)),
       payload: {},
     });
-    expect(checkout.statusCode, checkout.body).toBe(201);
-    expect(checkout.json().data.cart.id).toBe(data(init).id);
+    expect(checkout.statusCode, checkout.body).toBe(503);
+    expect(checkout.json().error.code).toBe('CHECKOUT_DISABLED');
+    expect((await read(cookie(init))).json().data.id).toBe(data(init).id);
   });
 });
 
@@ -721,7 +724,11 @@ it('keeps Shopper Auth link secrets out of assembled API logs and disables cachi
   const logs: string[] = [];
   const logger = createLogger(
     { component: 'api', level: 'info' },
-    { write: (line: string) => { logs.push(line); } },
+    {
+      write: (line: string) => {
+        logs.push(line);
+      },
+    },
   );
   const assembled = buildApi({
     database: db,

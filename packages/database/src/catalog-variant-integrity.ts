@@ -1,4 +1,5 @@
-import { sql, type RawBuilder } from 'kysely';
+import { sql, type RawBuilder, type Kysely } from 'kysely';
+import type { DatabaseSchema } from './index.js';
 
 interface VariantIntegrityColumns {
   readonly organizationId: RawBuilder<unknown>;
@@ -58,4 +59,27 @@ export function catalogProductHasCoherentActiveVariants(
         })}
     )
   )`;
+}
+
+/** Catalog owns publication and structural sale eligibility for Cart and Checkout. */
+export async function storefrontVariantEligibility(
+  db: Kysely<DatabaseSchema>,
+  organizationId: string,
+  variantId: string,
+  productId?: string,
+): Promise<boolean | null> {
+  const variant = await sql<{ configured: boolean }>`
+    select ${catalogVariantIsStructurallyValid({
+      organizationId: sql.ref('variant.organization_id'),
+      productId: sql.ref('variant.product_id'),
+      variantId: sql.ref('variant.id'),
+      optionSignature: sql.ref('variant.option_signature'),
+    })} as configured
+    from catalog.product_variants variant
+    join catalog.products product on product.id = variant.product_id and product.organization_id = variant.organization_id
+    where variant.id = ${variantId} and variant.organization_id = ${organizationId}
+      and (${productId ?? null}::uuid is null or product.id = ${productId ?? null}::uuid)
+      and variant.status = 'ACTIVE' and product.status = 'ACTIVE' and product.publication_status = 'PUBLISHED'
+  `.execute(db);
+  return variant.rows[0]?.configured ?? null;
 }

@@ -1,4 +1,5 @@
 import { createHmac } from 'node:crypto';
+import { hmacSha256 } from '@maevelle/security';
 import { betterAuth } from 'better-auth';
 import { Resend } from 'resend';
 
@@ -16,6 +17,11 @@ export type ShopperAuthEmailSender = (message: ShopperAuthEmail) => Promise<void
 
 function realmSecret(secret: string): string {
   return createHmac('sha256', secret).update('maevelle:shopper-auth:v1').digest('hex');
+}
+
+/** Internal proof tied to the actual encrypted secondary-storage session key. */
+export function shopperSessionStorageHash(secret: string, token: string): string {
+  return hmacSha256(realmSecret(secret), token);
 }
 
 /** Production delivery uses the existing Resend configuration; tests inject a local mailbox. */
@@ -100,6 +106,7 @@ export function createShopperAuth(
     },
     secondaryStorage: createAuthSecondaryStorage({
       database,
+      fenceShopperSessions: true,
       hmacSecret: secret,
       encryptionKey: Buffer.from(config.authEncryptionKey, 'base64'),
     }),

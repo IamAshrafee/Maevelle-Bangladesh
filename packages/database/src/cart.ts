@@ -1,3 +1,4 @@
+export { checkoutCartSnapshotInTransaction } from './cart/checkout-source.js';
 /** Stable facade for existing Orders, Checkout and Storefront consumers. */
 export { CartDomainError } from './cart/errors.js';
 export type { CartView, GuestMutationScope } from './cart/types.js';

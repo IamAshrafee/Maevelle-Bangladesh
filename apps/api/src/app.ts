@@ -55,14 +55,19 @@ export function buildApi(options: BuildApiOptions) {
     // Cart and Shopper Auth URLs can contain coupon codes and bearer secrets.
     logController: new LogController({
       disableRequestLogging: (request) =>
-        request.url.startsWith(shopperAuthPrefix) || /^\/storefront\/v1\/carts(?:[/?]|$)/.test(request.url),
+        request.url.startsWith(shopperAuthPrefix) ||
+        /^\/storefront\/v1\/(?:carts|checkout|checkouts|orders)(?:[/?]|$)/.test(request.url),
     }),
     bodyLimit: 1_048_576,
     routerOptions: { maxParamLength: 160 },
     genReqId: (request) => resolveCorrelationId(request.headers['x-correlation-id']),
   }).withTypeProvider<TypeBoxTypeProvider>();
 
-  registerWishlistObservability(app, options.database, options.config?.storefrontOrganizationCode ?? 'maevelle');
+  registerWishlistObservability(
+    app,
+    options.database,
+    options.config?.storefrontOrganizationCode ?? 'maevelle',
+  );
 
   // Auth is bridged through Better Auth's Fetch handler; retaining JSON as text
   // prevents Fastify from consuming and reserializing credential payloads.
@@ -98,16 +103,21 @@ export function buildApi(options: BuildApiOptions) {
     const path = request.url.split('?', 1)[0] ?? '';
     const shopperAuth = path.startsWith(shopperAuthPrefix);
     if (shopperAuth) reply.header('cache-control', 'private, no-store');
-    const shopperPrivate = shopperAuth
-      || path === '/storefront/v1/wishlist'
-      || path === '/storefront/v1/wishlist/saved-state'
-      || path === '/storefront/v1/wishlist/merges'
-      || path.startsWith('/storefront/v1/wishlist/account-shares')
-      || path.startsWith('/storefront/v1/wishlist/items/');
+    const shopperPrivate =
+      shopperAuth ||
+      path === '/storefront/v1/wishlist' ||
+      path === '/storefront/v1/wishlist/saved-state' ||
+      path === '/storefront/v1/wishlist/merges' ||
+      path.startsWith('/storefront/v1/wishlist/account-shares') ||
+      path.startsWith('/storefront/v1/wishlist/items/');
     const sharePath = path.startsWith('/storefront/v1/wishlist/shares');
     if (options.config && shopperPrivate && ['POST', 'PUT', 'PATCH', 'DELETE'].includes(method)) {
-      if (!origin || origin !== new URL(options.config.storefrontBaseUrl).origin
-        || (request.headers['sec-fetch-site'] && !['same-origin', 'same-site', 'none'].includes(request.headers['sec-fetch-site'])))
+      if (
+        !origin ||
+        origin !== new URL(options.config.storefrontBaseUrl).origin ||
+        (request.headers['sec-fetch-site'] &&
+          !['same-origin', 'same-site', 'none'].includes(request.headers['sec-fetch-site']))
+      )
         return reply.code(403).send({
           error: { code: 'ORIGIN_REJECTED', message: 'Request origin is not trusted.' },
         });
@@ -116,22 +126,34 @@ export function buildApi(options: BuildApiOptions) {
           error: { code: 'UNSUPPORTED_MEDIA_TYPE', message: 'JSON is required.' },
         });
     }
-    if (options.config && sharePath && method === 'POST' && path !== '/storefront/v1/wishlist/shares/open') {
+    if (
+      options.config &&
+      sharePath &&
+      method === 'POST' &&
+      path !== '/storefront/v1/wishlist/shares/open'
+    ) {
       if (request.headers.origin !== new URL(options.config.storefrontBaseUrl).origin)
-        return reply.code(403).send({ error: { code: 'ORIGIN_REJECTED', message: 'Request origin is not trusted.' } });
+        return reply
+          .code(403)
+          .send({ error: { code: 'ORIGIN_REJECTED', message: 'Request origin is not trusted.' } });
       if (!request.headers['content-type']?.startsWith('application/json'))
-        return reply.code(415).send({ error: { code: 'UNSUPPORTED_MEDIA_TYPE', message: 'JSON is required.' } });
+        return reply
+          .code(415)
+          .send({ error: { code: 'UNSUPPORTED_MEDIA_TYPE', message: 'JSON is required.' } });
     }
     if (options.config && (shopperPrivate || sharePath)) {
-      const policy = path.startsWith('/shopper-auth/sign-up/') ? { maximum: 5, seconds: 3600 }
-        : path.startsWith('/shopper-auth/sign-in/') ? { maximum: 12, seconds: 900 }
-        : path.startsWith('/shopper-auth/send-verification-email')
-          || path.startsWith('/shopper-auth/request-password-reset')
-          ? { maximum: 5, seconds: 3600 }
-        : sharePath ? { maximum: path.endsWith('/open') ? 120 : 30, seconds: 3600 }
-        : path.startsWith('/storefront/v1/wishlist/items/')
-          ? { maximum: 120, seconds: 60 }
-        : { maximum: 120, seconds: 60 };
+      const policy = path.startsWith('/shopper-auth/sign-up/')
+        ? { maximum: 5, seconds: 3600 }
+        : path.startsWith('/shopper-auth/sign-in/')
+          ? { maximum: 12, seconds: 900 }
+          : path.startsWith('/shopper-auth/send-verification-email') ||
+              path.startsWith('/shopper-auth/request-password-reset')
+            ? { maximum: 5, seconds: 3600 }
+            : sharePath
+              ? { maximum: path.endsWith('/open') ? 120 : 30, seconds: 3600 }
+              : path.startsWith('/storefront/v1/wishlist/items/')
+                ? { maximum: 120, seconds: 60 }
+                : { maximum: 120, seconds: 60 };
       // A bearer in the reset URL must not create a separate rate bucket.
       const ratePath = path.startsWith('/shopper-auth/reset-password/')
         ? '/shopper-auth/reset-password/:token'
@@ -267,9 +289,11 @@ export function buildApi(options: BuildApiOptions) {
           requestId: request.id,
         },
       });
-    const diagnostics = request.url.startsWith(shopperAuthPrefix)
-      ? { requestId: request.id, route: request.routeOptions.url }
-      : { err: error, requestId: request.id };
+    const diagnostics =
+      request.url.startsWith(shopperAuthPrefix) ||
+      /^\/storefront\/v1\/(?:checkout|checkouts|orders)(?:[/?]|$)/.test(request.url)
+        ? { requestId: request.id, route: request.routeOptions.url }
+        : { err: error, requestId: request.id };
     request.log.error(diagnostics, 'Unhandled API request error.');
     return reply.status(500).send({
       error: {

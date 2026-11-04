@@ -1,3 +1,4 @@
+export * from './checkout.js';
 /** Explicit transport DTOs shared by API clients; domain entities stay private to their owners. */
 import type { CustomerLifecycleStageDto } from './crm.js';
 

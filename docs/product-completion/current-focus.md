@@ -1,5 +1,7 @@
 # Current Focus
 
+Checkout Phase 01A backend foundation is **PASS locally**. The [implementation report](../architecture/checkout/PHASE_01A_IMPLEMENTATION_REPORT.md) records isolated PostgreSQL ownership, adoption/revocation, source, migration and regression evidence. Purchases and production drafts remain disabled; Phase 01B requires a separate assignment. The legacy confirmation frontend fallback remains a release blocker. No commit or persistent migration/deployment occurred. Existing Cart release gates below remain open.
+
 Shopping Cart Phase 08 production release is **BLOCKED**. The [release handoff](../architecture/cart/PHASE_08_RELEASE_HANDOFF.md) records the locally verified ingress fixes and the authorized recovery, ingress, policy and human acceptance gates.
 
 Shopping Cart Phase 07 is **PARTIAL** locally and production remains **BLOCKED**. The [release-readiness report](../architecture/cart/PHASE_07_RELEASE_READINESS.md) records the Shopper Auth fix, isolated recovery evidence, and Phase 08 gates.

@@ -3,6 +3,8 @@ import type { DatabaseSchema } from './index.js';
 import { appendAuditEvent } from './platform.js';
 
 export interface ShopperPrincipal {
+  /** Server-only live shopper session proof; never serialize in a DTO. */
+  readonly sessionKeyHash?: string;
   readonly organizationId: string;
   readonly accountId: string;
   readonly customerId: string;

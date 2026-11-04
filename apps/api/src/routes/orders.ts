@@ -6,7 +6,6 @@ import type { DatabaseClient } from '@maevelle/database';
 import {
   cancelOrder,
   cancelOrderLine,
-  createCheckout,
   createDeliveryPricingRule,
   getCheckout,
   getAvailableCheckoutPaymentMethods,
@@ -53,6 +52,7 @@ import { findActiveAdminContext, isCheckoutEnabledForToken } from '@maevelle/dat
 import type { createAuth } from '../auth/auth.js';
 
 import { checkoutCartContext } from './checkout-cart-context.js';
+import { containLegacyCheckoutRoutes } from './checkout-legacy.js';
 import type { CartShopperResolver } from './cart-context.js';
 const checkoutCookie = 'maevelle_checkout';
 type Auth = ReturnType<typeof createAuth>;
@@ -69,9 +69,6 @@ function token(
     .map((part) => part.trim())
     .find((part) => part.startsWith(`${name}=`))
     ?.slice(name.length + 1);
-}
-function setCookie(name: string, value: string): string {
-  return `${name}=${encodeURIComponent(value)}; Path=/; HttpOnly; SameSite=Lax; Max-Age=3600${process.env.NODE_ENV === 'production' ? '; Secure' : ''}`;
 }
 function sendError(
   reply: { code(status: number): { send(value: unknown): unknown } },
@@ -160,19 +157,8 @@ export function registerOrderRoutes(
   config?: RuntimeConfig,
   resolveShopper?: CartShopperResolver,
 ): void {
+  containLegacyCheckoutRoutes(app, database, config);
   const cartTokens = checkoutCartContext(app, database, config, resolveShopper);
-  app.post('/storefront/v1/checkouts', async (request, reply) => {
-    const cartToken = cartTokens.get(request);
-    if (!cartToken)
-      return reply.code(404).send({ error: { code: 'NOT_FOUND', message: 'Cart was not found.' } });
-    try {
-      const created = await createCheckout(database.db, { cartToken });
-      reply.header('set-cookie', setCookie(checkoutCookie, created.token));
-      return reply.code(201).send({ data: created.checkout });
-    } catch (caught) {
-      return sendError(reply, caught);
-    }
-  });
   app.get('/storefront/v1/checkouts/current', async (request, reply) => {
     const checkoutToken = token(request.headers, checkoutCookie);
     const cartToken = cartTokens.get(request);
@@ -618,7 +604,10 @@ export function registerOrderRoutes(
           data: await createDeliveryPricingRule(database.db, {
             organizationId: active.organizationId,
             actorId: active.actorId,
-            ...(request.body as Omit<Parameters<typeof createDeliveryPricingRule>[1], 'organizationId' | 'actorId'>),
+            ...(request.body as Omit<
+              Parameters<typeof createDeliveryPricingRule>[1],
+              'organizationId' | 'actorId'
+            >),
           }),
         });
       } catch (caught) {
@@ -1285,9 +1274,13 @@ export function registerOrderRoutes(
             countryCode: Type.String({ pattern: '^[A-Z]{2}$' }),
             saveToCustomer: Type.Optional(Type.Boolean()),
           }),
-          deliveryAmount: Type.Optional(Type.String({ pattern: '^(?:0|[1-9]\\d*)(?:\\.\\d{1,4})?$' })),
+          deliveryAmount: Type.Optional(
+            Type.String({ pattern: '^(?:0|[1-9]\\d*)(?:\\.\\d{1,4})?$' }),
+          ),
           deliveryOverrideReason: Type.Optional(Type.String({ minLength: 1, maxLength: 500 })),
-          discountAmount: Type.Optional(Type.String({ pattern: '^(?:0|[1-9]\\d*)(?:\\.\\d{1,4})?$' })),
+          discountAmount: Type.Optional(
+            Type.String({ pattern: '^(?:0|[1-9]\\d*)(?:\\.\\d{1,4})?$' }),
+          ),
           discountOverrideReason: Type.Optional(Type.String({ minLength: 1, maxLength: 500 })),
           paymentMethod: Type.Union([
             Type.Literal('COD'),

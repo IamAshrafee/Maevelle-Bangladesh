@@ -7,6 +7,8 @@ export type NodeEnvironment = 'development' | 'test' | 'production';
 export type LogLevel = 'debug' | 'info' | 'warn' | 'error';
 
 export interface RuntimeConfig {
+  /** Isolated development only. Never enables purchases. */
+  readonly checkoutDraftsEnabled?: boolean;
   readonly nodeEnv: NodeEnvironment;
   readonly databaseUrl: string;
   readonly testDatabaseUrl?: string;
@@ -497,6 +499,7 @@ export function parseConfig(environment: Environment): RuntimeConfig {
 
   return Object.freeze({
     nodeEnv,
+    checkoutDraftsEnabled: boolean(environment, 'CHECKOUT_DRAFTS_ENABLED', false),
     databaseUrl,
     ...(testDatabaseUrl ? { testDatabaseUrl } : {}),
     databasePoolMax: integer(environment, 'DATABASE_POOL_MAX', 10, 1, 50),

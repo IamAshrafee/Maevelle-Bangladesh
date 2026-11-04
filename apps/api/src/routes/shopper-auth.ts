@@ -4,7 +4,11 @@ import type { RuntimeConfig } from '@maevelle/config';
 import type { DatabaseClient } from '@maevelle/database';
 import { resolveStorefrontContext } from '@maevelle/database/storefront';
 import { resolveOrEnrollShopper, type ShopperPrincipal } from '@maevelle/database/shopper';
-import { createShopperAuth, type ShopperAuthEmailSender } from '../auth/shopper-auth.js';
+import {
+  createShopperAuth,
+  shopperSessionStorageHash,
+  type ShopperAuthEmailSender,
+} from '../auth/shopper-auth.js';
 
 function headers(request: FastifyRequest): Headers {
   return new Headers(
@@ -68,7 +72,13 @@ export function registerShopperAuthRoutes(
       if (strict) throw new Error('Verified shopper mapping unavailable.');
       return null;
     }
-    return { principal, partition: shopperPartition(config.betterAuthSecret, principal) };
+    return {
+      principal: {
+        ...principal,
+        sessionKeyHash: shopperSessionStorageHash(config.betterAuthSecret, session.session.token),
+      },
+      partition: shopperPartition(config.betterAuthSecret, principal),
+    };
   };
   const resolve = async (
     request: FastifyRequest,
