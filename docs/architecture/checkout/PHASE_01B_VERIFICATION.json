@@ -1,0 +1,147 @@
+{
+  "phase": "01B",
+  "date": "2026-11-04",
+  "status": "PARTIAL",
+  "branch": "main",
+  "baselineHead": "fd2cfa2e3496e2bb7a959a83fa0c41989ac41ee3",
+  "finalHead": "fd2cfa2e3496e2bb7a959a83fa0c41989ac41ee3",
+  "initialWorkingTree": "CLEAN",
+  "finalWorkingTree": "DIRTY_UNCOMMITTED",
+  "workCommitted": false,
+  "pushed": false,
+  "deployed": false,
+  "purchaseEnabled": false,
+  "testEnvironment": {
+    "postgresMajor": 18,
+    "host": "127.0.0.1",
+    "port": 55440,
+    "dedicatedTemporaryCluster": true,
+    "persistentEnvironmentMigrated": false,
+    "realProviderEffects": false,
+    "randomFixtureDatabasesDropped": true,
+    "clusterStoppedAndConfirmed": true,
+    "browser": "supported in-app browser via cua_repl",
+    "browserOrigin": "http://localhost:3000",
+    "apiLoopback": "http://127.0.0.1:3002"
+  },
+  "tests": [
+    {
+      "command": "node node_modules/vitest/vitest.mjs run apps/storefront/features/checkout/foundation-controller.test.ts apps/storefront/features/cart/api.test.ts apps/storefront/features/cart/browser-runtime.test.ts apps/storefront/features/cart/controller.test.ts",
+      "status": "PASS",
+      "files": 4,
+      "passed": 77
+    },
+    {
+      "command": "node node_modules/vitest/vitest.mjs run apps/storefront/features/checkout/availability.test.ts",
+      "status": "PASS",
+      "files": 1,
+      "passed": 4
+    },
+    {
+      "command": "node node_modules/vitest/vitest.mjs run apps/storefront/features/wishlist/wishlist-store.test.ts apps/storefront/features/wishlist/account-adapter.test.ts apps/storefront/features/wishlist/guest-journal.test.ts apps/storefront/components/commerce/wishlist-button.test.tsx apps/storefront/features/pdp/pdp-product-details.test.tsx",
+      "status": "PASS",
+      "files": 5,
+      "passed": 25
+    },
+    {
+      "command": "node node_modules/vitest/vitest.mjs run apps/api/src/checkout-foundation.test.ts",
+      "isolatedTestDatabase": true,
+      "status": "PASS",
+      "files": 1,
+      "passed": 14
+    }
+  ],
+  "checks": {
+    "storefrontTypecheck": "PASS",
+    "contractsBuild": "PASS",
+    "apiBuild": "PASS",
+    "isolatedRuntimeDependenciesBuild": "PASS",
+    "storefrontProductionBuild": "PASS",
+    "focusedLint": "PASS",
+    "architecture13Workspaces": "PASS",
+    "focusedFormatting": "PASS",
+    "gitDiffCheck": "PASS"
+  },
+  "browser": {
+    "guestBuyNow": "PASS",
+    "accountBuyNow": "PASS",
+    "cartInitiation": "PASS",
+    "cartPreservation": "PASS",
+    "reloadRestore": "PASS",
+    "explicitCartAdoption": "PASS",
+    "sourceReviewAndAccountCartRebind": "PASS",
+    "normalAccountSwitch": "PASS",
+    "expiredDraft": "PASS",
+    "expiredGuest": "PASS",
+    "missingInvalidLegacyReceipt": "PASS",
+    "legacyTrackingContainment": "PASS",
+    "responsiveLayoutMeasurements": [
+      320,
+      390,
+      768,
+      1024,
+      1440
+    ],
+    "notVerified": [
+      "transport timeout/lost-response fault injection",
+      "pending-response account-switch race",
+      "browser 409/410/422/429/503 matrix",
+      "rapid-click browser stress",
+      "multi-axis wrong/missing selection browser matrix",
+      "multiple independent background tabs",
+      "keyboard focus/reduced-motion breadth",
+      "human AT and real hardware",
+      "authorized populated historical receipt",
+      "production-mode runtime and ingress"
+    ]
+  },
+  "browserDatabaseFacts": {
+    "drafts": 3,
+    "orders": 0,
+    "reservations": 0,
+    "paymentIntents": 0,
+    "promotionUsage": 0,
+    "convertedCarts": 0,
+    "orderPlacementOutboxEvents": 0
+  },
+  "automaticReviewBlocks": [
+    "headless Chrome startup: generic policy block",
+    "local production-mode Next server startup: generic policy block"
+  ],
+  "changedFiles": [
+    "apps/storefront/app/checkout/page.tsx",
+    "apps/storefront/app/orders/confirmation/page.tsx",
+    "apps/storefront/app/orders/track/page.tsx",
+    "apps/storefront/components/commerce/cart-drawer.tsx",
+    "apps/storefront/features/cart/api.ts",
+    "apps/storefront/features/cart/browser-runtime.ts",
+    "apps/storefront/features/cart/components/cart-summary.tsx",
+    "apps/storefront/features/cart/shopper-authority.ts",
+    "apps/storefront/features/checkout/availability.test.ts",
+    "apps/storefront/features/checkout/availability.ts",
+    "apps/storefront/features/checkout/components/checkout-entry.tsx",
+    "apps/storefront/features/checkout/components/checkout-review.tsx",
+    "apps/storefront/features/checkout/components/review-items.tsx",
+    "apps/storefront/features/checkout/foundation-api.ts",
+    "apps/storefront/features/checkout/foundation-controller.test.ts",
+    "apps/storefront/features/checkout/foundation-controller.ts",
+    "apps/storefront/features/checkout/foundation-errors.ts",
+    "apps/storefront/features/checkout/foundation-journal.ts",
+    "apps/storefront/features/checkout/foundation-runtime.ts",
+    "apps/storefront/features/checkout/foundation-types.ts",
+    "apps/storefront/features/checkout/index.ts",
+    "apps/storefront/features/orders/components/legacy-order-receipt.tsx",
+    "apps/storefront/features/pdp/pdp-variant-selector.tsx",
+    "apps/storefront/features/pdp/pdp-view.tsx",
+    "apps/storefront/lib/api/client/deadline.ts",
+    "apps/storefront/lib/auth/shopper-session.ts",
+    "apps/storefront/lib/auth/shopper-transitions.ts",
+    "docs/architecture/checkout/PHASE_01B_IMPLEMENTATION_REPORT.md",
+    "docs/architecture/checkout/PHASE_01B_VERIFICATION.json",
+    "docs/architecture/checkout/README.md",
+    "docs/product-completion/current-focus.md",
+    "docs/product-completion/state.json",
+    "packages/contracts/src/checkout.ts",
+    "scripts/checkout-phase01b-runtime.mjs"
+  ]
+}

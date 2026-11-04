@@ -4,6 +4,10 @@ Planning baseline: 2026-11-04 (Asia/Dhaka), branch `main`, HEAD `7ca66d1d56aa42d
 
 Phase 01A backend foundation is now implemented and locally verified, with purchases still disabled. See the [implementation report](PHASE_01A_IMPLEMENTATION_REPORT.md) and [actual backend / transaction contract](PHASE_01A_BACKEND_CONTRACT.md). Phase 00 documents below remain the planning baseline.
 
+Phase 01B Storefront foundation is implemented with **PARTIAL** local acceptance. See the [frontend implementation and acceptance report](PHASE_01B_IMPLEMENTATION_REPORT.md) and [verification record](PHASE_01B_VERIFICATION.json). Main real-browser/API journeys pass; browser fault/race and accessibility breadth remain open. Purchases remain disabled.
+
+Phase 02A backend is **PASS for locally verified scope**. See the [implementation and acceptance report](PHASE_02A_IMPLEMENTATION_REPORT.md) and [exact Phase 02B backend handoff](PHASE_02A_BACKEND_CONTRACT.md). Explicit coverage defaults UNVERIFIED; missing real data fails safely. Phase 01B remains PARTIAL, purchases stay disabled, and Phase 02B/immutable quotes are not implemented.
+
 ## Reading order and authority
 
 | Document | Authoritative subject |

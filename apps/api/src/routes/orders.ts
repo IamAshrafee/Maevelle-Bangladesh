@@ -334,6 +334,13 @@ export function registerOrderRoutes(
           currency: Type.String({ pattern: '^[A-Z]{3}$' }),
           priority: Type.Integer(),
           status: Type.Union([Type.Literal('ACTIVE'), Type.Literal('INACTIVE')]),
+          checkoutServiceability: Type.Optional(
+            Type.Union([
+              Type.Literal('UNVERIFIED'),
+              Type.Literal('SUPPORTED'),
+              Type.Literal('UNSUPPORTED'),
+            ]),
+          ),
         }),
       },
     },
@@ -350,6 +357,7 @@ export function registerOrderRoutes(
           currency: string;
           priority: number;
           status: 'ACTIVE' | 'INACTIVE';
+          checkoutServiceability?: 'UNVERIFIED' | 'SUPPORTED' | 'UNSUPPORTED';
         };
         return {
           data: await updateDeliveryPricingRule(database.db, {
@@ -364,6 +372,9 @@ export function registerOrderRoutes(
             currency: body.currency,
             priority: body.priority,
             status: body.status,
+            ...(body.checkoutServiceability === undefined
+              ? {}
+              : { checkoutServiceability: body.checkoutServiceability }),
           }),
         };
       } catch (caught) {
@@ -593,6 +604,13 @@ export function registerOrderRoutes(
           flatAmount: Type.String({ pattern: '^(?:0|[1-9]\\d*)(?:\\.\\d{1,4})?$' }),
           currency: Type.String({ pattern: '^[A-Z]{3}$' }),
           priority: Type.Optional(Type.Integer()),
+          checkoutServiceability: Type.Optional(
+            Type.Union([
+              Type.Literal('UNVERIFIED'),
+              Type.Literal('SUPPORTED'),
+              Type.Literal('UNSUPPORTED'),
+            ]),
+          ),
         }),
       },
     },

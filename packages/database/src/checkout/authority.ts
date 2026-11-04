@@ -8,6 +8,7 @@ import { CheckoutError, type CheckoutAuthority, type CheckoutContext } from './t
 export async function lockCheckoutAuthority(
   tx: Kysely<DatabaseSchema>,
   owner: CheckoutAuthority,
+  options: { customerWrite?: boolean } = {},
 ): Promise<void> {
   if (!tx.isTransaction)
     throw new Error('Checkout authority must be checked inside its transaction.');
@@ -33,7 +34,9 @@ export async function lockCheckoutAuthority(
     throw new CheckoutError('SESSION_EXPIRED', 'Sign in again before accessing Checkout.');
   const customer =
     await sql`select id from customers.customers where organization_id=${owner.organizationId}
-    and id=${owner.customerId} and status='ACTIVE' for share`.execute(tx);
+    and id=${owner.customerId} and status='ACTIVE' ${options.customerWrite ? sql`for update` : sql`for share`}`.execute(
+      tx,
+    );
   const account =
     await sql`select id from customers.customer_accounts where organization_id=${owner.organizationId}
     and id=${owner.accountId} and customer_id=${owner.customerId} and user_id=${owner.userId} and status='ACTIVE' for update`.execute(

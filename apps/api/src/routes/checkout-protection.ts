@@ -25,7 +25,13 @@ export function protectCheckoutRoutes(
         503,
         'Checkout is unavailable. Your Bag is unchanged.',
       );
-    if (request.query && Object.keys(request.query).length)
+    if (
+      request.query &&
+      Object.keys(request.query).length &&
+      !['/storefront/v1/checkout/delivery-areas', '/storefront/v1/checkout/addresses'].includes(
+        request.routeOptions.url ?? '',
+      )
+    )
       throw new CheckoutRequestError(
         'INVALID_REQUEST',
         400,

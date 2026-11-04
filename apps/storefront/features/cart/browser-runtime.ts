@@ -1,5 +1,7 @@
 'use client';
 
+import { announceShopperTransition } from '@/lib/auth/shopper-transitions';
+
 import { emitCartObservation } from '@/lib/analytics/cart-telemetry';
 import { cartApi, createCartApi } from './api';
 import { createCartController, type CartController } from './controller';
@@ -412,6 +414,8 @@ export const cartStore = {
     invoke((c) => c.mergeGuest(...args)),
   guestRecoveryPending: () => invoke((c) => c.guestRecoveryPending()),
   accountPartition: () => (typeof window === 'undefined' ? null : instance().accountPartition()),
-  ownerTransition: (phase: 'begin' | 'settled', signedOut = false) =>
-    instance().identity(phase, true, signedOut),
+  ownerTransition: (phase: 'begin' | 'settled', signedOut = false) => {
+    announceShopperTransition(phase);
+    instance().identity(phase, true, signedOut);
+  },
 };

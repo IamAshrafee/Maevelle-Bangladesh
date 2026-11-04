@@ -1,3 +1,5 @@
+import type { OrderDetailDto } from './index.js';
+
 /** IDs/revisions are preconditions, never credentials. Phase 01A has no payable quote. */
 export type CheckoutSourceDto =
   | { readonly kind: 'CART'; readonly cartId: string; readonly cartRevision: string }
@@ -39,3 +41,15 @@ export interface CheckoutGuestSessionDto {
   readonly id: string;
   readonly expiresAt: string;
 }
+
+/** Read-only subset of the existing authorized legacy receipt; no new Order creation API. */
+export type LegacyOrderReceiptDto = Pick<
+  OrderDetailDto,
+  'orderNumber' | 'status' | 'currency' | 'total'
+> & {
+  readonly payment: Pick<OrderDetailDto['payment'], 'status' | 'outstanding'>;
+  readonly lines: readonly Pick<
+    OrderDetailDto['lines'][number],
+    'id' | 'productTitle' | 'sku' | 'quantity'
+  >[];
+};

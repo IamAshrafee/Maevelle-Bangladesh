@@ -946,6 +946,14 @@ export async function verifyCustomerEmail(
   });
 }
 
+/** Address commands can participate in the caller's authorization/receipt transaction. */
+async function customerAddressTransaction<T>(
+  db: Kysely<DatabaseSchema>,
+  run: (tx: Kysely<DatabaseSchema>) => Promise<T>,
+): Promise<T> {
+  return db.isTransaction ? run(db) : db.transaction().execute(run);
+}
+
 export async function addCustomerAddress(
   db: Kysely<DatabaseSchema>,
   input: {
@@ -964,6 +972,7 @@ export async function addCustomerAddress(
     district?: string;
     postalCode?: string;
     isDefault?: boolean;
+    instructions?: string | null;
   },
 ): Promise<{ id: string }> {
   if (
@@ -976,7 +985,7 @@ export async function addCustomerAddress(
       'Recipient, address line, and ISO country code are required.',
     );
   }
-  return db.transaction().execute(async (transaction) => {
+  return customerAddressTransaction(db, async (transaction) => {
     const customer = await sql<{
       id: string;
     }>`select id from customers.customers where id = ${input.customerId} and organization_id = ${input.organizationId} and status not in ('MERGED', 'ANONYMIZED') for update`.execute(
@@ -1000,12 +1009,12 @@ export async function addCustomerAddress(
     const created = await sql<{ id: string }>`
       insert into customers.customer_addresses (
         organization_id, customer_id, label, recipient_name, phone, address_line_1, address_line_2,
-        geography_node_id, area, city, district, postal_code, country_code, is_default
+        geography_node_id, area, city, district, postal_code, country_code, is_default, delivery_instructions
       ) values (
         ${input.organizationId}, ${input.customerId}, ${input.label?.trim() ?? null}, ${input.recipientName.trim()},
         ${input.phone?.trim() ?? null}, ${input.addressLine1.trim()}, ${input.addressLine2?.trim() ?? null},
         ${input.geographyNodeId ?? null}, ${input.area?.trim() ?? null}, ${input.city?.trim() ?? null},
-        ${input.district?.trim() ?? null}, ${input.postalCode?.trim() ?? null}, ${input.countryCode}, ${input.isDefault ?? false}
+        ${input.district?.trim() ?? null}, ${input.postalCode?.trim() ?? null}, ${input.countryCode}, ${input.isDefault ?? false}, ${input.instructions ?? null}
       ) returning id
     `.execute(transaction);
     const id = created.rows[0]?.id;
@@ -1636,7 +1645,10 @@ export async function mergeCustomers(
       limit 1
     `.execute(transaction);
     if (ownedCarts.rows.length)
-      throw new CustomerDomainError('CONFLICT', 'Resolve account-owned Carts before merging these customers.');
+      throw new CustomerDomainError(
+        'CONFLICT',
+        'Resolve account-owned Carts before merging these customers.',
+      );
 
     const counts = await sql<{
       phones: number;
@@ -1815,8 +1827,10 @@ export async function mergeCustomers(
     );
 
     // Transfer or reconcile customer account links
-    const accountToDeleteCustomerId = sourceAccount?.status === 'ACTIVE' && targetAccount?.status !== 'ACTIVE'
-      ? input.targetCustomerId : input.sourceCustomerId;
+    const accountToDeleteCustomerId =
+      sourceAccount?.status === 'ACTIVE' && targetAccount?.status !== 'ACTIVE'
+        ? input.targetCustomerId
+        : input.sourceCustomerId;
     const ownedShares = await sql<{ count: number }>`
       select count(*)::int as count from wishlist.shares
       where organization_id=${input.organizationId} and owner_account_id in (
@@ -1824,7 +1838,10 @@ export async function mergeCustomers(
           and customer_id=${accountToDeleteCustomerId}::uuid)
     `.execute(transaction);
     if (ownedShares.rows[0]!.count > 0)
-      throw new CustomerDomainError('CONFLICT', 'Resolve account-owned Wishlist shares before merging these customers.');
+      throw new CustomerDomainError(
+        'CONFLICT',
+        'Resolve account-owned Wishlist shares before merging these customers.',
+      );
     if (sourceAccount?.status === 'ACTIVE') {
       if (targetAccount?.status === 'ACTIVE') {
         // Both link to the same user: delete the redundant source account row
@@ -2148,7 +2165,7 @@ export async function anonymizeCustomer(
     await sql`
       update customers.customer_addresses
       set label = null, recipient_name = 'Anonymized', phone = null,
-          address_line_1 = 'Redacted', address_line_2 = null, geography_node_id = null,
+          address_line_1 = 'Redacted', address_line_2 = null, delivery_instructions = null, geography_node_id = null,
           area = null, city = null, district = null, postal_code = null,
           is_default = false, status = 'INACTIVE', version = version + 1, updated_at = now()
       where organization_id = ${input.organizationId} and customer_id = ${input.customerId}
@@ -2307,6 +2324,7 @@ export async function updateCustomerAddress(
     district?: string | null;
     postalCode?: string | null;
     isDefault?: boolean;
+    instructions?: string | null;
   },
 ): Promise<void> {
   if (
@@ -2319,7 +2337,7 @@ export async function updateCustomerAddress(
       'Recipient, address line, and ISO country code are required.',
     );
   }
-  return db.transaction().execute(async (transaction) => {
+  return customerAddressTransaction(db, async (transaction) => {
     const customer = await sql<{ id: string }>`
       select id from customers.customers
       where id = ${input.customerId} and organization_id = ${input.organizationId}
@@ -2368,6 +2386,7 @@ export async function updateCustomerAddress(
           district = ${input.district?.trim() ?? null},
           postal_code = ${input.postalCode?.trim() ?? null},
           country_code = ${input.countryCode},
+          delivery_instructions = case when ${input.instructions === undefined} then delivery_instructions else ${input.instructions ?? null} end,
           is_default = coalesce(${input.isDefault ?? null}, is_default),
           version = version + 1,
           updated_at = now()
@@ -2505,7 +2524,10 @@ export async function removeCustomerAddress(
   db: Kysely<DatabaseSchema>,
   input: { organizationId: string; actorId: string; customerId: string; addressId: string },
 ): Promise<void> {
-  await db.transaction().execute(async (transaction) => {
+  await customerAddressTransaction(db, async (transaction) => {
+    // Match create/edit and shopper selection: never lock an address before its Customer.
+    await sql`select id from customers.customers where organization_id=${input.organizationId}
+      and id=${input.customerId} for update`.execute(transaction);
     const removed = await sql<{ id: string }>`
       update customers.customer_addresses
       set status = 'INACTIVE', is_default = false, version = version + 1, updated_at = now()

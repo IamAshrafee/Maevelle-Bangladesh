@@ -2,13 +2,13 @@
   "program": "Maevelle Product Completion V2",
   "version": 2,
   "active_area": "storefront-checkout",
-  "active_substage": "CHECKOUT_PHASE_01A_BACKEND_FOUNDATION",
+  "active_substage": "CHECKOUT_PHASE_02A_DELIVERY_BACKEND",
   "active_status": "IN_PROGRESS",
   "baseline_commit": "d2cce2c",
   "last_checkpoint_commit": "c3413e3",
   "last_verified_commit": "16f648a",
-  "last_completed_action": "Implemented and locally verified gated Checkout drafts, source ownership, adoption/revocation fencing and isolated migration compatibility.",
-  "next_action": "Separately assign Phase 01B to integrate the available draft backend; keep purchase activation disabled and preserve existing Cart release gates.",
+  "last_completed_action": "Implemented and locally verified Phase 02A delivery/contact, shopper-owned saved addresses and explicit serviceability policies; purchases remain disabled and Phase 01B remains PARTIAL.",
+  "next_action": "Use the Phase 02A backend contract for separately authorized Phase 02B integration; preserve unresolved Phase 01B browser/race/accessibility/history/runtime gates and real delivery coverage/provider gates.",
   "interrupted": false,
   "blocked_by": [
     "SIZING_OWNER_RESPONSIVE_AND_ACCESSIBILITY_ACCEPTANCE_PENDING",
@@ -25,7 +25,9 @@
     "CART_PHASE01C_HUMAN_AT_HARDWARE_AND_BROWSER_BREADTH_OPEN",
     "CART_DEPLOYED_TRUSTED_INGRESS_AND_HISTORICAL_LOG_REVIEW_PENDING",
     "CHECKOUT_PUBLIC_PURCHASE_DISABLED_PENDING_LATER_PHASES",
-    "CHECKOUT_LEGACY_CONFIRMATION_UI_FALLBACK_REPLACEMENT_REQUIRED"
+    "CHECKOUT_PHASE01B_BROWSER_FAILURE_RACE_AND_ACCESSIBILITY_ACCEPTANCE_OPEN",
+    "CHECKOUT_AUTHORIZED_HISTORICAL_RECEIPT_AND_PRODUCTION_RUNTIME_UNVERIFIED",
+    "CHECKOUT_REAL_DELIVERY_COVERAGE_AND_COURIER_ACCEPTANCE_UNVERIFIED"
   ],
   "owner_review_status": "PENDING",
   "verified_complete_areas": [

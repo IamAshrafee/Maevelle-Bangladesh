@@ -107,6 +107,7 @@ export async function createGeographyNode(
     canonicalName: string;
     localName?: string;
     sourceCode?: string;
+    countryCode?: string;
   },
 ): Promise<{ id: string }> {
   if (!input.canonicalName.trim())
@@ -120,7 +121,7 @@ export async function createGeographyNode(
   }
   const result = await sql<{
     id: string;
-  }>`insert into geography.nodes (dataset_id, parent_id, node_type, canonical_name, local_name, source_code) values (${input.datasetId ?? null}, ${input.parentId ?? null}, ${input.nodeType}, ${input.canonicalName.trim()}, ${input.localName?.trim() ?? null}, ${input.sourceCode?.trim() ?? null}) returning id`.execute(
+  }>`insert into geography.nodes (dataset_id, parent_id, node_type, canonical_name, local_name, source_code, country_code) values (${input.datasetId ?? null}, ${input.parentId ?? null}, ${input.nodeType}, ${input.canonicalName.trim()}, ${input.localName?.trim() ?? null}, ${input.sourceCode?.trim() ?? null}, ${input.countryCode ?? (input.nodeType === 'COUNTRY' && input.sourceCode === 'BD' ? 'BD' : null)}) returning id`.execute(
     db,
   );
   const id = result.rows[0]?.id;

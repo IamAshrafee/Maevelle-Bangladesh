@@ -36,7 +36,7 @@ export async function checkoutTransaction<T>(
 function principal(owner: CheckoutAuthority) {
   return owner.kind === 'GUEST' ? owner.sessionId : owner.accountId;
 }
-async function receipt(
+export async function receipt(
   tx: Transaction<DatabaseSchema>,
   owner: CheckoutAuthority,
   key: string,
@@ -71,9 +71,14 @@ async function receipt(
     throw error;
   }
 }
-async function finish(tx: Transaction<DatabaseSchema>, receiptId: string, draftId: string) {
-  await sql`update platform.idempotency_records set status='SUCCEEDED',result_entity_type='checkout.draft',
-    result_entity_id=${draftId},safe_response=${JSON.stringify({ draftId })}::jsonb,completed_at=clock_timestamp(),expires_at=null
+export async function finish(
+  tx: Transaction<DatabaseSchema>,
+  receiptId: string,
+  draftId: string,
+  entityType = 'checkout.draft',
+) {
+  await sql`update platform.idempotency_records set status='SUCCEEDED',result_entity_type=${entityType},
+    result_entity_id=${draftId},safe_response=${JSON.stringify(entityType === 'checkout.draft' ? { draftId } : { addressId: draftId })}::jsonb,completed_at=clock_timestamp(),expires_at=null
     where id=${receiptId}`.execute(tx);
 }
 async function capacity(tx: Transaction<DatabaseSchema>, owner: CheckoutAuthority) {
@@ -104,7 +109,7 @@ async function lines(
     tx,
   );
 }
-async function audit(
+export async function audit(
   tx: Transaction<DatabaseSchema>,
   owner: CheckoutAuthority,
   id: string,

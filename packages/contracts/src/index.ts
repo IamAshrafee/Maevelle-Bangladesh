@@ -1,3 +1,4 @@
+export * from './checkout-delivery.js';
 export * from './checkout.js';
 /** Explicit transport DTOs shared by API clients; domain entities stay private to their owners. */
 import type { CustomerLifecycleStageDto } from './crm.js';
@@ -3604,6 +3605,7 @@ export interface CreateManualOrderInputDto {
 }
 
 export interface DeliveryPricingRuleDto {
+  readonly checkoutServiceability?: 'UNVERIFIED' | 'SUPPORTED' | 'UNSUPPORTED';
   readonly id: string;
   readonly name: string;
   readonly countryCode: string;
@@ -3619,6 +3621,7 @@ export interface DeliveryPricingRuleDto {
 }
 
 export interface CreateDeliveryPricingRuleInputDto {
+  readonly checkoutServiceability?: 'UNVERIFIED' | 'SUPPORTED' | 'UNSUPPORTED';
   readonly name: string;
   readonly countryCode: string;
   readonly geographyNodeId?: string;
@@ -3628,6 +3631,7 @@ export interface CreateDeliveryPricingRuleInputDto {
 }
 
 export interface UpdateDeliveryPricingRuleInputDto {
+  readonly checkoutServiceability?: 'UNVERIFIED' | 'SUPPORTED' | 'UNSUPPORTED';
   readonly expectedVersion: number;
   readonly name?: string;
   readonly flatAmount?: string;

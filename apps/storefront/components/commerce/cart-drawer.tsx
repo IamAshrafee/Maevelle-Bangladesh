@@ -1,5 +1,7 @@
 'use client';
 
+import { CheckoutEntry } from '@/features/checkout/components/checkout-entry';
+
 import Link from 'next/link';
 import { useEffect, useId, useRef } from 'react';
 import { Button } from '@/components/ui/button';
@@ -89,9 +91,7 @@ function OpenCartDrawer({ onClose }: { onClose: () => void }) {
           ) : (
             (cart || snapshot.mode === 'empty') && (
               <div className="space-y-3 py-6 text-center">
-                <p className="text-sm text-on-surface-variant">
-                  There are no items in your bag.
-                </p>
+                <p className="text-sm text-on-surface-variant">There are no items in your bag.</p>
                 <Link
                   className="inline-flex min-h-12 items-center justify-center rounded-xl border border-border-subtle px-4 text-sm font-semibold text-primary transition-[background-color,transform] duration-150 active:scale-98 hover:bg-surface-container"
                   href="/categories"
@@ -117,6 +117,19 @@ function OpenCartDrawer({ onClose }: { onClose: () => void }) {
           >
             Review full bag
           </Link>
+          {cart && cart.lines.length > 0 && (
+            <CheckoutEntry
+              label="Checkout"
+              onContinue={onClose}
+              disabled={cartIsBusy(snapshot) || !cart.commerceReview?.merchandiseReady}
+              source={{ kind: 'CART', cartId: cart.id, cartRevision: cart.intentRevision }}
+              handles={Object.fromEntries(
+                cart.lines
+                  .filter((line) => line.productHandle)
+                  .map((line) => [line.variantId, line.productHandle]),
+              )}
+            />
+          )}
         </footer>
       </section>
     </dialog>

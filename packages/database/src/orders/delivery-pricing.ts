@@ -3,16 +3,47 @@ import { sql, type Kysely } from 'kysely';
 import type { DatabaseSchema } from '../index.js';
 import { appendAuditEvent } from '../platform.js';
 import type { CartView } from '../cart.js';
-import {
-  decimal4Minor,
-  decimalPattern,
-  OrderDomainError,
-  type DeliveryQuote,
-} from './types.js';
+import { decimal4Minor, decimalPattern, OrderDomainError, type DeliveryQuote } from './types.js';
+
+/** Coverage is an explicit merchant decision, independently of the rate selection. */
+export function deliveryCoverageRules(input: { organizationId: string; currency: string }) {
+  return sql`select r.geography_node_id,r.priority,r.id,r.checkout_serviceability
+    from orders.delivery_pricing_rules r join geography.nodes n on n.id=r.geography_node_id
+    where r.organization_id=${input.organizationId} and r.status='ACTIVE' and r.country_code='BD' and r.currency_code=${input.currency}
+      and r.checkout_serviceability<>'UNVERIFIED' and n.node_type not in ('COUNTRY','DIVISION')`;
+}
+export function deliveryCoverageSelection(input: { organizationId: string; currency: string }) {
+  return sql`select r.checkout_serviceability from (${deliveryCoverageRules(input)}) r join ancestry a on a.id=r.geography_node_id
+    order by a.depth,r.priority desc,r.id limit 1`;
+}
+
+/** Shared tariff priority: priority descending, then nearest ancestor, then stable ID. */
+export function deliveryPricingSelection(input: {
+  organizationId: string;
+  currency: string;
+  countryCode: string;
+}) {
+  return sql`    select rule.id, rule.name, rule.flat_amount::text, rule.currency_code, rule.version::text, rule.geography_node_id
+    from orders.delivery_pricing_rules rule
+    where rule.organization_id = ${input.organizationId}
+      and rule.status = 'ACTIVE'
+      and rule.country_code = ${input.countryCode.toUpperCase()}
+      and rule.currency_code = ${input.currency}
+      and (rule.geography_node_id is null or rule.geography_node_id in (select id from ancestry))
+    order by rule.priority desc,
+      case when rule.geography_node_id is null then 1000000 else coalesce((select depth from ancestry where id = rule.geography_node_id), 1000000) end,
+      rule.id
+    limit 1`;
+}
 
 export async function resolveDeliveryQuote(
   db: Kysely<DatabaseSchema>,
-  input: { organizationId: string; currency: string; countryCode: string; geographyNodeId?: string },
+  input: {
+    organizationId: string;
+    currency: string;
+    countryCode: string;
+    geographyNodeId?: string;
+  },
 ): Promise<DeliveryQuote> {
   const result = await sql<{
     id: string;
@@ -27,17 +58,7 @@ export async function resolveDeliveryQuote(
       from geography.nodes node join ancestry on ancestry.id = node.id
       where node.parent_id is not null
     )
-    select rule.id, rule.name, rule.flat_amount::text, rule.currency_code
-    from orders.delivery_pricing_rules rule
-    where rule.organization_id = ${input.organizationId}
-      and rule.status = 'ACTIVE'
-      and rule.country_code = ${input.countryCode.toUpperCase()}
-      and rule.currency_code = ${input.currency}
-      and (rule.geography_node_id is null or rule.geography_node_id in (select id from ancestry))
-    order by rule.priority desc,
-      case when rule.geography_node_id is null then 1000000 else coalesce((select depth from ancestry where id = rule.geography_node_id), 1000000) end,
-      rule.id
-    limit 1
+    ${deliveryPricingSelection(input)}
   `.execute(db);
   const row = result.rows[0];
   if (!row)
@@ -45,12 +66,21 @@ export async function resolveDeliveryQuote(
       'VALIDATION_FAILED',
       'Delivery is not configured for this address and currency.',
     );
-  return { ruleId: row.id, ruleName: row.name, amount: row.flat_amount, currency: row.currency_code };
+  return {
+    ruleId: row.id,
+    ruleName: row.name,
+    amount: row.flat_amount,
+    currency: row.currency_code,
+  };
 }
 
 export async function quoteForCheckout(
   db: Kysely<DatabaseSchema>,
-  checkout: { organization_id: string; country_code: string | null; geography_node_id: string | null },
+  checkout: {
+    organization_id: string;
+    country_code: string | null;
+    geography_node_id: string | null;
+  },
   cart: CartView,
 ): Promise<DeliveryQuote | null> {
   if (!checkout.country_code) return null;
@@ -63,6 +93,7 @@ export async function quoteForCheckout(
 }
 
 export interface DeliveryPricingRuleRecord {
+  readonly checkout_serviceability: 'UNVERIFIED' | 'SUPPORTED' | 'UNSUPPORTED';
   readonly id: string;
   readonly name: string;
   readonly country_code: string;
@@ -95,6 +126,7 @@ export async function listDeliveryPricingRules(
   organizationId: string,
 ): Promise<readonly DeliveryPricingRuleRecord[]> {
   const result = await sql<{
+    checkout_serviceability: 'UNVERIFIED' | 'SUPPORTED' | 'UNSUPPORTED';
     id: string;
     name: string;
     country_code: string;
@@ -111,6 +143,7 @@ export async function listDeliveryPricingRules(
     updated_at: string;
   }>`
     select
+      rule.checkout_serviceability,
       rule.id,
       rule.name,
       rule.country_code,
@@ -137,7 +170,12 @@ export async function listDeliveryPricingRules(
 
 export async function simulateDeliveryPricingRuleQuote(
   db: Kysely<DatabaseSchema>,
-  input: { organizationId: string; currency: string; countryCode: string; geographyNodeId?: string },
+  input: {
+    organizationId: string;
+    currency: string;
+    countryCode: string;
+    geographyNodeId?: string;
+  },
 ): Promise<DeliveryQuoteSimulationResult> {
   try {
     const quote = await resolveDeliveryQuote(db, input);
@@ -191,17 +229,27 @@ export async function createDeliveryPricingRule(
     flatAmount: string;
     currency: string;
     priority?: number;
+    checkoutServiceability?: 'UNVERIFIED' | 'SUPPORTED' | 'UNSUPPORTED';
   },
 ) {
-  if (!input.name.trim() || !/^[A-Z]{2}$/.test(input.countryCode) || !/^[A-Z]{3}$/.test(input.currency))
+  if (
+    !input.name.trim() ||
+    !/^[A-Z]{2}$/.test(input.countryCode) ||
+    !/^[A-Z]{3}$/.test(input.currency)
+  )
     throw new OrderDomainError('VALIDATION_FAILED', 'Delivery pricing rule details are invalid.');
   if (!decimalPattern.test(input.flatAmount) || decimal4Minor(input.flatAmount) < 0n)
     throw new OrderDomainError('VALIDATION_FAILED', 'Delivery amount is invalid.');
   if (!Number.isInteger(input.priority ?? 0))
-    throw new OrderDomainError('VALIDATION_FAILED', 'Delivery pricing priority must be an integer.');
+    throw new OrderDomainError(
+      'VALIDATION_FAILED',
+      'Delivery pricing priority must be an integer.',
+    );
   return db.transaction().execute(async (transaction) => {
     if (input.geographyNodeId) {
-      const geography = await sql<{ id: string }>`select id from geography.nodes where id=${input.geographyNodeId} and status='ACTIVE'`.execute(
+      const geography = await sql<{
+        id: string;
+      }>`select id from geography.nodes where id=${input.geographyNodeId} and status='ACTIVE'`.execute(
         transaction,
       );
       if (!geography.rows[0])
@@ -222,8 +270,8 @@ export async function createDeliveryPricingRule(
         'An active delivery pricing rule already has this country, geography, and priority.',
       );
     const result = await sql<{ id: string; version: string }>`
-      insert into orders.delivery_pricing_rules (organization_id,name,country_code,geography_node_id,flat_amount,currency_code,priority)
-      values (${input.organizationId},${input.name.trim()},${input.countryCode},${input.geographyNodeId ?? null},${input.flatAmount}::numeric,${input.currency},${input.priority ?? 0})
+      insert into orders.delivery_pricing_rules (organization_id,name,country_code,geography_node_id,flat_amount,currency_code,priority,checkout_serviceability)
+      values (${input.organizationId},${input.name.trim()},${input.countryCode},${input.geographyNodeId ?? null},${input.flatAmount}::numeric,${input.currency},${input.priority ?? 0},${input.checkoutServiceability ?? 'UNVERIFIED'})
       returning id,version::text
     `.execute(transaction);
     await appendAuditEvent(transaction, {
@@ -233,7 +281,12 @@ export async function createDeliveryPricingRule(
       action: 'orders.delivery_pricing_rule.created',
       targetType: 'orders.delivery_pricing_rule',
       targetId: result.rows[0]!.id,
-      metadata: { countryCode: input.countryCode, flatAmount: input.flatAmount, priority: input.priority ?? 0 },
+      metadata: {
+        countryCode: input.countryCode,
+        flatAmount: input.flatAmount,
+        priority: input.priority ?? 0,
+        checkoutServiceability: input.checkoutServiceability ?? 'UNVERIFIED',
+      },
     });
     return { id: result.rows[0]!.id, version: Number(result.rows[0]!.version) };
   });
@@ -253,17 +306,27 @@ export async function updateDeliveryPricingRule(
     currency: string;
     priority: number;
     status: 'ACTIVE' | 'INACTIVE';
+    checkoutServiceability?: 'UNVERIFIED' | 'SUPPORTED' | 'UNSUPPORTED';
   },
 ) {
-  if (!input.name.trim() || !/^[A-Z]{2}$/.test(input.countryCode) || !/^[A-Z]{3}$/.test(input.currency))
+  if (
+    !input.name.trim() ||
+    !/^[A-Z]{2}$/.test(input.countryCode) ||
+    !/^[A-Z]{3}$/.test(input.currency)
+  )
     throw new OrderDomainError('VALIDATION_FAILED', 'Delivery pricing rule details are invalid.');
   if (!decimalPattern.test(input.flatAmount) || decimal4Minor(input.flatAmount) < 0n)
     throw new OrderDomainError('VALIDATION_FAILED', 'Delivery amount is invalid.');
   if (!Number.isInteger(input.priority))
-    throw new OrderDomainError('VALIDATION_FAILED', 'Delivery pricing priority must be an integer.');
+    throw new OrderDomainError(
+      'VALIDATION_FAILED',
+      'Delivery pricing priority must be an integer.',
+    );
   return db.transaction().execute(async (transaction) => {
     if (input.geographyNodeId) {
-      const geography = await sql<{ id: string }>`select id from geography.nodes where id=${input.geographyNodeId} and status='ACTIVE'`.execute(
+      const geography = await sql<{
+        id: string;
+      }>`select id from geography.nodes where id=${input.geographyNodeId} and status='ACTIVE'`.execute(
         transaction,
       );
       if (!geography.rows[0])
@@ -289,6 +352,7 @@ export async function updateDeliveryPricingRule(
       update orders.delivery_pricing_rules
       set name=${input.name.trim()},country_code=${input.countryCode},geography_node_id=${input.geographyNodeId ?? null},
           flat_amount=${input.flatAmount}::numeric,currency_code=${input.currency},priority=${input.priority},status=${input.status},
+          checkout_serviceability=coalesce(${input.checkoutServiceability ?? null},checkout_serviceability),
           version=version+1,updated_at=now()
       where organization_id=${input.organizationId} and id=${input.ruleId} and version=${input.expectedVersion}
       returning version::text
@@ -301,12 +365,26 @@ export async function updateDeliveryPricingRule(
         action: 'orders.delivery_pricing_rule.updated',
         targetType: 'orders.delivery_pricing_rule',
         targetId: input.ruleId,
-        metadata: { countryCode: input.countryCode, flatAmount: input.flatAmount, priority: input.priority, status: input.status },
+        metadata: {
+          countryCode: input.countryCode,
+          flatAmount: input.flatAmount,
+          priority: input.priority,
+          status: input.status,
+          checkoutServiceability: input.checkoutServiceability ?? 'UNCHANGED',
+        },
       });
       return { id: input.ruleId, version: Number(updated.rows[0].version) };
     }
-    const exists = await sql<{ id: string }>`select id from orders.delivery_pricing_rules where organization_id=${input.organizationId} and id=${input.ruleId}`.execute(transaction);
-    if (!exists.rows[0]) throw new OrderDomainError('NOT_FOUND', 'Delivery pricing rule was not found.');
-    throw new OrderDomainError('STALE_VERSION', 'Delivery pricing rule changed; reload before saving.');
+    const exists = await sql<{
+      id: string;
+    }>`select id from orders.delivery_pricing_rules where organization_id=${input.organizationId} and id=${input.ruleId}`.execute(
+      transaction,
+    );
+    if (!exists.rows[0])
+      throw new OrderDomainError('NOT_FOUND', 'Delivery pricing rule was not found.');
+    throw new OrderDomainError(
+      'STALE_VERSION',
+      'Delivery pricing rule changed; reload before saving.',
+    );
   });
 }

@@ -1,5 +1,7 @@
 'use client';
 
+import { CheckoutEntry } from '@/features/checkout/components/checkout-entry';
+
 import { useId, type FormEvent } from 'react';
 import type { CartView } from '../types';
 import { Button } from '@/components/ui/button';
@@ -98,7 +100,16 @@ export function CartSummary({ cart, busy }: { cart: CartView; busy: boolean }) {
       )}
       <div className="space-y-1 border-t border-border-subtle pt-3 text-sm text-on-surface-variant">
         <p>Stock can change while items are in your bag. Delivery has yet to be checked.</p>
-        <p>Online checkout is currently unavailable.</p>
+        <CheckoutEntry
+          label="Checkout"
+          disabled={busy || !cart.commerceReview?.merchandiseReady}
+          source={{ kind: 'CART', cartId: cart.id, cartRevision: cart.intentRevision }}
+          handles={Object.fromEntries(
+            cart.lines
+              .filter((line) => line.productHandle)
+              .map((line) => [line.variantId, line.productHandle]),
+          )}
+        />
       </div>
     </aside>
   );

@@ -1,21 +1,8 @@
 import type { CartSessionForgottenDto, WishlistCartTransferRequestDto } from '@maevelle/contracts';
-import { requestStorefrontClient } from '@/lib/api/client/http';
 import type { CartIntent, CartView } from './types';
 
-/** Transport abort is an unknown write outcome, not proof of rollback. */
-export async function requestCart<T>(path: string, init: RequestInit): Promise<T> {
-  const control = new AbortController();
-  const cancel = () => control.abort();
-  if (init.signal?.aborted) control.abort();
-  init.signal?.addEventListener('abort', cancel, { once: true });
-  const timer = setTimeout(cancel, 15_000);
-  try {
-    return await requestStorefrontClient<T>(path, { ...init, signal: control.signal });
-  } finally {
-    clearTimeout(timer);
-    init.signal?.removeEventListener('abort', cancel);
-  }
-}
+export { requestWithDeadline as requestCart } from '@/lib/api/client/deadline';
+import { requestWithDeadline as requestCart } from '@/lib/api/client/deadline';
 export interface CartApi {
   get(context?: string, signal?: AbortSignal): Promise<CartView>;
   initialize(): Promise<CartView>;

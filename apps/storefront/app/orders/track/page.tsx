@@ -1,31 +1,29 @@
+import Link from 'next/link';
 import type { Metadata } from 'next';
-import { Suspense } from 'react';
-import { OrderTrackView } from '@/features/orders';
-
 export const metadata: Metadata = {
-  title: 'Track Your Order',
-  description:
-    'Track your handcrafted Maevelle heirloom parcel delivered directly to your doorstep across Bangladesh in real-time.',
+  title: 'Order tracking unavailable',
   robots: { index: false, follow: false },
 };
-
-function TrackOrderFallback() {
-  return (
-    <div className="min-h-screen w-full bg-surface flex items-center justify-center p-6">
-      <div className="flex flex-col items-center gap-3">
-        <div className="size-10 rounded-full border-2 border-primary border-t-transparent animate-spin" />
-        <p className="font-sans text-xs sm:text-sm text-on-surface-variant font-medium">
-          Loading Concierge Tracker…
-        </p>
-      </div>
-    </div>
-  );
-}
-
 export default function TrackOrderPage() {
   return (
-    <Suspense fallback={<TrackOrderFallback />}>
-      <OrderTrackView />
-    </Suspense>
+    <main className="mx-auto min-h-[60vh] max-w-2xl space-y-5 px-4 py-10 sm:px-6">
+      <h1 className="font-serif text-3xl font-semibold">Order tracking is currently unavailable</h1>
+      <p className="text-on-surface-variant">
+        Contact Maevelle for help with an existing order. An order number and phone number alone
+        cannot authorize private order access.
+      </p>
+      <Link
+        className="inline-flex min-h-12 items-center font-semibold text-primary underline underline-offset-4"
+        href="/orders/confirmation"
+      >
+        Check authorized receipt access
+      </Link>
+      <Link
+        className="inline-flex min-h-12 items-center font-semibold text-primary underline underline-offset-4"
+        href="/cart"
+      >
+        Return to your bag
+      </Link>
+    </main>
   );
 }

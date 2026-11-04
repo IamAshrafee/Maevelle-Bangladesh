@@ -1,3 +1,5 @@
+import { checkoutPreviewEnabled } from '@/features/checkout/availability';
+import { CheckoutReview } from '@/features/checkout/components/checkout-review';
 import type { Metadata } from 'next';
 import Link from 'next/link';
 
@@ -7,6 +9,7 @@ export const metadata: Metadata = {
 };
 
 export default function CheckoutPage() {
+  if (checkoutPreviewEnabled) return <CheckoutReview />;
   return (
     <main className="mx-auto min-h-[60vh] max-w-2xl space-y-4 px-4 py-12 sm:px-6">
       <h1 className="font-serif text-3xl font-semibold">Checkout is currently unavailable</h1>

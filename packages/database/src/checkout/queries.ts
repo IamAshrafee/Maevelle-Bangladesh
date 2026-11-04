@@ -20,10 +20,7 @@ export async function draftView(
   tx: Kysely<DatabaseSchema>,
   row: DraftRow,
 ): Promise<CheckoutDraftDto> {
-  // Expiry is derived after any lock wait, even before background cleanup.
-  const state = await sql<{
-    expired: boolean;
-  }>`select ${row.expires_at}::timestamptz<=clock_timestamp() expired`.execute(tx);
+  const status = await draftStatus(tx, row);
   const lines = await sql<{
     id: string;
     variantId: string;
@@ -39,7 +36,7 @@ export async function draftView(
     implementationVersion: 2,
     revision: row.revision,
     ownerKind: row.owner_account_id ? 'ACCOUNT' : 'GUEST',
-    status: row.status === 'ACTIVE' && state.rows[0]?.expired ? 'EXPIRED' : row.status,
+    status,
     expiresAt: row.expires_at.toISOString(),
     currency: row.currency_code,
     sourceReviewRequired: row.source_review_required,
@@ -50,4 +47,15 @@ export async function draftView(
     lines: lines.rows,
     purchaseAvailable: false,
   };
+}
+
+/** Expiry is derived after lock waits, even before background cleanup. */
+export async function draftStatus(
+  tx: Kysely<DatabaseSchema>,
+  row: DraftRow,
+): Promise<CheckoutDraftDto['status']> {
+  const state = await sql<{
+    expired: boolean;
+  }>`select ${row.expires_at}::timestamptz<=clock_timestamp() expired`.execute(tx);
+  return row.status === 'ACTIVE' && state.rows[0]?.expired ? 'EXPIRED' : row.status;
 }

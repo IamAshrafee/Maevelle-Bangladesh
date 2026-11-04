@@ -20,6 +20,7 @@ interface ProductOption {
 }
 
 export interface PdpVariantSelectorProps {
+  readonly disabled?: boolean;
   readonly options: readonly ProductOption[];
   readonly selected: Record<string, string>;
   readonly onChoose: (axisId: string, valueId: string) => void;
@@ -30,6 +31,7 @@ export interface PdpVariantSelectorProps {
 
 export function PdpVariantSelector({
   options,
+  disabled = false,
   selected,
   onChoose,
   valuePossible,
@@ -76,7 +78,16 @@ export function PdpVariantSelector({
                   onClick={onFittingGuide}
                   className="inline-flex items-center gap-1 text-[12px] font-semibold text-[#9e2a4b] hover:text-[#7e0e35] underline underline-offset-2 min-h-0 border-0 bg-transparent p-0 cursor-pointer transition-colors"
                 >
-                  <svg className="w-3.5 h-3.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <svg
+                    className="w-3.5 h-3.5 shrink-0"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    aria-hidden="true"
+                  >
                     <path d="M21.3 15.3a2.4 2.4 0 0 1 0 3.4l-2.6 2.6a2.4 2.4 0 0 1-3.4 0L2.7 8.7a2.4 2.4 0 0 1 0-3.4l2.6-2.6a2.4 2.4 0 0 1 3.4 0l12.6 12.6z" />
                     <path d="m14.5 12.5 2-2" />
                     <path d="m11.5 9.5 2-2" />
@@ -100,7 +111,7 @@ export function PdpVariantSelector({
                       title={value.label}
                       aria-label={value.label}
                       aria-pressed={active}
-                      disabled={!possible}
+                      disabled={disabled || !possible}
                       onClick={() => onChoose(axis.id, value.id)}
                       className={[
                         'relative w-10 h-10 rounded-full p-0.5 flex items-center justify-center transition-[transform,box-shadow] duration-150',
@@ -136,7 +147,7 @@ export function PdpVariantSelector({
                       key={value.id}
                       type="button"
                       aria-pressed={active}
-                      disabled={!possible}
+                      disabled={disabled || !possible}
                       onClick={() => onChoose(axis.id, value.id)}
                       className={[
                         'p-2.5 sm:p-3 min-h-[44px] rounded-xl flex items-center justify-center text-center transition-colors duration-150',

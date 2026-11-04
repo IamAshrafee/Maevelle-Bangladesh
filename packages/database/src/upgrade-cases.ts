@@ -1,3 +1,4 @@
+import { checkoutDeliveryUpgradeCase } from './checkout/delivery-upgrade-case.js';
 import { checkoutUpgradeCases } from './checkout/upgrade-cases.js';
 import { cartUpgradeCases } from './cart/upgrade-cases.js';
 import { wishlistUpgradeCases } from './wishlist/upgrade-cases.js';
@@ -26,6 +27,7 @@ export const upgradeCases: Record<string, UpgradeCase> = {
   ...wishlistUpgradeCases,
   ...cartUpgradeCases,
   ...checkoutUpgradeCases,
+  '3220_checkout_delivery': checkoutDeliveryUpgradeCase,
   '3212_wishlist_analytics': {
     async before(db, organizationId) {
       await sql`insert into wishlist.shares(id,organization_id,view_token_digest,manage_token_digest,expires_at)

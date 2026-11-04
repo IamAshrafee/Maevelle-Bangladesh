@@ -1,5 +1,7 @@
 'use client';
 
+import { CheckoutEntry } from '@/features/checkout/components/checkout-entry';
+
 import { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { QuantityStepper } from '@/components/commerce/quantity-stepper';
@@ -53,7 +55,7 @@ export function PdpView({
   wishlistPending = false,
   onWishlistToggle,
   onAddToCart,
-  busy,
+  busy: cartBusy,
   cartMessage,
   cartEpoch = 0,
 }: PdpViewProps) {
@@ -75,6 +77,8 @@ export function PdpView({
 
   const [activeMedia, setActiveMedia] = useState(0);
   const [quantity, setQuantity] = useState(1);
+  const [checkoutBusy, setCheckoutBusy] = useState(false);
+  const busy = cartBusy || checkoutBusy;
   const [actionFeedback, setActionFeedback] = useState<string | null>(null);
   const [isSizeGuideOpen, setIsSizeGuideOpen] = useState(false);
   const sizeDialogRef = useRef<HTMLDialogElement>(null);
@@ -319,6 +323,7 @@ export function PdpView({
 
         {/* Variant selector */}
         <PdpVariantSelector
+          disabled={busy}
           options={product.options}
           selected={selected}
           onChoose={choose}
@@ -336,11 +341,19 @@ export function PdpView({
             <button
               type="button"
               id="pdp-mobile-inline-add-to-cart"
-              disabled={busy || unselectedAxes.length > 0 || !selectedVariant?.available || !selectedVariant.price}
+              disabled={
+                busy ||
+                unselectedAxes.length > 0 ||
+                !selectedVariant?.available ||
+                !selectedVariant.price
+              }
               onClick={handleAddToCartClick}
               className={cx(
                 'flex-1 h-12 rounded-full flex items-center justify-center px-4 font-semibold text-[13.5px] transition-[background-color,transform] duration-150 active:scale-[0.98] border-0 shadow-xs cursor-pointer',
-                unselectedAxes.length === 0 && selectedVariant?.available && selectedVariant.price && !busy
+                unselectedAxes.length === 0 &&
+                  selectedVariant?.available &&
+                  selectedVariant.price &&
+                  !busy
                   ? 'bg-[#9e2a4b] hover:bg-[#8b2340] text-white'
                   : 'bg-[#9e2a4b]/60 text-white/80 cursor-not-allowed',
               )}
@@ -354,10 +367,24 @@ export function PdpView({
                       ? `Select ${unselectedAxes[0]?.name ?? 'Option'}`
                       : !selectedVariant?.available
                         ? 'Selection unavailable'
-                        : !selectedVariant.price ? 'Price unavailable' : 'Add to Bag'}
+                        : !selectedVariant.price
+                          ? 'Price unavailable'
+                          : 'Add to Bag'}
               </span>
             </button>
           </div>
+
+          <CheckoutEntry
+            label="Buy now"
+            disabled={checkoutBusy}
+            onPendingChange={setCheckoutBusy}
+            source={
+              selectedVariant?.available && !unselectedAxes.length
+                ? { kind: 'BUY_NOW', variantId: selectedVariant.id, quantity: String(quantity) }
+                : null
+            }
+            handles={selectedVariant ? { [selectedVariant.id]: product.handle } : {}}
+          />
 
           {(actionFeedback || cartMessage) && (
             <p
@@ -419,7 +446,7 @@ export function PdpView({
 
         {/* Sticky bottom bar */}
         <PdpStickyBar
-                    quantity={quantity}
+          quantity={quantity}
           onQuantityChange={setQuantity}
           onAddToCart={handleAddToCartClick}
           busy={busy}
@@ -532,6 +559,7 @@ export function PdpView({
 
                 {/* 4. Options (Color first, then Size, Material, etc.) */}
                 <PdpVariantSelector
+                  disabled={busy}
                   options={product.options}
                   selected={selected}
                   onChoose={choose}
@@ -545,17 +573,30 @@ export function PdpView({
                 {/* Quantity and Add to Bag */}
                 <div className="flex flex-col gap-2.5 pt-1">
                   <div className="flex items-center gap-2.5 xl:gap-3 w-full">
-                    <QuantityStepper value={quantity} onChange={setQuantity} size="touch" disabled={busy} />
+                    <QuantityStepper
+                      value={quantity}
+                      onChange={setQuantity}
+                      size="touch"
+                      disabled={busy}
+                    />
 
-            {/* Add to Bag button */}
+                    {/* Add to Bag button */}
                     <button
                       type="button"
                       id="pdp-desktop-add-to-cart"
-                      disabled={busy || unselectedAxes.length > 0 || !selectedVariant?.available || !selectedVariant.price}
+                      disabled={
+                        busy ||
+                        unselectedAxes.length > 0 ||
+                        !selectedVariant?.available ||
+                        !selectedVariant.price
+                      }
                       onClick={handleAddToCartClick}
                       className={cx(
                         'flex-1 h-12 rounded-full flex items-center justify-center px-4 font-semibold text-[14px] transition-[background-color,transform] duration-150 active:scale-[0.98] border-0 shadow-xs cursor-pointer',
-                        unselectedAxes.length === 0 && selectedVariant?.available && selectedVariant.price && !busy
+                        unselectedAxes.length === 0 &&
+                          selectedVariant?.available &&
+                          selectedVariant.price &&
+                          !busy
                           ? 'bg-[#9e2a4b] hover:bg-[#8b2340] text-white'
                           : 'bg-[#9e2a4b]/60 text-white/80 cursor-not-allowed',
                       )}
@@ -569,10 +610,28 @@ export function PdpView({
                               ? `Select ${unselectedAxes[0]?.name ?? 'Option'}`
                               : !selectedVariant?.available
                                 ? 'Selection unavailable'
-                                : !selectedVariant.price ? 'Price unavailable' : 'Add to Bag'}
+                                : !selectedVariant.price
+                                  ? 'Price unavailable'
+                                  : 'Add to Bag'}
                       </span>
                     </button>
                   </div>
+
+                  <CheckoutEntry
+                    label="Buy now"
+                    disabled={checkoutBusy}
+                    onPendingChange={setCheckoutBusy}
+                    source={
+                      selectedVariant?.available && !unselectedAxes.length
+                        ? {
+                            kind: 'BUY_NOW',
+                            variantId: selectedVariant.id,
+                            quantity: String(quantity),
+                          }
+                        : null
+                    }
+                    handles={selectedVariant ? { [selectedVariant.id]: product.handle } : {}}
+                  />
 
                   {(actionFeedback || cartMessage) && (
                     <p

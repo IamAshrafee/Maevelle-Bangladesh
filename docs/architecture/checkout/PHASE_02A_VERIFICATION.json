@@ -1,0 +1,411 @@
+{
+  "phase": "02A",
+  "date": "2026-11-04",
+  "status": "PASS",
+  "scope": "Locally verified backend only; full Checkout incomplete",
+  "branch": "main",
+  "baselineHead": "fd2cfa2e3496e2bb7a959a83fa0c41989ac41ee3",
+  "finalHead": "fd2cfa2e3496e2bb7a959a83fa0c41989ac41ee3",
+  "initialWorkingTree": "DIRTY_PHASE_01B_WORK",
+  "finalWorkingTree": "DIRTY_UNCOMMITTED_PRESERVED_PHASE_01B_PLUS_PHASE_02A",
+  "initialPhase01BReportBytes": 2,
+  "phase01BStatus": "PARTIAL",
+  "committed": false,
+  "pushed": false,
+  "deployed": false,
+  "purchaseEnabled": false,
+  "productionDraftsEnabled": false,
+  "environment": {
+    "postgres": "18.3",
+    "host": "127.0.0.1",
+    "port": 55442,
+    "taskOwnedTemporaryCluster": true,
+    "serverIdentityVerified": true,
+    "persistentTargetMigrated": false,
+    "randomFixtureDatabasesDropped": true,
+    "clusterStoppedAndConfirmed": true,
+    "providerEffects": false
+  },
+  "tests": [
+    {
+      "paths": [
+        "apps/api/src/checkout-delivery.test.ts",
+        "packages/database/src/checkout/delivery-migration.test.ts",
+        "packages/database/src/checkout/delivery-performance.test.ts"
+      ],
+      "passed": 26,
+      "status": "PASS"
+    },
+    {
+      "paths": [
+        "apps/api/src/checkout-foundation.test.ts",
+        "packages/database/src/checkout/foundation.test.ts"
+      ],
+      "passed": 16,
+      "status": "PASS"
+    },
+    {
+      "paths": [
+        "apps/api/src/shopper-auth.test.ts"
+      ],
+      "passed": 12,
+      "status": "PASS"
+    },
+    {
+      "paths": [
+        "packages/database/src/orders.test.ts",
+        "packages/database/src/payments.test.ts",
+        "packages/database/src/cart-foundation.test.ts",
+        "packages/database/src/customers.test.ts",
+        "packages/database/src/fulfillment-delivery.test.ts",
+        "packages/database/src/customers/identities.test.ts",
+        "apps/api/src/cart-foundation.test.ts",
+        "apps/api/src/cart-credential-closure.test.ts"
+      ],
+      "passed": 123,
+      "status": "PASS"
+    }
+  ],
+  "distinctFocusedTestsPassed": 177,
+  "checks": {
+    "contractsDatabaseApiTypes": "PASS",
+    "backendBuild": "PASS",
+    "storefrontTypes": "PASS",
+    "focusedLint": "PASS",
+    "focusedFormatting": "PASS",
+    "architecture13Workspaces": "PASS",
+    "gitDiffCheck": "PASS",
+    "freshMigrations": "PASS",
+    "populated3219Upgrade": "PASS",
+    "historicalMigrationBlobs51": "PASS",
+    "normalizedHistoryRegistry69": "PASS"
+  },
+  "negativeEffects": {
+    "orders": 0,
+    "inventoryReservations": 0,
+    "paymentObligations": 0,
+    "confirmedPayments": 0,
+    "promotionRedemptions": 0,
+    "cartConversions": 0,
+    "purchaseOutboxEvents": 0,
+    "purchaseOrPaymentBehavioralEvents": 0
+  },
+  "measurements": {
+    "localSyntheticOnly": true,
+    "areaNodes": 2500,
+    "warmups": 5,
+    "samplesPerOperation": 20,
+    "concurrency": 1,
+    "searchExplainExecutionMs": 8.395,
+    "searchSharedHitBlocks": 5121,
+    "operations": {
+      "serviceability": {
+        "p50Ms": 1.51,
+        "p95Ms": 1.6,
+        "queries": 1,
+        "maxDtoBytes": 253
+      },
+      "areaSearch": {
+        "p50Ms": 9.56,
+        "p95Ms": 10.25,
+        "queries": 1,
+        "maxDtoBytes": 2980
+      },
+      "deliveryUpdate": {
+        "p50Ms": 6.12,
+        "p95Ms": 7.1,
+        "queries": 16,
+        "maxDtoBytes": 743
+      },
+      "deliveryRestore": {
+        "p50Ms": 2.77,
+        "p95Ms": 3.36,
+        "queries": 8,
+        "maxDtoBytes": 743
+      }
+    }
+  },
+  "notVerified": [
+    "real reference-data coverage and provider compatibility",
+    "representative national-data/concurrent load",
+    "production ingress, role, logs and restore",
+    "physical network loss at COMMIT",
+    "Phase 02B UI/device/accessibility",
+    "remaining Phase 01B interruption/account-race/history/runtime gates",
+    "production privacy/retention and cleanup approval"
+  ],
+  "diagnosticFailuresResolvedOrRecorded": [
+    "stale built database dependency",
+    "fixture SQL/precedence/NFC assertions",
+    "unmigrated disposable regression selector",
+    "Shopper Auth selector mismatch",
+    "one omitted TEST_DATABASE_URL diagnostic refused connection at default test port before mutation",
+    "cold-statistics search cross-product plan"
+  ],
+  "finalWorkingTreeEntriesBeforeVerificationFile": [
+    {
+      "status": " M",
+      "path": "apps/api/src/routes/checkout-errors.ts"
+    },
+    {
+      "status": " M",
+      "path": "apps/api/src/routes/checkout-protection.ts"
+    },
+    {
+      "status": " M",
+      "path": "apps/api/src/routes/checkout.ts"
+    },
+    {
+      "status": " M",
+      "path": "apps/api/src/routes/orders.ts"
+    },
+    {
+      "status": " M",
+      "path": "apps/storefront/app/checkout/page.tsx"
+    },
+    {
+      "status": " M",
+      "path": "apps/storefront/app/orders/confirmation/page.tsx"
+    },
+    {
+      "status": " M",
+      "path": "apps/storefront/app/orders/track/page.tsx"
+    },
+    {
+      "status": " M",
+      "path": "apps/storefront/components/commerce/cart-drawer.tsx"
+    },
+    {
+      "status": " M",
+      "path": "apps/storefront/features/cart/api.ts"
+    },
+    {
+      "status": " M",
+      "path": "apps/storefront/features/cart/browser-runtime.ts"
+    },
+    {
+      "status": " M",
+      "path": "apps/storefront/features/cart/components/cart-summary.tsx"
+    },
+    {
+      "status": " M",
+      "path": "apps/storefront/features/cart/shopper-authority.ts"
+    },
+    {
+      "status": " M",
+      "path": "apps/storefront/features/checkout/index.ts"
+    },
+    {
+      "status": " M",
+      "path": "apps/storefront/features/pdp/pdp-variant-selector.tsx"
+    },
+    {
+      "status": " M",
+      "path": "apps/storefront/features/pdp/pdp-view.tsx"
+    },
+    {
+      "status": " M",
+      "path": "docs/architecture/checkout/README.md"
+    },
+    {
+      "status": " M",
+      "path": "docs/architecture/checkout/SCENARIO_ACCEPTANCE_REGISTER.md"
+    },
+    {
+      "status": " M",
+      "path": "docs/architecture/checkout/SECURITY_THREAT_MODEL.md"
+    },
+    {
+      "status": " M",
+      "path": "docs/product-completion/current-focus.md"
+    },
+    {
+      "status": " M",
+      "path": "docs/product-completion/state.json"
+    },
+    {
+      "status": " M",
+      "path": "packages/contracts/src/checkout.ts"
+    },
+    {
+      "status": " M",
+      "path": "packages/contracts/src/index.ts"
+    },
+    {
+      "status": " M",
+      "path": "packages/database/src/checkout/authority.ts"
+    },
+    {
+      "status": " M",
+      "path": "packages/database/src/checkout/commands.ts"
+    },
+    {
+      "status": " M",
+      "path": "packages/database/src/checkout/foundation.test.ts"
+    },
+    {
+      "status": " M",
+      "path": "packages/database/src/checkout/index.ts"
+    },
+    {
+      "status": " M",
+      "path": "packages/database/src/checkout/queries.ts"
+    },
+    {
+      "status": " M",
+      "path": "packages/database/src/customers.ts"
+    },
+    {
+      "status": " M",
+      "path": "packages/database/src/geography.ts"
+    },
+    {
+      "status": " M",
+      "path": "packages/database/src/migrations/index.ts"
+    },
+    {
+      "status": " M",
+      "path": "packages/database/src/orders/delivery-pricing.ts"
+    },
+    {
+      "status": " M",
+      "path": "packages/database/src/upgrade-cases.ts"
+    },
+    {
+      "status": "??",
+      "path": "apps/api/src/checkout-delivery.test.ts"
+    },
+    {
+      "status": "??",
+      "path": "apps/api/src/routes/checkout-delivery.ts"
+    },
+    {
+      "status": "??",
+      "path": "apps/api/src/routes/checkout-input.ts"
+    },
+    {
+      "status": "??",
+      "path": "apps/storefront/features/checkout/availability.test.ts"
+    },
+    {
+      "status": "??",
+      "path": "apps/storefront/features/checkout/availability.ts"
+    },
+    {
+      "status": "??",
+      "path": "apps/storefront/features/checkout/components/checkout-entry.tsx"
+    },
+    {
+      "status": "??",
+      "path": "apps/storefront/features/checkout/components/checkout-review.tsx"
+    },
+    {
+      "status": "??",
+      "path": "apps/storefront/features/checkout/components/review-items.tsx"
+    },
+    {
+      "status": "??",
+      "path": "apps/storefront/features/checkout/foundation-api.ts"
+    },
+    {
+      "status": "??",
+      "path": "apps/storefront/features/checkout/foundation-controller.test.ts"
+    },
+    {
+      "status": "??",
+      "path": "apps/storefront/features/checkout/foundation-controller.ts"
+    },
+    {
+      "status": "??",
+      "path": "apps/storefront/features/checkout/foundation-errors.ts"
+    },
+    {
+      "status": "??",
+      "path": "apps/storefront/features/checkout/foundation-journal.ts"
+    },
+    {
+      "status": "??",
+      "path": "apps/storefront/features/checkout/foundation-runtime.ts"
+    },
+    {
+      "status": "??",
+      "path": "apps/storefront/features/checkout/foundation-types.ts"
+    },
+    {
+      "status": "??",
+      "path": "apps/storefront/features/orders/components/legacy-order-receipt.tsx"
+    },
+    {
+      "status": "??",
+      "path": "apps/storefront/lib/api/client/deadline.ts"
+    },
+    {
+      "status": "??",
+      "path": "apps/storefront/lib/auth/shopper-session.ts"
+    },
+    {
+      "status": "??",
+      "path": "apps/storefront/lib/auth/shopper-transitions.ts"
+    },
+    {
+      "status": "??",
+      "path": "docs/architecture/checkout/PHASE_01B_IMPLEMENTATION_REPORT.md"
+    },
+    {
+      "status": "??",
+      "path": "docs/architecture/checkout/PHASE_01B_VERIFICATION.json"
+    },
+    {
+      "status": "??",
+      "path": "docs/architecture/checkout/PHASE_02A_BACKEND_CONTRACT.md"
+    },
+    {
+      "status": "??",
+      "path": "docs/architecture/checkout/PHASE_02A_IMPLEMENTATION_REPORT.md"
+    },
+    {
+      "status": "??",
+      "path": "packages/contracts/src/checkout-delivery.ts"
+    },
+    {
+      "status": "??",
+      "path": "packages/database/src/checkout/delivery-migration.test.ts"
+    },
+    {
+      "status": "??",
+      "path": "packages/database/src/checkout/delivery-performance.test.ts"
+    },
+    {
+      "status": "??",
+      "path": "packages/database/src/checkout/delivery-upgrade-case.ts"
+    },
+    {
+      "status": "??",
+      "path": "packages/database/src/checkout/delivery.ts"
+    },
+    {
+      "status": "??",
+      "path": "packages/database/src/customers/delivery-contact.ts"
+    },
+    {
+      "status": "??",
+      "path": "packages/database/src/customers/shopper-addresses.ts"
+    },
+    {
+      "status": "??",
+      "path": "packages/database/src/geography-delivery.ts"
+    },
+    {
+      "status": "??",
+      "path": "packages/database/src/migrations/3220_checkout_delivery.ts"
+    },
+    {
+      "status": "??",
+      "path": "packages/database/src/orders/delivery-serviceability.ts"
+    },
+    {
+      "status": "??",
+      "path": "scripts/checkout-phase01b-runtime.mjs"
+    }
+  ]
+}

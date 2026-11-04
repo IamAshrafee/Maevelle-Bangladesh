@@ -56,3 +56,7 @@ All scenarios below have execution status **NOT VERIFIED in Phase 00**. They are
 | S50 P03–06 | Zero delivery/zero discount/rounding residual/tax policy | Exact totals, zero preserved, 2-place payable matches obligation | Same amount on form/instructions/receipt | Property examples and ledger equation, signed correction cases |
 
 Phase acceptance must include a real backend for B phases. Unit mocks do not establish inventory, financial or transaction correctness. Live provider/courier/legal readiness and human visual/accessibility judgment remain separate gates even after synthetic tests pass.
+
+## Phase 02A backend evidence (2026-11-04)
+
+[Report and scoped acceptance](PHASE_02A_IMPLEMENTATION_REPORT.md#9-scenario-acceptance): S05/S06 delivery validation and S35 saved-address snapshot/ownership are PASS for implemented backend scope on isolated PostgreSQL 18. S45 server replay/rollback/revision/revocation portions pass; full browser interruption/storage/identity display remains PARTIAL. S44 frontend/device/AT remains NOT VERIFIED in 02A. These do not close Phase 01B or later purchase/provider scenarios. [API handoff](PHASE_02A_BACKEND_CONTRACT.md) defines exact conflicts and explicit re-selection behavior.
