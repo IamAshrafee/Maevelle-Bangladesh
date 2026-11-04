@@ -1,0 +1,136 @@
+{
+  "phase": "02B",
+  "date": "2026-11-04",
+  "status": "PARTIAL",
+  "phase01BStatus": "PARTIAL_UNCHANGED",
+  "branch": "main",
+  "baselineHead": "2fd662eb2b515d0cda250b11b0e60a5883249901",
+  "finalHead": "2fd662eb2b515d0cda250b11b0e60a5883249901",
+  "initialDirtyFiles": ["docs/architecture/checkout/PHASE_02A_IMPLEMENTATION_REPORT.md"],
+  "preexistingReportBytesPreserved": 2,
+  "finalWorkingTree": "DIRTY_UNCOMMITTED",
+  "workCommitted": false,
+  "pushed": false,
+  "deployed": false,
+  "persistentMigration": false,
+  "purchaseEnabled": false,
+  "productionDraftsEnabled": false,
+  "tests": [
+    {
+      "command": "node node_modules/vitest/vitest.mjs run apps/storefront/features/checkout apps/storefront/features/cart/api.test.ts apps/storefront/features/cart/browser-runtime.test.ts apps/storefront/features/cart/controller.test.ts apps/storefront/features/wishlist/wishlist-store.test.ts apps/storefront/features/wishlist/account-adapter.test.ts apps/storefront/features/wishlist/guest-journal.test.ts apps/storefront/components/commerce/wishlist-button.test.tsx apps/storefront/features/pdp/pdp-product-details.test.tsx",
+      "status": "PASS",
+      "files": 12,
+      "passed": 131
+    },
+    {
+      "command": "node node_modules/vitest/vitest.mjs run apps/api/src/checkout-delivery.test.ts apps/api/src/checkout-foundation.test.ts apps/api/src/shopper-auth.test.ts",
+      "status": "PASS",
+      "files": 3,
+      "passed": 45,
+      "isolatedPostgres": true
+    },
+    {
+      "command": "node node_modules/vitest/vitest.mjs run packages/database/src/orders.test.ts",
+      "status": "PASS",
+      "files": 1,
+      "passed": 24,
+      "isolatedPostgres": true,
+      "isolation": "isolatedCartDatabase -> runMigrations -> spawnSync Vitest with isolated URL -> finally close/drop"
+    }
+  ],
+  "checks": {
+    "storefrontTypecheck": "PASS",
+    "focusedLint": "PASS",
+    "focusedFormatting": "PASS",
+    "architecture13Workspaces": "PASS",
+    "gitDiffCheck": "PASS",
+    "storefrontProductionBuildPreviewFalse": "PASS",
+    "productionRuntimeIngress": "NOT VERIFIED"
+  },
+  "environment": {
+    "postgresVersion": "18.3",
+    "host": "127.0.0.1",
+    "port": 55443,
+    "dedicatedTemporaryCluster": true,
+    "explicitBaseDatabaseUrl": "postgresql://checkout_fixture@127.0.0.1:55443/maevelle_test",
+    "randomFixtureDatabasesDropped": true,
+    "clusterStoppedAndConfirmed": true,
+    "browser": "supported in-app browser via cua_repl",
+    "browserOrigin": "http://localhost:3000",
+    "apiLoopback": "http://127.0.0.1:3002",
+    "syntheticAccountsOnly": true,
+    "externalProvidersCalled": false,
+    "runtimeStopped": true
+  },
+  "browser": {
+    "guestBuyNowBanglaSaveReload": "PASS",
+    "accountSelectionAndExplicitGuestAdoption": "PASS",
+    "searchEnglishBanglaKeyboardMoreClear": "PASS",
+    "afterCommit503SameRequestRecovery": "PASS",
+    "revisionConflictExplicitReviewPreservesEdits": "PASS",
+    "savedAddressCreateEditDefaultRemove": "PASS",
+    "savedAddressPagination23Rows": "PASS",
+    "changedRemovedSnapshotReview": "PASS",
+    "coverageUnverifiedAndExplicitRevalidation": "PASS",
+    "invalidMobilePreservesOtherFields": "PASS",
+    "normalAccountSwitch": "PASS",
+    "uncertainCommittedSaveThenAccountSwitch": "PASS",
+    "sameOwnerTabRoundTripRetainsUnsavedFields": "PASS",
+    "cartEntrySaveReturnPreservesOneLineQuantityOne": "PASS",
+    "expiredDraftSaveDisabled": "PASS",
+    "paymentDisabled": "PASS",
+    "exactDelayedResponseSwitchTiming": "NOT VERIFIED",
+    "osBackgroundVisibilityCloaking": "NOT VERIFIED",
+    "finalConsoleErrorSample": 0,
+    "responsiveWidthScrollWidth": [[320,320],[390,375],[768,753],[844,829],[1024,1009],[1440,1425]],
+    "mountedDeliveryForms": 1,
+    "mobileInputFontPx": 16,
+    "screenshots": [
+      "C:/Users/devas/.codex/visualizations/2026/11/04/01a1a5fc-6efd-75e2-8a37-8584a06f2651/checkout02b-desktop.jpg",
+      "C:/Users/devas/.codex/visualizations/2026/11/04/01a1a5fc-6efd-75e2-8a37-8584a06f2651/checkout02b-mobile.jpg"
+    ]
+  },
+  "performance": {
+    "measurement": "Final production checkout client-reference manifest, unique JS chunks including shared code; preview off; gzip each file independently",
+    "chunkCount": 8,
+    "uncompressedBytes": 317042,
+    "gzipBytes": 85429,
+    "incrementalBaselineDelta": "NOT VERIFIED",
+    "representativeInteractionLatency": "NOT VERIFIED",
+    "searchDebounceMs": 300,
+    "searchPageLimit": 20,
+    "searchRenderCap": 100
+  },
+  "browserDatabaseFacts": {
+    "drafts": 4,
+    "orders": 0,
+    "reservations": 0,
+    "paymentIntents": 0,
+    "confirmedPayments": 0,
+    "promotionUsage": 0,
+    "convertedCarts": 0,
+    "orderOrPaymentPurchaseAnalyticsEvents": 0,
+    "orderPlacementOutboxEvents": 0
+  },
+  "notVerified": [
+    "native 200% text scaling and 400% zoom",
+    "human AT, hardware, iOS/Android keyboard/autofill and browser breadth",
+    "reduced-motion/dialog accessibility matrix",
+    "exact delayed-response identity-switch browser timing and actual OS background privacy cloak",
+    "populated authorized historical receipt and production runtime/ingress",
+    "representative volume/performance and field Core Web Vitals",
+    "real geographic coverage, provider compatibility, retention/legal and persistent recovery acceptance"
+  ],
+  "limitations": [
+    "Unsaved private edits and exact uncertain commands are page-memory only; no navigation guard or PII persistence",
+    "01B acceptance gates remain open independently",
+    "Existing shell/footer marketing is not authoritative serviceability evidence",
+    "Browser screenshots precede final draft-change/revocation clear hardening; those final changes pass focused controller tests and build"
+  ],
+  "acceptance": {
+    "1": "PASS", "2": "PASS", "3": "PASS", "4": "PASS", "5": "PARTIAL",
+    "6": "PASS", "7": "PASS", "8": "PASS", "9": "PASS", "10": "PASS",
+    "11": "PASS", "12": "PASS", "13": "PASS", "14": "PARTIAL", "15": "PASS",
+    "16": "PASS", "17": "PARTIAL", "18": "PARTIAL", "19": "PASS", "20": "PASS"
+  }
+}

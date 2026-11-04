@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Notice } from '@/components/ui/notice';
 import { reviewActions, useReviewSnapshot } from '../foundation-runtime';
+import { DeliveryPanel } from './delivery-panel';
 import { ReviewItems } from './review-items';
 
 export function CheckoutReview() {
@@ -18,8 +19,11 @@ export function CheckoutReview() {
     return () => clearInterval(timer);
   }, []);
   const draft = state.draft,
-    busy = ['checking', 'pending'].includes(state.phase),
+    busy =
+      ['checking', 'pending'].includes(state.phase) ||
+      ['loading', 'saving'].includes(state.delivery.phase),
     pending = Boolean(state.pending);
+  const privatePending = Boolean(state.delivery.pending);
   const references = state.partition ? reviewActions.references().filter((ref) => ref.id) : [];
   const expired =
     draft?.status === 'EXPIRED' || Boolean(draft && Date.parse(draft.expiresAt) <= clock);
@@ -32,19 +36,22 @@ export function CheckoutReview() {
     }
   }
   return (
-    <main className="mx-auto min-h-[60vh] max-w-3xl space-y-6 px-4 py-8 sm:px-6 sm:py-12">
+    <main
+      id="main-content"
+      tabIndex={-1}
+      className="mx-auto min-h-[60vh] max-w-6xl space-y-6 px-4 py-8 sm:px-6 sm:py-12"
+    >
       <header className="space-y-2">
         <p className="text-sm font-semibold uppercase tracking-widest text-primary">
           Development preview
         </p>
-        <h1 className="font-serif text-3xl font-semibold">Review your selection</h1>
+        <h1 className="font-serif text-3xl font-semibold">Your checkout</h1>
         <p className="text-on-surface-variant">
-          Ordering is unavailable. This review does not reserve stock, calculate a payable total, or
-          create an order.
+          Add your delivery details and review your selection. Ordering is not available yet.
         </p>
       </header>
       <nav
-        className="flex flex-wrap gap-5 text-sm font-semibold text-primary"
+        className="flex flex-wrap items-center gap-x-5 gap-y-3 text-sm font-semibold text-primary"
         aria-label="Review navigation"
       >
         <Link
@@ -59,8 +66,43 @@ export function CheckoutReview() {
         >
           Your account
         </Link>
+        <div className="flex flex-wrap gap-3">
+          <Button
+            variant="outline"
+            disabled={
+              busy ||
+              (privatePending && !state.suspended) ||
+              clock < (state.issue?.retryAt ?? 0) ||
+              Boolean(pending && state.issue && !state.issue.retryable)
+            }
+            onClick={() =>
+              void action(
+                state.suspended
+                  ? reviewActions.resume
+                  : pending
+                    ? reviewActions.retry
+                    : () => reviewActions.refresh(),
+              )
+            }
+          >
+            {state.suspended
+              ? 'Check current session'
+              : pending
+                ? 'Retry same request'
+                : 'Restore review'}
+          </Button>
+          {pending && state.issue && !state.issue.retryable && (
+            <Button variant="ghost" onClick={reviewActions.stopRecovering}>
+              Dismiss rejected request
+            </Button>
+          )}
+        </div>
       </nav>
-      <div aria-live="polite" role="status" className="min-h-6 text-sm text-on-surface-variant">
+      <div
+        aria-live="polite"
+        role="status"
+        className={busy ? 'text-sm text-on-surface-variant' : 'sr-only'}
+      >
         {busy
           ? state.phase === 'checking'
             ? 'Checking your current shopper session…'
@@ -87,25 +129,7 @@ export function CheckoutReview() {
           Retry the same request to find out whether the review was saved. No order was placed.
         </Notice>
       )}
-      <div className="flex flex-wrap gap-3">
-        <Button
-          variant="outline"
-          disabled={
-            busy ||
-            clock < (state.issue?.retryAt ?? 0) ||
-            Boolean(pending && state.issue && !state.issue.retryable)
-          }
-          onClick={() => void action(pending ? reviewActions.retry : () => reviewActions.refresh())}
-        >
-          {pending ? 'Retry same request' : 'Restore review'}
-        </Button>
-        {pending && state.issue && !state.issue.retryable && (
-          <Button variant="ghost" onClick={reviewActions.stopRecovering}>
-            Dismiss rejected request
-          </Button>
-        )}
-      </div>
-      {references.length > 1 && !pending && (
+      {references.length > 1 && !pending && !privatePending && (
         <nav aria-label="Saved reviews" className="flex flex-wrap gap-3">
           {references.map((ref, index) => (
             <Button
@@ -120,7 +144,7 @@ export function CheckoutReview() {
           ))}
         </nav>
       )}
-      {state.partition !== 'guest' && state.guestCandidate && !pending && (
+      {state.partition !== 'guest' && state.guestCandidate && !pending && !privatePending && (
         <Notice variant="neutral" title="You have a guest review">
           <p>
             Bring that review into your account only if you want to keep it. Your guest and account
@@ -137,48 +161,83 @@ export function CheckoutReview() {
         </Notice>
       )}
       {draft && (
-        <section
-          aria-label="Current review"
-          className="rounded-2xl border border-border-subtle bg-surface-container-lowest p-4 sm:p-6"
+        <div
+          hidden={state.suspended}
+          className={
+            state.suspended
+              ? 'hidden'
+              : 'grid min-w-0 items-start gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,0.6fr)]'
+          }
         >
-          <div className="flex flex-wrap justify-between gap-3">
-            <h2 className="font-serif text-xl font-semibold">
-              {draft.source.kind === 'BUY_NOW' ? 'Buy now selection' : 'Complete bag selection'}
-            </h2>
-            <p className="text-sm font-semibold">
-              {expired ? 'Expired' : draft.status === 'ABANDONED' ? 'Abandoned' : 'Active review'}
-            </p>
-          </div>
-          <ReviewItems draft={draft} handles={state.handles} />
-          <p className="text-sm text-on-surface-variant">
-            Review expires{' '}
-            <time dateTime={draft.expiresAt}>{new Date(draft.expiresAt).toLocaleString()}</time>.
-          </p>
-          {draft.sourceReviewRequired && (
-            <Notice className="mt-4" variant="warning" title="Review your account bag">
-              This selection came from a guest bag. Choose your current account bag explicitly, or
-              return to the product to start a separate review.
-            </Notice>
-          )}
-          <div className="mt-5 flex flex-wrap gap-3">
-            {draft.source.kind === 'CART' && (
-              <Button
-                variant="outline"
-                disabled={busy || pending || expired || draft.status !== 'ACTIVE'}
-                onClick={() => void action(reviewActions.refreshCart)}
-              >
-                {draft.sourceReviewRequired ? 'Use my current account bag' : 'Review current bag'}
-              </Button>
-            )}
-            <Button
-              variant="ghost"
-              disabled={busy || pending || expired || draft.status !== 'ACTIVE'}
-              onClick={() => void action(reviewActions.abandon)}
+          <DeliveryPanel key={`${state.partition}:${draft.id}`} review={state} clock={clock} />
+          <div className="min-w-0 space-y-5 lg:order-2">
+            <section
+              aria-label="Current review"
+              className="rounded-2xl border border-border-subtle bg-surface-container-lowest p-4 sm:p-6"
             >
-              Abandon review
-            </Button>
+              <div className="flex flex-wrap justify-between gap-3">
+                <h2 className="font-serif text-xl font-semibold">
+                  {draft.source.kind === 'BUY_NOW' ? 'Buy now selection' : 'Complete bag selection'}
+                </h2>
+                <p className="text-sm font-semibold">
+                  {expired
+                    ? 'Expired'
+                    : draft.status === 'ABANDONED'
+                      ? 'Abandoned'
+                      : 'Active review'}
+                </p>
+              </div>
+              <ReviewItems draft={draft} handles={state.handles} />
+              <p className="text-sm text-on-surface-variant">
+                Review expires{' '}
+                <time dateTime={draft.expiresAt}>{new Date(draft.expiresAt).toLocaleString()}</time>
+                .
+              </p>
+              {draft.sourceReviewRequired && (
+                <Notice className="mt-4" variant="warning" title="Review your account bag">
+                  This selection came from a guest bag. Choose your current account bag explicitly,
+                  or return to the product to start a separate review.
+                </Notice>
+              )}
+              <div className="mt-5 flex flex-wrap gap-3">
+                {draft.source.kind === 'CART' && (
+                  <Button
+                    variant="outline"
+                    disabled={
+                      busy || pending || privatePending || expired || draft.status !== 'ACTIVE'
+                    }
+                    onClick={() => void action(reviewActions.refreshCart)}
+                  >
+                    {draft.sourceReviewRequired
+                      ? 'Use my current account bag'
+                      : 'Review current bag'}
+                  </Button>
+                )}
+                <Button
+                  variant="ghost"
+                  disabled={
+                    busy || pending || privatePending || expired || draft.status !== 'ACTIVE'
+                  }
+                  onClick={() => void action(reviewActions.abandon)}
+                >
+                  Abandon review
+                </Button>
+              </div>
+            </section>
+            <section
+              className="rounded-2xl border border-border-subtle p-5"
+              aria-label="Next checkout stage"
+            >
+              <h2 className="font-serif text-xl font-semibold">Payment & final review</h2>
+              <p className="mt-2 text-sm text-on-surface-variant">
+                This stage is not available yet. No payment is due and no order will be placed.
+              </p>
+              <Button className="mt-4" fullWidth disabled>
+                Continue to payment — unavailable
+              </Button>
+            </section>
           </div>
-        </section>
+        </div>
       )}
       {!draft && !busy && !pending && !state.guestCandidate && (
         <p className="rounded-2xl border border-border-subtle p-6">
@@ -189,7 +248,7 @@ export function CheckoutReview() {
         <div className="flex flex-wrap gap-3">
           <Button
             variant="ghost"
-            disabled={busy || pending}
+            disabled={busy || pending || privatePending}
             onClick={() =>
               void action(async () => {
                 await reviewActions.revoke();
@@ -201,7 +260,7 @@ export function CheckoutReview() {
           </Button>
           <Button
             variant="ghost"
-            disabled={busy || pending}
+            disabled={busy || pending || privatePending}
             onClick={() => {
               reviewActions.freshGuest();
               router.push('/cart');

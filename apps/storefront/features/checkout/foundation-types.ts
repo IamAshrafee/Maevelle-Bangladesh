@@ -1,3 +1,4 @@
+import { EMPTY_DELIVERY, type DeliveryProjection } from './delivery-types';
 import type {
   CheckoutDraftDto,
   CheckoutSourceDto,
@@ -32,6 +33,8 @@ export interface ReviewIssue {
   code: string;
 }
 export interface ReviewSnapshot {
+  suspended: boolean;
+  delivery: DeliveryProjection;
   phase: 'idle' | 'checking' | 'ready' | 'pending' | 'error';
   partition: string | null;
   draft: CheckoutDraftDto | null;
@@ -42,6 +45,8 @@ export interface ReviewSnapshot {
   handles: CatalogReferences;
 }
 export const EMPTY_REVIEW: ReviewSnapshot = Object.freeze({
+  suspended: false,
+  delivery: EMPTY_DELIVERY,
   phase: 'idle',
   partition: null,
   draft: null,

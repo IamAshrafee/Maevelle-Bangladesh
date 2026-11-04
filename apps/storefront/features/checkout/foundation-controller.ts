@@ -1,3 +1,6 @@
+import { StorefrontClientApiError } from '@/lib/api/client/http';
+import { createDeliveryWorkflow, type DeliveryScope } from './delivery-workflow';
+import type { deliveryApi } from './delivery-api';
 import type {
   CheckoutDraftDto,
   CheckoutSourceDto,
@@ -16,6 +19,7 @@ import { ownerPartition, type ReviewJournal } from './foundation-journal';
 
 interface Dependencies {
   api: typeof reviewApi;
+  deliveryApi?: typeof deliveryApi;
   journal: ReviewJournal;
   resolveOwner(signal: AbortSignal): Promise<string | null>;
   uuid?: () => string;
@@ -91,6 +95,7 @@ export function createReviewController(deps: Dependencies) {
     });
     deps.journal.finish(current);
     publish({
+      ...(state.draft?.id !== value.id ? { delivery: EMPTY_REVIEW.delivery } : {}),
       draft: value,
       handles,
       pending: null,
@@ -110,12 +115,12 @@ export function createReviewController(deps: Dependencies) {
     if (intent.kind === 'adopt') deps.journal.removeReference('guest', intent.id);
     return accepted;
   }
-  function task<T>(run: (epoch: number) => Promise<T>): Promise<T> {
+  function task<T>(run: (epoch: number) => Promise<T>, report = true): Promise<T> {
     if (running) return running as Promise<T>;
     const epoch = generation;
     const job = run(epoch)
       .catch((error) => {
-        if (epoch === generation && !held)
+        if (report && epoch === generation && !held)
           publish({ phase: 'error', issue: reviewIssue(error, now()) });
         throw error;
       })
@@ -125,9 +130,62 @@ export function createReviewController(deps: Dependencies) {
     running = job;
     return job;
   }
+  function suspend() {
+    generation++;
+    abort.abort();
+    abort = new AbortController();
+    running = null;
+    held = true;
+    publish({
+      suspended: true,
+      phase: 'checking',
+      delivery: state.delivery.pending
+        ? {
+            ...state.delivery,
+            phase: 'unknown',
+            issue: state.delivery.issue ?? {
+              code: 'UNKNOWN_OUTCOME',
+              message:
+                'The result is uncertain. Retry the same request after your session is checked.',
+              retryable: true,
+              retryAt: now(),
+            },
+          }
+        : state.delivery,
+    });
+  }
+  function resume() {
+    held = false;
+    return task(async (epoch) => {
+      try {
+        const current = await identify(epoch);
+        if (state.draft) {
+          const ref = deps.journal.references(current).find((r) => r.id === state.draft?.id);
+          const fresh = await deps.api.read(
+            state.draft.id,
+            authority(current, ref?.context),
+            abort.signal,
+          );
+          if ((await identify(epoch)) !== current) throw new Error('Shopper changed');
+          assertCurrent(epoch);
+          publish({ draft: fresh });
+        }
+        publish({ suspended: false, phase: 'ready', issue: null });
+      } catch (error) {
+        if (epoch === generation) {
+          if (error instanceof StorefrontClientApiError && [401, 403, 404].includes(error.status))
+            invalidate();
+          publish({ phase: 'error', issue: reviewIssue(error, now()) });
+        }
+        throw error;
+      }
+    }, false);
+  }
   async function restore(epoch: number, selectedId?: string) {
-    publish({ phase: 'checking', draft: null, issue: null });
+    if (state.delivery.pending) throw new Error('Recover the pending delivery request first.');
+    publish({ phase: 'checking', draft: null, delivery: EMPTY_REVIEW.delivery, issue: null });
     const current = await identify(epoch);
+    if (state.delivery.pending) throw new Error('Recover the pending delivery request first.');
     const pending = deps.journal.pending(current);
     const ref = selectedId
       ? deps.journal.references(current).find((v) => v.id === selectedId)
@@ -145,6 +203,68 @@ export function createReviewController(deps: Dependencies) {
     const value = await deps.api.read(ref.id, owner, abort.signal);
     return accept(value, epoch, current, owner, ref.handles);
   }
+  const delivery = createDeliveryWorkflow({
+    ...(deps.deliveryApi ? { api: deps.deliveryApi } : {}),
+    get: () => state.delivery,
+    publish: (patch) => publish({ delivery: { ...state.delivery, ...patch } }),
+    now,
+    uuid,
+    run: function runPrivate<T>(
+      action: (scope: DeliveryScope) => Promise<T>,
+      wait = false,
+    ): Promise<T> {
+      if (running && wait) {
+        const epoch = generation;
+        return running
+          .catch(() => undefined)
+          .then(() => {
+            assertCurrent(epoch);
+            return runPrivate(action, false);
+          });
+      }
+      if (running) return Promise.reject(new Error('A checkout request is already running.'));
+      return task(async (epoch) => {
+        const current = await identify(epoch);
+        if (!state.draft || state.pending) throw new Error('Restore the current review first.');
+        const draft = state.draft;
+        const ref = deps.journal.references(current).find((r) => r.id === draft.id);
+        const owner = authority(current, ref?.context);
+        const scope: DeliveryScope = {
+          owner,
+          draft,
+          signal: abort.signal,
+          current: () => epoch === generation && !held && state.draft?.id === draft.id,
+          verify: async () => {
+            if ((await identify(epoch)) !== current) throw new Error('Shopper changed');
+            assertCurrent(epoch);
+            if (state.draft?.id !== draft.id) throw new Error('Checkout changed');
+          },
+          revokeView: () => {
+            invalidate();
+            publish({
+              phase: 'error',
+              issue: reviewIssue(new Error('Your session changed.'), now()),
+            });
+          },
+          accept: (value) => {
+            assertCurrent(epoch);
+            if (value.draftId !== draft.id) throw new Error('Checkout changed');
+            const next = { ...state.draft!, revision: value.revision, status: value.draftStatus };
+            deps.journal.save({
+              partition: current,
+              ...(owner.kind === 'GUEST' ? { context: owner.context } : {}),
+              id: next.id,
+              revision: next.revision,
+              handles: state.handles,
+              savedAt: now(),
+            });
+            publish({ draft: next });
+          },
+        };
+        return action(scope);
+      }, false);
+    },
+  });
   return {
     getSnapshot: () => state,
     subscribe(fn: () => void) {
@@ -152,10 +272,18 @@ export function createReviewController(deps: Dependencies) {
       return () => listeners.delete(fn);
     },
     invalidate,
+    delivery,
+    suspend,
+    resume,
+    checkOwner: () => {
+      suspend();
+      return resume();
+    },
     refresh: (id?: string) => task((epoch) => restore(epoch, id)),
     async initiate(source: CheckoutSourceDto, handles: CatalogReferences = {}) {
       // Existing uncertain intent is never replaced by a fresh key/payload.
       return task(async (epoch) => {
+        if (state.delivery.pending) throw new Error('Recover the pending delivery request first.');
         const current = await identify(epoch),
           previous = deps.journal.pending(current);
         if (previous) {
@@ -194,7 +322,8 @@ export function createReviewController(deps: Dependencies) {
     update: (change: UpdateCheckoutDraftDto, handles = state.handles) =>
       task(async (epoch) => {
         const current = await identify(epoch);
-        if (deps.journal.pending(current)) throw new Error('Recover the pending request first.');
+        if (deps.journal.pending(current) || state.delivery.pending)
+          throw new Error('Recover the pending request first.');
         const value = state.draft;
         if (!value) throw new Error('Restore the review first.');
         return execute(
@@ -216,7 +345,8 @@ export function createReviewController(deps: Dependencies) {
           guest = deps.journal.reference('guest');
         if (current === 'guest' || !guest?.id || !guest.context || !guest.revision)
           throw new Error('Sign in and restore the guest review first.');
-        if (deps.journal.pending(current)) throw new Error('Recover the pending request first.');
+        if (deps.journal.pending(current) || state.delivery.pending)
+          throw new Error('Recover the pending request first.');
         return execute(
           {
             kind: 'adopt',
@@ -244,7 +374,7 @@ export function createReviewController(deps: Dependencies) {
         assertCurrent(epoch);
         if (result.revoked !== true) throw new Error('Guest session was not revoked.');
         deps.journal.forgetGuest();
-        publish({ draft: null, pending: null, phase: 'ready' });
+        publish({ draft: null, delivery: EMPTY_REVIEW.delivery, pending: null, phase: 'ready' });
       }),
     startNewGuest: () => {
       invalidate();

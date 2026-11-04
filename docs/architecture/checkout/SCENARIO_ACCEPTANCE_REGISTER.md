@@ -1,5 +1,24 @@
 # Scenario and acceptance register
 
+## Phase 02B execution addendum — 2026-11-04
+
+Overall **PARTIAL**; Phase 01B remains PARTIAL. See the [02B report](PHASE_02B_IMPLEMENTATION_REPORT.md) and [machine-readable evidence](PHASE_02B_VERIFICATION.json). The Phase 00 scenarios below remain a specification, not blanket passing evidence.
+
+| Executed scenario | Evidence and status |
+| --- | --- |
+| Guest Bangla contact/mobile/address, save/reload; Cart and Buy Now | Real isolated API/browser PASS; Bag unchanged |
+| Search English/Bangla, keyboard, clear, pagination; absent approved coverage | Browser PASS; real reference API, synthetic dataset only |
+| Saved select/create/edit/default/remove, CHANGED/REMOVED snapshot | Browser PASS; explicit actions and retained purchase snapshot |
+| After-commit 503, exact retry, 409 review and invalid mobile correction | Browser PASS; local fields retained and no fresh-key automatic replay |
+| A/B normal switch and switch away from uncertain committed save | Browser PASS; previous private marker/retry absent |
+| Ignored-abort delayed private read/write and changed-owner suspension | Controller tests PASS; exact delayed-response browser timing and OS-background cloak NOT VERIFIED |
+| Forged money/internal fields, guest book denial, string revisions, no PII journal, 429 | Focused adapter/controller/API tests PASS; no full browser status matrix claim |
+| Responsive saved-form layout | Six widths including landscape; no horizontal overflow; one form; 16px mobile fields |
+| Native zoom, human AT/hardware/browser breadth, historical receipt, production runtime | NOT VERIFIED; inherited Phase 01B requirements remain open |
+| Delivery creates no Orders/payments/stock/promotion/conversion/purchase events | Browser database zero facts and API assertions PASS; separate Orders regression isolated |
+
+The full focused run is 200 tests in 16 files. Screenshots precede the final draft-change/revocation clearing hardening, which passed controller tests and the final build. No purchase activation, persistent migration or deployment.
+
 All scenarios below have execution status **NOT VERIFIED in Phase 00**. They are specification coverage, not passing tests. E31 in the audit identifies overlapping pre-existing test source; future runs must record command, commit, environment, assertion and artifact, plus whether PostgreSQL/browser/provider was real or mocked. `Pxx` refers to paired phases in the roadmap. Shared security requirement for every row: tenant/current-owner or explicit Admin capability, bounded input, private no-store/PII-safe diagnostics and exact money. Additional controls listed per case. Failure-risk column also identifies why the case is required.
 
 | ID / phase | Preconditions and action | Expected backend outcome / failure risk | Frontend recovery | Admin / Worker and security / acceptance evidence |

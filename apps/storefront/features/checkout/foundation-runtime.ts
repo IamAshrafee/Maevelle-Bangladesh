@@ -39,8 +39,14 @@ function createRuntime() {
       options = { signal: events.signal };
     const refresh = () => {
       if (authHold) return;
-      controller.invalidate();
-      if (clients) void controller.refresh().catch(() => undefined);
+      if (controller.getSnapshot().suspended) {
+        if (clients) void controller.resume().catch(() => undefined);
+      } else if (controller.getSnapshot().draft) {
+        if (clients) void controller.checkOwner().catch(() => undefined);
+      } else {
+        controller.invalidate();
+        if (clients) void controller.refresh().catch(() => undefined);
+      }
     };
     const transition = (phase: string, local = false) => {
       if (!local && (localHold || (authHold && phase === 'begin'))) return;
@@ -79,7 +85,7 @@ function createRuntime() {
     document.addEventListener(
       'visibilitychange',
       () => {
-        if (document.visibilityState === 'hidden') controller.invalidate(true);
+        if (document.visibilityState === 'hidden') controller.suspend();
         else refresh();
       },
       options,
@@ -164,6 +170,8 @@ export async function startReview(source: CheckoutSourceDto, handles: CatalogRef
   return active.action(() => active.controller.initiate(intended.source, intended.handles));
 }
 export const reviewActions = {
+  delivery: () => instance().controller.delivery,
+  resume: () => instance().controller.resume(),
   refresh: (id?: string) => instance().controller.refresh(id),
   retry: () => instance().controller.retry(),
   abandon: () => {

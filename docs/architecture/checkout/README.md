@@ -6,7 +6,9 @@ Phase 01A backend foundation is now implemented and locally verified, with purch
 
 Phase 01B Storefront foundation is implemented with **PARTIAL** local acceptance. See the [frontend implementation and acceptance report](PHASE_01B_IMPLEMENTATION_REPORT.md) and [verification record](PHASE_01B_VERIFICATION.json). Main real-browser/API journeys pass; browser fault/race and accessibility breadth remain open. Purchases remain disabled.
 
-Phase 02A backend is **PASS for locally verified scope**. See the [implementation and acceptance report](PHASE_02A_IMPLEMENTATION_REPORT.md) and [exact Phase 02B backend handoff](PHASE_02A_BACKEND_CONTRACT.md). Explicit coverage defaults UNVERIFIED; missing real data fails safely. Phase 01B remains PARTIAL, purchases stay disabled, and Phase 02B/immutable quotes are not implemented.
+Phase 02A backend has locally verified evidence in its [verification record](PHASE_02A_VERIFICATION.json) and [exact backend handoff](PHASE_02A_BACKEND_CONTRACT.md). Its Markdown report is currently two bytes and was preserved unchanged. Explicit coverage defaults UNVERIFIED; missing real data fails safely.
+
+Phase 02B delivery frontend is implemented with **PARTIAL** acceptance: [implementation and acceptance report](PHASE_02B_IMPLEMENTATION_REPORT.md), [verification record](PHASE_02B_VERIFICATION.json), and [Phase 03A authoritative handoff](PHASE_03A_HANDOFF.md). 200 focused tests and listed synthetic browser journeys pass; native zoom, human AT/device breadth, exact delayed-response browser timing and production-runtime gates remain open. Phase 01B stays PARTIAL. Purchases/production drafts stay disabled; immutable quotes and placement are not implemented. No commit, push, deployment or persistent migration occurred in 02B.
 
 ## Reading order and authority
 

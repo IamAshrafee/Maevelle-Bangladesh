@@ -2,13 +2,13 @@
   "program": "Maevelle Product Completion V2",
   "version": 2,
   "active_area": "storefront-checkout",
-  "active_substage": "CHECKOUT_PHASE_02A_DELIVERY_BACKEND",
+  "active_substage": "CHECKOUT_PHASE_02B_DELIVERY_FRONTEND",
   "active_status": "IN_PROGRESS",
   "baseline_commit": "d2cce2c",
   "last_checkpoint_commit": "c3413e3",
   "last_verified_commit": "16f648a",
-  "last_completed_action": "Implemented and locally verified Phase 02A delivery/contact, shopper-owned saved addresses and explicit serviceability policies; purchases remain disabled and Phase 01B remains PARTIAL.",
-  "next_action": "Use the Phase 02A backend contract for separately authorized Phase 02B integration; preserve unresolved Phase 01B browser/race/accessibility/history/runtime gates and real delivery coverage/provider gates.",
+  "last_completed_action": "Implemented Phase 02B delivery/contact and explicit saved-address frontend; 200 focused tests and listed isolated browser journeys pass. Acceptance PARTIAL; purchases disabled and Phase 01B PARTIAL preserved.",
+  "next_action": "Review Phase 02B acceptance and Phase 03A handoff; close native zoom, human AT/device, exact delayed-response/background browser and production-runtime gates when authorized. Quotes/placement remain unimplemented; preserve all Phase 01B and real coverage/provider gates.",
   "interrupted": false,
   "blocked_by": [
     "SIZING_OWNER_RESPONSIVE_AND_ACCESSIBILITY_ACCEPTANCE_PENDING",
@@ -27,7 +27,8 @@
     "CHECKOUT_PUBLIC_PURCHASE_DISABLED_PENDING_LATER_PHASES",
     "CHECKOUT_PHASE01B_BROWSER_FAILURE_RACE_AND_ACCESSIBILITY_ACCEPTANCE_OPEN",
     "CHECKOUT_AUTHORIZED_HISTORICAL_RECEIPT_AND_PRODUCTION_RUNTIME_UNVERIFIED",
-    "CHECKOUT_REAL_DELIVERY_COVERAGE_AND_COURIER_ACCEPTANCE_UNVERIFIED"
+    "CHECKOUT_REAL_DELIVERY_COVERAGE_AND_COURIER_ACCEPTANCE_UNVERIFIED",
+    "CHECKOUT_PHASE02B_HUMAN_AT_ZOOM_DEVICE_AND_EXACT_BROWSER_RACE_GATES_OPEN"
   ],
   "owner_review_status": "PENDING",
   "verified_complete_areas": [
