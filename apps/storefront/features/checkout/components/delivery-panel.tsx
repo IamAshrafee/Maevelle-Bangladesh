@@ -27,11 +27,19 @@ export function DeliveryPanel({ review, clock }: { review: ReviewSnapshot; clock
   const busy =
       review.suspended ||
       ['loading', 'saving'].includes(projection.phase) ||
+      ['loading', 'saving'].includes(review.quote.phase) ||
+      Boolean(review.quote.pending) ||
       ['checking', 'pending'].includes(review.phase),
     pending = Boolean(projection.pending),
     conflict = projection.phase === 'conflict';
   const expired = review.draft?.status !== 'ACTIVE' || Date.parse(review.draft.expiresAt) <= clock;
   const locked = busy || pending || conflict || expired;
+  useEffect(
+    () => () => {
+      loaded.current = '';
+    },
+    [],
+  );
   useEffect(() => {
     const id = review.draft?.id;
     if (!id || busy || pending) return;
@@ -49,6 +57,7 @@ export function DeliveryPanel({ review, clock }: { review: ReviewSnapshot; clock
   }, [confirmed, dirty]);
   function resetFromServer() {
     setDirty(false);
+    reviewActions.deliveryEditing(false);
     setValue(confirmed?.delivery ?? blankDelivery);
     setErrors({});
     setLocalMessage('');
@@ -76,6 +85,7 @@ export function DeliveryPanel({ review, clock }: { review: ReviewSnapshot; clock
     await action(async () => {
       await actions.save(value);
       setDirty(false);
+      reviewActions.deliveryEditing(false);
     });
   }
   return (
@@ -132,7 +142,10 @@ export function DeliveryPanel({ review, clock }: { review: ReviewSnapshot; clock
               void action(async () => {
                 const kind = projection.pending?.kind;
                 await actions.retry();
-                if (kind === 'delivery') setDirty(false);
+                if (kind === 'delivery') {
+                  setDirty(false);
+                  reviewActions.deliveryEditing(false);
+                }
               })
             }
           >
@@ -267,6 +280,7 @@ export function DeliveryPanel({ review, clock }: { review: ReviewSnapshot; clock
           actions={actions}
           onSelected={() => {
             setDirty(false);
+            reviewActions.deliveryEditing(false);
             setErrors({});
             setLocalMessage('');
             formHeading.current?.focus();
@@ -293,6 +307,7 @@ export function DeliveryPanel({ review, clock }: { review: ReviewSnapshot; clock
             onChange={(next) => {
               setValue(next);
               setDirty(true);
+              reviewActions.deliveryEditing(true);
               setErrors({});
             }}
           />

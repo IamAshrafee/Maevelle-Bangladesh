@@ -7,10 +7,13 @@ import { Notice } from '@/components/ui/notice';
 import { reviewActions, useReviewSnapshot } from '../foundation-runtime';
 import { DeliveryPanel } from './delivery-panel';
 import { ReviewItems } from './review-items';
+import { QuotePanel } from './quote-panel';
+import { useReviewCatalog } from '../use-review-catalog';
 
 export function CheckoutReview() {
   const state = useReviewSnapshot(),
     router = useRouter();
+  const products = useReviewCatalog(state.handles);
   const [clock, setClock] = useState(Date.now),
     [actionError, setActionError] = useState('');
   useEffect(() => {
@@ -21,9 +24,10 @@ export function CheckoutReview() {
   const draft = state.draft,
     busy =
       ['checking', 'pending'].includes(state.phase) ||
-      ['loading', 'saving'].includes(state.delivery.phase),
+      ['loading', 'saving'].includes(state.delivery.phase) ||
+      ['loading', 'saving'].includes(state.quote.phase),
     pending = Boolean(state.pending);
-  const privatePending = Boolean(state.delivery.pending);
+  const privatePending = Boolean(state.delivery.pending || state.quote.pending);
   const references = state.partition ? reviewActions.references().filter((ref) => ref.id) : [];
   const expired =
     draft?.status === 'EXPIRED' || Boolean(draft && Date.parse(draft.expiresAt) <= clock);
@@ -187,7 +191,7 @@ export function CheckoutReview() {
                       : 'Active review'}
                 </p>
               </div>
-              <ReviewItems draft={draft} handles={state.handles} />
+              <ReviewItems draft={draft} handles={state.handles} products={products} />
               <p className="text-sm text-on-surface-variant">
                 Review expires{' '}
                 <time dateTime={draft.expiresAt}>{new Date(draft.expiresAt).toLocaleString()}</time>
@@ -224,17 +228,20 @@ export function CheckoutReview() {
                 </Button>
               </div>
             </section>
+            <QuotePanel
+              key={`${state.partition}:${draft.id}`}
+              review={state}
+              clock={clock}
+              products={products}
+            />
             <section
               className="rounded-2xl border border-border-subtle p-5"
               aria-label="Next checkout stage"
             >
-              <h2 className="font-serif text-xl font-semibold">Payment & final review</h2>
+              <h2 className="font-serif text-xl font-semibold">Ordering remains unavailable</h2>
               <p className="mt-2 text-sm text-on-surface-variant">
                 This stage is not available yet. No payment is due and no order will be placed.
               </p>
-              <Button className="mt-4" fullWidth disabled>
-                Continue to payment — unavailable
-              </Button>
             </section>
           </div>
         </div>

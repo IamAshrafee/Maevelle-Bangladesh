@@ -171,6 +171,8 @@ export async function startReview(source: CheckoutSourceDto, handles: CatalogRef
 }
 export const reviewActions = {
   delivery: () => instance().controller.delivery,
+  quote: () => instance().controller.quote,
+  deliveryEditing: (value: boolean) => instance().controller.deliveryEditing(value),
   resume: () => instance().controller.resume(),
   refresh: (id?: string) => instance().controller.refresh(id),
   retry: () => instance().controller.retry(),

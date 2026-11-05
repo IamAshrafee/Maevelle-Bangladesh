@@ -1,3 +1,4 @@
+import { EMPTY_QUOTE, type QuoteProjection } from './quote-types';
 import { EMPTY_DELIVERY, type DeliveryProjection } from './delivery-types';
 import type {
   CheckoutDraftDto,
@@ -34,6 +35,8 @@ export interface ReviewIssue {
 }
 export interface ReviewSnapshot {
   suspended: boolean;
+  quote: QuoteProjection;
+  deliveryEditing: boolean;
   delivery: DeliveryProjection;
   phase: 'idle' | 'checking' | 'ready' | 'pending' | 'error';
   partition: string | null;
@@ -46,6 +49,8 @@ export interface ReviewSnapshot {
 }
 export const EMPTY_REVIEW: ReviewSnapshot = Object.freeze({
   suspended: false,
+  quote: EMPTY_QUOTE,
+  deliveryEditing: false,
   delivery: EMPTY_DELIVERY,
   phase: 'idle',
   partition: null,
