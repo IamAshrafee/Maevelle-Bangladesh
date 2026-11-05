@@ -1,4 +1,6 @@
 import type { FastifyInstance } from 'fastify';
+import type { IndependentReceiptEvidenceDto } from '@maevelle/contracts';
+import { registerPaymentOperationsRoutes } from './payment-operations.js';
 import { Type } from 'typebox';
 
 import type { DatabaseClient } from '@maevelle/database';
@@ -25,7 +27,7 @@ import type { createAuth } from '../auth/auth.js';
 
 type Auth = ReturnType<typeof createAuth>;
 
-function sendError(
+export function sendPaymentError(
   reply: { code(status: number): { send(value: unknown): unknown } },
   caught: unknown,
 ) {
@@ -33,16 +35,19 @@ function sendError(
   const status =
     caught.code === 'NOT_FOUND'
       ? 404
-      : [
-            'IDEMPOTENCY_CONFLICT',
-            'PAYMENT_ATTEMPT_ALREADY_REVIEWED',
-            'DUPLICATE_EXTERNAL_TRANSACTION',
-            'REFUND_ALREADY_COMPLETED',
-          ].includes(caught.code)
-        ? 409
-        : caught.code === 'REFUND_EXCEEDS_REFUNDABLE'
-          ? 422
-          : 422;
+      : caught.code === 'FORBIDDEN'
+        ? 403
+        : [
+              'IDEMPOTENCY_CONFLICT',
+              'PAYMENT_ATTEMPT_ALREADY_REVIEWED',
+              'DUPLICATE_EXTERNAL_TRANSACTION',
+              'REFUND_ALREADY_COMPLETED',
+              'CONFLICT',
+            ].includes(caught.code)
+          ? 409
+          : caught.code === 'REFUND_EXCEEDS_REFUNDABLE'
+            ? 422
+            : 422;
   return reply.code(status).send({
     error: {
       code: caught.code,
@@ -59,7 +64,7 @@ function headers(value: Record<string, string | string[] | undefined>): Headers 
   );
 }
 
-async function admin(
+export async function paymentAdmin(
   database: DatabaseClient,
   auth: Auth,
   requestHeaders: Record<string, string | string[] | undefined>,
@@ -81,8 +86,13 @@ export function registerPaymentRoutes(
   database: DatabaseClient,
   auth: Auth,
 ): void {
+  app.addHook('onRequest', async (request, reply) => {
+    if (/^\/admin\/(?:payments|refunds)(?:\/|\?|$)/.test(request.url))
+      reply.header('Cache-Control', 'no-store');
+  });
+  registerPaymentOperationsRoutes(app, database, auth);
   app.get('/admin/payments/methods', async (request, reply) => {
-    const active = await admin(database, auth, request.headers, 'payments.view');
+    const active = await paymentAdmin(database, auth, request.headers, 'payments.view');
     if (!active) return reply.code(403).send({ error: 'FORBIDDEN' });
     return { data: await listPaymentMethods(database.db, active.organizationId) };
   });
@@ -108,7 +118,7 @@ export function registerPaymentRoutes(
       },
     },
     async (request, reply) => {
-      const active = await admin(database, auth, request.headers, 'payments.manage');
+      const active = await paymentAdmin(database, auth, request.headers, 'payments.manage');
       if (!active) return reply.code(403).send({ error: 'FORBIDDEN' });
       try {
         const body = request.body as {
@@ -119,6 +129,27 @@ export function registerPaymentRoutes(
           paymentWindowMinutes?: number | null;
         };
         const code = (request.params as { code: PaymentMethodCode }).code;
+        if (code !== 'COD' && body.status === 'ACTIVE')
+          return reply.code(422).send({
+            error: {
+              code: 'POLICY_BLOCKED',
+              message:
+                'Wallet activation and instruction replacement require approved receiving destinations and financial policies.',
+            },
+          });
+        if (code !== 'COD' && body.instructions) {
+          const previous = (await listPaymentMethods(database.db, active.organizationId)).find(
+            (m) => m.code === code,
+          );
+          if (JSON.stringify(body.instructions) !== JSON.stringify(previous?.instructions))
+            return reply.code(422).send({
+              error: {
+                code: 'POLICY_BLOCKED',
+                message:
+                  'Receiving instructions cannot be replaced through legacy method settings.',
+              },
+            });
+        }
         if (!['COD', 'BKASH_MANUAL', 'NAGAD_MANUAL'].includes(code))
           return reply
             .code(422)
@@ -132,19 +163,19 @@ export function registerPaymentRoutes(
           }),
         };
       } catch (caught) {
-        return sendError(reply, caught);
+        return sendPaymentError(reply, caught);
       }
     },
   );
 
   app.get('/admin/payments/pending', async (request, reply) => {
-    const active = await admin(database, auth, request.headers, 'payments.verify');
+    const active = await paymentAdmin(database, auth, request.headers, 'payments.verify');
     if (!active) return reply.code(403).send({ error: 'FORBIDDEN' });
     return { data: await listPendingPaymentAttempts(database.db, active.organizationId) };
   });
 
   app.get('/admin/payments/cod-collections/pending', async (request, reply) => {
-    const active = await admin(database, auth, request.headers, 'payments.verify');
+    const active = await paymentAdmin(database, auth, request.headers, 'payments.verify');
     if (!active) return reply.code(403).send({ error: 'FORBIDDEN' });
     return { data: await listPendingCodCollections(database.db, active.organizationId) };
   });
@@ -162,7 +193,7 @@ export function registerPaymentRoutes(
       },
     },
     async (request, reply) => {
-      const active = await admin(database, auth, request.headers, 'payments.verify');
+      const active = await paymentAdmin(database, auth, request.headers, 'payments.verify');
       const key = request.headers['idempotency-key'];
       if (!active) return reply.code(403).send({ error: 'FORBIDDEN' });
       if (typeof key !== 'string' || !key.trim())
@@ -185,13 +216,13 @@ export function registerPaymentRoutes(
           }),
         });
       } catch (caught) {
-        return sendError(reply, caught);
+        return sendPaymentError(reply, caught);
       }
     },
   );
 
   app.get('/admin/payments/attempts/:attemptId', async (request, reply) => {
-    const active = await admin(database, auth, request.headers, 'payments.view');
+    const active = await paymentAdmin(database, auth, request.headers, 'payments.view');
     if (!active) return reply.code(403).send({ error: 'FORBIDDEN' });
     try {
       return {
@@ -202,15 +233,39 @@ export function registerPaymentRoutes(
         ),
       };
     } catch (caught) {
-      return sendError(reply, caught);
+      return sendPaymentError(reply, caught);
     }
   });
 
   app.post(
     '/admin/payments/attempts/:attemptId/verify',
-    { schema: { body: Type.Object({ confirmedAmount: Type.String({ minLength: 1 }) }) } },
+    {
+      schema: {
+        body: Type.Object(
+          {
+            confirmedAmount: Type.String({ minLength: 1, maxLength: 21 }),
+            evidence: Type.Object(
+              {
+                transactionId: Type.String({ minLength: 4, maxLength: 128 }),
+                receivingNumber: Type.String({ pattern: '^01[3-9][0-9]{8}$' }),
+                currency: Type.Literal('BDT'),
+                valueTime: Type.String({ format: 'date-time' }),
+                source: Type.Union([
+                  Type.Literal('ACCOUNT_HISTORY'),
+                  Type.Literal('PROVIDER_STATEMENT'),
+                ]),
+                evidenceReference: Type.String({ minLength: 1, maxLength: 512 }),
+                financialAccountId: Type.String({ format: 'uuid' }),
+              },
+              { additionalProperties: false },
+            ),
+          },
+          { additionalProperties: false },
+        ),
+      },
+    },
     async (request, reply) => {
-      const active = await admin(database, auth, request.headers, 'payments.verify');
+      const active = await paymentAdmin(database, auth, request.headers, 'payments.verify');
       const key = request.headers['idempotency-key'];
       if (!active) return reply.code(403).send({ error: 'FORBIDDEN' });
       if (typeof key !== 'string' || !key.trim())
@@ -224,11 +279,12 @@ export function registerPaymentRoutes(
             actorId: active.actorId,
             attemptId: (request.params as { attemptId: string }).attemptId,
             confirmedAmount: (request.body as { confirmedAmount: string }).confirmedAmount,
+            evidence: (request.body as { evidence: IndependentReceiptEvidenceDto }).evidence,
             idempotencyKey: key,
           }),
         };
       } catch (caught) {
-        return sendError(reply, caught);
+        return sendPaymentError(reply, caught);
       }
     },
   );
@@ -244,7 +300,7 @@ export function registerPaymentRoutes(
       },
     },
     async (request, reply) => {
-      const active = await admin(database, auth, request.headers, 'payments.verify');
+      const active = await paymentAdmin(database, auth, request.headers, 'payments.verify');
       if (!active) return reply.code(403).send({ error: 'FORBIDDEN' });
       try {
         const body = request.body as { reasonCode: string; note?: string };
@@ -257,7 +313,7 @@ export function registerPaymentRoutes(
           }),
         };
       } catch (caught) {
-        return sendError(reply, caught);
+        return sendPaymentError(reply, caught);
       }
     },
   );
@@ -286,7 +342,7 @@ export function registerPaymentRoutes(
       },
     },
     async (request, reply) => {
-      const active = await admin(database, auth, request.headers, 'payments.view');
+      const active = await paymentAdmin(database, auth, request.headers, 'payments.view');
       if (!active) return reply.code(403).send({ error: 'FORBIDDEN' });
       const query = request.query as {
         page?: number;
@@ -308,7 +364,7 @@ export function registerPaymentRoutes(
   );
 
   app.get('/admin/payments/:paymentId', async (request, reply) => {
-    const active = await admin(database, auth, request.headers, 'payments.view');
+    const active = await paymentAdmin(database, auth, request.headers, 'payments.view');
     if (!active) return reply.code(403).send({ error: 'FORBIDDEN' });
     try {
       return {
@@ -319,7 +375,7 @@ export function registerPaymentRoutes(
         ),
       };
     } catch (caught) {
-      return sendError(reply, caught);
+      return sendPaymentError(reply, caught);
     }
   });
 
@@ -350,7 +406,7 @@ export function registerPaymentRoutes(
       },
     },
     async (request, reply) => {
-      const active = await admin(database, auth, request.headers, 'refunds.view');
+      const active = await paymentAdmin(database, auth, request.headers, 'refunds.view');
       if (!active) return reply.code(403).send({ error: 'FORBIDDEN' });
       const query = request.query as {
         page?: number;
@@ -383,7 +439,7 @@ export function registerPaymentRoutes(
       },
     },
     async (request, reply) => {
-      const active = await admin(database, auth, request.headers, 'refunds.manage');
+      const active = await paymentAdmin(database, auth, request.headers, 'refunds.manage');
       const key = request.headers['idempotency-key'];
       if (!active) return reply.code(403).send({ error: 'FORBIDDEN' });
       if (typeof key !== 'string' || !key.trim())
@@ -402,16 +458,27 @@ export function registerPaymentRoutes(
           }),
         });
       } catch (caught) {
-        return sendError(reply, caught);
+        return sendPaymentError(reply, caught);
       }
     },
   );
 
   app.post(
     '/admin/refunds/:refundId/complete',
-    { schema: { body: Type.Object({ externalReference: Type.String({ minLength: 4 }) }) } },
+    {
+      schema: {
+        body: Type.Object(
+          {
+            externalReference: Type.String({ minLength: 4, maxLength: 128 }),
+            evidenceReference: Type.Optional(Type.String({ minLength: 1, maxLength: 512 })),
+            originalSourceVerified: Type.Optional(Type.Literal(true)),
+          },
+          { additionalProperties: false },
+        ),
+      },
+    },
     async (request, reply) => {
-      const active = await admin(database, auth, request.headers, 'refunds.manage');
+      const active = await paymentAdmin(database, auth, request.headers, 'refunds.manage');
       const key = request.headers['idempotency-key'];
       if (!active) return reply.code(403).send({ error: 'FORBIDDEN' });
       if (typeof key !== 'string' || !key.trim())
@@ -425,11 +492,12 @@ export function registerPaymentRoutes(
             actorId: active.actorId,
             refundId: (request.params as { refundId: string }).refundId,
             externalReference: (request.body as { externalReference: string }).externalReference,
+            ...(request.body as { evidenceReference?: string; originalSourceVerified?: boolean }),
             idempotencyKey: key,
           }),
         };
       } catch (caught) {
-        return sendError(reply, caught);
+        return sendPaymentError(reply, caught);
       }
     },
   );

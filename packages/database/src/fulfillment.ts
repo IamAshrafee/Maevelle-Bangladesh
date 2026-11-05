@@ -5,6 +5,7 @@ import { consumeReservationAllocationInTransaction, InventoryDomainError } from 
 import { assignOutboundCostsForFulfillmentInTransaction, CostingDomainError } from './costing.js';
 import { appendAuditEvent, claimIdempotencyRecord, IdempotencyKeyReuseError } from './platform.js';
 import { requireActiveLocationCapability } from './warehouse.js';
+import { getOrderPaymentSummary, type PaymentMethodCode } from './payments.js';
 import {
   dispatchFulfillmentUnitsInTransaction,
   releaseFulfillmentUnitAllocations,
@@ -540,6 +541,22 @@ export async function dispatchFulfillmentInTransaction(
     fault?: () => void;
   },
 ): Promise<void> {
+  const order = await lockFulfillmentOrderInTransaction(transaction, input);
+  if (!['PENDING', 'CONFIRMED'].includes(order.order_status))
+    throw new FulfillmentDomainError('INVALID_TRANSITION', 'This Order cannot be dispatched.');
+  if (order.payment_method !== 'COD') {
+    const summary = await getOrderPaymentSummary(transaction, {
+      organizationId: input.organizationId,
+      orderId: order.id,
+      paymentMethod: order.payment_method,
+      expectedAmount: order.total_amount,
+    });
+    if (summary.status !== 'PAID')
+      throw new FulfillmentDomainError(
+        'CONFLICT',
+        'Prepaid Orders require fully verified payment before dispatch.',
+      );
+  }
   const current = await sql<{
     status: FulfillmentStatus;
     version: string;
@@ -619,6 +636,28 @@ export async function dispatchFulfillmentInTransaction(
     fulfillmentId: input.fulfillmentId,
     metadata: { physicalInventoryConsumed: true },
   });
+}
+
+/** All dispatch entry points take the Order fence before delivery/fulfillment locks. */
+export async function lockFulfillmentOrderInTransaction(
+  transaction: Kysely<DatabaseSchema>,
+  input: { organizationId: string; fulfillmentId: string },
+) {
+  const row = (
+    await sql<{
+      id: string;
+      order_status: string;
+      payment_method: PaymentMethodCode;
+      total_amount: string;
+    }>`
+    select o.id,o.order_status,o.payment_method,o.total_amount::text from orders.orders o join fulfillment.fulfillments f
+      on f.organization_id=o.organization_id and f.order_id=o.id
+    where f.organization_id=${input.organizationId} and f.id=${input.fulfillmentId} for update of o`.execute(
+      transaction,
+    )
+  ).rows[0];
+  if (!row) throw new FulfillmentDomainError('NOT_FOUND', 'Fulfillment Order was not found.');
+  return row;
 }
 
 export async function cancelFulfillment(

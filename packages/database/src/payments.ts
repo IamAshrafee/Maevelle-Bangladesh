@@ -1,3 +1,14 @@
+export { reverseManualReceipt } from './payments/receipt-corrections.js';
+export { reviewManualClaim, listManualClaimQueue } from './payments/review-claims.js';
+import {
+  allocateReceiptRefundInTransaction,
+  receiptRefundContext,
+} from './payments/receipt-refunds.js';
+import { postVerifiedRefundInTransaction } from './finance.js';
+import { requirePaymentCapability } from './payments/authorization.js';
+export { processPaymentReviewAging } from './payments/review-aging.js';
+export { changeRefundProcessingState } from './payments/refund-processing.js';
+export { listReceiptExceptions } from './payments/receipt-exceptions.js';
 import { sql, type Kysely } from 'kysely';
 
 import type { DatabaseSchema } from './index.js';
@@ -9,6 +20,9 @@ export class PaymentDomainError extends Error {
   public constructor(
     public readonly code:
       | 'NOT_FOUND'
+      | 'FORBIDDEN'
+      | 'CONFLICT'
+      | 'POLICY_BLOCKED'
       | 'PAYMENT_METHOD_UNAVAILABLE'
       | 'VALIDATION_FAILED'
       | 'PAYMENT_ATTEMPT_ALREADY_REVIEWED'
@@ -493,16 +507,43 @@ export async function createPaymentIntentForOrder(
     paymentMethod: PaymentMethodCode;
     currency: string;
     expectedAmount: string;
+    operatingPolicyId?: string;
   },
 ): Promise<{ id: string; method: PaymentMethodCode }> {
+  const obligation = (
+    await sql<{
+      valid: boolean;
+    }>`select currency_code=${input.currency} and payment_method=${input.paymentMethod}
+    and total_amount=${input.expectedAmount}::numeric and order_number=${input.orderNumber} as valid from orders.orders
+    where organization_id=${input.organizationId} and id=${input.orderId} for update`.execute(db)
+  ).rows[0];
+  if (!obligation?.valid)
+    throw new PaymentDomainError(
+      'VALIDATION_FAILED',
+      'The payment obligation must exactly match its committed Order.',
+    );
   const method = await requireActivePaymentMethod(db, {
     organizationId: input.organizationId,
     code: input.paymentMethod,
   });
+  const policy = input.operatingPolicyId
+    ? (
+        await sql<{
+          submission_minutes: number;
+          review_minutes: number;
+        }>`select submission_minutes,review_minutes
+    from payments.operating_policy_revisions where organization_id=${input.organizationId} and id=${input.operatingPolicyId}`.execute(
+          db,
+        )
+      ).rows[0]
+    : undefined;
+  if (input.operatingPolicyId && !policy)
+    throw new PaymentDomainError('POLICY_BLOCKED', 'Approved operating policy was not found.');
   const result = await sql<{ id: string }>`
-    insert into payments.payment_intents (organization_id, order_id, order_number_snapshot, payment_method_id, currency_code, expected_amount, status, instructions_snapshot, expires_at)
+    insert into payments.payment_intents (organization_id, order_id, order_number_snapshot, payment_method_id, currency_code, expected_amount, status, instructions_snapshot, expires_at, review_expires_at, operating_policy_id)
     values (${input.organizationId}, ${input.orderId}, ${input.orderNumber}, ${method.id}, ${input.currency}, ${input.expectedAmount}::numeric, 'READY', ${JSON.stringify(method.instructions)}::jsonb,
-      case when ${method.paymentWindowMinutes}::integer is null then null else now() + (${method.paymentWindowMinutes}::integer * interval '1 minute') end)
+      case when ${policy?.submission_minutes ?? method.paymentWindowMinutes}::integer is null then null else now() + (${policy?.submission_minutes ?? method.paymentWindowMinutes}::integer * interval '1 minute') end,
+      case when ${policy?.review_minutes ?? null}::integer is null then null else now() + (${(policy?.submission_minutes ?? 0) + (policy?.review_minutes ?? 0)}::integer * interval '1 minute') end,${input.operatingPolicyId ?? null}::uuid)
     returning id
   `.execute(db);
   const id = result.rows[0]?.id;
@@ -530,7 +571,7 @@ export async function getOrderPaymentSummary(
       (select status from payments.payment_intents where organization_id = ${input.organizationId} and order_id = ${input.orderId} order by created_at desc limit 1) as intent_status,
       coalesce((select sum(allocation.amount)::text from payments.payment_allocations allocation join payments.payments payment on payment.id = allocation.payment_id
         where allocation.organization_id = ${input.organizationId} and allocation.order_id = ${input.orderId} and payment.status = 'CONFIRMED'), '0.0000') as collected,
-      coalesce((select sum(refund.amount)::text from payments.refunds refund where refund.organization_id = ${input.organizationId} and refund.order_id = ${input.orderId}
+      coalesce((select sum(refund_allocation.amount)::text from payments.refunds refund join payments.refund_allocations refund_allocation on refund_allocation.organization_id=refund.organization_id and refund_allocation.refund_id=refund.id and refund_allocation.component_type<>'UNALLOCATED_RECEIPT' where refund.organization_id = ${input.organizationId} and refund.order_id = ${input.orderId}
         and refund.status = 'COMPLETED'), '0.0000') as refunded
   `.execute(db);
   const row = summary.rows[0] ?? {
@@ -711,6 +752,11 @@ export async function submitManualPayment(
     idempotencyKey: string;
   },
 ): Promise<PaymentAttemptView> {
+  if (input.payerReference && !/^01[3-9]\d{8}$/.test(input.payerReference))
+    throw new PaymentDomainError(
+      'VALIDATION_FAILED',
+      'Sending mobile must be a Bangladesh mobile number.',
+    );
   const normalizedReference = normalizeExternalReference(input.customerReference);
   if (input.claimedAmount) checkedAmount(input.claimedAmount, 'Claimed amount');
   return db.transaction().execute(async (transaction) => {
@@ -748,6 +794,11 @@ export async function submitManualPayment(
         );
       throw error;
     }
+    const orderLock =
+      await sql`select id from orders.orders where organization_id=${input.organizationId} and id=${input.orderId} for update`.execute(
+        transaction,
+      );
+    if (!orderLock.rows[0]) throw new PaymentDomainError('NOT_FOUND', 'Order was not found.');
     const intent = await sql<{
       id: string;
       expected_amount: string;
@@ -766,6 +817,17 @@ export async function submitManualPayment(
       throw new PaymentDomainError(
         'PAYMENT_METHOD_UNAVAILABLE',
         'Manual payment submission is not available for this Order.',
+      );
+    const activity = await sql<{
+      blocked: boolean;
+    }>`select count(*)>=5 as blocked from payments.payment_attempts
+      where organization_id=${input.organizationId} and payment_intent_id=${intentRow.id} and status='PENDING_VERIFICATION'`.execute(
+      transaction,
+    );
+    if (activity.rows[0]?.blocked)
+      throw new PaymentDomainError(
+        'CONFLICT',
+        'Existing payment claims must be reviewed before submitting more.',
       );
     const created = await sql<{ id: string }>`
       insert into payments.payment_attempts (organization_id, payment_intent_id, customer_reference, normalized_reference, payer_reference, claimed_amount)
@@ -1107,158 +1169,18 @@ export async function recordCodCollection(
   });
 }
 
-export async function verifyManualPayment(
-  db: Kysely<DatabaseSchema>,
-  input: {
-    organizationId: string;
-    actorId: string;
-    attemptId: string;
-    confirmedAmount: string;
-    idempotencyKey: string;
-    fault?: () => void;
-  },
-): Promise<PaymentView> {
-  const amount = checkedAmount(input.confirmedAmount, 'Verified amount');
-  return db.transaction().execute(async (transaction) => {
-    let recordId: string;
-    try {
-      const record = await claimIdempotencyRecord(transaction, {
-        organizationId: input.organizationId,
-        principalType: 'USER',
-        principalId: input.actorId,
-        operationType: 'payments.manual-verification',
-        idempotencyKey: input.idempotencyKey,
-        requestFingerprint: `${input.attemptId}:${amount}`,
-      });
-      if (!record.created) {
-        if (record.status === 'SUCCEEDED') {
-          const replay = await sql<{
-            id: string;
-          }>`select result_entity_id::text as id from platform.idempotency_records where id = ${record.id}`.execute(
-            transaction,
-          );
-          if (replay.rows[0]?.id)
-            return getPayment(transaction, input.organizationId, replay.rows[0].id);
-        }
-        throw new PaymentDomainError(
-          'IDEMPOTENCY_CONFLICT',
-          'This payment verification is already in progress.',
-        );
-      }
-      recordId = record.id;
-    } catch (error) {
-      if (error instanceof IdempotencyKeyReuseError)
-        throw new PaymentDomainError(
-          'IDEMPOTENCY_CONFLICT',
-          'The idempotency key was reused for different verification details.',
-        );
-      throw error;
-    }
-    const attempt = await sql<{
-      id: string;
-      customer_reference: string;
-      normalized_reference: string;
-      status: string;
-      intent_id: string;
-      order_id: string;
-      order_number_snapshot: string;
-      currency_code: string;
-      expected_amount: string;
-      method_id: string;
-      method_code: PaymentMethodCode;
-    }>`
-      select attempt.id, attempt.customer_reference, attempt.normalized_reference, attempt.status, intent.id as intent_id, intent.order_id, intent.order_number_snapshot,
-        intent.currency_code, intent.expected_amount::text, method.id as method_id, method.code as method_code
-      from payments.payment_attempts attempt join payments.payment_intents intent on intent.id = attempt.payment_intent_id
-      join payments.payment_methods method on method.id = intent.payment_method_id
-      where attempt.organization_id = ${input.organizationId} and attempt.id = ${input.attemptId}
-      for update
-    `.execute(transaction);
-    const row = attempt.rows[0];
-    if (!row) throw new PaymentDomainError('NOT_FOUND', 'Payment attempt was not found.');
-    if (row.status !== 'PENDING_VERIFICATION')
-      throw new PaymentDomainError(
-        'PAYMENT_ATTEMPT_ALREADY_REVIEWED',
-        'This payment attempt has already been reviewed.',
-      );
-    const intent = await sql<{
-      id: string;
-      status: string;
-    }>`select id, status from payments.payment_intents where organization_id = ${input.organizationId} and id = ${row.intent_id} for update`.execute(
-      transaction,
-    );
-    if (!intent.rows[0]) throw new PaymentDomainError('NOT_FOUND', 'Payment intent was not found.');
-    if (intent.rows[0].status !== 'READY')
-      throw new PaymentDomainError(
-        'PAYMENT_METHOD_UNAVAILABLE',
-        'This payment obligation is no longer open for verification.',
-      );
-    const duplicate = await sql<{
-      id: string;
-    }>`select id from payments.payments where organization_id = ${input.organizationId} and payment_method_id = ${row.method_id} and normalized_external_reference = ${row.normalized_reference} and status = 'CONFIRMED' for update`.execute(
-      transaction,
-    );
-    if (duplicate.rows[0])
-      throw new PaymentDomainError(
-        'DUPLICATE_EXTERNAL_TRANSACTION',
-        'This transaction reference is already verified for another payment.',
-      );
-    // The locked intent serializes verification/allocation for this obligation.
-    const totals = await sql<{
-      allocated: string;
-    }>`select coalesce(sum(amount), 0)::text as allocated from payments.payment_allocations where organization_id = ${input.organizationId} and order_id = ${row.order_id}`.execute(
-      transaction,
-    );
-    const allocation = await sql<{
-      amount: string;
-    }>`select least(${amount}::numeric, greatest(${row.expected_amount}::numeric - ${totals.rows[0]!.allocated}::numeric, 0))::text as amount`.execute(
-      transaction,
-    );
-    if (allocation.rows[0]!.amount === '0')
-      throw new PaymentDomainError(
-        'PAYMENT_ALREADY_SATISFIED',
-        'This Order does not have an outstanding payment balance.',
-      );
-    const created = await sql<{ id: string; payment_number: string }>`
-      insert into payments.payments (organization_id, payment_number, payment_method_id, currency_code, amount, external_reference, normalized_external_reference, source_attempt_id, confirmed_by_actor_id)
-      values (${input.organizationId}, 'PAY-' || upper(replace(uuidv7()::text, '-', '')), ${row.method_id}, ${row.currency_code}, ${amount}::numeric,
-        ${row.customer_reference}, ${row.normalized_reference}, ${row.id}, ${input.actorId}) returning id, payment_number
-    `.execute(transaction);
-    const payment = created.rows[0];
-    if (!payment) throw new Error('Payment creation did not return an id.');
-    await sql`insert into payments.payment_allocations (organization_id, payment_id, order_id, order_number_snapshot, amount) values (${input.organizationId}, ${payment.id}, ${row.order_id}, ${row.order_number_snapshot}, ${allocation.rows[0]!.amount}::numeric)`.execute(
-      transaction,
-    );
-    const after = await sql<{
-      outstanding: string;
-    }>`select greatest(${row.expected_amount}::numeric - (${totals.rows[0]!.allocated}::numeric + ${allocation.rows[0]!.amount}::numeric), 0)::text as outstanding`.execute(
-      transaction,
-    );
-    await sql`update payments.payment_attempts set status = 'VERIFIED', resolved_at = now(), reviewed_by_actor_id = ${input.actorId}, version = version + 1 where id = ${row.id}`.execute(
-      transaction,
-    );
-    await sql`update payments.payment_intents set status = case when ${after.rows[0]!.outstanding}::numeric = 0 then 'SATISFIED' else status end, version = version + 1, updated_at = now() where id = ${row.intent_id}`.execute(
-      transaction,
-    );
-    input.fault?.();
-    await sql`update platform.idempotency_records set status = 'SUCCEEDED', result_entity_type = 'payments.payment', result_entity_id = ${payment.id}::uuid, safe_response = ${JSON.stringify({ paymentId: payment.id })}::jsonb, completed_at = now() where id = ${recordId}`.execute(
-      transaction,
-    );
-    await appendAuditEvent(transaction, {
-      organizationId: input.organizationId,
-      actorType: 'USER',
-      actorId: input.actorId,
-      action: 'payments.payment.verified',
-      targetType: 'payments.payment',
-      targetId: payment.id,
-      metadata: { attemptId: row.id, orderId: row.order_id, amount },
-    });
-    await sql`insert into platform.outbox_events (organization_id, event_type, event_version, aggregate_type, aggregate_id, aggregate_version, payload, occurred_at) values (${input.organizationId}, 'payments.payment.verified', 1, 'payments.payment', ${payment.id}, 1, ${JSON.stringify({ paymentId: payment.id, orderId: row.order_id })}::jsonb, now())`.execute(
-      transaction,
-    );
-    return getPayment(transaction, input.organizationId, payment.id);
-  });
-}
+export { verifyManualPayment, getVerifiedReceipt } from './payments/manual-receipts.js';
+export {
+  createReceivingDestination,
+  changeReceivingDestination,
+  listReceivingDestinations,
+  checkoutPaymentReadiness,
+} from './payments/destinations.js';
+export {
+  approvePaymentOperatingPolicy,
+  proposePaymentOperatingPolicy,
+  prepareCheckoutPaymentObligationInTransaction,
+} from './payments/operating-policy.js';
 
 export async function rejectManualPayment(
   db: Kysely<DatabaseSchema>,
@@ -1273,6 +1195,12 @@ export async function rejectManualPayment(
   if (!input.reasonCode.trim())
     throw new PaymentDomainError('VALIDATION_FAILED', 'A rejection reason is required.');
   return db.transaction().execute(async (transaction) => {
+    await requirePaymentCapability(
+      transaction,
+      input.organizationId,
+      input.actorId,
+      'payments.verify',
+    );
     const row = await sql<{
       status: string;
     }>`select status from payments.payment_attempts where organization_id = ${input.organizationId} and id = ${input.attemptId} for update`.execute(
@@ -1309,7 +1237,7 @@ export async function getPayment(
   paymentId: string,
 ): Promise<PaymentView> {
   const result = await sql<PaymentRow>`
-    select payment.id, payment.payment_number, allocation.order_id, allocation.order_number_snapshot, method.code, payment.amount::text, payment.currency_code,
+    select payment.id, payment.payment_number, coalesce(allocation.order_id,evidence.order_id) as order_id, coalesce(allocation.order_number_snapshot,receipt_order.order_number) as order_number_snapshot, method.code, payment.amount::text, payment.currency_code,
       payment.external_reference, payment.status, payment.confirmed_at,
       coalesce(sum(refund.amount) filter (where refund.status = 'COMPLETED'), 0)::numeric(20,4)::text as refunded,
       greatest(payment.amount - coalesce(sum(refund.amount) filter (where refund.status = 'COMPLETED'), 0), 0)::numeric(20,4)::text as net,
@@ -1318,7 +1246,9 @@ export async function getPayment(
       financial_account.id as financial_account_id,
       financial_account.name as financial_account_name,
       finance_transaction.occurred_at as finance_posted_at
-    from payments.payments payment join payments.payment_allocations allocation on allocation.payment_id = payment.id
+    from payments.payments payment left join payments.payment_allocations allocation on allocation.payment_id = payment.id
+    left join payments.verified_receipt_evidence evidence on evidence.organization_id=payment.organization_id and evidence.payment_id=payment.id
+    left join orders.orders receipt_order on receipt_order.organization_id=evidence.organization_id and receipt_order.id=evidence.order_id
     join payments.payment_methods method on method.id = payment.payment_method_id
     left join payments.refunds refund on refund.payment_id = payment.id
     left join finance.finance_transactions finance_transaction
@@ -1330,7 +1260,7 @@ export async function getPayment(
     left join finance.financial_accounts financial_account on financial_account.id = finance_entry.financial_account_id
     where payment.organization_id = ${organizationId} and payment.id = ${paymentId}
     group by payment.id, allocation.order_id, allocation.order_number_snapshot, method.code,
-      finance_transaction.id, financial_account.id
+      finance_transaction.id, financial_account.id, evidence.order_id, receipt_order.order_number
   `.execute(db);
   const row = result.rows[0];
   if (!row) throw new PaymentDomainError('NOT_FOUND', 'Payment was not found.');
@@ -1350,7 +1280,7 @@ export async function listPayments(
   const to = filters.to ?? null;
   const [result, countResult] = await Promise.all([
     sql<PaymentRow>`
-    select payment.id, payment.payment_number, allocation.order_id, allocation.order_number_snapshot, method.code,
+    select payment.id, payment.payment_number, coalesce(allocation.order_id,evidence.order_id) as order_id, coalesce(allocation.order_number_snapshot,receipt_order.order_number) as order_number_snapshot, method.code,
       payment.amount::text, payment.currency_code, payment.external_reference, payment.status, payment.confirmed_at,
       coalesce(sum(refund.amount) filter (where refund.status = 'COMPLETED'), 0)::numeric(20,4)::text as refunded,
       greatest(payment.amount - coalesce(sum(refund.amount) filter (where refund.status = 'COMPLETED'), 0), 0)::numeric(20,4)::text as net,
@@ -1360,7 +1290,9 @@ export async function listPayments(
       financial_account.name as financial_account_name,
       finance_transaction.occurred_at as finance_posted_at
     from payments.payments payment
-    join payments.payment_allocations allocation on allocation.payment_id = payment.id
+    left join payments.payment_allocations allocation on allocation.payment_id = payment.id
+      left join payments.verified_receipt_evidence evidence on evidence.organization_id=payment.organization_id and evidence.payment_id=payment.id
+      left join orders.orders receipt_order on receipt_order.organization_id=evidence.organization_id and receipt_order.id=evidence.order_id
     join payments.payment_methods method on method.id = payment.payment_method_id
     left join payments.refunds refund on refund.payment_id = payment.id
     left join finance.finance_transactions finance_transaction
@@ -1377,14 +1309,16 @@ export async function listPayments(
       and (${to}::text is null or payment.confirmed_at <= ${to}::timestamptz)
       and (${posting}::text = 'ALL' or (${posting}::text = 'POSTED' and finance_transaction.id is not null) or (${posting}::text = 'UNPOSTED' and finance_transaction.id is null))
     group by payment.id, allocation.order_id, allocation.order_number_snapshot, method.code,
-      finance_transaction.id, financial_account.id
+      finance_transaction.id, financial_account.id, evidence.order_id, receipt_order.order_number
     order by payment.confirmed_at desc, payment.id desc
     limit ${pageSize} offset ${offset}
   `.execute(db),
     sql<{ total: string }>`
       select count(distinct payment.id)::text as total
       from payments.payments payment
-      join payments.payment_allocations allocation on allocation.payment_id = payment.id
+      left join payments.payment_allocations allocation on allocation.payment_id = payment.id
+      left join payments.verified_receipt_evidence evidence on evidence.organization_id=payment.organization_id and evidence.payment_id=payment.id
+      left join orders.orders receipt_order on receipt_order.organization_id=evidence.organization_id and receipt_order.id=evidence.order_id
       join payments.payment_methods method on method.id = payment.payment_method_id
       left join finance.finance_transactions finance_transaction
         on finance_transaction.organization_id = payment.organization_id
@@ -1422,6 +1356,19 @@ export async function createRefund(
   if (!input.reasonCode.trim())
     throw new PaymentDomainError('VALIDATION_FAILED', 'A refund reason is required.');
   return db.transaction().execute(async (transaction) => {
+    if (
+      (
+        await sql`select 1 from payments.verified_receipt_evidence where organization_id=${input.organizationId} and payment_id=${input.paymentId}`.execute(
+          transaction,
+        )
+      ).rows[0]
+    )
+      await requirePaymentCapability(
+        transaction,
+        input.organizationId,
+        input.actorId,
+        'refunds.manage',
+      );
     let recordId: string;
     try {
       const record = await claimIdempotencyRecord(transaction, {
@@ -1463,9 +1410,11 @@ export async function createRefund(
       payment_method_id: string;
       order_id: string;
     }>`
-      select payment.id, payment.currency_code, payment.amount::text, payment.payment_method_id, allocation.order_id
-      from payments.payments payment join payments.payment_allocations allocation on allocation.payment_id = payment.id
-      where payment.organization_id = ${input.organizationId} and payment.id = ${input.paymentId} and payment.status = 'CONFIRMED' for update
+      select payment.id, payment.currency_code, payment.amount::text, payment.payment_method_id, coalesce(allocation.order_id,evidence.order_id) as order_id
+      from payments.payments payment left join payments.payment_allocations allocation on allocation.payment_id = payment.id
+      left join payments.verified_receipt_evidence evidence on evidence.organization_id=payment.organization_id and evidence.payment_id=payment.id
+      left join orders.orders receipt_order on receipt_order.organization_id=evidence.organization_id and receipt_order.id=evidence.order_id
+      where payment.organization_id = ${input.organizationId} and payment.id = ${input.paymentId} and payment.status = 'CONFIRMED' for update of payment
     `.execute(transaction);
     const row = payment.rows[0];
     if (!row) throw new PaymentDomainError('NOT_FOUND', 'Payment was not found.');
@@ -1496,10 +1445,12 @@ export async function createRefund(
     `.execute(transaction);
     const refundId = created.rows[0]?.id;
     if (!refundId) throw new Error('Refund creation did not return an id.');
-    await sql`
-      insert into payments.refund_allocations (organization_id, refund_id, component_type, amount)
-      values (${input.organizationId}, ${refundId}::uuid, 'ORDER_TOTAL', ${amount}::numeric)
-    `.execute(transaction);
+    await allocateReceiptRefundInTransaction(transaction, {
+      organizationId: input.organizationId,
+      paymentId: input.paymentId,
+      refundId,
+      amount,
+    });
     await sql`update platform.idempotency_records set status = 'SUCCEEDED', result_entity_type = 'payments.refund', result_entity_id = ${refundId}::uuid, safe_response = ${JSON.stringify({ refundId })}::jsonb, completed_at = now() where id = ${recordId}`.execute(
       transaction,
     );
@@ -1557,9 +1508,9 @@ export async function createCancellationRefundObligationsInTransaction(
   for (const payment of payments.rows) {
     // Locking the Payment above serializes this against normal refund creation.
     const committed = await sql<{ amount: string }>`
-      select coalesce(sum(amount), 0)::text as amount
-      from payments.refunds
-      where organization_id = ${input.organizationId}
+      select coalesce(sum(refund_allocation.amount), 0)::text as amount
+      from payments.refunds refund join payments.refund_allocations refund_allocation on refund_allocation.organization_id=refund.organization_id and refund_allocation.refund_id=refund.id and refund_allocation.component_type<>'UNALLOCATED_RECEIPT'
+      where refund.organization_id = ${input.organizationId}
         and payment_id = ${payment.id}
         and status in ('REQUESTED', 'PROCESSING', 'UNKNOWN_EXTERNAL_OUTCOME', 'COMPLETED')
     `.execute(transaction);
@@ -1619,61 +1570,95 @@ export async function completeManualRefund(
     externalReference: string;
     idempotencyKey: string;
     fault?: () => void;
+    evidenceReference?: string;
+    originalSourceVerified?: boolean;
   },
 ): Promise<RefundView> {
   const normalizedReference = normalizeExternalReference(input.externalReference);
-  return db.transaction().execute(async (transaction) => {
-    let recordId: string;
-    try {
-      const record = await claimIdempotencyRecord(transaction, {
-        organizationId: input.organizationId,
-        principalType: 'USER',
-        principalId: input.actorId,
-        operationType: 'payments.refund-complete',
-        idempotencyKey: input.idempotencyKey,
-        requestFingerprint: `${input.refundId}:${normalizedReference}`,
-      });
-      if (!record.created) {
-        if (record.status === 'SUCCEEDED')
-          return getRefund(transaction, input.organizationId, input.refundId);
-        throw new PaymentDomainError(
-          'IDEMPOTENCY_CONFLICT',
-          'This refund completion is already in progress.',
-        );
+  return db
+    .transaction()
+    .execute(async (transaction) => {
+      const receiptContext = await receiptRefundContext(transaction, input);
+      let recordId: string;
+      try {
+        const record = await claimIdempotencyRecord(transaction, {
+          organizationId: input.organizationId,
+          principalType: 'USER',
+          principalId: input.actorId,
+          operationType: 'payments.refund-complete',
+          idempotencyKey: input.idempotencyKey,
+          requestFingerprint: `${input.refundId}:${normalizedReference}:${input.evidenceReference ?? ''}:${input.originalSourceVerified ?? false}`,
+        });
+        if (!record.created) {
+          if (record.status === 'SUCCEEDED')
+            return getRefund(transaction, input.organizationId, input.refundId);
+          throw new PaymentDomainError(
+            'IDEMPOTENCY_CONFLICT',
+            'This refund completion is already in progress.',
+          );
+        }
+        recordId = record.id;
+      } catch (error) {
+        if (error instanceof IdempotencyKeyReuseError)
+          throw new PaymentDomainError(
+            'IDEMPOTENCY_CONFLICT',
+            'The idempotency key was reused for different refund completion details.',
+          );
+        throw error;
       }
-      recordId = record.id;
-    } catch (error) {
-      if (error instanceof IdempotencyKeyReuseError)
-        throw new PaymentDomainError(
-          'IDEMPOTENCY_CONFLICT',
-          'The idempotency key was reused for different refund completion details.',
+      if (receiptContext)
+        await sql`select id from payments.payments where organization_id=${input.organizationId} and id=${receiptContext.payment_id} for update`.execute(
+          transaction,
         );
-      throw error;
-    }
-    const refund = await sql<{
-      id: string;
-      status: string;
-    }>`select id, status from payments.refunds where organization_id = ${input.organizationId} and id = ${input.refundId} for update`.execute(
-      transaction,
-    );
-    const row = refund.rows[0];
-    if (!row) throw new PaymentDomainError('NOT_FOUND', 'Refund was not found.');
-    if (row.status === 'COMPLETED')
-      throw new PaymentDomainError(
-        'REFUND_ALREADY_COMPLETED',
-        'This refund has already been completed.',
+      const refund = await sql<{
+        id: string;
+        status: string;
+      }>`select id, status from payments.refunds where organization_id = ${input.organizationId} and id = ${input.refundId} for update`.execute(
+        transaction,
       );
-    if (!['REQUESTED', 'PROCESSING'].includes(row.status))
-      throw new PaymentDomainError(
-        'VALIDATION_FAILED',
-        'This refund cannot be completed in its current state.',
+      const row = refund.rows[0];
+      if (!row) throw new PaymentDomainError('NOT_FOUND', 'Refund was not found.');
+      if (row.status === 'COMPLETED')
+        throw new PaymentDomainError(
+          'REFUND_ALREADY_COMPLETED',
+          'This refund has already been completed.',
+        );
+      if (
+        ![
+          'REQUESTED',
+          'PROCESSING',
+          ...(receiptContext ? ['UNKNOWN_EXTERNAL_OUTCOME'] : []),
+        ].includes(row.status)
+      )
+        throw new PaymentDomainError(
+          'VALIDATION_FAILED',
+          'This refund cannot be completed in its current state.',
+        );
+      await sql`update payments.refunds set status = 'COMPLETED', external_reference = ${input.externalReference.trim()}, normalized_external_reference = ${normalizedReference}, completed_at = now(), completed_by_actor_id = ${input.actorId}, version = version + 1, updated_at = now() where id = ${row.id}`.execute(
+        transaction,
       );
-    await sql`update payments.refunds set status = 'COMPLETED', external_reference = ${input.externalReference.trim()}, normalized_external_reference = ${normalizedReference}, completed_at = now(), completed_by_actor_id = ${input.actorId}, version = version + 1, updated_at = now() where id = ${row.id}`.execute(
-      transaction,
-    );
-    // A return's commercial state is a projection of linked financial records,
-    // never an independently editable copy of refund truth.
-    await sql`
+      if (receiptContext) {
+        await postVerifiedRefundInTransaction(transaction, {
+          organizationId: input.organizationId,
+          actorId: input.actorId,
+          refundId: input.refundId,
+          accountId: receiptContext.financial_account_id,
+          amount: receiptContext.amount,
+          currency: receiptContext.currency_code,
+        });
+        await appendAuditEvent(transaction, {
+          organizationId: input.organizationId,
+          actorType: 'USER',
+          actorId: input.actorId,
+          action: 'payments.refund.original_source_verified',
+          targetType: 'payments.refund',
+          targetId: input.refundId,
+          metadata: { evidenceReference: input.evidenceReference, originalSourceVerified: true },
+        });
+      }
+      // A return's commercial state is a projection of linked financial records,
+      // never an independently editable copy of refund truth.
+      await sql`
       update returns.return_cases return_case
       set commercial_resolution_status = case
             when not exists (
@@ -1719,23 +1704,31 @@ export async function completeManualRefund(
             and link.refund_id = ${row.id}
         )
     `.execute(transaction);
-    input.fault?.();
-    await sql`update platform.idempotency_records set status = 'SUCCEEDED', result_entity_type = 'payments.refund', result_entity_id = ${row.id}::uuid, safe_response = ${JSON.stringify({ refundId: row.id })}::jsonb, completed_at = now() where id = ${recordId}`.execute(
-      transaction,
-    );
-    await appendAuditEvent(transaction, {
-      organizationId: input.organizationId,
-      actorType: 'USER',
-      actorId: input.actorId,
-      action: 'payments.refund.completed',
-      targetType: 'payments.refund',
-      targetId: row.id,
+      input.fault?.();
+      await sql`update platform.idempotency_records set status = 'SUCCEEDED', result_entity_type = 'payments.refund', result_entity_id = ${row.id}::uuid, safe_response = ${JSON.stringify({ refundId: row.id })}::jsonb, completed_at = now() where id = ${recordId}`.execute(
+        transaction,
+      );
+      await appendAuditEvent(transaction, {
+        organizationId: input.organizationId,
+        actorType: 'USER',
+        actorId: input.actorId,
+        action: 'payments.refund.completed',
+        targetType: 'payments.refund',
+        targetId: row.id,
+      });
+      await sql`insert into platform.outbox_events (organization_id, event_type, event_version, aggregate_type, aggregate_id, aggregate_version, payload, occurred_at) values (${input.organizationId}, 'payments.refund.completed', 1, 'payments.refund', ${row.id}, 1, ${JSON.stringify({ refundId: row.id })}::jsonb, now())`.execute(
+        transaction,
+      );
+      return getRefund(transaction, input.organizationId, row.id);
+    })
+    .catch((error) => {
+      if ((error as { code?: string }).code === '23505')
+        throw new PaymentDomainError(
+          'DUPLICATE_EXTERNAL_TRANSACTION',
+          'This refund transfer already has financial history.',
+        );
+      throw error;
     });
-    await sql`insert into platform.outbox_events (organization_id, event_type, event_version, aggregate_type, aggregate_id, aggregate_version, payload, occurred_at) values (${input.organizationId}, 'payments.refund.completed', 1, 'payments.refund', ${row.id}, 1, ${JSON.stringify({ refundId: row.id })}::jsonb, now())`.execute(
-      transaction,
-    );
-    return getRefund(transaction, input.organizationId, row.id);
-  });
 }
 
 export async function getRefund(
@@ -1744,7 +1737,7 @@ export async function getRefund(
   refundId: string,
 ): Promise<RefundView> {
   const result = await sql<RefundRow>`
-    select refund.id, refund.refund_number, refund.order_id, allocation.order_number_snapshot,
+    select refund.id, refund.refund_number, refund.order_id, order_row.order_number as order_number_snapshot,
       refund.payment_id, payment.payment_number, refund.amount::text, refund.currency_code,
       refund.status, refund.reason_code, refund.external_reference, refund.requested_at,
       refund.completed_at, refund.version::text,
@@ -1755,7 +1748,8 @@ export async function getRefund(
       finance_transaction.occurred_at as finance_posted_at
     from payments.refunds refund
     join payments.payments payment on payment.id = refund.payment_id
-    join payments.payment_allocations allocation on allocation.payment_id = payment.id
+    join orders.orders order_row on order_row.organization_id=refund.organization_id and order_row.id=refund.order_id
+    left join payments.payment_allocations allocation on allocation.payment_id = payment.id
     left join finance.finance_transactions finance_transaction
       on finance_transaction.organization_id = refund.organization_id
       and finance_transaction.transaction_type = 'REFUND_SOURCE_POSTING'
@@ -1783,7 +1777,7 @@ export async function listRefunds(
   const to = filters.to ?? null;
   const [result, countResult] = await Promise.all([
     sql<RefundRow>`
-      select refund.id, refund.refund_number, refund.order_id, allocation.order_number_snapshot,
+      select refund.id, refund.refund_number, refund.order_id, order_row.order_number as order_number_snapshot,
         refund.payment_id, payment.payment_number, refund.amount::text, refund.currency_code,
         refund.status, refund.reason_code, refund.external_reference, refund.requested_at,
         refund.completed_at, refund.version::text,
@@ -1794,7 +1788,8 @@ export async function listRefunds(
         finance_transaction.occurred_at as finance_posted_at
       from payments.refunds refund
       join payments.payments payment on payment.id = refund.payment_id
-      join payments.payment_allocations allocation on allocation.payment_id = payment.id
+      join orders.orders order_row on order_row.organization_id=refund.organization_id and order_row.id=refund.order_id
+    left join payments.payment_allocations allocation on allocation.payment_id = payment.id
       left join finance.finance_transactions finance_transaction
         on finance_transaction.organization_id = refund.organization_id
         and finance_transaction.transaction_type = 'REFUND_SOURCE_POSTING'
@@ -1815,7 +1810,8 @@ export async function listRefunds(
       select count(distinct refund.id)::text as total
       from payments.refunds refund
       join payments.payments payment on payment.id = refund.payment_id
-      join payments.payment_allocations allocation on allocation.payment_id = payment.id
+      join orders.orders order_row on order_row.organization_id=refund.organization_id and order_row.id=refund.order_id
+    left join payments.payment_allocations allocation on allocation.payment_id = payment.id
       left join finance.finance_transactions finance_transaction
         on finance_transaction.organization_id = refund.organization_id
         and finance_transaction.transaction_type = 'REFUND_SOURCE_POSTING'
@@ -1866,10 +1862,11 @@ export async function getPaymentDetail(
         delivery.manual_carrier_name as carrier_name, delivery.tracking_reference,
         delivery.delivered_at
       from payments.payments payment
-      join payments.payment_allocations allocation
+      left join payments.payment_allocations allocation
         on allocation.organization_id = payment.organization_id and allocation.payment_id = payment.id
+      left join payments.verified_receipt_evidence evidence on evidence.organization_id=payment.organization_id and evidence.payment_id=payment.id
       join orders.orders order_row
-        on order_row.organization_id = allocation.organization_id and order_row.id = allocation.order_id
+        on order_row.organization_id = payment.organization_id and order_row.id = coalesce(allocation.order_id,evidence.order_id)
       join orders.order_customer_snapshots customer
         on customer.organization_id = order_row.organization_id and customer.order_id = order_row.id
       left join payments.payment_attempts attempt on attempt.id = payment.source_attempt_id

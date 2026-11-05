@@ -2738,6 +2738,92 @@ export async function createCodSettlement(
   });
 }
 
+/** Payments calls this inside receipt verification; it must never open another transaction. */
+export async function postVerifiedReceiptInTransaction(
+  tx: Kysely<DatabaseSchema>,
+  input: {
+    organizationId: string;
+    actorId: string;
+    paymentId: string;
+    accountId: string;
+    amount: string;
+    currency: string;
+  },
+) {
+  const destination = await account(tx, input.organizationId, input.accountId, true);
+  if (destination.status !== 'ACTIVE' || destination.currency_code !== input.currency)
+    throw new FinanceDomainError(
+      'VALIDATION_FAILED',
+      'Receipt account must be active and match the currency.',
+    );
+  const id = await movement(tx, {
+    ...input,
+    type: 'PAYMENT_SOURCE_POSTING',
+    description: 'Independently verified manual receipt',
+    sourceDomain: 'payments.payment',
+    sourceId: input.paymentId,
+  });
+  await outbox(tx, input.organizationId, 'finance.payment.posted', id);
+  return id;
+}
+
+export async function postVerifiedRefundInTransaction(
+  tx: Kysely<DatabaseSchema>,
+  input: {
+    organizationId: string;
+    actorId: string;
+    refundId: string;
+    accountId: string;
+    amount: string;
+    currency: string;
+  },
+) {
+  const source = await account(tx, input.organizationId, input.accountId, true);
+  if (
+    source.status !== 'ACTIVE' ||
+    source.currency_code !== input.currency ||
+    moneyUnits(await balance(tx, input.organizationId, input.accountId)) < moneyUnits(input.amount)
+  )
+    throw new FinanceDomainError(
+      'CONFLICT',
+      'The original refund account must be active, currency-compatible and sufficiently funded.',
+    );
+  const id = await movement(tx, {
+    ...input,
+    amount: `-${input.amount}`,
+    type: 'REFUND_SOURCE_POSTING',
+    description: 'Verified original-source manual refund',
+    sourceDomain: 'payments.refund',
+    sourceId: input.refundId,
+  });
+  await outbox(tx, input.organizationId, 'finance.refund.posted', id);
+  return id;
+}
+
+export async function reverseVerifiedReceiptInTransaction(
+  tx: Kysely<DatabaseSchema>,
+  input: {
+    organizationId: string;
+    actorId: string;
+    paymentId: string;
+    accountId: string;
+    amount: string;
+    currency: string;
+  },
+) {
+  await account(tx, input.organizationId, input.accountId, true);
+  const id = await movement(tx, {
+    ...input,
+    amount: `-${input.amount}`,
+    type: 'EXTERNAL_ADJUSTMENT',
+    description: 'Independently evidenced receipt reversal',
+    sourceDomain: 'payments.receipt_reversal',
+    sourceId: input.paymentId,
+  });
+  await outbox(tx, input.organizationId, 'finance.payment.reversed', id);
+  return id;
+}
+
 export async function postPaymentToFinancialAccount(
   db: Kysely<DatabaseSchema>,
   input: {

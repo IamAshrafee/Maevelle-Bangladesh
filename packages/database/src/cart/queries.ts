@@ -4,11 +4,9 @@ import type { CartCommerceIssueDto } from '@maevelle/contracts';
 import type { DatabaseSchema } from '../index.js';
 import type { CartView } from './types.js';
 import { findCart, type ResolvedCart } from './context.js';
-import { availableToSellByVariant } from './availability.js';
-import { parseMoney, money, quantity, availableWholeUnits, fingerprint } from './value.js';
+import { parseMoney, money, fingerprint } from './value.js';
 import { catalogVariantIsStructurallyValid } from '../catalog-variant-integrity.js';
-import { resolveVariantPrices } from '../pricing.js';
-import { evaluatePromotions } from '../promotions.js';
+import { evaluateMerchandise } from '../commerce/merchandise.js';
 export async function getGuestCart(
   db: Kysely<DatabaseSchema>,
   token: string,
@@ -123,52 +121,12 @@ export async function evaluateCart<Expiry extends Date | null>(
       'LIMIT_EXCEEDED',
       'This legacy Cart exceeds the safe coupon limit and needs review.',
     );
-  const eligibleVariants = lines.rows
-    .filter((line) => line.visible && line.configured)
-    .map((line) => line.variant_id);
-  const [prices, stock] = await Promise.all([
-    resolveVariantPrices(db, {
-      organizationId: cart.organizationId,
-      variantIds: eligibleVariants,
-      currency: cart.currency,
-      at: evaluatedAt,
-    }),
-    availableToSellByVariant(db, cart.organizationId, eligibleVariants),
-  ]);
-  const computedLines = lines.rows.map((line) => {
-    const price = line.visible && line.configured ? prices.get(line.variant_id) : undefined;
-    const ats = availableWholeUnits(stock.get(line.variant_id) ?? '0');
-    const lineQuantity = quantity(line.quantity);
-    const availability: CartView['lines'][number]['availability'] = !(
-      line.visible && line.configured
-    )
-      ? 'UNAVAILABLE'
-      : !price
-        ? 'UNPRICED'
-        : ats < lineQuantity
-          ? ats === 0n
-            ? 'UNAVAILABLE'
-            : 'INSUFFICIENT_CURRENT_STOCK'
-          : 'AVAILABLE';
-    const gross = price ? money(parseMoney(price.amount) * lineQuantity) : '0.0000';
-    const suggestedQuantity =
-      availability === 'INSUFFICIENT_CURRENT_STOCK' ? Number(ats) : undefined;
-    return { ...line, price, gross, availability, suggestedQuantity };
-  });
-  const calculations = await evaluatePromotions(db, {
-    guestPreview: true,
+  const { computedLines, calculations } = await evaluateMerchandise(db, {
     organizationId: cart.organizationId,
+    currency: cart.currency,
     at: evaluatedAt,
+    lines: lines.rows,
     couponCodes: coupons.rows.map((coupon) => coupon.normalized_code),
-    lines: computedLines
-      .filter((line) => line.price && line.availability === 'AVAILABLE')
-      .map((line) => ({
-        lineId: line.id,
-        variantId: line.variant_id,
-        productId: line.product_id,
-        categoryIds: line.category_ids,
-        gross: line.gross,
-      })),
   });
   const discountByLine = new Map<string, bigint>();
   for (const calculation of calculations) {

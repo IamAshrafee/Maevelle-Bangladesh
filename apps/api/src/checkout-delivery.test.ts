@@ -5,7 +5,11 @@ import { sql } from '@maevelle/database';
 import { runMigrations } from '@maevelle/database/migrate';
 import { cartFixture, isolatedCartDatabase } from '@maevelle/database/testing/cart';
 import { createGuestCart, addGuestCartLine, getGuestCart } from '@maevelle/database/cart';
-import { updateCheckoutDelivery, type CheckoutAuthority } from '@maevelle/database/checkout';
+import {
+  updateCheckoutDelivery,
+  createCheckoutQuote,
+  type CheckoutAuthority,
+} from '@maevelle/database/checkout';
 import {
   revokeShopperStorageValue,
   lockShopperSession,
@@ -673,7 +677,7 @@ describe('Phase 02A delivery API, ownership and real PostgreSQL races', () => {
     ).toBe(200);
   }, 10000);
 
-  it('rejects a delayed delivery update when revocation wins the session fence', async () => {
+  it('rejects delayed delivery and snapshot quote writes when revocation wins the session fence', async () => {
     const a = await account();
     await read('/test-checkout-proof', a);
     const proof = observedProof!;
@@ -701,9 +705,25 @@ describe('Phase 02A delivery API, ownership and real PostgreSQL races', () => {
     );
     // Attach rejection handling before releasing the competing transaction.
     const outcome = expect(mutation).rejects.toMatchObject({ code: 'SESSION_EXPIRED' });
+    const quoting = createCheckoutQuote(
+      db(),
+      proof,
+      created.json().data.id,
+      { revision: '1' },
+      key(),
+    );
+    const quoteOutcome = expect(quoting).rejects.toMatchObject({ code: 'SESSION_EXPIRED' });
     release.release();
     await revoking;
     await outcome;
+    await quoteOutcome;
+    expect(
+      (
+        await sql`select id from orders.checkout_quotes where draft_id=${created.json().data.id}`.execute(
+          db(),
+        )
+      ).rows,
+    ).toHaveLength(0);
     expect(
       (
         await sql`select draft_id from orders.checkout_draft_delivery where draft_id=${created.json().data.id}`.execute(
@@ -835,6 +855,145 @@ describe('Phase 02A delivery API, ownership and real PostgreSQL races', () => {
         .statusCode,
     ).toBe(200);
     expect((await read(addresses, d.headers)).statusCode).toBe(401);
+  });
+
+  it('quotes and explicitly acknowledges exact server components; retries recover the immutable accepted quote', async () => {
+    await sql`update orders.delivery_pricing_rules set flat_amount=0,version=version+1 where id=${ruleId}`.execute(
+      db(),
+    );
+    const d = await newDraft();
+    await put(`${base}/${d.id}/delivery`, { revision: '1', delivery: contact() }, d.headers);
+    expect((await read(`${base}/${d.id}/quotes/current`, d.headers)).json().data).toBeNull();
+    const intent = key();
+    const first = await post(
+      `${base}/${d.id}/quotes`,
+      { revision: '2' },
+      { ...d.headers, 'idempotency-key': intent },
+    );
+    expect(first.statusCode, first.body).toBe(201);
+    const q = first.json().data;
+    expect(q).toMatchObject({
+      status: 'CURRENT',
+      draftRevision: '3',
+      reviewRequired: true,
+      purchaseAvailable: false,
+      facts: {
+        merchandiseSubtotal: '100.0000',
+        shipping: '0.0000',
+        evaluatedTotal: '100.0000',
+        tax: null,
+        paymentFees: null,
+        payable: null,
+        final: false,
+      },
+    });
+    expect(first.headers['cache-control']).toBe('private, no-store');
+    expect(
+      (
+        await post(
+          `${base}/${d.id}/quotes`,
+          { revision: '2' },
+          { ...d.headers, 'idempotency-key': intent },
+        )
+      ).json().data.id,
+    ).toBe(q.id);
+    const acknowledged = await post(
+      `${base}/${d.id}/quotes/${q.id}/acknowledgements`,
+      { revision: '3', fingerprint: q.fingerprint },
+      d.headers,
+    );
+    expect(acknowledged.statusCode, acknowledged.body).toBe(200);
+    expect(acknowledged.json().data).toMatchObject({
+      acknowledged: true,
+      reviewRequired: false,
+      purchaseAvailable: false,
+    });
+    expect((await read(`${base}/${d.id}/delivery`, d.headers)).json().data).toMatchObject({
+      revision: '3',
+      quoteAvailable: false,
+      purchaseAvailable: false,
+    });
+    const other = await newDraft();
+    expect((await read(`${base}/${d.id}/quotes/${q.id}`, other.headers)).statusCode).toBe(404);
+    expect((await read(`${base}/${other.id}/quotes/${q.id}`, other.headers)).statusCode).toBe(404);
+    expect((await read(`${base}/${d.id}/quotes/${key()}`, d.headers)).statusCode).toBe(404);
+    for (const forged of [
+      { revision: 3 },
+      { revision: '3', total: '0' },
+      { revision: '3', couponCodes: [false] },
+      { revision: '3', customerId: key() },
+      { revision: '3', couponCodes: Array(11).fill('AB') },
+    ]) {
+      expect((await post(`${base}/${d.id}/quotes`, forged, d.headers)).statusCode).toBe(400);
+    }
+    expect(
+      (
+        await post(
+          `${base}/${d.id}/quotes`,
+          { revision: '3' },
+          { ...d.headers, origin: 'https://foreign.example' },
+        )
+      ).statusCode,
+    ).toBe(403);
+    expect(
+      (
+        await post(
+          `${base}/${d.id}/quotes`,
+          { revision: '3' },
+          { ...d.headers, 'idempotency-key': intent },
+        )
+      ).statusCode,
+    ).toBe(409);
+    const expired = await post(
+      `${base}/${d.id}/quotes/${q.id}/acknowledgements`,
+      { revision: '3', fingerprint: 'x'.repeat(43) },
+      d.headers,
+    );
+    expect(expired.statusCode).toBe(409);
+  });
+
+  it('revalidates account saved-address association on quote creation/read and keeps owners isolated', async () => {
+    const a = await account(),
+      b = await account();
+    const created = await post(base, { source: source() }, a);
+    expect(created.statusCode, created.body).toBe(201);
+    const id = created.json().data.id;
+    const saved = await post(addresses, { address: contact() }, a);
+    const book = (await read(addresses, a)).json().data.items[0];
+    expect(saved.statusCode).toBe(201);
+    await put(
+      `${base}/${id}/delivery`,
+      { revision: '1', savedAddressId: book.id, savedAddressRevision: book.revision },
+      a,
+    );
+    const response = await post(`${base}/${id}/quotes`, { revision: '2' }, a);
+    expect(response.statusCode, response.body).toBe(201);
+    const q = response.json().data;
+    expect((await read(`${base}/${id}/quotes/${q.id}`, b)).statusCode).toBe(404);
+    await put(
+      `${addresses}/${book.id}`,
+      { revision: book.revision, address: { ...contact(), addressLine1: 'Account edit' } },
+      a,
+    );
+    const current = await read(`${base}/${id}/quotes/current`, a);
+    expect(current.json().data).toMatchObject({
+      status: 'INVALIDATED',
+      issues: ['ADDRESS_CHANGED'],
+      facts: q.facts,
+    });
+    const rejected = await post(`${base}/${id}/quotes`, { revision: '3' }, a);
+    expect(rejected.statusCode, rejected.body).toBe(409);
+    expect(rejected.json().error.code).toBe('ADDRESS_CHANGED');
+  });
+
+  it('keeps quote routes disabled in production and does not expose quote IDs as capabilities', async () => {
+    const d = await newDraft();
+    const anonymous = await read(`${base}/${d.id}/quotes/current`, {});
+    expect(anonymous.statusCode).toBe(401);
+    const production = (await application({ ...config, nodeEnv: 'production' })).server;
+    const denied = await post(`${base}/${d.id}/quotes`, { revision: '1' }, d.headers, production);
+    expect(denied.statusCode).toBe(503);
+    expect(denied.json().error.code).toBe('CHECKOUT_DISABLED');
   });
 
   it('finishes all address and failure workflows with zero purchase/financial/inventory effects', async () => {

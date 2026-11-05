@@ -21,14 +21,23 @@ export function checkoutDomainStatus(code: string): number {
       'DRAFT_LIMIT',
       'ADDRESS_LIMIT',
       'ADDRESS_CHANGED',
+      'CONFIGURATION_CHANGED',
+      'DELIVERY_CHANGED',
+      'SUPERSEDED',
+      'QUOTE_LIMIT',
     ].includes(code)
   )
     return 409;
-  if (code === 'DRAFT_EXPIRED') return 410;
+  if (code === 'DRAFT_EXPIRED' || code === 'QUOTE_EXPIRED') return 410;
   if (
-    ['SOURCE_INELIGIBLE', 'INVALID_CONTACT', 'UNSUPPORTED_AREA', 'DELIVERY_UNAVAILABLE'].includes(
-      code,
-    )
+    [
+      'SOURCE_INELIGIBLE',
+      'INVALID_CONTACT',
+      'UNSUPPORTED_AREA',
+      'DELIVERY_UNAVAILABLE',
+      'VARIANT_UNAVAILABLE',
+      'INSUFFICIENT_STOCK',
+    ].includes(code)
   )
     return 422;
   return 503;

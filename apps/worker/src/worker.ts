@@ -26,11 +26,17 @@ import { deliverPendingInvitationEmails } from '@maevelle/database/iam';
 import { processStorefrontSearchOutbox } from '@maevelle/database/storefront';
 import { cleanupWishlistShares } from '@maevelle/database/wishlist-share-lifecycle';
 import { processExpiredPaymentOrders, processOrderOutbox } from '@maevelle/database/orders';
+import { processPaymentReviewAging } from '@maevelle/database/payments';
 import { expireInventoryReservations } from '@maevelle/database/inventory';
 import { dispatchPostDeliveryReviewInvitations } from '@maevelle/database/reviews';
 import { processCourierBookings, type CourierProviderResolver } from './courier-bookings.js';
 import type { ObjectStoragePort } from '@maevelle/media';
-import { cleanupExpiredMediaUploads, importExternalImageBatch, processMediaBatch, purgeOneMediaAsset } from './media-jobs.js';
+import {
+  cleanupExpiredMediaUploads,
+  importExternalImageBatch,
+  processMediaBatch,
+  purgeOneMediaAsset,
+} from './media-jobs.js';
 import {
   ChannelAdapterRegistry,
   processMessagingDeliveries,
@@ -274,6 +280,7 @@ export function createWorker(options: WorkerOptions): WorkerRuntime {
         runJob(() => processOrderOutbox(options.database.db)),
         runJob(() => expireInventoryReservations(options.database.db)),
         runJob(() => processExpiredPaymentOrders(options.database.db)),
+        runJob(() => processPaymentReviewAging(options.database.db)),
         runJob(() => processCourierBookings(options.database, options.courierProviderResolver)),
         options.mediaStorage
           ? runJob(() => processMediaBatch(options.database, options.mediaStorage!))

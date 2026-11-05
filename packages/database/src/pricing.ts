@@ -18,6 +18,7 @@ export interface ResolvedPrice {
   readonly variantId: string;
   readonly amount: string;
   readonly compareAtAmount: string | null;
+  readonly revision?: string;
   readonly currency: string;
 }
 
@@ -281,7 +282,12 @@ export async function resolveVariantPrice(
 /** Same authoritative temporal selection as the single resolver, in one bounded query. */
 export async function resolveVariantPrices(
   db: Kysely<DatabaseSchema>,
-  input: { organizationId: string; variantIds: readonly string[]; currency: string; at?: Date | string },
+  input: {
+    organizationId: string;
+    variantIds: readonly string[];
+    currency: string;
+    at?: Date | string;
+  },
 ): Promise<ReadonlyMap<string, ResolvedPrice>> {
   assertCurrency(input.currency);
   if (input.variantIds.length === 0) return new Map();
@@ -297,8 +303,9 @@ export async function resolveVariantPrices(
     amount: string;
     compare_at_amount: string | null;
     currency_code: string;
+    version: string;
   }>`
-    select distinct on (variant_id) id, variant_id, amount::text, compare_at_amount::text, currency_code
+    select distinct on (variant_id) id, variant_id, amount::text, compare_at_amount::text, currency_code, version::text
     from pricing.price_definitions
     where organization_id = ${input.organizationId}
       and variant_id = any(${[...input.variantIds]}::uuid[])
@@ -317,6 +324,7 @@ export async function resolveVariantPrices(
         amount: row.amount,
         compareAtAmount: row.compare_at_amount,
         currency: row.currency_code,
+        revision: row.version,
       },
     ]),
   );

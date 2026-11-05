@@ -23,7 +23,12 @@ describe('Checkout additive migration and database invariants', () => {
       f.organizationId,
     );
     const result = await runMigrations(isolation.database.db);
-    expect(result.executed).toEqual(['3219_checkout_foundation', '3220_checkout_delivery']);
+    expect(result.executed).toEqual([
+      '3219_checkout_foundation',
+      '3220_checkout_delivery',
+      '3221_checkout_quotes',
+      '3222_manual_payment_integrity',
+    ]);
     await checkoutUpgradeCases['3219_checkout_foundation']!.after(
       isolation.database.db,
       f.organizationId,

@@ -2,6 +2,8 @@ import { hashToken } from '@maevelle/security';
 import { CartDomainError } from './errors.js';
 const moneyScale = 10_000n;
 export function parseMoney(value: string): bigint {
+  if (!/^\d{1,16}(?:\.\d{1,4})?$/.test(value))
+    throw new CartDomainError('VALIDATION_FAILED', 'Money exceeds supported decimal precision.');
   const [whole, fraction = ''] = value.split('.');
   return BigInt(whole ?? '0') * moneyScale + BigInt(((fraction ?? '') + '0000').slice(0, 4));
 }
@@ -9,6 +11,8 @@ export function parseMoney(value: string): bigint {
 export function money(value: bigint): string {
   const sign = value < 0n ? '-' : '';
   const absolute = value < 0n ? -value : value;
+  if (absolute > 99_999_999_999_999_999_999n)
+    throw new CartDomainError('VALIDATION_FAILED', 'Money exceeds supported decimal precision.');
   return `${sign}${(absolute / moneyScale).toString()}.${(absolute % moneyScale).toString().padStart(4, '0')}`;
 }
 

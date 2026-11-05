@@ -1,3 +1,4 @@
+import { registerCheckoutQuoteRoutes } from './checkout-quotes.js';
 import { registerCheckoutDeliveryRoutes } from './checkout-delivery.js';
 import { intentKey, strictBody } from './checkout-input.js';
 import { CheckoutRequestError } from './checkout-errors.js';
@@ -55,6 +56,7 @@ export function registerCheckoutRoutes(
   app.register(async (checkout) => {
     protectCheckoutRoutes(checkout, database, config);
     registerCheckoutDeliveryRoutes(checkout, database, config, resolveShopper);
+    registerCheckoutQuoteRoutes(checkout, database, config, resolveShopper);
     checkout.post(
       '/storefront/v1/checkout/guest-sessions',
       {

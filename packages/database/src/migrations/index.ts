@@ -1,3 +1,4 @@
+import * as checkoutQuotes from './3221_checkout_quotes.js';
 import * as checkoutDelivery from './3220_checkout_delivery.js';
 import * as checkoutFoundation from './3219_checkout_foundation.js';
 import * as cartObservations from './3218_cart_observations.js';
@@ -144,6 +145,8 @@ export const migrations = {
   '3218_cart_observations': cartObservations,
   '3219_checkout_foundation': checkoutFoundation,
   '3220_checkout_delivery': checkoutDelivery,
+  '3221_checkout_quotes': checkoutQuotes,
+  '3222_manual_payment_integrity': manualPaymentIntegrity,
 } satisfies Record<string, Migration>;
 
 export const migrationProvider: MigrationProvider = {
@@ -151,3 +154,4 @@ export const migrationProvider: MigrationProvider = {
     return migrations;
   },
 };
+import * as manualPaymentIntegrity from './3222_manual_payment_integrity.js';

@@ -150,6 +150,15 @@ export const notificationEventCatalog: readonly NotificationEventDefinition[] = 
     'HIGH',
   ),
   staff(
+    'payments.claim.review_overdue',
+    'PAYMENT_REVIEW_REQUIRED',
+    'payments.review',
+    'Payment review needs attention',
+    'An unresolved payment claim has reached its approved review deadline.',
+    (_id, payload) => `/orders/${payloadId(payload, 'orderId', '')}`,
+    'HIGH',
+  ),
+  staff(
     'delivery.attempt_failed',
     'DELIVERY_EXCEPTION_REQUIRES_ATTENTION',
     'delivery.view',

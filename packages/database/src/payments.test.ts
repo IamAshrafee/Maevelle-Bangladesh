@@ -26,7 +26,7 @@ import {
   updateCheckoutPaymentMethod,
 } from './orders.js';
 import {
-  completeManualRefund,
+  completeManualRefund as completeEvidencedRefund,
   configurePaymentMethod,
   createRefund,
   getPayment,
@@ -40,7 +40,7 @@ import {
   recordCodCollection,
   rejectManualPayment,
   submitManualPayment,
-  verifyManualPayment,
+  verifyManualPayment as verifyIndependentPayment,
   verifyPaymentIntegrity,
 } from './payments.js';
 import { createOrganization } from './platform.js';
@@ -54,6 +54,45 @@ const database = createDatabase({
 const decimal = (value: string | undefined) => Number(value).toFixed(4);
 afterAll(async () => database.close());
 
+// Regression fixtures now supply independent synthetic history evidence and real authorization.
+async function verifyManualPayment(
+  db: Parameters<typeof verifyIndependentPayment>[0],
+  input: Parameters<typeof verifyIndependentPayment>[1],
+) {
+  const row = (
+    await sql<{
+      customer_reference: string;
+      instructions_snapshot: { accountNumber: string };
+      account_id: string;
+    }>`select a.customer_reference,i.instructions_snapshot,
+    (select id from finance.financial_accounts where organization_id=${input.organizationId} and account_number='SYNTHETIC-RECEIPTS') account_id
+    from payments.payment_attempts a join payments.payment_intents i on i.id=a.payment_intent_id
+    where a.organization_id=${input.organizationId} and a.id=${input.attemptId}`.execute(db)
+  ).rows[0];
+  return verifyIndependentPayment(db, {
+    ...input,
+    evidence: {
+      transactionId: row?.customer_reference ?? 'UNKNOWN-REFERENCE',
+      receivingNumber: row?.instructions_snapshot.accountNumber ?? '01700000000',
+      currency: 'BDT',
+      valueTime: '2026-01-01T00:00:00Z',
+      source: 'PROVIDER_STATEMENT',
+      evidenceReference: 'synthetic-independent-statement',
+      financialAccountId: row?.account_id ?? crypto.randomUUID(),
+    },
+  });
+}
+async function completeManualRefund(
+  db: Parameters<typeof completeEvidencedRefund>[0],
+  input: Parameters<typeof completeEvidencedRefund>[1],
+) {
+  return completeEvidencedRefund(db, {
+    ...input,
+    originalSourceVerified: true,
+    evidenceReference: 'synthetic-original-source-refund-statement',
+  });
+}
+
 async function fixture(quantity = '4') {
   const organization = await createOrganization(database.db, {
     code: `pay-${crypto.randomUUID().slice(0, 12)}`,
@@ -63,6 +102,18 @@ async function fixture(quantity = '4') {
     defaultCurrency: 'BDT',
   });
   const actorId = crypto.randomUUID();
+  const actorEmail = `${actorId}@example.test`;
+  await sql`insert into iam.users(id,name,email,email_normalized) values(${actorId},'Synthetic verifier',${actorEmail},${actorEmail})`.execute(
+    database.db,
+  );
+  await sql`insert into iam.organization_memberships(organization_id,user_id,membership_type,status) values(${organization.id},${actorId},'OWNER','ACTIVE')`.execute(
+    database.db,
+  );
+  await sql`insert into finance.financial_accounts(organization_id,account_number,name,account_type,currency_code)
+    values(${organization.id},'SYNTHETIC-RECEIPTS','bKash wallet','MOBILE_WALLET','BDT')`.execute(
+    database.db,
+  );
+
   const type = await sql<{
     id: string;
   }>`insert into catalog.product_types (organization_id, code, name) values (${organization.id}, ${`pay-${crypto.randomUUID().slice(0, 6)}`}, 'Payment type') returning id`.execute(
@@ -807,7 +858,7 @@ describe('payment facts, manual wallet verification, and refunds', () => {
         confirmedAmount: '1161.0000',
         idempotencyKey: 'wrong-tenant',
       }),
-    ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+    ).rejects.toMatchObject({ code: 'FORBIDDEN' });
   });
 
   it('allows only one concurrent verification and one concurrent refund completion, without changing inventory', async () => {
@@ -835,7 +886,10 @@ describe('payment facts, manual wallet verification, and refunds', () => {
         idempotencyKey: 'race-verify-b',
       }),
     ]);
-    expect(verified.filter((result) => result.status === 'fulfilled')).toHaveLength(1);
+    expect(verified.filter((result) => result.status === 'fulfilled')).toHaveLength(2);
+    expect(
+      new Set(verified.map((r) => (r as PromiseFulfilledResult<{ id: string }>).value.id)).size,
+    ).toBe(1);
     const payment = verified.find(
       (result): result is PromiseFulfilledResult<Awaited<ReturnType<typeof verifyManualPayment>>> =>
         result.status === 'fulfilled',
@@ -1017,22 +1071,16 @@ describe('payment facts, manual wallet verification, and refunds', () => {
       idempotencyKey: crypto.randomUUID(),
     });
     const financeActor = undefined as never;
-    const wallet = await finance.createFinancialAccount(database.db, {
-      organizationId: input.organizationId,
-      actorId: financeActor,
-      accountNumber: `WALLET-${crypto.randomUUID().slice(0, 8)}`,
-      name: 'bKash wallet',
-      accountType: 'MOBILE_WALLET',
-      currencyCode: 'BDT',
-      idempotencyKey: crypto.randomUUID(),
-    });
-    await finance.postPaymentToFinancialAccount(database.db, {
-      organizationId: input.organizationId,
-      actorId: financeActor,
-      paymentId: payment.id,
-      accountId: wallet.id,
-      idempotencyKey: crypto.randomUUID(),
-    });
+    const wallet = { id: payment.financePosting!.accountId };
+    await expect(
+      finance.postPaymentToFinancialAccount(database.db, {
+        organizationId: input.organizationId,
+        actorId: financeActor,
+        paymentId: payment.id,
+        accountId: wallet.id,
+        idempotencyKey: crypto.randomUUID(),
+      }),
+    ).rejects.toMatchObject({ code: 'CONFLICT' });
     expect(await getPayment(database.db, input.organizationId, payment.id)).toMatchObject({
       financePosting: { accountId: wallet.id, accountName: 'bKash wallet' },
     });
@@ -1052,13 +1100,15 @@ describe('payment facts, manual wallet verification, and refunds', () => {
       externalReference: 'RFD-FINANCE-001',
       idempotencyKey: crypto.randomUUID(),
     });
-    await finance.postRefundToFinancialAccount(database.db, {
-      organizationId: input.organizationId,
-      actorId: financeActor,
-      refundId: completed.id,
-      accountId: wallet.id,
-      idempotencyKey: crypto.randomUUID(),
-    });
+    await expect(
+      finance.postRefundToFinancialAccount(database.db, {
+        organizationId: input.organizationId,
+        actorId: financeActor,
+        refundId: completed.id,
+        accountId: wallet.id,
+        idempotencyKey: crypto.randomUUID(),
+      }),
+    ).rejects.toMatchObject({ code: 'CONFLICT' });
     expect(await getRefund(database.db, input.organizationId, completed.id)).toMatchObject({
       orderNumber: flow.order.orderNumber,
       paymentNumber: payment.paymentNumber,

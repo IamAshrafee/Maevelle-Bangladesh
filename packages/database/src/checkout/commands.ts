@@ -15,12 +15,13 @@ import { CheckoutError, type CheckoutAuthority, type CheckoutContext } from './t
 export async function checkoutTransaction<T>(
   db: Kysely<DatabaseSchema>,
   run: (tx: Transaction<DatabaseSchema>) => Promise<T>,
+  isolation: 'read committed' | 'repeatable read' = 'read committed',
 ): Promise<T> {
   for (let attempt = 0; ; attempt++) {
     try {
       return await db
         .transaction()
-        .setIsolationLevel('read committed')
+        .setIsolationLevel(isolation)
         .execute(async (tx) => {
           await sql`set local lock_timeout='2s'`.execute(tx);
           await sql`set local statement_timeout='5s'`.execute(tx);

@@ -16,6 +16,10 @@
       "types": "./src/testing/cart-fixture.ts",
       "default": "./dist/src/testing/cart-fixture.js"
     },
+    "./testing/manual-payments": {
+      "types": "./src/testing/manual-payment-fixture.ts",
+      "default": "./dist/src/testing/manual-payment-fixture.js"
+    },
     ".": {
       "types": "./src/index.ts",
       "default": "./dist/src/index.js"

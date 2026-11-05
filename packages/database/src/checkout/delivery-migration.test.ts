@@ -21,6 +21,8 @@ describe('Phase 02A populated 3219 upgrade and referential integrity', () => {
     await checkoutDeliveryUpgradeCase.before(isolation.database.db, f.organizationId);
     expect((await runMigrations(isolation.database.db)).executed).toEqual([
       '3220_checkout_delivery',
+      '3221_checkout_quotes',
+      '3222_manual_payment_integrity',
     ]);
     await checkoutDeliveryUpgradeCase.after(isolation.database.db, f.organizationId);
   }, 60000);

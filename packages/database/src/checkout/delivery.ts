@@ -27,7 +27,10 @@ interface DeliveryRow {
   current_address_revision: string | null;
   current_address_status: string | null;
 }
-async function view(tx: Kysely<DatabaseSchema>, row: DraftRow): Promise<CheckoutDeliveryStateDto> {
+export async function checkoutDeliveryInTransaction(
+  tx: Kysely<DatabaseSchema>,
+  row: DraftRow,
+): Promise<CheckoutDeliveryStateDto> {
   const result =
     await sql<DeliveryRow>`select d.*,d.saved_address_revision::text,a.version::text current_address_revision,
     a.status current_address_status from orders.checkout_draft_delivery d
@@ -92,7 +95,7 @@ export async function getCheckoutDelivery(
 ) {
   return checkoutTransaction(db, async (tx) => {
     await lockCheckoutAuthority(tx, owner);
-    return view(tx, await ownedDraft(tx, owner, id));
+    return checkoutDeliveryInTransaction(tx, await ownedDraft(tx, owner, id));
   });
 }
 export async function updateCheckoutDelivery(
@@ -106,7 +109,7 @@ export async function updateCheckoutDelivery(
     await lockCheckoutAuthority(tx, owner);
     const record = await receipt(tx, owner, key, 'delivery.update', { id, ...input });
     const row = await ownedDraft(tx, owner, record.draftId ?? id);
-    if (record.draftId) return view(tx, row);
+    if (record.draftId) return checkoutDeliveryInTransaction(tx, row);
     const active =
       await sql`select id from orders.checkout_drafts where id=${id} and status='ACTIVE' and expires_at>clock_timestamp()`.execute(
         tx,
@@ -138,7 +141,7 @@ export async function updateCheckoutDelivery(
         addressRevision = saved.revision;
       } else if ('delivery' in input) delivery = normalizeDeliveryContact(input.delivery);
       else {
-        const current = await view(tx, row);
+        const current = await checkoutDeliveryInTransaction(tx, row);
         if (!current.delivery)
           throw new CheckoutError('INVALID_CONTACT', 'Enter delivery details first.');
         if (current.savedAddress && current.savedAddress.status !== 'CURRENT')
@@ -182,6 +185,6 @@ export async function updateCheckoutDelivery(
     );
     await finish(tx, record.id, id);
     await audit(tx, owner, id, 'delivery_updated');
-    return view(tx, await ownedDraft(tx, owner, id));
+    return checkoutDeliveryInTransaction(tx, await ownedDraft(tx, owner, id));
   });
 }

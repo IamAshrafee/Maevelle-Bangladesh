@@ -605,6 +605,7 @@ export async function cancelOrder(
             where attempt.organization_id = intent.organization_id
               and attempt.payment_intent_id = intent.id
               and attempt.status = 'PENDING_VERIFICATION'
+              and (intent.review_expires_at is null or intent.review_expires_at > now())
           )
           and not exists (
             select 1
@@ -742,6 +743,7 @@ export async function processExpiredPaymentOrders(
         where attempt.organization_id = intent.organization_id
           and attempt.payment_intent_id = intent.id
           and attempt.status = 'PENDING_VERIFICATION'
+              and (intent.review_expires_at is null or intent.review_expires_at > now())
       )
       and not exists (
         select 1

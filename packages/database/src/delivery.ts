@@ -5,7 +5,11 @@ import type { DatabaseSchema } from './index.js';
 import { appendAuditEvent, claimIdempotencyRecord, IdempotencyKeyReuseError } from './platform.js';
 import { getOrderPaymentSummary } from './payments.js';
 import { recognizeCogsForDeliveredFulfillmentInTransaction } from './costing.js';
-import { dispatchFulfillmentInTransaction, FulfillmentDomainError } from './fulfillment.js';
+import {
+  dispatchFulfillmentInTransaction,
+  FulfillmentDomainError,
+  lockFulfillmentOrderInTransaction,
+} from './fulfillment.js';
 import { ingestProviderEvent } from './notifications.js';
 
 export type DeliveryOperationalStatus =
@@ -1652,6 +1656,18 @@ export async function dispatchDelivery(
         organizationId: input.organizationId,
         deliveryId: (started.replay as { deliveryId: string }).deliveryId,
       });
+    const dispatchLink = (
+      await sql<{
+        fulfillment_id: string;
+      }>`select fulfillment_id from delivery.deliveries where organization_id=${input.organizationId} and id=${input.deliveryId}`.execute(
+        transaction,
+      )
+    ).rows[0];
+    if (!dispatchLink) throw new DeliveryDomainError('NOT_FOUND', 'Delivery was not found.');
+    await lockFulfillmentOrderInTransaction(transaction, {
+      organizationId: input.organizationId,
+      fulfillmentId: dispatchLink.fulfillment_id,
+    });
     const current = await lockDelivery(transaction, input);
     if (current.status !== 'BOOKED')
       throw new DeliveryDomainError(
@@ -2742,4 +2758,3 @@ export async function findCourierBookingForWebhook(
     integrationAccountId: row.integration_account_id,
   };
 }
-

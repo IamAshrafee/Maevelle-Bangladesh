@@ -371,9 +371,13 @@ export async function updatePromotion(
   }
   if (input.benefitValue !== undefined) {
     const value = toScaled(input.benefitValue);
-    if (value <= 0n) throw new PromotionDomainError('VALIDATION_FAILED', 'Promotion benefit must be positive.');
+    if (value <= 0n)
+      throw new PromotionDomainError('VALIDATION_FAILED', 'Promotion benefit must be positive.');
     if (input.benefitType === 'PERCENTAGE_DISCOUNT' && value > 100n * moneyScale) {
-      throw new PromotionDomainError('VALIDATION_FAILED', 'Percentage discount cannot exceed 100%.');
+      throw new PromotionDomainError(
+        'VALIDATION_FAILED',
+        'Percentage discount cannot exceed 100%.',
+      );
     }
   }
   if (input.minimumMerchandiseSubtotal) {
@@ -455,13 +459,19 @@ export async function updatePromotion(
       if (!revisionId) throw new Error('Could not create new revision.');
 
       for (const productId of input.productIds ?? []) {
-        await sql`insert into promotions.promotion_target_products (organization_id, promotion_revision_id, product_id) values (${input.organizationId}, ${revisionId}, ${productId})`.execute(transaction);
+        await sql`insert into promotions.promotion_target_products (organization_id, promotion_revision_id, product_id) values (${input.organizationId}, ${revisionId}, ${productId})`.execute(
+          transaction,
+        );
       }
       for (const variantId of input.variantIds ?? []) {
-        await sql`insert into promotions.promotion_target_variants (organization_id, promotion_revision_id, variant_id) values (${input.organizationId}, ${revisionId}, ${variantId})`.execute(transaction);
+        await sql`insert into promotions.promotion_target_variants (organization_id, promotion_revision_id, variant_id) values (${input.organizationId}, ${revisionId}, ${variantId})`.execute(
+          transaction,
+        );
       }
       for (const categoryId of input.categoryIds ?? []) {
-        await sql`insert into promotions.promotion_target_categories (organization_id, promotion_revision_id, category_id) values (${input.organizationId}, ${revisionId}, ${categoryId})`.execute(transaction);
+        await sql`insert into promotions.promotion_target_categories (organization_id, promotion_revision_id, category_id) values (${input.organizationId}, ${revisionId}, ${categoryId})`.execute(
+          transaction,
+        );
       }
     }
 
@@ -623,7 +633,9 @@ export async function listAdminPromotions(
         code: coupon.code,
         status: coupon.status,
         usageLimitTotal: coupon.usage_limit_total ? Number(coupon.usage_limit_total) : null,
-        usageLimitPerCustomer: coupon.usage_limit_per_customer ? Number(coupon.usage_limit_per_customer) : null,
+        usageLimitPerCustomer: coupon.usage_limit_per_customer
+          ? Number(coupon.usage_limit_per_customer)
+          : null,
         usageCount: Number(coupon.usage_count),
         createdAt: coupon.created_at,
       })),
@@ -762,7 +774,9 @@ export async function getAdminPromotionDetail(
       code: coupon.code,
       status: coupon.status,
       usageLimitTotal: coupon.usage_limit_total ? Number(coupon.usage_limit_total) : null,
-      usageLimitPerCustomer: coupon.usage_limit_per_customer ? Number(coupon.usage_limit_per_customer) : null,
+      usageLimitPerCustomer: coupon.usage_limit_per_customer
+        ? Number(coupon.usage_limit_per_customer)
+        : null,
       usageCount: Number(coupon.usage_count),
       createdAt: coupon.created_at,
     })),
@@ -801,6 +815,8 @@ export async function evaluatePromotions(
     couponCodes?: readonly string[];
     /** Guest previews have no verified customer for customer-limited offers. */
     guestPreview?: true;
+    /** Verified owner only; never a browser supplied Customer identity. */
+    customerId?: string;
     at?: Date | string;
   },
 ): Promise<readonly PromotionCalculation[]> {
@@ -829,14 +845,20 @@ export async function evaluatePromotions(
       where code.organization_id = promotion.organization_id and code.promotion_id = promotion.id
         and promotion.promotion_type = 'COUPON' and code.status = 'ACTIVE'
         and code.normalized_code = any(${requestedCodes})
-        and (not ${input.guestPreview ?? false}::boolean or (
-          code.usage_limit_per_customer is null
-          and (code.usage_limit_total is null or (
+        -- Legacy placement deliberately evaluates the candidate before its locked redemption
+        -- check. Filtering it here could leave discounted Order lines without usage.
+        and (not ${input.guestPreview ?? false}::boolean or code.usage_limit_total is null or (
+          select count(*) from promotions.promotion_usage usage
+          where usage.organization_id=code.organization_id and usage.coupon_code_id=code.id
+            and usage.status='COMMITTED'
+        ) < code.usage_limit_total)
+        and (code.usage_limit_per_customer is null or (
+          ${input.customerId ?? null}::uuid is not null and (
             select count(*) from promotions.promotion_usage usage
-            where usage.organization_id = code.organization_id and usage.promotion_id = code.promotion_id
-              and usage.coupon_code_id = code.id and usage.status = 'COMMITTED'
-          ) < code.usage_limit_total)
-        ))
+            where usage.organization_id=code.organization_id and usage.coupon_code_id=code.id
+              and usage.customer_id=${input.customerId ?? null}::uuid and usage.status='COMMITTED'
+          ) < code.usage_limit_per_customer
+        ) or not ${input.guestPreview ?? false}::boolean)
       order by code.id
       limit 1
     ) coupon on true
@@ -874,14 +896,16 @@ export async function evaluatePromotions(
           (target.category_id !== null && line.categoryIds.includes(target.category_id)),
       );
     });
-    const remainingLines = eligible.map((line) => ({ ...line,
+    const remainingLines = eligible.map((line) => ({
+      ...line,
       gross: fromScaled(toScaled(line.gross) - (allocated.get(line.lineId) ?? 0n)),
     }));
     const eligibleGross = remainingLines.reduce((sum, line) => sum + toScaled(line.gross), 0n);
     if (eligibleGross === 0n) continue;
     if (
       promotion.minimum_merchandise_subtotal &&
-      eligible.reduce((sum, line) => sum + toScaled(line.gross), 0n) < toScaled(promotion.minimum_merchandise_subtotal)
+      eligible.reduce((sum, line) => sum + toScaled(line.gross), 0n) <
+        toScaled(promotion.minimum_merchandise_subtotal)
     ) {
       continue;
     }
@@ -892,7 +916,10 @@ export async function evaluatePromotions(
         : benefit;
     const allocations = allocateDiscount(fromScaled(rawDiscount), remainingLines);
     for (const allocation of allocations)
-      allocated.set(allocation.lineId, (allocated.get(allocation.lineId) ?? 0n) + toScaled(allocation.amount));
+      allocated.set(
+        allocation.lineId,
+        (allocated.get(allocation.lineId) ?? 0n) + toScaled(allocation.amount),
+      );
     const discount = allocations.reduce((sum, allocation) => sum + toScaled(allocation.amount), 0n);
     if (discount === 0n) continue;
     applied.push({
@@ -905,4 +932,21 @@ export async function evaluatePromotions(
     if (promotion.combinability === 'EXCLUSIVE') exclusiveApplied = true;
   }
   return applied;
+}
+
+/** Opaque provenance includes insertion/priority/target changes even when the resulting total is equal.
+ * Snapshot consistency comes from the caller's isolation, never from this digest or row locks. */
+export async function promotionConfigurationFingerprint(
+  db: Kysely<DatabaseSchema>,
+  organizationId: string,
+) {
+  const result = await sql<{ revision: string }>`select md5(jsonb_build_array(
+    (select jsonb_agg(to_jsonb(p) order by p.id) from promotions.promotions p where organization_id=${organizationId}),
+    (select jsonb_agg(to_jsonb(r) order by r.id) from promotions.promotion_revisions r where organization_id=${organizationId}),
+    (select jsonb_agg(to_jsonb(c) order by c.id) from promotions.coupon_codes c where organization_id=${organizationId}),
+    (select jsonb_agg(to_jsonb(t) order by promotion_revision_id,product_id) from promotions.promotion_target_products t where organization_id=${organizationId}),
+    (select jsonb_agg(to_jsonb(t) order by promotion_revision_id,variant_id) from promotions.promotion_target_variants t where organization_id=${organizationId}),
+    (select jsonb_agg(to_jsonb(t) order by promotion_revision_id,category_id) from promotions.promotion_target_categories t where organization_id=${organizationId})
+  )::text) revision`.execute(db);
+  return result.rows[0]!.revision;
 }
