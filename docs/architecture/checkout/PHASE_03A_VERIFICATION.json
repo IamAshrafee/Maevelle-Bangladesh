@@ -1,0 +1,242 @@
+{
+  "date": "2026-11-04",
+  "overallStatus": "PARTIAL",
+  "branch": "main",
+  "initialDirtyWorkPreserved": true,
+  "committed": false,
+  "pushed": false,
+  "deployed": false,
+  "persistentMigration": false,
+  "productionPurchasesEnabled": false,
+  "productionDraftsEnabled": false,
+  "postgres": {
+    "version": "18.3",
+    "host": "127.0.0.1",
+    "port": 55444,
+    "role": "checkout_fixture",
+    "baseDatabaseMigrated": false,
+    "mutatedTargets": "newly created random maevelle_cart01a_* databases only",
+    "clusterDirectory": "C:\\Users\\devas\\AppData\\Local\\Temp\\maevelle-checkout03a-56192ed4cb544915a8bf5c3fa359c215",
+    "newMigration": "3221_checkout_quotes",
+    "randomTestDatabasesDropped": true,
+    "clusterStopped": true
+  },
+  "verification": {
+    "focusedTests": {
+      "passed": 211,
+      "files": 17,
+      "seconds": 91.44,
+      "command": "node scripts/checkout-phase03a-verification.mjs"
+    },
+    "backendTypecheck": "PASS",
+    "backendBuild": "PASS",
+    "architecture": {
+      "status": "PASS",
+      "workspaces": 13
+    },
+    "focusedLint": "PASS",
+    "focusedFormat": "PASS",
+    "migrationHistoryCheck": {
+      "status": "FAIL",
+      "reason": "Pre-existing CRLF byte differences in baseline manifest and 18 historical migrations",
+      "historicalNormalizedContentMismatches": 0,
+      "historicalFilesOrBaselineEdited": false
+    },
+    "migrationPolicyTests": {
+      "passed": 3,
+      "failed": 1,
+      "reason": "Same CRLF baseline fixture failure"
+    },
+    "freshMigration": "PASS",
+    "populated3220Upgrade": "PASS",
+    "physicalCommitConnectionLoss": "NOT VERIFIED",
+    "productionIngressRolesAndLogs": "NOT VERIFIED",
+    "browserHumanAccessibility": "NOT VERIFIED",
+    "finalFocusedRecheck": {
+      "passed": 37,
+      "files": 2,
+      "seconds": 21.08,
+      "command": "vitest run packages/database/src/checkout/quotes.test.ts apps/api/src/checkout-delivery.test.ts",
+      "reason": "organization revision provenance and direct quote revocation coverage"
+    }
+  },
+  "performance": {
+    "measurement": "eight local warmed discounted Cart samples per size, domain call including commit; p95 approximation is sample maximum",
+    "countExclusions": [
+      "wire BEGIN/COMMIT",
+      "server-internal trigger SQL",
+      "API preliminary ownership/cookie-slot lookup"
+    ],
+    "results": [
+      {
+        "lines": 1,
+        "queries": [
+          37,
+          39,
+          39,
+          39,
+          39,
+          39,
+          39,
+          39
+        ],
+        "p50": 13.867300000000796,
+        "p95": 15.542699999999968
+      },
+      {
+        "lines": 5,
+        "queries": [
+          37,
+          39,
+          39,
+          39,
+          39,
+          39,
+          39,
+          39
+        ],
+        "p50": 13.597700000000259,
+        "p95": 16.30199999999968
+      },
+      {
+        "lines": 20,
+        "queries": [
+          37,
+          39,
+          39,
+          39,
+          39,
+          39,
+          39,
+          39
+        ],
+        "p50": 14.891899999999623,
+        "p95": 17.0033999999996
+      },
+      {
+        "lines": 100,
+        "queries": [
+          37,
+          39,
+          39,
+          39,
+          39,
+          39,
+          39,
+          39
+        ],
+        "p50": 37.66270000000077,
+        "p95": 51.75009999999929
+      }
+    ],
+    "lookupPlan": [
+      {
+        "QUERY PLAN": [
+          {
+            "Plan": {
+              "Node Type": "Limit",
+              "Parallel Aware": false,
+              "Async Capable": false,
+              "Startup Cost": 0.14,
+              "Total Cost": 8.16,
+              "Plan Rows": 1,
+              "Plan Width": 416,
+              "Actual Startup Time": 0.003,
+              "Actual Total Time": 0.004,
+              "Actual Rows": 0,
+              "Actual Loops": 1,
+              "Disabled": false,
+              "Shared Hit Blocks": 1,
+              "Shared Read Blocks": 0,
+              "Shared Dirtied Blocks": 0,
+              "Shared Written Blocks": 0,
+              "Local Hit Blocks": 0,
+              "Local Read Blocks": 0,
+              "Local Dirtied Blocks": 0,
+              "Local Written Blocks": 0,
+              "Temp Read Blocks": 0,
+              "Temp Written Blocks": 0,
+              "Plans": [
+                {
+                  "Node Type": "Index Scan",
+                  "Parent Relationship": "Outer",
+                  "Parallel Aware": false,
+                  "Async Capable": false,
+                  "Scan Direction": "Forward",
+                  "Index Name": "checkout_quotes_draft",
+                  "Relation Name": "checkout_quotes",
+                  "Alias": "checkout_quotes",
+                  "Startup Cost": 0.14,
+                  "Total Cost": 8.16,
+                  "Plan Rows": 1,
+                  "Plan Width": 416,
+                  "Actual Startup Time": 0.002,
+                  "Actual Total Time": 0.003,
+                  "Actual Rows": 0,
+                  "Actual Loops": 1,
+                  "Disabled": false,
+                  "Index Cond": "((organization_id = '01a1a74b-e4f3-7a59-b331-2655a0be889d'::uuid) AND (draft_id = '8cc3155c-b40d-4f57-82a5-2c698dcbcdf8'::uuid))",
+                  "Rows Removed by Index Recheck": 0,
+                  "Index Searches": 1,
+                  "Shared Hit Blocks": 1,
+                  "Shared Read Blocks": 0,
+                  "Shared Dirtied Blocks": 0,
+                  "Shared Written Blocks": 0,
+                  "Local Hit Blocks": 0,
+                  "Local Read Blocks": 0,
+                  "Local Dirtied Blocks": 0,
+                  "Local Written Blocks": 0,
+                  "Temp Read Blocks": 0,
+                  "Temp Written Blocks": 0
+                }
+              ]
+            },
+            "Planning": {
+              "Shared Hit Blocks": 4,
+              "Shared Read Blocks": 0,
+              "Shared Dirtied Blocks": 0,
+              "Shared Written Blocks": 0,
+              "Local Hit Blocks": 0,
+              "Local Read Blocks": 0,
+              "Local Dirtied Blocks": 0,
+              "Local Written Blocks": 0,
+              "Temp Read Blocks": 0,
+              "Temp Written Blocks": 0
+            },
+            "Planning Time": 0.115,
+            "Triggers": [],
+            "Execution Time": 0.012
+          }
+        ]
+      }
+    ],
+    "representativeLoadAndContention": "NOT VERIFIED"
+  },
+  "negativeSideEffects": {
+    "quoteOnlyAssertions": {
+      "orders": 0,
+      "reservations": 0,
+      "paymentObligations": 0,
+      "promotionUsage": 0,
+      "convertedCarts": 0,
+      "financeTransactions": 0,
+      "purchaseEvents": 0
+    },
+    "note": "Separate existing Orders/Payments/Inventory regressions deliberately create synthetic business facts."
+  },
+  "policyBlockers": [
+    "TAX_POLICY_UNRESOLVED",
+    "PAYMENT_POLICY_UNRESOLVED",
+    "COURIER_COMPATIBILITY_UNVERIFIED"
+  ],
+  "inheritedPhase01B": "PARTIAL",
+  "inheritedPhase02B": "PARTIAL",
+  "handoff": "PHASE_03B_HANDOFF.md",
+  "initialHead": "2fd662eb2b515d0cda250b11b0e60a5883249901",
+  "finalHead": "504e53b71ba2c05d1c174d435d69846721b05242",
+  "externalCommitDuringRun": {
+    "sha": "504e53b71ba2c05d1c174d435d69846721b05242",
+    "scope": "preserved Phase 02B frontend work only",
+    "agentCreated": false
+  }
+}

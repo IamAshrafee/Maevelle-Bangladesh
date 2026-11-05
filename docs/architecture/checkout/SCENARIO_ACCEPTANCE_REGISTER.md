@@ -79,3 +79,15 @@ Phase acceptance must include a real backend for B phases. Unit mocks do not est
 ## Phase 02A backend evidence (2026-11-04)
 
 [Report and scoped acceptance](PHASE_02A_IMPLEMENTATION_REPORT.md#9-scenario-acceptance): S05/S06 delivery validation and S35 saved-address snapshot/ownership are PASS for implemented backend scope on isolated PostgreSQL 18. S45 server replay/rollback/revision/revocation portions pass; full browser interruption/storage/identity display remains PARTIAL. S44 frontend/device/AT remains NOT VERIFIED in 02A. These do not close Phase 01B or later purchase/provider scenarios. [API handoff](PHASE_02A_BACKEND_CONTRACT.md) defines exact conflicts and explicit re-selection behavior.
+
+## Phase 03A Scenario status — 2026-11-04
+
+See [the Phase 03A report](PHASE_03A_IMPLEMENTATION_REPORT.md) for exact real-PostgreSQL/API evidence, limitations and per-requirement status. Overall PARTIAL; 211 focused tests pass. Quote ownership, exact components, immutable facts, snapshot coherence including insertion phantoms, source/address/configuration review, receipt recovery and zero purchase side effects are locally verified. S07/S14/S15/S50 remain PARTIAL across their future placement/payment scope; S08 quotation checks pass. Tax/fees/payable and provider compatibility remain unresolved. Phase 01B/02B stay PARTIAL; purchases/production drafts stay disabled. Physical COMMIT wire loss, complete quote revocation/fault permutations, representative load and production ingress/role/log/privacy gates remain unverified.
+
+## Phase 03B local evidence
+
+See the [25-outcome frontend register](PHASE_03B_IMPLEMENTATION_REPORT.md#acceptance-register). Component review is PARTIAL overall: four source/owner browser paths, exact money, coupon/change review, stock/address/configuration invalidation and accepted lost-response retry passed locally. S07/S14/S15/S50 remain PARTIAL beyond quotation; S08 retains quotation-only evidence. S44 human AT/native zoom/device breadth, full browser timing/fault and production acceptance remain open. No purchase scenario is promoted.
+
+## Phase 04A payment backend evidence
+
+See [the 04A implementation report and acceptance register](PHASE_04A_IMPLEMENTATION_REPORT.md) and [verification](PHASE_04A_VERIFICATION.json). Independent receipt evidence, permanent reference fences, actual-money Finance conservation, partial/excess/late liabilities, reviewed corrections/refunds and approved-policy expiry are locally exercised. S19–34 remain PARTIAL across public activation, secure committed-Order recovery, legacy policy remediation and real provider/courier operations; no purchase scenario is promoted. Earlier phase, migration byte-history, deployed IAM/ingress/retention and human/browser gates remain open.

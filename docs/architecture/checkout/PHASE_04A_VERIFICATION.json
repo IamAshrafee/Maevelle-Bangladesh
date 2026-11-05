@@ -1,0 +1,260 @@
+{
+  "verifiedAt": "2026-11-04T20:46:52.989Z",
+  "target": {
+    "current_database": "maevelle_cart01a_dfcc4c5572d643de8e867f20f87c2d34",
+    "current_user": "checkout_fixture",
+    "inet_server_addr": "127.0.0.1",
+    "inet_server_port": 55444,
+    "version": "PostgreSQL 18.3 on x86_64-windows, compiled by msvc-19.44.35223, 64-bit"
+  },
+  "migrations": [
+    "0000_extensions_and_database_baseline",
+    "0001_platform_core",
+    "0002_audit_foundation",
+    "0003_platform_operations",
+    "0004_iam_and_authentication",
+    "0005_iam_user_normalization",
+    "0200_catalog",
+    "0300_sizing",
+    "0301_sizing_category_defaults",
+    "0400_media",
+    "0500_warehouse",
+    "0600_inventory",
+    "0601_inventory_stocktake_session_timestamp",
+    "0650_geography",
+    "0700_customers",
+    "0800_pricing",
+    "0900_promotions",
+    "1000_cart",
+    "1001_geography_source_code_nulls",
+    "1100_orders_checkout_cod",
+    "1200_payments",
+    "1201_checkout_payment_default",
+    "1202_refund_allocations",
+    "1300_fulfillment",
+    "1400_delivery",
+    "1500_procurement",
+    "1600_inbound_shipment",
+    "1700_receiving",
+    "1800_landed_cost",
+    "1900_costing",
+    "1901_costing_adjustment_effects",
+    "2000_returns",
+    "2100_return_cost_recovery",
+    "2101_return_cost_layer_provenance",
+    "2200_finance",
+    "2300_reviews",
+    "2400_notifications_integrations",
+    "2500_analytics",
+    "2600_admin_operations",
+    "2601_notifications_integrations_operations",
+    "2602_analytics_reporting_operations",
+    "2603_admin_operations_complete",
+    "2700_storefront_search",
+    "2701_operational_controls",
+    "2800_supply_operations",
+    "2900_asset_management",
+    "3000_centralized_runtime_settings",
+    "3100_unit_traceability",
+    "3200_messaging_core",
+    "3201_messaging_reconciliation",
+    "3202_messaging_performance",
+    "3203_media_purge_recovery",
+    "3204_media_purge_reference_indexes",
+    "3205_external_media_imports",
+    "3206_media_rendition_repair",
+    "3207_product_recommendations",
+    "3208_wishlist_sharing",
+    "3209_account_wishlist",
+    "3210_wishlist_share_lifecycle",
+    "3211_wishlist_share_receipt_tombstones",
+    "3212_wishlist_analytics",
+    "3213_cart_foundation",
+    "3214_cart_credential_retirement",
+    "3215_cart_integrity",
+    "3216_account_cart",
+    "3217_cart_analytics",
+    "3218_cart_observations",
+    "3219_checkout_foundation",
+    "3220_checkout_delivery",
+    "3221_checkout_quotes",
+    "3222_manual_payment_integrity"
+  ],
+  "success": true,
+  "totalTests": 289,
+  "passedTests": 289,
+  "failedTests": 0,
+  "files": [
+    {
+      "file": "apps/api/src/checkout-delivery.test.ts",
+      "status": "passed",
+      "passed": 22,
+      "failed": 0
+    },
+    {
+      "file": "apps/api/src/checkout-foundation.test.ts",
+      "status": "passed",
+      "passed": 14,
+      "failed": 0
+    },
+    {
+      "file": "apps/api/src/payment-operations.test.ts",
+      "status": "passed",
+      "passed": 4,
+      "failed": 0
+    },
+    {
+      "file": "packages/database/src/cart-foundation.test.ts",
+      "status": "passed",
+      "passed": 22,
+      "failed": 0
+    },
+    {
+      "file": "packages/database/src/cart-reassessment.test.ts",
+      "status": "passed",
+      "passed": 10,
+      "failed": 0
+    },
+    {
+      "file": "packages/database/src/finance.test.ts",
+      "status": "passed",
+      "passed": 11,
+      "failed": 0
+    },
+    {
+      "file": "packages/database/src/fulfillment-delivery.test.ts",
+      "status": "passed",
+      "passed": 11,
+      "failed": 0
+    },
+    {
+      "file": "packages/database/src/inventory.test.ts",
+      "status": "passed",
+      "passed": 20,
+      "failed": 0
+    },
+    {
+      "file": "packages/database/src/notifications.test.ts",
+      "status": "passed",
+      "passed": 19,
+      "failed": 0
+    },
+    {
+      "file": "packages/database/src/orders.test.ts",
+      "status": "passed",
+      "passed": 24,
+      "failed": 0
+    },
+    {
+      "file": "packages/database/src/payments.test.ts",
+      "status": "passed",
+      "passed": 13,
+      "failed": 0
+    },
+    {
+      "file": "apps/api/src/routes/pricing.test.ts",
+      "status": "passed",
+      "passed": 4,
+      "failed": 0
+    },
+    {
+      "file": "apps/api/src/routes/promotions.test.ts",
+      "status": "passed",
+      "passed": 5,
+      "failed": 0
+    },
+    {
+      "file": "apps/storefront/features/checkout/availability.test.ts",
+      "status": "passed",
+      "passed": 4,
+      "failed": 0
+    },
+    {
+      "file": "apps/storefront/features/checkout/delivery-api.test.tsx",
+      "status": "passed",
+      "passed": 6,
+      "failed": 0
+    },
+    {
+      "file": "apps/storefront/features/checkout/delivery-workflow.test.ts",
+      "status": "passed",
+      "passed": 19,
+      "failed": 0
+    },
+    {
+      "file": "apps/storefront/features/checkout/foundation-controller.test.ts",
+      "status": "passed",
+      "passed": 24,
+      "failed": 0
+    },
+    {
+      "file": "apps/storefront/features/checkout/quote-api.test.tsx",
+      "status": "passed",
+      "passed": 9,
+      "failed": 0
+    },
+    {
+      "file": "apps/storefront/features/checkout/quote-workflow.test.ts",
+      "status": "passed",
+      "passed": 8,
+      "failed": 0
+    },
+    {
+      "file": "packages/database/src/checkout/delivery-migration.test.ts",
+      "status": "passed",
+      "passed": 6,
+      "failed": 0
+    },
+    {
+      "file": "packages/database/src/checkout/delivery-performance.test.ts",
+      "status": "passed",
+      "passed": 1,
+      "failed": 0
+    },
+    {
+      "file": "packages/database/src/checkout/foundation.test.ts",
+      "status": "passed",
+      "passed": 2,
+      "failed": 0
+    },
+    {
+      "file": "packages/database/src/checkout/quotes.test.ts",
+      "status": "passed",
+      "passed": 15,
+      "failed": 0
+    },
+    {
+      "file": "packages/database/src/payments/manual-payment.test.ts",
+      "status": "passed",
+      "passed": 16,
+      "failed": 0
+    }
+  ],
+  "purchasesEnabled": false,
+  "publicPaymentCollectionEnabled": false,
+  "realProviderApproval": false,
+  "followup": {
+    "reason": "Correct empty out-of-range queue totals after the integrated run",
+    "tests": 20,
+    "files": 2,
+    "passed": true,
+    "durationSeconds": 17.32
+  },
+  "checks": {
+    "backendBuild": "PASS",
+    "focusedTypechecks": "PASS",
+    "focusedEslint": "PASS",
+    "focusedPrettier": "PASS",
+    "architectureWorkspaces": 13,
+    "diffWhitespace": "PASS",
+    "historicalMigrationBytes": "FAIL_INHERITED_UNCHANGED"
+  },
+  "head": "504e53b71ba2c05d1c174d435d69846721b05242",
+  "branch": "main",
+  "syntheticPaymentTiming": {
+    "receipts": 20,
+    "p95Ms": 10.85,
+    "maxMs": 31.33,
+    "representativeProductionLoad": false
+  }
+}

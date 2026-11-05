@@ -1,0 +1,95 @@
+{
+  "phase": "03B",
+  "status": "PARTIAL",
+  "branch": "main",
+  "head": "504e53b71ba2c05d1c174d435d69846721b05242",
+  "tests": {
+    "files": 22,
+    "passed": 237,
+    "seconds": 52.93,
+    "command": "node scripts/checkout-phase03b-verification.mjs"
+  },
+  "checks": {
+    "storefront_typecheck": "PASS",
+    "storefront_build_preview_false": "PASS",
+    "changed_files_eslint": "PASS",
+    "architecture": "PASS",
+    "diff_check": "PASS",
+    "historical_migration_byte_check": "FAIL - inherited manifest and 18 CRLF byte mismatches"
+  },
+  "browser": {
+    "sources": [
+      "guest BUY_NOW",
+      "guest CART",
+      "account BUY_NOW",
+      "account CART"
+    ],
+    "viewport_document_widths": [
+      [
+        320,
+        320
+      ],
+      [
+        390,
+        375
+      ],
+      [
+        768,
+        753
+      ],
+      [
+        844,
+        829
+      ],
+      [
+        1024,
+        1009
+      ],
+      [
+        1440,
+        1425
+      ]
+    ],
+    "automatic_quote_reload": "PASS after initial read race fix",
+    "accepted_lost_response_replay": "same quote count 3 and root 5",
+    "account_a_to_b": "no prior account quote or address rendered"
+  },
+  "final_fixture": {
+    "drafts": 4,
+    "quotes": 10,
+    "acknowledgements": 5,
+    "orders": 0,
+    "reservations": 0,
+    "obligations": 0,
+    "redemptions": 0,
+    "converted": 0,
+    "purchases": 0,
+    "confirmed_payments": 0,
+    "finance_postings": 0,
+    "purchase_events": 0
+  },
+  "artifact_directory": "C:/Users/devas/AppData/Local/Temp/maevelle-checkout03b-9b00dd1e2aaf461ebda98900c8cbe879/artifacts",
+  "database": "PostgreSQL 18.3 dedicated disposable loopback 55445, random databases only; base not migrated",
+  "inherited_status": {
+    "01B": "PARTIAL",
+    "02B": "PARTIAL",
+    "03A": "PARTIAL"
+  },
+  "not_performed": [
+    "commit",
+    "push",
+    "deploy",
+    "persistent migration",
+    "provider operation",
+    "purchase activation",
+    "native zoom/human AT/physical device acceptance",
+    "complete browser race and fault matrix",
+    "representative 100-line browser load",
+    "production runtime verification"
+  ],
+  "cleanup": "API stopped; random fixture databases absent before dedicated cluster shutdown; own Next development processes stopped; logs retained",
+  "screenshots": [
+    "C:/Users/devas/.codex/visualizations/2026/11/04/01a1a730-9cf0-7203-a2dc-8daffea0fb01/checkout-03b-mobile.jpg",
+    "C:/Users/devas/.codex/visualizations/2026/11/04/01a1a730-9cf0-7203-a2dc-8daffea0fb01/checkout-03b-desktop.jpg"
+  ]
+}

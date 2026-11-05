@@ -10,6 +10,8 @@ Phase 02A backend has locally verified evidence in its [verification record](PHA
 
 Phase 02B delivery frontend is implemented with **PARTIAL** acceptance: [implementation and acceptance report](PHASE_02B_IMPLEMENTATION_REPORT.md), [verification record](PHASE_02B_VERIFICATION.json), and [Phase 03A authoritative handoff](PHASE_03A_HANDOFF.md). 200 focused tests and listed synthetic browser journeys pass; native zoom, human AT/device breadth, exact delayed-response browser timing and production-runtime gates remain open. Phase 01B stays PARTIAL. Purchases/production drafts stay disabled; immutable quotes and placement are not implemented. No commit, push, deployment or persistent migration occurred in 02B.
 
+Phase 03A component-quote backend is implemented with **PARTIAL** overall acceptance: [implementation report](PHASE_03A_IMPLEMENTATION_REPORT.md), [verification record](PHASE_03A_VERIFICATION.json), and [exact Phase 03B contract](PHASE_03B_HANDOFF.md). Both sources share authoritative merchandise evaluation, immutable revision-bound components and snapshot-consistent reads. Tax/payment fees/final payable and courier compatibility remain unresolved; purchases and production drafts stay disabled. Phase 01B/02B remain PARTIAL.
+
 ## Reading order and authority
 
 | Document | Authoritative subject |
@@ -29,3 +31,7 @@ Phase 02B delivery frontend is implemented with **PARTIAL** acceptance: [impleme
 Evidence labels throughout: **V** = verified by source inspection at this HEAD; **E** = external guidance; **R** = recommendation; **B** = business assumption awaiting owner decision; **O** = open verification/decision. Source inspection proves code exists, not that it is deployed, reachable through every ingress, or correct under real concurrency. Existing tests are evidence of intended coverage until run and observed.
 
 Dedicated Checkout scope supersedes the Cart project's prohibition on implementing Checkout only after a separate implementation assignment. This Phase 00 assignment permits documentation only. Existing Cart, Wishlist and Product Completion release gates remain open independently.
+
+Phase 03B commercial component review frontend is implemented with **PARTIAL** acceptance: [report and 25-outcome register](PHASE_03B_IMPLEMENTATION_REPORT.md), [verification](PHASE_03B_VERIFICATION.json), [04A backend handoff](PHASE_04A_HANDOFF.md). All four guest/account source paths passed local browser quotation; 237 focused tests passed. Human/device/browser fault breadth remains open. Earlier PARTIAL statuses and all purchase/production gates remain unchanged.
+
+Phase 04A payment backend is implemented with **PARTIAL** acceptance and **BLOCKED** public financial activation. See [report and 27-outcome register](PHASE_04A_IMPLEMENTATION_REPORT.md), [isolated verification](PHASE_04A_VERIFICATION.json), and [exact Phase 04B handoff](PHASE_04B_HANDOFF.md). Claims, independent receipts, permanent reference fences, liabilities, atomic Finance posting and bounded approved-policy review are distinct. No purchase, receiving account or public payment collection was activated.

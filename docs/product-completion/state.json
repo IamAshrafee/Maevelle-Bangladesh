@@ -2,13 +2,13 @@
   "program": "Maevelle Product Completion V2",
   "version": 2,
   "active_area": "storefront-checkout",
-  "active_substage": "CHECKOUT_PHASE_02B_DELIVERY_FRONTEND",
+  "active_substage": "CHECKOUT_PHASE_04A_MANUAL_PAYMENT_BACKEND",
   "active_status": "IN_PROGRESS",
   "baseline_commit": "d2cce2c",
   "last_checkpoint_commit": "c3413e3",
   "last_verified_commit": "16f648a",
-  "last_completed_action": "Implemented Phase 02B delivery/contact and explicit saved-address frontend; 200 focused tests and listed isolated browser journeys pass. Acceptance PARTIAL; purchases disabled and Phase 01B PARTIAL preserved.",
-  "next_action": "Review Phase 02B acceptance and Phase 03A handoff; close native zoom, human AT/device, exact delayed-response/background browser and production-runtime gates when authorized. Quotes/placement remain unimplemented; preserve all Phase 01B and real coverage/provider gates.",
+  "last_completed_action": "Implemented Phase 04A independent receipt/destination/policy/Finance/refund/expiry backend; 289 tests in 24 files and final 20-test pagination/API follow-up passed on disposable PostgreSQL 18.3. Overall PARTIAL, public financial activation BLOCKED; prior phase gates preserved.",
+  "next_action": "Use Phase 04B handoff for gated payment/reviewer interfaces. Preserve disabled purchases/production drafts. Obtain provider/tax/legal/coverage/retention approvals and resolve legacy null review policies before activation; do not bypass Phase 05 committed-Order authority.",
   "interrupted": false,
   "blocked_by": [
     "SIZING_OWNER_RESPONSIVE_AND_ACCESSIBILITY_ACCEPTANCE_PENDING",
@@ -28,7 +28,15 @@
     "CHECKOUT_PHASE01B_BROWSER_FAILURE_RACE_AND_ACCESSIBILITY_ACCEPTANCE_OPEN",
     "CHECKOUT_AUTHORIZED_HISTORICAL_RECEIPT_AND_PRODUCTION_RUNTIME_UNVERIFIED",
     "CHECKOUT_REAL_DELIVERY_COVERAGE_AND_COURIER_ACCEPTANCE_UNVERIFIED",
-    "CHECKOUT_PHASE02B_HUMAN_AT_ZOOM_DEVICE_AND_EXACT_BROWSER_RACE_GATES_OPEN"
+    "CHECKOUT_PHASE02B_HUMAN_AT_ZOOM_DEVICE_AND_EXACT_BROWSER_RACE_GATES_OPEN",
+    "CHECKOUT_FINAL_TAX_FEE_ROUNDING_AND_PAYMENT_POLICY_UNRESOLVED",
+    "CHECKOUT_PHASE03A_REPRESENTATIVE_LOAD_AND_FULL_FAULT_MATRIX_OPEN",
+    "CHECKOUT_HISTORICAL_MIGRATION_CRLF_BYTE_CHECK_FAILS",
+    "CHECKOUT_PHASE03B_HUMAN_DEVICE_BROWSER_FAULT_AND_VOLUME_ACCEPTANCE_OPEN",
+    "CHECKOUT_LIVE_RECEIVING_DESTINATION_ACTIVATION_DISABLED",
+    "CHECKOUT_NAGAD_ACCOUNT_CATEGORY_AND_WORKFLOW_UNVERIFIED",
+    "CHECKOUT_LEGACY_NULL_PAYMENT_REVIEW_POLICY_REMEDIATION_PENDING",
+    "CHECKOUT_FINANCIAL_PROVIDER_LEGAL_AND_OPERATING_APPROVAL_PENDING"
   ],
   "owner_review_status": "PENDING",
   "verified_complete_areas": [
