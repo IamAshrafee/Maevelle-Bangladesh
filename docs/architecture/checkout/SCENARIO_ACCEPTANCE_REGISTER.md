@@ -91,3 +91,15 @@ See the [25-outcome frontend register](PHASE_03B_IMPLEMENTATION_REPORT.md#accept
 ## Phase 04A payment backend evidence
 
 See [the 04A implementation report and acceptance register](PHASE_04A_IMPLEMENTATION_REPORT.md) and [verification](PHASE_04A_VERIFICATION.json). Independent receipt evidence, permanent reference fences, actual-money Finance conservation, partial/excess/late liabilities, reviewed corrections/refunds and approved-policy expiry are locally exercised. S19–34 remain PARTIAL across public activation, secure committed-Order recovery, legacy policy remediation and real provider/courier operations; no purchase scenario is promoted. Earlier phase, migration byte-history, deployed IAM/ingress/retention and human/browser gates remain open.
+
+## Phase 04B frontend evidence
+
+See [the 30-outcome register](PHASE_04B_IMPLEMENTATION_REPORT.md#acceptance-register) and [browser evidence](PHASE_04B_BROWSER_VERIFICATION.json). Actual Admin synthetic journeys cover independent configuration approval, claim pagination, receipt verification with accepted response loss/exact replay, excess refund through unknown outcome and current-liability reconciliation. 306 integrated tests pass, with separate Shopper Auth/Wishlist and focused follow-ups. S19–34 remain PARTIAL for complete browser/state/race coverage and public authority/provider operations. S44 has five-width/keyboard smoke evidence, with human AT/device/native zoom and owner acceptance open. No Checkout Order, reservation, redemption, Cart conversion or purchase event was created. Earlier PARTIAL gates and migration byte FAIL remain unchanged.
+
+## Phase 05A backend evidence
+
+See [the 35-outcome acceptance register](PHASE_05A_IMPLEMENTATION_REPORT.md#acceptance-register). The isolated backend commits both sources, conserves last-unit stock/coupon capacity and recovers exact intents under current authority. Overall PARTIAL; no real purchase, public manual instructions or claim path is enabled. Earlier outcomes and the historical migration byte failure carry forward.
+
+## Phase 05B Storefront evidence
+
+See [the 30-outcome acceptance register](PHASE_05B_IMPLEMENTATION_REPORT.md#acceptance-register). Both purchase sources and both ownership types exercise the actual blocked payment check in Chromium with no purchase effects. The separate contract tests cover confirmed and uncertain responses; committed browser and provider journeys remain unverified. Overall PARTIAL, activation BLOCKED. Earlier outcomes and migration byte failure are unchanged.

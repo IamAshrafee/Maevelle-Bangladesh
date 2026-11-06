@@ -58,7 +58,7 @@ function state(value: CheckoutDeliveryStateDto, id: string) {
     !value ||
     value.draftId !== id ||
     !revision(value.revision) ||
-    !['ACTIVE', 'ABANDONED', 'EXPIRED'].includes(value.draftStatus) ||
+    !['ACTIVE', 'ABANDONED', 'EXPIRED', 'COMMITTED'].includes(value.draftStatus) ||
     !Number.isFinite(Date.parse(value.expiresAt)) ||
     value.purchaseAvailable !== false ||
     value.quoteAvailable !== false ||

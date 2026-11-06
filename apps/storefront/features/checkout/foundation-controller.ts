@@ -1,6 +1,11 @@
 import type { createQuoteWorkflow } from './quote-workflow';
 import type { quoteApi } from './quote-api';
 import type { QuoteScope } from './quote-types';
+import type { createPlacementWorkflow } from './placement-workflow';
+import type { placementApi } from './placement-api';
+import type { CheckoutPlacementMethod } from '@maevelle/contracts';
+import { EMPTY_PLACEMENT, placementLocked } from './placement-types';
+import { usableTerms } from './placement-eligibility';
 import { StorefrontClientApiError } from '@/lib/api/client/http';
 import { createDeliveryWorkflow, type DeliveryScope } from './delivery-workflow';
 import type { deliveryApi } from './delivery-api';
@@ -24,6 +29,7 @@ interface Dependencies {
   api: typeof reviewApi;
   deliveryApi?: typeof deliveryApi;
   quoteApi?: typeof quoteApi;
+  placementApi?: typeof placementApi;
   journal: ReviewJournal;
   resolveOwner(signal: AbortSignal): Promise<string | null>;
   uuid?: () => string;
@@ -39,10 +45,14 @@ export function createReviewController(deps: Dependencies) {
     part: string | undefined,
     held = false;
   let running: Promise<unknown> | null = null;
-  let runningKind: 'source' | 'delivery' | 'quote' = 'source';
+  type TaskKind = 'source' | 'delivery' | 'quote' | 'placement';
+  let runningKind: TaskKind = 'source';
   const listeners = new Set<() => void>();
   function publish(patch: Partial<ReviewSnapshot>) {
     state = { ...state, ...patch, persisted: deps.journal.healthy() };
+    const terms = state.placement.terms;
+    if (terms && !usableTerms(state, terms, now()))
+      state = { ...state, placement: { ...state.placement, terms: null } };
     listeners.forEach((fn) => fn());
   }
   function invalidate(hold = false) {
@@ -99,9 +109,19 @@ export function createReviewController(deps: Dependencies) {
       savedAt: now(),
     });
     deps.journal.finish(current);
+    const attempted = deps.journal
+      .references(current)
+      .find((ref) => ref.id === value.id)?.placementAttempted;
     publish({
       ...(state.draft?.id !== value.id
-        ? { delivery: EMPTY_REVIEW.delivery, quote: EMPTY_REVIEW.quote, deliveryEditing: false }
+        ? {
+            delivery: EMPTY_REVIEW.delivery,
+            quote: EMPTY_REVIEW.quote,
+            placement: attempted
+              ? { ...EMPTY_PLACEMENT, committedConflict: true }
+              : EMPTY_PLACEMENT,
+            deliveryEditing: false,
+          }
         : { quote: { ...state.quote, observedRevision: null } }),
       draft: value,
       handles,
@@ -125,7 +145,7 @@ export function createReviewController(deps: Dependencies) {
   function task<T>(
     run: (epoch: number) => Promise<T>,
     report = true,
-    kind: 'source' | 'delivery' | 'quote' = 'source',
+    kind: TaskKind = 'source',
   ): Promise<T> {
     if (running)
       return runningKind === kind
@@ -154,6 +174,14 @@ export function createReviewController(deps: Dependencies) {
     publish({
       suspended: true,
       phase: 'checking',
+      placement: {
+        ...state.placement,
+        phase: state.placement.pending ? 'unknown' : 'idle',
+        terms: null,
+        receipt: null,
+        status: null,
+        committedConflict: state.placement.committedConflict || !!state.placement.receipt,
+      },
       quote: {
         ...state.quote,
         observedRevision: null,
@@ -212,13 +240,14 @@ export function createReviewController(deps: Dependencies) {
     }, false);
   }
   async function restore(epoch: number, selectedId?: string) {
-    if (state.delivery.pending || state.quote.pending)
+    if (state.delivery.pending || state.quote.pending || state.placement.pending)
       throw new Error('Recover the pending delivery request first.');
     publish({
       phase: 'checking',
       draft: null,
       delivery: EMPTY_REVIEW.delivery,
       quote: EMPTY_REVIEW.quote,
+      placement: EMPTY_PLACEMENT,
       deliveryEditing: false,
       issue: null,
     });
@@ -261,7 +290,7 @@ export function createReviewController(deps: Dependencies) {
     });
   }
   function runPrivate<T>(
-    section: 'delivery' | 'quote',
+    section: Exclude<TaskKind, 'source'>,
     action: (scope: DeliveryScope & QuoteScope) => Promise<T>,
     wait = false,
   ): Promise<T> {
@@ -275,11 +304,52 @@ export function createReviewController(deps: Dependencies) {
         });
     }
     if (running) return Promise.reject(new Error('A checkout request is already running.'));
-    if (section === 'quote' ? state.delivery.pending : state.quote.pending)
+    if (section !== 'placement' && placementLocked(state.placement))
+      return Promise.reject(new Error('Check your order request first.'));
+    if (
+      (section !== 'delivery' && state.delivery.pending) ||
+      (section !== 'quote' && state.quote.pending)
+    )
       return Promise.reject(new Error('Recover the other pending private request first.'));
     return task(
       async (epoch) => {
-        const current = await identify(epoch);
+        let current: string;
+        try {
+          current = await identify(epoch);
+        } catch (error) {
+          if (section === 'placement' && epoch === generation && !held) {
+            const p = state.placement;
+            const denied =
+              error instanceof StorefrontClientApiError && [401, 403].includes(error.status);
+            if (denied) invalidate();
+            const message = denied
+              ? 'Secure order access is unavailable to this session. If you placed an order, it may still exist.'
+              : 'Your session could not be checked. Reconnect and check your order again.';
+            publish({
+              placement: {
+                ...state.placement,
+                terms: null,
+                receipt: null,
+                status: null,
+                committedConflict: !denied && (p.committedConflict || !!p.receipt),
+                phase: state.placement.pending ? 'unknown' : 'rejected',
+                issue: {
+                  code: denied ? 'SESSION_EXPIRED' : 'UNAVAILABLE',
+                  message,
+                  retryable: !denied,
+                  retryAt: now(),
+                },
+              },
+              ...(denied
+                ? {
+                    phase: 'error' as const,
+                    issue: { code: 'SESSION_EXPIRED', message, retryable: false, retryAt: now() },
+                  }
+                : {}),
+            });
+          }
+          throw error;
+        }
         if (!state.draft || state.pending) throw new Error('Restore the current review first.');
         const draft = state.draft;
         const ref = deps.journal.references(current).find((r) => r.id === draft.id);
@@ -299,7 +369,16 @@ export function createReviewController(deps: Dependencies) {
             invalidate();
             publish({
               phase: 'error',
-              issue: reviewIssue(new Error('Your session changed.'), now()),
+              issue:
+                section === 'placement'
+                  ? {
+                      code: 'SESSION_EXPIRED',
+                      message:
+                        'Secure order access is unavailable to this session. If you placed an order, it may still exist.',
+                      retryable: false,
+                      retryAt: now(),
+                    }
+                  : reviewIssue(new Error('Your session changed.'), now()),
             });
           },
           accept: (value) => {
@@ -379,6 +458,40 @@ export function createReviewController(deps: Dependencies) {
     reviewConflict: () => quoteAction((q) => q.reviewConflict()),
     previous: () => quoteAction((q) => q.previous()),
   };
+  let placementWorkflow: ReturnType<typeof createPlacementWorkflow> | undefined;
+  async function placementAction<T>(
+    action: (workflow: ReturnType<typeof createPlacementWorkflow>) => Promise<T>,
+  ) {
+    const epoch = generation;
+    const { createPlacementWorkflow } = await import('./placement-workflow');
+    assertCurrent(epoch);
+    placementWorkflow ??= createPlacementWorkflow({
+      ...(deps.placementApi ? { api: deps.placementApi } : {}),
+      get: () => state,
+      publish: (patch) => {
+        if (part && state.draft) {
+          if (patch.phase === 'placing') deps.journal.markPlacement(part, state.draft.id, true);
+          if (state.placement.pending && (patch.phase === 'review' || patch.phase === 'blocked'))
+            deps.journal.markPlacement(part, state.draft.id, false);
+        }
+        publish({ placement: { ...state.placement, ...patch } });
+      },
+      now,
+      uuid,
+      run: (action) => runPrivate('placement', action),
+    });
+    return action(placementWorkflow);
+  }
+  const placement = {
+    check: (method: CheckoutPlacementMethod) => placementAction((p) => p.check(method)),
+    submit: (fingerprint: string) => placementAction((p) => p.submit(fingerprint)),
+    retry: () => placementAction((p) => p.retry()),
+    status: () => placementAction((p) => p.status()),
+    clearTerms: () => {
+      if (!placementLocked(state.placement))
+        publish({ placement: { ...state.placement, terms: null } });
+    },
+  };
   return {
     getSnapshot: () => state,
     subscribe(fn: () => void) {
@@ -388,6 +501,7 @@ export function createReviewController(deps: Dependencies) {
     invalidate,
     delivery,
     quote,
+    placement,
     deliveryEditing: (value: boolean) => publish({ deliveryEditing: value }),
     suspend,
     resume,
@@ -399,7 +513,7 @@ export function createReviewController(deps: Dependencies) {
     async initiate(source: CheckoutSourceDto, handles: CatalogReferences = {}) {
       // Existing uncertain intent is never replaced by a fresh key/payload.
       return task(async (epoch) => {
-        if (state.delivery.pending || state.quote.pending)
+        if (state.delivery.pending || state.quote.pending || placementLocked(state.placement))
           throw new Error('Recover the pending delivery request first.');
         const current = await identify(epoch),
           previous = deps.journal.pending(current);
@@ -439,7 +553,12 @@ export function createReviewController(deps: Dependencies) {
     update: (change: UpdateCheckoutDraftDto, handles = state.handles) =>
       task(async (epoch) => {
         const current = await identify(epoch);
-        if (deps.journal.pending(current) || state.delivery.pending || state.quote.pending)
+        if (
+          deps.journal.pending(current) ||
+          state.delivery.pending ||
+          state.quote.pending ||
+          placementLocked(state.placement)
+        )
           throw new Error('Recover the pending request first.');
         const value = state.draft;
         if (!value) throw new Error('Restore the review first.');
@@ -462,7 +581,12 @@ export function createReviewController(deps: Dependencies) {
           guest = deps.journal.reference('guest');
         if (current === 'guest' || !guest?.id || !guest.context || !guest.revision)
           throw new Error('Sign in and restore the guest review first.');
-        if (deps.journal.pending(current) || state.delivery.pending || state.quote.pending)
+        if (
+          deps.journal.pending(current) ||
+          state.delivery.pending ||
+          state.quote.pending ||
+          placementLocked(state.placement)
+        )
           throw new Error('Recover the pending request first.');
         return execute(
           {
@@ -484,6 +608,7 @@ export function createReviewController(deps: Dependencies) {
     },
     revoke: () =>
       task(async (epoch) => {
+        if (state.placement.pending) throw new Error('Check your order request first.');
         const current = await identify(epoch),
           owner = authority(current);
         if (owner.kind !== 'GUEST') throw new Error('Only a guest session can be ended here.');
@@ -495,12 +620,14 @@ export function createReviewController(deps: Dependencies) {
           draft: null,
           delivery: EMPTY_REVIEW.delivery,
           quote: EMPTY_REVIEW.quote,
+          placement: EMPTY_PLACEMENT,
           deliveryEditing: false,
           pending: null,
           phase: 'ready',
         });
       }),
     startNewGuest: () => {
+      if (state.placement.pending) return;
       invalidate();
       deps.journal.forgetGuest();
       publish({ phase: 'ready' });

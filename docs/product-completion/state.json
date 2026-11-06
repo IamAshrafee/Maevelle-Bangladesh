@@ -2,13 +2,13 @@
   "program": "Maevelle Product Completion V2",
   "version": 2,
   "active_area": "storefront-checkout",
-  "active_substage": "CHECKOUT_PHASE_04A_MANUAL_PAYMENT_BACKEND",
+  "active_substage": "CHECKOUT_PHASE_05B_STOREFRONT_PLACEMENT",
   "active_status": "IN_PROGRESS",
   "baseline_commit": "d2cce2c",
   "last_checkpoint_commit": "c3413e3",
   "last_verified_commit": "16f648a",
-  "last_completed_action": "Implemented Phase 04A independent receipt/destination/policy/Finance/refund/expiry backend; 289 tests in 24 files and final 20-test pagination/API follow-up passed on disposable PostgreSQL 18.3. Overall PARTIAL, public financial activation BLOCKED; prior phase gates preserved.",
-  "next_action": "Use Phase 04B handoff for gated payment/reviewer interfaces. Preserve disabled purchases/production drafts. Obtain provider/tax/legal/coverage/retention approvals and resolve legacy null review policies before activation; do not bypass Phase 05 committed-Order authority.",
+  "last_completed_action": "Implemented Phase 05B Storefront final terms, exact placement recovery and private confirmation. Four real blocked browser paths verified with no purchase effects. Local acceptance PARTIAL; earlier statuses and migration byte failure preserved.",
+  "next_action": "Use PHASE_05B_NEXT_STAGE_HANDOFF.md for separately authorized post-order and activation work. Real final policy, provider/courier eligibility, shopper instructions/claims, guest recovery, browser success and human acceptance remain open.",
   "interrupted": false,
   "blocked_by": [
     "SIZING_OWNER_RESPONSIVE_AND_ACCESSIBILITY_ACCEPTANCE_PENDING",
@@ -36,7 +36,10 @@
     "CHECKOUT_LIVE_RECEIVING_DESTINATION_ACTIVATION_DISABLED",
     "CHECKOUT_NAGAD_ACCOUNT_CATEGORY_AND_WORKFLOW_UNVERIFIED",
     "CHECKOUT_LEGACY_NULL_PAYMENT_REVIEW_POLICY_REMEDIATION_PENDING",
-    "CHECKOUT_FINANCIAL_PROVIDER_LEGAL_AND_OPERATING_APPROVAL_PENDING"
+    "CHECKOUT_FINANCIAL_PROVIDER_LEGAL_AND_OPERATING_APPROVAL_PENDING",
+    "CHECKOUT_PHASE04B_FULL_BROWSER_FINANCIAL_STATE_RACE_AND_HUMAN_ACCESSIBILITY_ACCEPTANCE_OPEN",
+    "CHECKOUT_PHASE05A_REAL_PLACEMENT_POLICY_AND_COMMITTED_ORDER_RECOVERY_ACCEPTANCE_OPEN",
+    "CHECKOUT_PHASE05B_SUCCESSFUL_BROWSER_PLACEMENT_AND_HUMAN_ACCEPTANCE_UNVERIFIED"
   ],
   "owner_review_status": "PENDING",
   "verified_complete_areas": [

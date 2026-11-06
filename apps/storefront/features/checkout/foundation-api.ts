@@ -16,7 +16,7 @@ function draftResult(value: CheckoutDraftDto): CheckoutDraftDto {
     !/^[0-9a-f-]{36}$/i.test(value.id) ||
     !/^[1-9][0-9]*$/.test(value.revision) ||
     !['GUEST', 'ACCOUNT'].includes(value.ownerKind) ||
-    !['ACTIVE', 'ABANDONED', 'EXPIRED'].includes(value.status) ||
+    !['ACTIVE', 'ABANDONED', 'EXPIRED', 'COMMITTED'].includes(value.status) ||
     !Number.isFinite(Date.parse(value.expiresAt)) ||
     typeof value.sourceReviewRequired !== 'boolean' ||
     !value.source ||

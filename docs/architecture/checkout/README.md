@@ -12,6 +12,10 @@ Phase 02B delivery frontend is implemented with **PARTIAL** acceptance: [impleme
 
 Phase 03A component-quote backend is implemented with **PARTIAL** overall acceptance: [implementation report](PHASE_03A_IMPLEMENTATION_REPORT.md), [verification record](PHASE_03A_VERIFICATION.json), and [exact Phase 03B contract](PHASE_03B_HANDOFF.md). Both sources share authoritative merchandise evaluation, immutable revision-bound components and snapshot-consistent reads. Tax/payment fees/final payable and courier compatibility remain unresolved; purchases and production drafts stay disabled. Phase 01B/02B remain PARTIAL.
 
+Phase 05A atomic placement is **PARTIAL** locally and real purchases remain **BLOCKED**. See the [backend implementation and acceptance report](PHASE_05A_IMPLEMENTATION_REPORT.md) and the [Phase 05B handoff](PHASE_05B_HANDOFF.md) for the scoped receipt protocol, verified synthetic behavior and remaining gates.
+
+Phase 05B Storefront placement and confirmation are implemented with **PARTIAL** integration acceptance. See the [implementation report](PHASE_05B_IMPLEMENTATION_REPORT.md) and [post-order handoff](PHASE_05B_NEXT_STAGE_HANDOFF.md). Four real blocked browser journeys pass; successful browser commitment and public financial policy remain unavailable.
+
 ## Reading order and authority
 
 | Document | Authoritative subject |
@@ -35,3 +39,5 @@ Dedicated Checkout scope supersedes the Cart project's prohibition on implementi
 Phase 03B commercial component review frontend is implemented with **PARTIAL** acceptance: [report and 25-outcome register](PHASE_03B_IMPLEMENTATION_REPORT.md), [verification](PHASE_03B_VERIFICATION.json), [04A backend handoff](PHASE_04A_HANDOFF.md). All four guest/account source paths passed local browser quotation; 237 focused tests passed. Human/device/browser fault breadth remains open. Earlier PARTIAL statuses and all purchase/production gates remain unchanged.
 
 Phase 04A payment backend is implemented with **PARTIAL** acceptance and **BLOCKED** public financial activation. See [report and 27-outcome register](PHASE_04A_IMPLEMENTATION_REPORT.md), [isolated verification](PHASE_04A_VERIFICATION.json), and [exact Phase 04B handoff](PHASE_04B_HANDOFF.md). Claims, independent receipts, permanent reference fences, liabilities, atomic Finance posting and bounded approved-policy review are distinct. No purchase, receiving account or public payment collection was activated.
+
+Phase 04B Admin payment management and gated shopper presentation are implemented with **PARTIAL** local acceptance; public financial activation remains **BLOCKED**. See [report and 30-outcome register](PHASE_04B_IMPLEMENTATION_REPORT.md), [306-test integrated verification](PHASE_04B_VERIFICATION.json), [synthetic browser evidence](PHASE_04B_BROWSER_VERIFICATION.json) and [Phase 05A backend handoff](PHASE_05A_HANDOFF.md). Actual independent approval, post-commit response-loss replay and excess-refund reconciliation were exercised locally. Human/device and complete browser fault/state breadth, all earlier PARTIAL gates and the historical migration byte failure remain open. No Phase 05 placement, public claim endpoint, purchase activation, persistent migration or deployment was performed.

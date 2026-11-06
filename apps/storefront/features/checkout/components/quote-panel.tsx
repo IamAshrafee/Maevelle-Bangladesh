@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Notice } from '@/components/ui/notice';
 import { reviewActions } from '../foundation-runtime';
 import type { ReviewSnapshot } from '../foundation-types';
+import { placementLocked } from '../placement-types';
 import { quoteIssueMessages } from '../quote-workflow';
 import { QuoteLines } from './quote-lines';
 import { QuoteBreakdown } from './quote-breakdown';
@@ -32,6 +33,7 @@ export function QuotePanel({
     loaded = useRef('');
   const busy =
     review.suspended ||
+    placementLocked(review.placement) ||
     ['checking', 'pending'].includes(review.phase) ||
     ['loading', 'saving'].includes(s.phase) ||
     ['loading', 'saving'].includes(review.delivery.phase);

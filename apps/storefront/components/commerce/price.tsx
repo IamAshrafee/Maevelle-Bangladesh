@@ -2,11 +2,13 @@ import type { ComponentProps } from 'react';
 
 import { cx } from '@/components/ui/classnames';
 import { formatMoney } from '@/lib/format/money';
+import { formatExactMoney } from '@/lib/format/exact-money';
 
 type MoneyProps = Omit<ComponentProps<'span'>, 'children'> & {
   amount: number | string;
   currency?: string;
   locale?: string;
+  precision?: 'exact';
 };
 
 export function Money({
@@ -14,11 +16,14 @@ export function Money({
   className,
   currency = 'BDT',
   locale = 'en-BD',
+  precision,
   ...props
 }: MoneyProps) {
   return (
     <span className={cx('tabular-nums', className)} translate="no" {...props}>
-      {formatMoney(String(amount), currency, locale)}
+      {precision === 'exact'
+        ? formatExactMoney(String(amount), currency, locale)
+        : formatMoney(String(amount), currency, locale)}
     </span>
   );
 }
@@ -51,13 +56,18 @@ export function Price({
       ? Math.round(((numOriginal - numAmount) / numOriginal) * 100)
       : undefined;
 
-  const savingsLabel = discountBadge || (calculatedSavings ? `${calculatedSavings}% SAVINGS` : undefined);
+  const savingsLabel =
+    discountBadge || (calculatedSavings ? `${calculatedSavings}% SAVINGS` : undefined);
 
   return (
     <div
       className={cx(
         'flex flex-wrap items-baseline gap-x-2 gap-y-1 font-semibold text-primary',
-        size === 'lg' ? 'text-price-lg' : size === 'sm' ? 'text-body-sm font-bold' : 'text-price-md',
+        size === 'lg'
+          ? 'text-price-lg'
+          : size === 'sm'
+            ? 'text-body-sm font-bold'
+            : 'text-price-md',
         className,
       )}
       {...props}

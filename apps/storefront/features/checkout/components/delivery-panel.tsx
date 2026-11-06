@@ -6,6 +6,7 @@ import { Notice } from '@/components/ui/notice';
 import { SavedAddresses } from '@/features/account/addresses/saved-addresses';
 import { reviewActions } from '../foundation-runtime';
 import type { ReviewSnapshot } from '../foundation-types';
+import { placementLocked } from '../placement-types';
 import {
   blankDelivery,
   DeliveryFields,
@@ -26,6 +27,7 @@ export function DeliveryPanel({ review, clock }: { review: ReviewSnapshot; clock
     loaded = useRef('');
   const busy =
       review.suspended ||
+      placementLocked(review.placement) ||
       ['loading', 'saving'].includes(projection.phase) ||
       ['loading', 'saving'].includes(review.quote.phase) ||
       Boolean(review.quote.pending) ||

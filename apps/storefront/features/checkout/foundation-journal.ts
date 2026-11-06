@@ -85,11 +85,20 @@ function intent(v: unknown, now: number): v is ReviewIntent {
 function reference(v: unknown, now: number): v is ReviewReference {
   return (
     object(v) &&
-    keys(v, ['partition', 'context', 'id', 'revision', 'handles', 'savedAt']) &&
+    keys(v, [
+      'partition',
+      'context',
+      'id',
+      'revision',
+      'handles',
+      'savedAt',
+      'placementAttempted',
+    ]) &&
     partition(v.partition) &&
     (v.context === undefined || id(v.context)) &&
     (v.id === undefined || id(v.id)) &&
     (v.revision === undefined || version(v.revision)) &&
+    (v.placementAttempted === undefined || v.placementAttempted === true) &&
     handles(v.handles) &&
     recent(v.savedAt, now) &&
     (v.partition !== 'guest' || id(v.context))
@@ -155,10 +164,20 @@ export function createReviewJournal(storage: Storage, now = Date.now) {
     pending: (part: string) => pending.find((v) => ownerPartition(v.owner) === part),
     save(value: ReviewReference) {
       if (!reference(value, now())) throw new Error('Invalid review reference');
+      const prior = refs.find((v) => v.partition === value.partition && v.id === value.id);
       refs = [
-        value,
+        prior?.placementAttempted ? { ...value, placementAttempted: true } : value,
         ...refs.filter((v) => !(v.partition === value.partition && v.id === value.id)),
       ].slice(0, 8);
+      persist();
+    },
+    markPlacement(part: string, draftId: string, attempted: boolean) {
+      refs = refs.map((ref) => {
+        if (ref.partition !== part || ref.id !== draftId) return ref;
+        const { placementAttempted: marker, ...rest } = ref;
+        if (attempted === Boolean(marker)) return ref;
+        return attempted ? { ...rest, placementAttempted: true } : rest;
+      });
       persist();
     },
     put(value: ReviewIntent) {

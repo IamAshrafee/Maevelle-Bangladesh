@@ -1,5 +1,6 @@
 import { EMPTY_QUOTE, type QuoteProjection } from './quote-types';
 import { EMPTY_DELIVERY, type DeliveryProjection } from './delivery-types';
+import { EMPTY_PLACEMENT, type PlacementProjection } from './placement-types';
 import type {
   CheckoutDraftDto,
   CheckoutSourceDto,
@@ -14,6 +15,7 @@ export interface ReviewReference {
   context?: string;
   id?: string;
   revision?: string;
+  placementAttempted?: boolean;
   handles: CatalogReferences;
   savedAt: number;
 }
@@ -36,6 +38,7 @@ export interface ReviewIssue {
 export interface ReviewSnapshot {
   suspended: boolean;
   quote: QuoteProjection;
+  placement: PlacementProjection;
   deliveryEditing: boolean;
   delivery: DeliveryProjection;
   phase: 'idle' | 'checking' | 'ready' | 'pending' | 'error';
@@ -50,6 +53,7 @@ export interface ReviewSnapshot {
 export const EMPTY_REVIEW: ReviewSnapshot = Object.freeze({
   suspended: false,
   quote: EMPTY_QUOTE,
+  placement: EMPTY_PLACEMENT,
   deliveryEditing: false,
   delivery: EMPTY_DELIVERY,
   phase: 'idle',

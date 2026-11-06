@@ -9,11 +9,22 @@ import { DeliveryPanel } from './delivery-panel';
 import { ReviewItems } from './review-items';
 import { QuotePanel } from './quote-panel';
 import { useReviewCatalog } from '../use-review-catalog';
+import { PlacementPanel } from './placement-panel';
+import { PlacementConfirmation } from './placement-confirmation';
+import { placementBusy } from '../placement-types';
+
+const noCatalogReferences = {};
 
 export function CheckoutReview() {
   const state = useReviewSnapshot(),
     router = useRouter();
-  const products = useReviewCatalog(state.handles);
+  const orderStage = Boolean(
+    state.placement.pending ||
+    state.placement.receipt ||
+    state.placement.committedConflict ||
+    state.draft?.status === 'COMMITTED',
+  );
+  const products = useReviewCatalog(orderStage ? noCatalogReferences : state.handles);
   const [clock, setClock] = useState(Date.now),
     [actionError, setActionError] = useState('');
   useEffect(() => {
@@ -21,9 +32,17 @@ export function CheckoutReview() {
     const timer = setInterval(() => setClock(Date.now()), 1000);
     return () => clearInterval(timer);
   }, []);
+  const pendingPlacement = Boolean(state.placement.pending);
+  useEffect(() => {
+    if (!pendingPlacement) return;
+    const warn = (event: BeforeUnloadEvent) => event.preventDefault();
+    addEventListener('beforeunload', warn);
+    return () => removeEventListener('beforeunload', warn);
+  }, [pendingPlacement]);
   const draft = state.draft,
     busy =
       ['checking', 'pending'].includes(state.phase) ||
+      placementBusy(state.placement) ||
       ['loading', 'saving'].includes(state.delivery.phase) ||
       ['loading', 'saving'].includes(state.quote.phase),
     pending = Boolean(state.pending);
@@ -51,7 +70,9 @@ export function CheckoutReview() {
         </p>
         <h1 className="font-serif text-3xl font-semibold">Your checkout</h1>
         <p className="text-on-surface-variant">
-          Add your delivery details and review your selection. Ordering is not available yet.
+          {orderStage
+            ? 'Check the order connected to this checkout.'
+            : 'Add your delivery details and review your selection.'}
         </p>
       </header>
       <nav
@@ -75,6 +96,7 @@ export function CheckoutReview() {
             variant="outline"
             disabled={
               busy ||
+              Boolean(state.placement.pending && !state.suspended) ||
               (privatePending && !state.suspended) ||
               clock < (state.issue?.retryAt ?? 0) ||
               Boolean(pending && state.issue && !state.issue.retryable)
@@ -133,7 +155,7 @@ export function CheckoutReview() {
           Retry the same request to find out whether the review was saved. No order was placed.
         </Notice>
       )}
-      {references.length > 1 && !pending && !privatePending && (
+      {references.length > 1 && !pending && !privatePending && !state.placement.pending && (
         <nav aria-label="Saved reviews" className="flex flex-wrap gap-3">
           {references.map((ref, index) => (
             <Button
@@ -148,23 +170,34 @@ export function CheckoutReview() {
           ))}
         </nav>
       )}
-      {state.partition !== 'guest' && state.guestCandidate && !pending && !privatePending && (
-        <Notice variant="neutral" title="You have a guest review">
-          <p>
-            Bring that review into your account only if you want to keep it. Your guest and account
-            bags will remain separate.
-          </p>
-          <Button
-            className="mt-3"
-            variant="outline"
-            disabled={busy}
-            onClick={() => void action(reviewActions.adopt)}
-          >
-            Keep guest review in my account
-          </Button>
-        </Notice>
+      {state.partition !== 'guest' &&
+        state.guestCandidate &&
+        !pending &&
+        !privatePending &&
+        !orderStage && (
+          <Notice variant="neutral" title="You have a guest review">
+            <p>
+              Bring that review into your account only if you want to keep it. Your guest and
+              account bags will remain separate.
+            </p>
+            <Button
+              className="mt-3"
+              variant="outline"
+              disabled={busy}
+              onClick={() => void action(reviewActions.adopt)}
+            >
+              Keep guest review in my account
+            </Button>
+          </Notice>
+        )}
+      {draft && !state.suspended && orderStage && (
+        <PlacementConfirmation
+          key={`${state.partition}:${draft.id}`}
+          review={state}
+          clock={clock}
+        />
       )}
-      {draft && (
+      {draft && !orderStage && (
         <div
           hidden={state.suspended}
           className={
@@ -234,15 +267,7 @@ export function CheckoutReview() {
               clock={clock}
               products={products}
             />
-            <section
-              className="rounded-2xl border border-border-subtle p-5"
-              aria-label="Next checkout stage"
-            >
-              <h2 className="font-serif text-xl font-semibold">Ordering remains unavailable</h2>
-              <p className="mt-2 text-sm text-on-surface-variant">
-                This stage is not available yet. No payment is due and no order will be placed.
-              </p>
-            </section>
+            <PlacementPanel key={`${state.partition}:${draft.id}`} review={state} clock={clock} />
           </div>
         </div>
       )}
@@ -251,7 +276,7 @@ export function CheckoutReview() {
           No review is open for this shopper. Start with a product or your bag.
         </p>
       )}
-      {state.partition === 'guest' && (
+      {state.partition === 'guest' && !orderStage && (
         <div className="flex flex-wrap gap-3">
           <Button
             variant="ghost"

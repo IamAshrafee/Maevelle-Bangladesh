@@ -9,6 +9,7 @@ export function useReviewCatalog(handles: CatalogReferences) {
   useEffect(() => {
     const abort = new AbortController();
     const unique: string[] = JSON.parse(handlesKey);
+    if (!unique.length) return;
     const result: Record<string, StorefrontProductDto> = {};
     let cursor = 0;
     const context = requestWithDeadline<StorefrontContextDto>('/api/storefront/v1/context', {

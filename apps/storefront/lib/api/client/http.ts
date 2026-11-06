@@ -18,7 +18,13 @@ export class StorefrontClientApiError extends Error {
   }
 }
 
-export async function requestStorefrontClient<T>(path: string, init?: RequestInit): Promise<T> {
+export type AcceptErrorData = (status: number, data: unknown) => boolean;
+
+export async function requestStorefrontClient<T>(
+  path: string,
+  init?: RequestInit,
+  acceptErrorData?: AcceptErrorData,
+): Promise<T> {
   const response = await fetch(path, {
     credentials: 'include',
     ...init,
@@ -38,8 +44,12 @@ export async function requestStorefrontClient<T>(path: string, init?: RequestIni
           | string;
       }
     | undefined;
-  if (!response.ok) {
-    const error = body && 'error' in body ? body.error : undefined;
+  const hasData = body && typeof body === 'object' && 'data' in body;
+  if (
+    !response.ok &&
+    !(hasData && !('error' in body) && acceptErrorData?.(response.status, body.data))
+  ) {
+    const error = body && typeof body === 'object' && 'error' in body ? body.error : undefined;
     const code = typeof error === 'string' ? error : (error?.code ?? 'REQUEST_FAILED');
     const message =
       typeof error === 'object' && error?.message
@@ -72,7 +82,7 @@ export async function requestStorefrontClient<T>(path: string, init?: RequestIni
         : {},
     );
   }
-  if (!body || !('data' in body))
+  if (!hasData)
     throw new StorefrontClientApiError(
       502,
       'INVALID_RESPONSE',
