@@ -9,6 +9,7 @@ import { promotionConfigurationFingerprint } from '../promotions.js';
 import { checkoutDeliveryInTransaction } from './delivery.js';
 import { draftView } from './queries.js';
 import { CheckoutError, type CheckoutAuthority, type DraftRow } from './types.js';
+import { hasPlacementFence } from './placement-fence.js';
 
 export interface QuoteSnapshot {
   source: unknown;
@@ -28,7 +29,10 @@ export async function evaluateCheckoutInTransaction(
   const isolation = await sql<{
     transaction_isolation: string;
   }>`show transaction_isolation`.execute(tx);
-  if (!['repeatable read', 'serializable'].includes(isolation.rows[0]!.transaction_isolation))
+  if (
+    !hasPlacementFence(tx) &&
+    !['repeatable read', 'serializable'].includes(isolation.rows[0]!.transaction_isolation)
+  )
     throw new Error('Commercial evaluation requires a coherent snapshot.');
   const organization = await sql<{
     default_currency: string;
@@ -91,8 +95,13 @@ export async function evaluateCheckoutInTransaction(
       'CONFIGURATION_CHANGED',
       'Review delivery configuration before requesting a quote.',
     );
-  const at = (await sql<{ at: string }>`select transaction_timestamp()::text at`.execute(tx))
-    .rows[0]!.at;
+  const at = (
+    await sql<{
+      at: string;
+    }>`select ${hasPlacementFence(tx) ? sql`clock_timestamp()` : sql`transaction_timestamp()`}::text at`.execute(
+      tx,
+    )
+  ).rows[0]!.at;
   const detail = await sql<MerchandiseLine & { title: string; sku: string; version: string }>`
     select l.id,l.variant_id,l.quantity::text,p.id product_id,p.title,v.sku,
       (v.status='ACTIVE' and p.status='ACTIVE' and p.publication_status='PUBLISHED') visible,
@@ -194,5 +203,13 @@ export async function evaluateCheckoutInTransaction(
     }),
     merchandise: computedLines.map((l) => [l.id, l.version, l.category_ids, l.price]),
   };
-  return { facts, snapshot, fingerprint: fingerprint({ facts, snapshot }), at };
+  return {
+    facts,
+    snapshot,
+    fingerprint: fingerprint({ facts, snapshot }),
+    at,
+    delivery: delivery.delivery,
+    tariff: delivery.eligibility.tariff,
+    savedAddress: delivery.savedAddress,
+  };
 }

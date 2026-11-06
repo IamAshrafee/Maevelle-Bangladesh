@@ -189,16 +189,28 @@ export async function appendAuditEvent(
   db: Kysely<DatabaseSchema>,
   event: AuditEventInput,
 ): Promise<void> {
+  await appendAuditEvents(db, [event]);
+}
+
+export async function appendAuditEvents(
+  db: Kysely<DatabaseSchema>,
+  events: readonly AuditEventInput[],
+): Promise<void> {
+  if (!events.length) return;
   await sql`
     insert into audit.audit_events (
       organization_id, actor_type, actor_id, membership_id, action, target_type, target_id, request_id, reason, before_diff, after_diff, metadata
-    ) values (
+    ) values ${sql.join(
+      events.map(
+        (event) => sql`(
       ${event.organizationId ?? null}, ${event.actorType}, ${event.actorId ?? null}, ${event.membershipId ?? null}, ${event.action},
       ${event.targetType ?? null}, ${event.targetId ?? null}, ${event.requestId ?? null}, ${event.reason ?? null},
       ${JSON.stringify(sanitizeAuditValue(event.beforeDiff ?? null))}::jsonb,
       ${JSON.stringify(sanitizeAuditValue(event.afterDiff ?? null))}::jsonb,
       ${JSON.stringify(sanitizeAuditValue(event.metadata ?? null))}::jsonb
-    )
+    )`,
+      ),
+    )}
   `.execute(db);
 }
 

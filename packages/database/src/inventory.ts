@@ -1,3 +1,4 @@
+import { reserveInventoryEntriesInTransaction } from './inventory-reserve-write.js';
 import { sql, type Kysely, type Transaction } from 'kysely';
 
 import type { DatabaseSchema } from './index.js';
@@ -576,7 +577,7 @@ async function beginIdempotent(
   input: {
     organizationId: string;
     actorId: string;
-    principalType?: 'USER' | 'SYSTEM';
+    principalType?: 'USER' | 'SYSTEM' | 'GUEST_CHECKOUT';
     operation: string;
     idempotencyKey: string;
     request: unknown;
@@ -618,7 +619,7 @@ async function emit(
   input: {
     organizationId: string;
     actorId?: string;
-    actorType?: 'USER' | 'SYSTEM';
+    actorType?: 'USER' | 'SYSTEM' | 'GUEST_CHECKOUT';
     action: string;
     eventType: string;
     targetType: string;
@@ -967,6 +968,7 @@ export async function findStocktakeLocation(
 export interface ReservationInput {
   organizationId: string;
   actorId: string;
+  actorType?: 'USER' | 'GUEST_CHECKOUT';
   variantId: string;
   locationId: string;
   quantity: string;
@@ -986,6 +988,7 @@ export async function createInventoryReservationInTransaction(
     organizationId: input.organizationId,
     actorId: input.actorId,
     operation: 'inventory.reserve',
+    ...(input.actorType ? { principalType: input.actorType } : {}),
     idempotencyKey: input.idempotencyKey,
     request: { ...input, expiresAt: input.expiresAt?.toISOString() },
   });
@@ -1008,32 +1011,14 @@ export async function createInventoryReservationInTransaction(
     inventoryItemId,
     input.quantity,
   );
-  const level = await lockLevel(
-    transaction,
-    input.organizationId,
-    inventoryItemId,
-    input.locationId,
-  );
-  if (
-    subtract(level.sellable_quantity, level.reserved_quantity) === '0' ||
-    subtract(subtract(level.sellable_quantity, level.reserved_quantity), input.quantity).startsWith(
-      '-',
-    )
-  )
-    throw new InventoryDomainError(
-      'INSUFFICIENT_STOCK',
-      'Insufficient available-to-sell inventory.',
-    );
-  const inserted = await sql<{
-    id: string;
-  }>`insert into inventory.inventory_reservations (organization_id, inventory_item_id, location_id, quantity, source_type, source_reference, expires_at) values (${input.organizationId}, ${inventoryItemId}, ${input.locationId}, ${input.quantity}::numeric, ${input.sourceType}, ${input.sourceReference}, ${input.expiresAt ?? null}) returning id`.execute(
-    transaction,
-  );
-  const reservationId = inserted.rows[0]?.id;
-  if (!reservationId) throw new Error('Reservation creation did not return an id.');
-  await sql`update inventory.inventory_levels set reserved_quantity = reserved_quantity + ${input.quantity}::numeric, version = version + 1, updated_at = now() where id = ${level.id}`.execute(
-    transaction,
-  );
+  const [reserved] = await reserveInventoryEntriesInTransaction(transaction, {
+    organizationId: input.organizationId,
+    actorId: input.actorId,
+    ...(input.actorType ? { actorType: input.actorType } : {}),
+    entries: [{ ...input, inventoryItemId }],
+  });
+  if (!reserved) throw new Error('Inventory reservation was not created.');
+  const reservationId = reserved.id;
   const response = { reservationId, inventoryItemId };
   await completeIdempotency(
     transaction,
@@ -1042,20 +1027,6 @@ export async function createInventoryReservationInTransaction(
     reservationId,
     response,
   );
-  await emit(transaction, {
-    organizationId: input.organizationId,
-    actorId: input.actorId,
-    action: 'inventory.reservation.created',
-    eventType: 'inventory.reservation.created',
-    targetType: 'inventory.reservation',
-    targetId: reservationId,
-    metadata: {
-      inventoryItemId,
-      locationId: input.locationId,
-      quantity: input.quantity,
-      sourceType: input.sourceType,
-    },
-  });
   return response;
 }
 

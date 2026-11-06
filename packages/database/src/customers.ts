@@ -234,6 +234,28 @@ export async function createCustomer(
  * is compatible or both phone and email agree. Ambiguous matches remain separate
  * and are queued as duplicate candidates for operator review.
  */
+export async function activeOrderCustomerRestrictions(
+  db: Kysely<DatabaseSchema>,
+  organizationId: string,
+  customerId: string,
+): Promise<readonly CustomerRestrictionType[]> {
+  const activeRestrictionsRows = await sql<{ restriction_type: CustomerRestrictionType }>`
+    select restriction_type from customers.customer_restrictions
+    where organization_id = ${organizationId}
+      and (
+        customer_id = ${customerId}
+        or customer_id in (
+          select alias_customer_id from customers.customer_aliases
+          where organization_id = ${organizationId} and canonical_customer_id = ${customerId}
+        )
+      )
+      and status = 'ACTIVE'
+      and (expires_at is null or expires_at > statement_timestamp())
+  `.execute(db);
+
+  return activeRestrictionsRows.rows.map((row) => row.restriction_type);
+}
+
 export async function resolveOrCreateOrderCustomerInTransaction(
   db: Kysely<DatabaseSchema>,
   input: {
@@ -455,22 +477,11 @@ export async function resolveOrCreateOrderCustomerInTransaction(
     }
   }
 
-  // Active restrictions check
-  const activeRestrictionsRows = await sql<{ restriction_type: CustomerRestrictionType }>`
-    select restriction_type from customers.customer_restrictions
-    where organization_id = ${input.organizationId}
-      and (
-        customer_id = ${finalCustomerId}
-        or customer_id in (
-          select alias_customer_id from customers.customer_aliases
-          where organization_id = ${input.organizationId} and canonical_customer_id = ${finalCustomerId}
-        )
-      )
-      and status = 'ACTIVE'
-      and (expires_at is null or expires_at > now())
-  `.execute(db);
-
-  const activeRestrictions = activeRestrictionsRows.rows.map((r) => r.restriction_type);
+  const activeRestrictions = await activeOrderCustomerRestrictions(
+    db,
+    input.organizationId,
+    finalCustomerId,
+  );
   if (activeRestrictions.includes('ORDERING_BLOCKED')) {
     throw new CustomerDomainError(
       'CUSTOMER_BLOCKED',

@@ -147,6 +147,7 @@ export const migrations = {
   '3220_checkout_delivery': checkoutDelivery,
   '3221_checkout_quotes': checkoutQuotes,
   '3222_manual_payment_integrity': manualPaymentIntegrity,
+  '3223_checkout_placement': checkoutPlacement,
 } satisfies Record<string, Migration>;
 
 export const migrationProvider: MigrationProvider = {
@@ -155,3 +156,4 @@ export const migrationProvider: MigrationProvider = {
   },
 };
 import * as manualPaymentIntegrity from './3222_manual_payment_integrity.js';
+import * as checkoutPlacement from './3223_checkout_placement.js';

@@ -667,7 +667,10 @@ describe('Phase 04A populated forward migration', () => {
         amount,external_reference,normalized_external_reference,status,source_attempt_id) values(${f.organizationId},${key()},${method.id},'BDT',100,'OLD-REF','OLD-REF',${status},${attempts[status === 'REVERSED' ? 0 : 1]})`.execute(
           d,
         );
-      expect((await runMigrations(d)).executed).toEqual(['3222_manual_payment_integrity']);
+      expect((await runMigrations(d)).executed).toEqual([
+        '3222_manual_payment_integrity',
+        '3223_checkout_placement',
+      ]);
       expect(
         (
           await sql<{

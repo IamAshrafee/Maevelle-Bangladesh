@@ -996,6 +996,37 @@ describe('Phase 02A delivery API, ownership and real PostgreSQL races', () => {
     expect(denied.json().error.code).toBe('CHECKOUT_DISABLED');
   });
 
+  it('protects the placement boundary and fails closed without an approved policy', async () => {
+    const d = await newDraft();
+    const url = `${base}/${d.id}/placement`;
+    const review = {
+      revision: '1',
+      quoteId: key(),
+      quoteFingerprint: 'x'.repeat(43),
+      method: 'COD',
+    };
+    const input = { ...review, finalTermsFingerprint: 'y'.repeat(43) };
+    const finalTerms = await post(`${base}/${d.id}/final-terms`, review, d.headers);
+    expect(finalTerms.statusCode).toBe(503);
+    expect(finalTerms.json().error.code).toBe('POLICY_BLOCKED');
+    const blocked = await post(url, input, d.headers);
+    expect(blocked.statusCode).toBe(503);
+    expect(blocked.json().error.code).toBe('POLICY_BLOCKED');
+    expect(blocked.headers['cache-control']).toBe('private, no-store');
+    expect(blocked.headers['set-cookie']).toBeUndefined();
+    expect((await post(url, { ...input, payable: '0.0000' }, d.headers)).statusCode).toBe(400);
+    expect((await post(url, { ...input, revision: 1 }, d.headers)).statusCode).toBe(400);
+    expect(
+      (await post(url, input, { ...d.headers, origin: 'https://foreign.example' })).statusCode,
+    ).toBe(403);
+    expect((await read(url, {})).statusCode).toBe(401);
+    expect((await read(url, d.headers)).statusCode).toBe(404);
+    const production = (await application({ ...config, nodeEnv: 'production' })).server;
+    expect((await post(url, input, d.headers, production)).json().error.code).toBe(
+      'CHECKOUT_DISABLED',
+    );
+  });
+
   it('finishes all address and failure workflows with zero purchase/financial/inventory effects', async () => {
     const facts = await sql`select
       (select count(*)::integer from orders.orders) orders,

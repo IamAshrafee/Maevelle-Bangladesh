@@ -4,30 +4,18 @@ import { hashToken } from '@maevelle/security';
 
 import type { DatabaseSchema } from '../index.js';
 import { CartDomainError, getGuestCart, type CartView } from '../cart.js';
-import {
-  CustomerDomainError,
-  resolveOrCreateOrderCustomerInTransaction,
-} from '../customers.js';
+import { CustomerDomainError, resolveOrCreateOrderCustomerInTransaction } from '../customers.js';
 import { normalizeCustomerPhone } from '../customer-identities.js';
-import {
-  createInventoryReservationInTransaction,
-  InventoryDomainError,
-} from '../inventory.js';
+import { createInventoryReservationInTransaction, InventoryDomainError } from '../inventory.js';
 import { claimIdempotencyRecord, IdempotencyKeyReuseError, appendAuditEvent } from '../platform.js';
 import { evaluatePromotions } from '../promotions.js';
+import {
+  PromotionCapacityError,
+  redeemOrderPromotionsInTransaction,
+} from '../promotions-redemption.js';
 import { createPaymentIntentForOrder } from '../payments.js';
-import {
-  decimal4Minor,
-  decimal4Text,
-  OrderDomainError,
-  type PlaceOrderResult,
-} from './types.js';
-import {
-  checkoutFingerprint,
-  checkoutInputView,
-  checkoutRow,
-  checkoutTotals,
-} from './checkout.js';
+import { decimal4Minor, decimal4Text, OrderDomainError, type PlaceOrderResult } from './types.js';
+import { checkoutFingerprint, checkoutInputView, checkoutRow, checkoutTotals } from './checkout.js';
 import { resolveDeliveryQuote } from './delivery-pricing.js';
 import { orderView } from './queries.js';
 
@@ -91,45 +79,6 @@ async function cartOrderLines(db: Kysely<DatabaseSchema>, cart: CartView) {
       'One or more Cart items are no longer sellable.',
     );
   return detail.rows;
-}
-
-async function promoteUsage(
-  db: Kysely<DatabaseSchema>,
-  input: {
-    organizationId: string;
-    customerId: string;
-    orderId: string;
-    calculations: Awaited<ReturnType<typeof evaluatePromotions>>;
-  },
-): Promise<void> {
-  for (const calculation of input.calculations) {
-    if (calculation.couponCodeId) {
-      const coupon = await sql<{
-        usage_limit_total: string | null;
-        usage_limit_per_customer: string | null;
-      }>`
-        select usage_limit_total::text, usage_limit_per_customer::text from promotions.coupon_codes where id = ${calculation.couponCodeId} for update
-      `.execute(db);
-      const limit = coupon.rows[0];
-      if (!limit) throw new OrderDomainError('CHECKOUT_CHANGED', 'Coupon is no longer available.');
-      const counts = await sql<{ total: string; customer: string }>`
-        select count(*) filter (where status = 'COMMITTED')::text as total,
-          count(*) filter (where status = 'COMMITTED' and customer_id = ${input.customerId})::text as customer
-        from promotions.promotion_usage where coupon_code_id = ${calculation.couponCodeId}
-      `.execute(db);
-      if (
-        (limit.usage_limit_total &&
-          BigInt(counts.rows[0]!.total) >= BigInt(limit.usage_limit_total)) ||
-        (limit.usage_limit_per_customer &&
-          BigInt(counts.rows[0]!.customer) >= BigInt(limit.usage_limit_per_customer))
-      )
-        throw new OrderDomainError('CHECKOUT_CHANGED', 'Coupon is no longer eligible.');
-    }
-    await sql`
-      insert into promotions.promotion_usage (organization_id, promotion_id, promotion_revision_id, coupon_code_id, customer_id, order_id, discount_amount, status)
-      values (${input.organizationId}, ${calculation.promotionId}, ${calculation.revisionId}, ${calculation.couponCodeId}, ${input.customerId}, ${input.orderId}, ${calculation.discount}::numeric, 'COMMITTED')
-    `.execute(db);
-  }
 }
 
 export async function placeOrder(
@@ -205,7 +154,10 @@ export async function placeOrder(
       throw new OrderDomainError('NOT_FOUND', 'Checkout was not found.');
     // Cart now redacts withdrawn merchandise; preserve the existing Checkout review outcome.
     if (cart.lines.some((line) => !line.productHandle))
-      throw new OrderDomainError('CHECKOUT_CHANGED', 'One or more Cart items are no longer sellable.');
+      throw new OrderDomainError(
+        'CHECKOUT_CHANGED',
+        'One or more Cart items are no longer sellable.',
+      );
     if (cart.lines.some((line) => line.availability !== 'AVAILABLE' || !line.unitPrice))
       throw new OrderDomainError('OUT_OF_STOCK', 'One or more items are no longer available.');
     const contact =
@@ -358,7 +310,7 @@ export async function placeOrder(
           and capability.capability_code = 'STOCK_HOLDING'
         where item.organization_id = ${checkout.organization_id} and item.variant_id = ${detail.variant_id} and item.status = 'ACTIVE'
           and level.sellable_quantity - level.reserved_quantity >= ${detail.quantity}::numeric
-        order by level.location_id for update limit 1
+        order by level.location_id limit 1
       `.execute(transaction);
       if (!location.rows[0])
         throw new OrderDomainError('OUT_OF_STOCK', 'One or more items are no longer available.');
@@ -400,11 +352,15 @@ export async function placeOrder(
         gross: cart.lines.find((cartLine) => cartLine.id === line.line_id)!.gross,
       })),
     });
-    await promoteUsage(transaction, {
+    await redeemOrderPromotionsInTransaction(transaction, {
       organizationId: checkout.organization_id,
       customerId,
       orderId,
       calculations,
+    }).catch((error: unknown) => {
+      if (error instanceof PromotionCapacityError)
+        throw new OrderDomainError('CHECKOUT_CHANGED', 'Coupon is no longer eligible.');
+      throw error;
     });
     await createPaymentIntentForOrder(transaction, {
       organizationId: checkout.organization_id,
@@ -412,7 +368,9 @@ export async function placeOrder(
       orderNumber: number,
       paymentMethod: checkout.payment_method,
       currency: cart.currency,
-      expectedAmount: decimal4Text(decimal4Minor(cart.merchandiseNet) + decimal4Minor(quote.amount)),
+      expectedAmount: decimal4Text(
+        decimal4Minor(cart.merchandiseNet) + decimal4Minor(quote.amount),
+      ),
     });
     input.fault?.('after-promotion-usage');
     for (const calculation of calculations) {

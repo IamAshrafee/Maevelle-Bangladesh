@@ -6,7 +6,7 @@ import { findCart } from './context.js';
 import { evaluateCart } from './queries.js';
 import { CartDomainError } from './errors.js';
 
-/** Read/lock only. Checkout must later add semantic conversion here, never direct SQL writes. */
+/** Read/lock and evaluate the complete Cart for Checkout source selection. */
 export async function checkoutCartSnapshotInTransaction(
   tx: Transaction<DatabaseSchema>,
   input: {
@@ -25,6 +25,20 @@ export async function checkoutCartSnapshotInTransaction(
   if (!cart || cart.organizationId !== input.organizationId || cart.currency !== input.currency)
     throw new CartDomainError('NOT_FOUND', 'Cart was not found.');
   return evaluateCart(tx, cart);
+}
+
+/** Consumes the same active Cart revision already locked and authorized by the source facade. */
+export async function convertReviewedCartInTransaction(
+  tx: Transaction<DatabaseSchema>,
+  input: { organizationId: string; cartId: string; revision: string; customerId: string },
+) {
+  const converted = await sql`update cart.carts
+    set status='CONVERTED',customer_id=${input.customerId},version=version+1,updated_at=clock_timestamp()
+    where organization_id=${input.organizationId} and id=${input.cartId} and status='ACTIVE'
+      and (expires_at is null or expires_at>clock_timestamp())
+      and version=${input.revision}::bigint returning id`.execute(tx);
+  if (!converted.rows.length)
+    throw new CartDomainError('NOT_FOUND', 'The reviewed Cart is no longer active.');
 }
 
 /** Source-only facade avoids hydrating/evaluating Cart twice during a commercial quote. */

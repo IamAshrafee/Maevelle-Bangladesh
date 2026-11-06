@@ -22,7 +22,7 @@ export interface CheckoutDraftDto {
   readonly implementationVersion: 2;
   readonly revision: string;
   readonly ownerKind: 'GUEST' | 'ACCOUNT';
-  readonly status: 'ACTIVE' | 'ABANDONED' | 'EXPIRED';
+  readonly status: 'ACTIVE' | 'ABANDONED' | 'EXPIRED' | 'COMMITTED';
   readonly expiresAt: string;
   readonly currency: string;
   readonly source:

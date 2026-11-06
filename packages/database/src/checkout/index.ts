@@ -18,3 +18,6 @@ export { searchDeliveryAreas } from '../geography-delivery.js';
 
 export { createCheckoutQuote, getCheckoutQuote, acknowledgeCheckoutQuote } from './quotes.js';
 export { evaluateCheckoutInTransaction } from './quote-evaluation.js';
+export { placeReviewedCheckout, reviewCheckoutFinalTerms } from './placement.js';
+export { getCommittedCheckoutOrder } from './placement-status.js';
+export { checkoutGuestOrderCredential } from './guest-order-credential.js';

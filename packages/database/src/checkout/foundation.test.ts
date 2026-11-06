@@ -28,6 +28,7 @@ describe('Checkout additive migration and database invariants', () => {
       '3220_checkout_delivery',
       '3221_checkout_quotes',
       '3222_manual_payment_integrity',
+      '3223_checkout_placement',
     ]);
     await checkoutUpgradeCases['3219_checkout_foundation']!.after(
       isolation.database.db,

@@ -25,7 +25,7 @@ export interface CheckoutDeliveryEligibilityDto {
 }
 export interface CheckoutDeliveryStateDto {
   readonly draftId: string;
-  readonly draftStatus: 'ACTIVE' | 'ABANDONED' | 'EXPIRED';
+  readonly draftStatus: 'ACTIVE' | 'ABANDONED' | 'EXPIRED' | 'COMMITTED';
   readonly expiresAt: string;
   readonly revision: string;
   readonly delivery: CheckoutDeliverySnapshot | null;

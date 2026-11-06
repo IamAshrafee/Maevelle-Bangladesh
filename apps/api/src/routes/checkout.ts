@@ -1,4 +1,5 @@
 import { registerCheckoutQuoteRoutes } from './checkout-quotes.js';
+import { registerCheckoutPlacementRoutes } from './checkout-placement.js';
 import { registerCheckoutDeliveryRoutes } from './checkout-delivery.js';
 import { intentKey, strictBody } from './checkout-input.js';
 import { CheckoutRequestError } from './checkout-errors.js';
@@ -57,6 +58,7 @@ export function registerCheckoutRoutes(
     protectCheckoutRoutes(checkout, database, config);
     registerCheckoutDeliveryRoutes(checkout, database, config, resolveShopper);
     registerCheckoutQuoteRoutes(checkout, database, config, resolveShopper);
+    registerCheckoutPlacementRoutes(checkout, database, config, resolveShopper);
     checkout.post(
       '/storefront/v1/checkout/guest-sessions',
       {

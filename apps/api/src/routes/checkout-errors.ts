@@ -25,6 +25,11 @@ export function checkoutDomainStatus(code: string): number {
       'DELIVERY_CHANGED',
       'SUPERSEDED',
       'QUOTE_LIMIT',
+      'QUOTE_REVIEW_REQUIRED',
+      'CHECKOUT_COMMITTED',
+      'PAYMENT_METHOD_UNAVAILABLE',
+      'PLACEMENT_REVIEW_LIMIT',
+      'CUSTOMER_RESTRICTED',
     ].includes(code)
   )
     return 409;

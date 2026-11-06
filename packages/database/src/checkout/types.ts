@@ -29,7 +29,8 @@ export interface DraftRow {
   source_cart_id: string | null;
   source_revision: string | null;
   revision: string;
-  status: 'ACTIVE' | 'ABANDONED' | 'EXPIRED';
+  status: 'ACTIVE' | 'ABANDONED' | 'EXPIRED' | 'COMMITTED';
+  current_quote_id: string | null;
   expires_at: Date;
   currency_code: string;
   source_review_required: boolean;
