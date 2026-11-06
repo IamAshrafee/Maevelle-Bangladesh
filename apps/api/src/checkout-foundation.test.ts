@@ -692,6 +692,77 @@ describe('Checkout Phase 01A on isolated PostgreSQL', () => {
       '__Host-maevelle_checkout_guest_01234567123441238123123456789012',
     );
   });
+  it('protects post-order payment routes from draft access, cross-site requests and claim spam', async () => {
+    const g = await guest(),
+      headers = guestHeaders(g);
+    const created = await draft(g);
+    expect(created.statusCode, created.body).toBe(201);
+    const payment = `${base}/${created.json().data.id}/order-payment`;
+    const claims = `${payment}/claims`;
+    const view = await app.inject({ method: 'GET', url: payment, headers });
+    expect(view.statusCode).toBe(404);
+    expect(view.headers['cache-control']).toBe('private, no-store');
+    expect(
+      (
+        await app.inject({
+          method: 'GET',
+          url: payment,
+          headers: { ...headers, 'sec-fetch-site': 'cross-site' },
+        })
+      ).statusCode,
+    ).toBe(403);
+    expect(
+      (await post(claims, { transactionId: 'Synthetic-123', amount: '100' }, headers)).statusCode,
+    ).toBe(400);
+    expect((await post(claims, { transactionId: 12345 }, headers)).statusCode).toBe(400);
+    expect(
+      (
+        await post(
+          claims,
+          { transactionId: 'Synthetic-123' },
+          { ...headers, origin: 'https://evil.example' },
+        )
+      ).statusCode,
+    ).toBe(403);
+    expect((await post(claims, { transactionId: 'Synthetic-123' }, headers)).statusCode).toBe(404);
+    expect(
+      (
+        await app.inject({
+          method: 'GET',
+          url: claims,
+          headers: {
+            ...headers,
+            'idempotency-key': key(),
+          },
+        })
+      ).statusCode,
+    ).toBe(404);
+    const production = await application({
+      ...config,
+      nodeEnv: 'production',
+      checkoutDraftsEnabled: true,
+    });
+    const productionRead = await production.server.inject({ method: 'GET', url: payment, headers });
+    expect(productionRead.json().error.code).toBe('CHECKOUT_DISABLED');
+    expect(
+      (await post(claims, { transactionId: 'Synthetic-123' }, headers, production.server))
+        .statusCode,
+    ).toBe(503);
+    const bucket = createHmac('sha256', config.betterAuthSecret)
+      .update(`checkout-rate:v2:${config.storefrontOrganizationCode}:127.0.0.1:claim`)
+      .digest('hex');
+    await sql`update iam.auth_kv_store set counter_value=12 where key_hash=${bucket}`.execute(db());
+    const otherInstance = await application();
+    const limited = await post(
+      claims,
+      { transactionId: 'Synthetic-123' },
+      headers,
+      otherInstance.server,
+    );
+    expect(limited.statusCode).toBe(429);
+    expect(limited.headers['retry-after']).toBe('60');
+  });
+
   it('shares durable quotas across API instances without accepting forwarded-IP spoofing', async () => {
     const g = await guest();
     const second = await application();

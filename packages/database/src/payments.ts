@@ -9,7 +9,7 @@ import { requirePaymentCapability } from './payments/authorization.js';
 export { processPaymentReviewAging } from './payments/review-aging.js';
 export { changeRefundProcessingState } from './payments/refund-processing.js';
 export { listReceiptExceptions } from './payments/receipt-exceptions.js';
-import { sql, type Kysely } from 'kysely';
+import { sql, type Kysely, type Transaction } from 'kysely';
 
 import type { DatabaseSchema } from './index.js';
 import { appendAuditEvent, claimIdempotencyRecord, IdempotencyKeyReuseError } from './platform.js';
@@ -22,6 +22,7 @@ export class PaymentDomainError extends Error {
       | 'NOT_FOUND'
       | 'FORBIDDEN'
       | 'CONFLICT'
+      | 'CLAIM_LIMIT_REACHED'
       | 'POLICY_BLOCKED'
       | 'PAYMENT_METHOD_UNAVAILABLE'
       | 'VALIDATION_FAILED'
@@ -558,8 +559,10 @@ export async function getOrderPaymentSummary(
     orderId: string;
     paymentMethod: PaymentMethodCode;
     expectedAmount: string;
+    intentId?: string;
   },
 ): Promise<PaymentSummary> {
+  const boundIntent = input.intentId ? sql`and id = ${input.intentId}` : sql``;
   const summary = await sql<{
     expected: string | null;
     intent_status: string | null;
@@ -567,8 +570,8 @@ export async function getOrderPaymentSummary(
     refunded: string;
   }>`
     select
-      (select expected_amount::text from payments.payment_intents where organization_id = ${input.organizationId} and order_id = ${input.orderId} order by created_at desc limit 1) as expected,
-      (select status from payments.payment_intents where organization_id = ${input.organizationId} and order_id = ${input.orderId} order by created_at desc limit 1) as intent_status,
+      (select expected_amount::text from payments.payment_intents where organization_id = ${input.organizationId} and order_id = ${input.orderId} ${boundIntent} order by created_at desc limit 1) as expected,
+      (select status from payments.payment_intents where organization_id = ${input.organizationId} and order_id = ${input.orderId} ${boundIntent} order by created_at desc limit 1) as intent_status,
       coalesce((select sum(allocation.amount)::text from payments.payment_allocations allocation join payments.payments payment on payment.id = allocation.payment_id
         where allocation.organization_id = ${input.organizationId} and allocation.order_id = ${input.orderId} and payment.status = 'CONFIRMED'), '0.0000') as collected,
       coalesce((select sum(refund_allocation.amount)::text from payments.refunds refund join payments.refund_allocations refund_allocation on refund_allocation.organization_id=refund.organization_id and refund_allocation.refund_id=refund.id and refund_allocation.component_type<>'UNALLOCATED_RECEIPT' where refund.organization_id = ${input.organizationId} and refund.order_id = ${input.orderId}
@@ -593,7 +596,8 @@ export async function getOrderPaymentSummary(
       when ${row.collected}::numeric >= ${expected}::numeric and ${expected}::numeric > 0 then 'PAID'
       when ${row.collected}::numeric > 0 then 'PARTIALLY_PAID'
       when exists (select 1 from payments.payment_attempts attempt join payments.payment_intents intent on intent.id = attempt.payment_intent_id
-        where intent.organization_id = ${input.organizationId} and intent.order_id = ${input.orderId} and attempt.status = 'PENDING_VERIFICATION') then 'PAYMENT_PENDING'
+        where intent.organization_id = ${input.organizationId} and intent.order_id = ${input.orderId} and attempt.status = 'PENDING_VERIFICATION'
+          ${input.intentId ? sql`and intent.id = ${input.intentId}` : sql``}) then 'PAYMENT_PENDING'
       when ${row.intent_status}::text = 'EXPIRED' then 'EXPIRED'
       when ${row.intent_status}::text = 'CANCELLED' then 'CANCELLED'
       else 'UNPAID'
@@ -818,41 +822,65 @@ export async function submitManualPayment(
         'PAYMENT_METHOD_UNAVAILABLE',
         'Manual payment submission is not available for this Order.',
       );
-    const activity = await sql<{
-      blocked: boolean;
-    }>`select count(*)>=5 as blocked from payments.payment_attempts
-      where organization_id=${input.organizationId} and payment_intent_id=${intentRow.id} and status='PENDING_VERIFICATION'`.execute(
-      transaction,
-    );
-    if (activity.rows[0]?.blocked)
-      throw new PaymentDomainError(
-        'CONFLICT',
-        'Existing payment claims must be reviewed before submitting more.',
-      );
-    const created = await sql<{ id: string }>`
-      insert into payments.payment_attempts (organization_id, payment_intent_id, customer_reference, normalized_reference, payer_reference, claimed_amount)
-      values (${input.organizationId}, ${intentRow.id}, ${input.customerReference.trim()}, ${normalizedReference}, ${input.payerReference?.trim() ?? null}, ${input.claimedAmount?.trim() ?? null}::numeric)
-      returning id
-    `.execute(transaction);
-    const attemptId = created.rows[0]?.id;
-    if (!attemptId) throw new Error('Payment attempt creation did not return an id.');
-    await sql`update platform.idempotency_records set status = 'SUCCEEDED', result_entity_type = 'payments.payment_attempt', result_entity_id = ${attemptId}::uuid, safe_response = ${JSON.stringify({ attemptId })}::jsonb, completed_at = now() where id = ${recordId}`.execute(
-      transaction,
-    );
-    await appendAuditEvent(transaction, {
-      organizationId: input.organizationId,
-      actorType: 'GUEST_ORDER',
-      actorId: input.orderId,
-      action: 'payments.payment_attempt.submitted',
-      targetType: 'payments.payment_attempt',
-      targetId: attemptId,
-      metadata: { method: intentRow.code },
+    const attemptId = await recordManualClaimInTransaction(transaction, {
+      ...input,
+      intentId: intentRow.id,
+      method: intentRow.code,
+      normalizedReference,
     });
-    await sql`insert into platform.outbox_events (organization_id, event_type, event_version, aggregate_type, aggregate_id, aggregate_version, payload, occurred_at) values (${input.organizationId}, 'payments.payment_attempt.submitted', 1, 'payments.payment_attempt', ${attemptId}, 1, ${JSON.stringify({ attemptId, orderId: input.orderId })}::jsonb, now())`.execute(
+    await sql`update platform.idempotency_records set status = 'SUCCEEDED', result_entity_type = 'payments.payment_attempt', result_entity_id = ${attemptId}::uuid, safe_response = ${JSON.stringify({ attemptId })}::jsonb, completed_at = now() where id = ${recordId}`.execute(
       transaction,
     );
     return getPaymentAttempt(transaction, input.organizationId, attemptId);
   });
+}
+
+/** The caller owns authorization and holds the Order and bound intent locks. */
+export async function recordManualClaimInTransaction(
+  transaction: Transaction<DatabaseSchema>,
+  input: {
+    organizationId: string;
+    orderId: string;
+    intentId: string;
+    method: Exclude<PaymentMethodCode, 'COD'>;
+    customerReference: string;
+    normalizedReference: string;
+    payerReference?: string;
+    claimedAmount?: string;
+    actor?: { type: 'GUEST_CHECKOUT' | 'USER'; id: string };
+  },
+): Promise<string> {
+  const activity = await sql<{
+    blocked: boolean;
+  }>`select count(*)>=5 as blocked from payments.payment_attempts
+    where organization_id=${input.organizationId} and payment_intent_id=${input.intentId} and status='PENDING_VERIFICATION'`.execute(
+    transaction,
+  );
+  if (activity.rows[0]?.blocked)
+    throw new PaymentDomainError(
+      input.actor ? 'CLAIM_LIMIT_REACHED' : 'CONFLICT',
+      'Existing payment claims must be reviewed before submitting more.',
+    );
+  const created = await sql<{ id: string }>`
+    insert into payments.payment_attempts (organization_id, payment_intent_id, customer_reference, normalized_reference, payer_reference, claimed_amount)
+    values (${input.organizationId}, ${input.intentId}, ${input.customerReference.trim()}, ${input.normalizedReference}, ${input.payerReference?.trim() ?? null}, ${input.claimedAmount?.trim() ?? null}::numeric)
+    returning id
+  `.execute(transaction);
+  const attemptId = created.rows[0]?.id;
+  if (!attemptId) throw new Error('Payment attempt creation did not return an id.');
+  await appendAuditEvent(transaction, {
+    organizationId: input.organizationId,
+    actorType: input.actor?.type ?? 'GUEST_ORDER',
+    actorId: input.actor?.id ?? input.orderId,
+    action: 'payments.payment_attempt.submitted',
+    targetType: 'payments.payment_attempt',
+    targetId: attemptId,
+    metadata: { method: input.method },
+  });
+  await sql`insert into platform.outbox_events (organization_id, event_type, event_version, aggregate_type, aggregate_id, aggregate_version, payload, occurred_at) values (${input.organizationId}, 'payments.payment_attempt.submitted', 1, 'payments.payment_attempt', ${attemptId}, 1, ${JSON.stringify({ attemptId, orderId: input.orderId })}::jsonb, now())`.execute(
+    transaction,
+  );
+  return attemptId;
 }
 
 export async function getPaymentAttempt(

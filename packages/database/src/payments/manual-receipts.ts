@@ -119,9 +119,12 @@ export async function verifyManualPayment(
           };
           currency_code: string;
           destination_id: string | null;
-        }>`select * from payments.payment_intents where organization_id=${input.organizationId} and id=${link.intent_id} for update`.execute(
-          tx,
-        )
+          bound_financial_account: string | null;
+        }>`select i.*, (select h.snapshot->>'financial_account_id'
+          from payments.receiving_destination_history h where h.organization_id=i.organization_id
+            and h.destination_id=i.destination_id and h.revision=i.destination_revision) bound_financial_account
+          from payments.payment_intents i where i.organization_id=${input.organizationId}
+            and i.id=${link.intent_id} for update of i`.execute(tx)
       ).rows[0]!;
       const attempt = (
         await sql<{
@@ -174,6 +177,8 @@ export async function verifyManualPayment(
           (intent.instructions_snapshot.receivingNumber ??
             intent.instructions_snapshot.accountNumber) ||
         evidence.transactionId !== attempt.customer_reference ||
+        (intent.destination_id !== null &&
+          intent.bound_financial_account !== evidence.financialAccountId) ||
         (intent.instructions_snapshot.financialAccountId &&
           intent.instructions_snapshot.financialAccountId !== evidence.financialAccountId)
       )

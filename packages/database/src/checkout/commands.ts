@@ -34,7 +34,7 @@ export async function checkoutTransaction<T>(
   }
 }
 
-function principal(owner: CheckoutAuthority) {
+export function checkoutPrincipalId(owner: CheckoutAuthority) {
   return owner.kind === 'GUEST' ? owner.sessionId : owner.accountId;
 }
 export async function receipt(
@@ -50,7 +50,7 @@ export async function receipt(
     const record = await claimIdempotencyRecord(tx, {
       organizationId: owner.organizationId,
       principalType: `CHECKOUT_${owner.kind}`,
-      principalId: principal(owner),
+      principalId: checkoutPrincipalId(owner),
       operationType: `checkout.foundation.${operation}`,
       idempotencyKey: key,
       requestFingerprint: hashToken(JSON.stringify(body)),
@@ -79,7 +79,7 @@ export async function finish(
   entityType = 'checkout.draft',
 ) {
   await sql`update platform.idempotency_records set status='SUCCEEDED',result_entity_type=${entityType},
-    result_entity_id=${draftId},safe_response=${JSON.stringify(entityType === 'checkout.draft' ? { draftId } : { addressId: draftId })}::jsonb,completed_at=clock_timestamp(),expires_at=null
+    result_entity_id=${draftId},safe_response=${JSON.stringify(entityType === 'checkout.draft' ? { draftId } : entityType === 'payments.payment_attempt' ? { attemptId: draftId } : { addressId: draftId })}::jsonb,completed_at=clock_timestamp(),expires_at=null
     where id=${receiptId}`.execute(tx);
 }
 async function capacity(tx: Transaction<DatabaseSchema>, owner: CheckoutAuthority) {

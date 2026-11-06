@@ -28,12 +28,24 @@ export function checkoutDomainStatus(code: string): number {
       'QUOTE_REVIEW_REQUIRED',
       'CHECKOUT_COMMITTED',
       'PAYMENT_METHOD_UNAVAILABLE',
+      'DESTINATION_UNAVAILABLE',
+      'ORDER_CANCELLED',
+      'PAYMENT_ALREADY_SETTLED',
+      'PAYMENT_SUPPORT_REQUIRED',
+      'CLAIM_ALREADY_SUBMITTED',
+      'CLAIM_LIMIT_REACHED',
+      'COD',
       'PLACEMENT_REVIEW_LIMIT',
       'CUSTOMER_RESTRICTED',
     ].includes(code)
   )
     return 409;
-  if (code === 'DRAFT_EXPIRED' || code === 'QUOTE_EXPIRED') return 410;
+  if (
+    ['DRAFT_EXPIRED', 'QUOTE_EXPIRED', 'ORDER_GRANT_EXPIRED', 'PAYMENT_WINDOW_EXPIRED'].includes(
+      code,
+    )
+  )
+    return 410;
   if (
     [
       'SOURCE_INELIGIBLE',

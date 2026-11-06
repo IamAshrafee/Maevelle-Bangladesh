@@ -295,7 +295,7 @@ export function checkoutPlacementEngine(
               delivery_instructions,guest_grant_hash,guest_grant_expires_at)
             values(${org},${draftId},${final.quote.id},${order.orderId},${intentId},
               ${JSON.stringify({ terms: final.terms, evidence: final.evidence })}::jsonb,${d.instructions ?? null},${guestHash},
-              (select expires_at from orders.checkout_guest_sessions where organization_id=${org}
+              (select least(expires_at,clock_timestamp()+interval '1 hour') from orders.checkout_guest_sessions where organization_id=${org}
                 and id=${owner.kind === 'GUEST' ? owner.sessionId : null}))`.execute(tx);
           await appendAuditEvent(tx, {
             organizationId: org,

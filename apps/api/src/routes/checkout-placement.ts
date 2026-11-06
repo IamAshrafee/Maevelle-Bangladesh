@@ -2,11 +2,14 @@ import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { Type } from 'typebox';
 import type { RuntimeConfig } from '@maevelle/config';
 import type { DatabaseClient } from '@maevelle/database';
-import type { PlaceCheckoutDto } from '@maevelle/contracts';
+import type { PlaceCheckoutDto, SubmitCheckoutPaymentClaimDto } from '@maevelle/contracts';
 import {
   checkoutGuestOrderCredential,
   getCheckoutDraft,
   getCommittedCheckoutOrder,
+  getCheckoutOrderPayment,
+  submitCheckoutPaymentClaim,
+  recoverCheckoutPaymentClaim,
   placeReviewedCheckout,
   reviewCheckoutFinalTerms,
 } from '@maevelle/database/checkout';
@@ -39,6 +42,15 @@ function validate(request: FastifyRequest, fields: readonly string[]) {
 }
 function grantCookieName(draftId: string, secure: boolean) {
   return `${secure ? '__Host-' : ''}maevelle_checkout_order_${draftId.replaceAll('-', '')}`;
+}
+
+function readGrant(request: FastifyRequest, draftId: string, secure: boolean) {
+  const name = grantCookieName(draftId, secure);
+  const pairs = (request.headers.cookie ?? '')
+    .split(';')
+    .map((pair) => pair.trim())
+    .filter((pair) => pair.startsWith(`${name}=`));
+  return pairs.length === 1 ? pairs[0]!.slice(name.length + 1) : undefined;
 }
 
 export function registerCheckoutPlacementRoutes(
@@ -119,12 +131,67 @@ export function registerCheckoutPlacementRoutes(
   );
   app.get('/storefront/v1/checkouts/:id/placement', { schema: { params } }, async (request) => {
     const { owner, draftId } = await context(request, false);
-    const name = grantCookieName(draftId, config.nodeEnv === 'production');
-    const pairs = (request.headers.cookie ?? '')
-      .split(';')
-      .map((p) => p.trim())
-      .filter((p) => p.startsWith(`${name}=`));
-    const grant = pairs.length === 1 ? pairs[0]!.slice(name.length + 1) : undefined;
+    const grant = readGrant(request, draftId, config.nodeEnv === 'production');
     return { data: await getCommittedCheckoutOrder(database.db, owner, draftId, grant) };
   });
+
+  const paymentAccess = async (request: FastifyRequest) => {
+    const { owner, draftId } = await context(request, false);
+    const grant = readGrant(request, draftId, config.nodeEnv === 'production');
+    return { owner, draftId, ...(grant ? { guestCredential: grant } : {}) };
+  };
+  app.get(
+    '/storefront/v1/checkouts/:id/order-payment',
+    { schema: { params } },
+    async (request) => ({
+      data: await getCheckoutOrderPayment(database.db, await paymentAccess(request)),
+    }),
+  );
+
+  app.get(
+    '/storefront/v1/checkouts/:id/order-payment/claims',
+    { schema: { params } },
+    async (request) => {
+      const key = intentKey(request);
+      return {
+        data: await recoverCheckoutPaymentClaim(database.db, await paymentAccess(request), key),
+      };
+    },
+  );
+
+  const claim = {
+    transactionId: Type.String({ minLength: 4, maxLength: 128 }),
+    sendingMobile: Type.Optional(Type.String({ pattern: '^01[3-9][0-9]{8}$' })),
+  };
+  app.post(
+    '/storefront/v1/checkouts/:id/order-payment/claims',
+    {
+      bodyLimit: 1024,
+      schema: { params, body: Type.Object(claim, { additionalProperties: false }) },
+      preValidation: async (request) => {
+        strictBody(request, Object.keys(claim));
+        if (
+          Object.values(request.body as Record<string, unknown>).some(
+            (value) => typeof value !== 'string',
+          )
+        )
+          throw new CheckoutRequestError(
+            'INVALID_REQUEST',
+            400,
+            'Payment claim fields must be strings.',
+          );
+      },
+    },
+    async (request) => {
+      const key = intentKey(request);
+      return {
+        data: await submitCheckoutPaymentClaim(
+          database.db,
+          await paymentAccess(request),
+          request.body as SubmitCheckoutPaymentClaimDto,
+          key,
+        ),
+      };
+    },
+  );
 }

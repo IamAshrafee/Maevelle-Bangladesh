@@ -2,13 +2,13 @@
   "program": "Maevelle Product Completion V2",
   "version": 2,
   "active_area": "storefront-checkout",
-  "active_substage": "CHECKOUT_PHASE_05B_STOREFRONT_PLACEMENT",
+  "active_substage": "CHECKOUT_PHASE_06A_POST_ORDER_PAYMENT_BACKEND",
   "active_status": "IN_PROGRESS",
   "baseline_commit": "d2cce2c",
   "last_checkpoint_commit": "c3413e3",
   "last_verified_commit": "16f648a",
-  "last_completed_action": "Implemented Phase 05B Storefront final terms, exact placement recovery and private confirmation. Four real blocked browser paths verified with no purchase effects. Local acceptance PARTIAL; earlier statuses and migration byte failure preserved.",
-  "next_action": "Use PHASE_05B_NEXT_STAGE_HANDOFF.md for separately authorized post-order and activation work. Real final policy, provider/courier eligibility, shopper instructions/claims, guest recovery, browser success and human acceptance remain open.",
+  "last_completed_action": "Implemented private Phase 06A committed Order payment views, guarded claim submission and receipt recovery. Local acceptance PARTIAL; public placement and collection remain BLOCKED.",
+  "next_action": "Use PHASE_06B_HANDOFF.md for separately authorized Storefront work. Verified cross-device recovery, activation approvals and browser acceptance remain open.",
   "interrupted": false,
   "blocked_by": [
     "SIZING_OWNER_RESPONSIVE_AND_ACCESSIBILITY_ACCEPTANCE_PENDING",
@@ -39,7 +39,8 @@
     "CHECKOUT_FINANCIAL_PROVIDER_LEGAL_AND_OPERATING_APPROVAL_PENDING",
     "CHECKOUT_PHASE04B_FULL_BROWSER_FINANCIAL_STATE_RACE_AND_HUMAN_ACCESSIBILITY_ACCEPTANCE_OPEN",
     "CHECKOUT_PHASE05A_REAL_PLACEMENT_POLICY_AND_COMMITTED_ORDER_RECOVERY_ACCEPTANCE_OPEN",
-    "CHECKOUT_PHASE05B_SUCCESSFUL_BROWSER_PLACEMENT_AND_HUMAN_ACCEPTANCE_UNVERIFIED"
+    "CHECKOUT_PHASE05B_SUCCESSFUL_BROWSER_PLACEMENT_AND_HUMAN_ACCEPTANCE_UNVERIFIED",
+    "CHECKOUT_PHASE06A_VERIFIED_GUEST_RECOVERY_AND_PUBLIC_COLLECTION_BLOCKED"
   ],
   "owner_review_status": "PENDING",
   "verified_complete_areas": [

@@ -13,6 +13,14 @@ import {
   reviewCheckoutFinalTerms,
 } from './placement.js';
 import { getCommittedCheckoutOrder } from './placement-status.js';
+import {
+  checkoutOrderPaymentEngine,
+  getCheckoutOrderPayment,
+  recoverCheckoutPaymentClaim,
+  submitCheckoutPaymentClaim,
+} from './order-payment.js';
+import { listManualClaimQueue, reviewManualClaim } from '../payments/review-claims.js';
+import { verifyManualPayment } from '../payments/manual-receipts.js';
 import { checkoutGuestOrderCredential } from './guest-order-credential.js';
 import {
   createGuestCart,
@@ -22,7 +30,11 @@ import {
   setGuestCartLineQuantity,
 } from '../cart.js';
 import { resolveOrEnrollShopper } from '../shopper.js';
-import { setShopperStorageValue, revokeShopperStorageValue } from '../shopper-session-fence.js';
+import {
+  lockShopperSession,
+  setShopperStorageValue,
+  revokeShopperStorageValue,
+} from '../shopper-session-fence.js';
 import { createCouponCode, createPromotion } from '../promotions.js';
 import { configurePaymentMethod } from '../payments.js';
 import { adjustInventory } from '../inventory.js';
@@ -264,7 +276,7 @@ async function expectLockWait(queryFragment: string) {
   throw new Error('Expected a PostgreSQL lock wait.');
 }
 
-async function wallet() {
+async function wallet(owner?: CheckoutAuthority) {
   const org = fixture.organizationId,
     maker = key(),
     reviewer = key();
@@ -321,7 +333,7 @@ async function wallet() {
     };
   };
   const w = checkoutPlacementEngine(policy);
-  const r = await draft(await guest(), undefined, undefined, 'BKASH_MANUAL');
+  const r = await draft(owner ?? (await guest()), undefined, undefined, 'BKASH_MANUAL');
   const terms = await w.review(db(), r.cmd, r.review);
   return {
     ...r,
@@ -772,6 +784,393 @@ describe('Checkout atomic placement on disposable PostgreSQL', () => {
     expect(await place(r)).toEqual(changed);
     expect(await place(r)).toEqual(changed);
     expect((await effects()).orders).toBe(0);
+  });
+
+  it('authorizes only the committed guest, gates transfer and claims, and reconciles a lost response', async () => {
+    const w = await wallet(),
+      payment = checkoutOrderPaymentEngine(true);
+    await expect(payment.get(db(), w.cmd)).rejects.toMatchObject({ code: 'NOT_FOUND' });
+    const placed = await w.engine.place(db(), w.cmd, w.input, w.key);
+    if (placed.kind !== 'COMMITTED' || w.cmd.owner.kind !== 'GUEST')
+      throw new Error('Expected guest placement');
+    const access = {
+      ...w.cmd,
+      guestCredential: checkoutGuestOrderCredential(
+        w.cmd.owner,
+        w.cmd.draftId,
+        placed.receipt.orderId,
+      ),
+    };
+    await expect(payment.get(db(), w.cmd)).rejects.toMatchObject({ code: 'NOT_FOUND' });
+    await expect(payment.get(db(), { ...access, owner: await guest() })).rejects.toMatchObject({
+      code: 'NOT_FOUND',
+    });
+    await expect(payment.get(db(), { ...access, draftId: w.review.quoteId })).rejects.toMatchObject(
+      { code: 'NOT_FOUND' },
+    );
+    await expect(
+      payment.get(db(), { ...access, draftId: placed.receipt.orderId }),
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+    expect(await getCheckoutOrderPayment(db(), access)).toMatchObject({
+      instructions: null,
+      claimAvailability: 'POLICY_BLOCKED',
+      originalPayable: '100.0000',
+    });
+    const body = { transactionId: 'Fixture-Claim-01' },
+      claimKey = key();
+    await expect(submitCheckoutPaymentClaim(db(), access, body, claimKey)).rejects.toMatchObject({
+      code: 'POLICY_BLOCKED',
+    });
+    await expect(
+      payment.submit(db(), access, { transactionId: '???' }, key()),
+    ).rejects.toMatchObject({ code: 'INVALID_REQUEST' });
+    expect(await payment.get(db(), access)).toMatchObject({
+      transferAvailability: 'AVAILABLE',
+      outstanding: '100.0000',
+      instructions: { accountNumber: '01700000000', transferAction: 'MERCHANT_PAYMENT' },
+    });
+    const before = await effects();
+    const start = performance.now();
+    const claims = await Promise.all([
+      payment.submit(db(), access, body, claimKey),
+      payment.submit(db(), access, body, claimKey),
+    ]);
+    console.info(
+      'Concurrent synthetic claim and exact retry wall time (ms)',
+      (performance.now() - start).toFixed(2),
+    );
+    expect(claims[0]).toEqual(claims[1]);
+    expect(claims[0]).toMatchObject({ status: 'PENDING_VERIFICATION', reviewState: 'PENDING' });
+    expect(JSON.stringify(claims[0])).not.toContain(body.transactionId);
+    expect(await recoverCheckoutPaymentClaim(db(), access, claimKey)).toEqual(claims[0]);
+    await expect(
+      payment.submit(db(), access, { transactionId: body.transactionId.toUpperCase() }, claimKey),
+    ).rejects.toMatchObject({ code: 'IDEMPOTENCY_CONFLICT' });
+    await expect(payment.submit(db(), access, body, key())).rejects.toMatchObject({
+      code: 'CLAIM_ALREADY_SUBMITTED',
+    });
+    expect(await effects()).toEqual(before);
+    expect(
+      (
+        await sql`select payload from platform.outbox_events where organization_id=${fixture.organizationId}
+      and event_type='payments.payment_attempt.submitted'`.execute(db())
+      ).rows,
+    ).toEqual([{ payload: { attemptId: claims[0].id, orderId: placed.receipt.orderId } }]);
+    expect(await payment.get(db(), access)).toMatchObject({
+      transferAvailability: 'CLAIM_UNDER_REVIEW',
+      instructions: null,
+      paymentStatus: 'PAYMENT_PENDING',
+      allocated: '0.0000',
+      verifiedWalletReceipts: '0.0000',
+    });
+    const bound = (
+      await sql<{
+        bounded: boolean;
+      }>`select guest_grant_expires_at<=created_at+interval '1 hour' bounded
+      from orders.checkout_placements where draft_id=${w.cmd.draftId}`.execute(db())
+    ).rows[0];
+    expect(bound?.bounded).toBe(true);
+    await revokeCheckoutGuestSession(db(), w.cmd.owner);
+    await expect(recoverCheckoutPaymentClaim(db(), access, claimKey)).rejects.toMatchObject({
+      code: 'SESSION_EXPIRED',
+    });
+  });
+
+  it('shows actual Admin review, partial receipt and excess settlement to the account owner', async () => {
+    const owner = await account();
+    const w = await wallet(owner),
+      payment = checkoutOrderPaymentEngine(true);
+    const placed = await w.engine.place(db(), w.cmd, w.input, w.key);
+    if (placed.kind !== 'COMMITTED') throw new Error('Expected account placement');
+    await expect(payment.get(db(), { ...w.cmd, owner: await account() })).rejects.toMatchObject({
+      code: 'NOT_FOUND',
+    });
+    await expect(
+      payment.get(db(), { ...w.cmd, owner: { ...owner, organizationId: key() } }),
+    ).rejects.toMatchObject({ code: 'OWNER_CHANGED' });
+    const actorId = key(),
+      email = `${actorId}@example.test`;
+    await sql`insert into iam.users(id,name,email,email_normalized) values(${actorId},'Synthetic Owner',${email},${email})`.execute(
+      db(),
+    );
+    await sql`insert into iam.organization_memberships(organization_id,user_id,membership_type,status)
+      values(${fixture.organizationId},${actorId},'OWNER','ACTIVE')`.execute(db());
+    const operator = { organizationId: fixture.organizationId, actorId };
+    const financialAccountId = (
+      await sql<{ financial_account_id: string }>`select financial_account_id
+      from payments.receiving_destinations where id=${w.destination}`.execute(db())
+    ).rows[0]!.financial_account_id;
+    const claimKey = key(),
+      transactionId = 'Fixture-Partial';
+    expect(await payment.get(db(), w.cmd)).toMatchObject({ instructions: { provider: 'BKASH' } });
+    const first = await payment.submit(db(), w.cmd, { transactionId }, claimKey);
+    expect((await listManualClaimQueue(db(), operator)).items).toMatchObject([
+      {
+        id: first.id,
+        orderId: placed.receipt.orderId,
+        customerReference: transactionId,
+        expectedAmount: '100.0000',
+      },
+    ]);
+    await reviewManualClaim(db(), {
+      ...operator,
+      attemptId: first.id,
+      state: 'UNDER_REVIEW',
+      note: 'Synthetic private note',
+    });
+    expect(await payment.recover(db(), w.cmd, claimKey)).toMatchObject({
+      id: first.id,
+      reviewState: 'UNDER_REVIEW',
+    });
+    const verify = (
+      attemptId: string,
+      reference: string,
+      confirmedAmount: string,
+      idempotencyKey: string,
+      accountId = financialAccountId,
+    ) =>
+      verifyManualPayment(db(), {
+        ...operator,
+        attemptId,
+        confirmedAmount,
+        idempotencyKey,
+        evidence: {
+          transactionId: reference,
+          financialAccountId: accountId,
+          receivingNumber: '01700000000',
+          currency: 'BDT',
+          valueTime: new Date().toISOString(),
+          source: 'ACCOUNT_HISTORY',
+          evidenceReference: 'Isolated statement fixture',
+        },
+      });
+    const otherAccount = (
+      await sql<{ id: string }>`insert into finance.financial_accounts
+      (organization_id,account_number,name,account_type,currency_code)
+      values(${fixture.organizationId},'SYNTHETIC-OTHER-WALLET','Unrelated wallet','MOBILE_WALLET','BDT')
+      returning id`.execute(db())
+    ).rows[0]!.id;
+    await expect(verify(first.id, transactionId, '40', key(), otherAccount)).rejects.toMatchObject({
+      code: 'VALIDATION_FAILED',
+    });
+    expect(await effects()).toMatchObject({ payments: 0, finance: 0 });
+    await verify(first.id, transactionId, '40', key());
+    expect(await payment.get(db(), w.cmd)).toMatchObject({
+      originalPayable: '100.0000',
+      outstanding: '60.0000',
+      verifiedWalletReceipts: '40.0000',
+      allocated: '40.0000',
+      paymentStatus: 'PARTIALLY_PAID',
+      transferAvailability: 'AVAILABLE',
+    });
+    const second = await payment.submit(
+      db(),
+      w.cmd,
+      { transactionId: 'Fixture-Excess', sendingMobile: '01800000000' },
+      key(),
+    );
+    const entered = gate(),
+      release = gate();
+    const fence = db()
+      .transaction()
+      .execute(async (tx) => {
+        await sql`select id from orders.orders where id=${placed.receipt.orderId} for update`.execute(
+          tx,
+        );
+        entered.open();
+        await release.promise;
+      });
+    await Promise.race([fence, entered.promise]);
+    const verification = verify(second.id, 'Fixture-Excess', '75', key());
+    let concurrentClaim: Promise<unknown> | undefined;
+    try {
+      await expectLockWait('select order_status from orders.orders');
+      concurrentClaim = payment
+        .submit(db(), w.cmd, { transactionId: 'Fixture-Settled-Race' }, key())
+        .catch((error: unknown) => error);
+      await expectLockWait('select order_number,order_status,total_amount');
+    } finally {
+      release.open();
+    }
+    await fence;
+    await verification;
+    expect(await concurrentClaim).toMatchObject({ code: 'PAYMENT_ALREADY_SETTLED' });
+    expect(await payment.get(db(), w.cmd)).toMatchObject({
+      outstanding: '0.0000',
+      verifiedWalletReceipts: '115.0000',
+      unallocatedAtVerification: '15.0000',
+      allocated: '100.0000',
+      paymentStatus: 'PAID',
+      instructions: null,
+      transferAvailability: 'PAYMENT_ALREADY_SETTLED',
+    });
+    expect(await effects()).toMatchObject({ orders: 1, obligations: 1, payments: 2, finance: 2 });
+    expect(await payment.submit(db(), w.cmd, { transactionId }, claimKey)).toMatchObject({
+      id: first.id,
+      status: 'VERIFIED',
+    });
+    const sessionHeld = gate(),
+      releaseSession = gate();
+    const sessionFence = db()
+      .transaction()
+      .execute(async (tx) => {
+        await lockShopperSession(tx, owner.sessionKeyHash, true);
+        sessionHeld.open();
+        await releaseSession.promise;
+      });
+    await Promise.race([sessionFence, sessionHeld.promise]);
+    const logout = revokeShopperStorageValue(db(), owner.sessionKeyHash);
+    let recovery: Promise<unknown> | undefined;
+    try {
+      await expectLockWait('pg_advisory_xact_lock(');
+      recovery = payment.recover(db(), w.cmd, claimKey).catch((error: unknown) => error);
+      await expectLockWait('pg_advisory_xact_lock_shared(');
+    } finally {
+      releaseSession.open();
+    }
+    await sessionFence;
+    await logout;
+    expect(await recovery).toMatchObject({ code: 'SESSION_EXPIRED' });
+  });
+
+  it('waits for destination suspension and does not expose an obsolete instruction snapshot', async () => {
+    const owner = await account(),
+      w = await wallet(owner);
+    const payment = checkoutOrderPaymentEngine(true);
+    expect(await w.engine.place(db(), w.cmd, w.input, w.key)).toMatchObject({ kind: 'COMMITTED' });
+    const entered = gate(),
+      release = gate();
+    const writer = db()
+      .transaction()
+      .execute(async (tx) => {
+        await sql`update payments.receiving_destinations set state='SUSPENDED',revision=revision+1
+        where id=${w.destination}`.execute(tx);
+        entered.open();
+        await release.promise;
+      });
+    await Promise.race([writer, entered.promise]);
+    const pending = payment.get(db(), w.cmd);
+    try {
+      await expectLockWait('from payments.receiving_destinations where');
+    } finally {
+      release.open();
+    }
+    await writer;
+    expect(await pending).toMatchObject({
+      instructions: null,
+      transferAvailability: 'DESTINATION_UNAVAILABLE',
+    });
+  });
+
+  it('keeps an expired pending claim for review and rejects a new claim after Worker cancellation', async () => {
+    const w = await wallet(),
+      payment = checkoutOrderPaymentEngine(true);
+    const placed = await w.engine.place(db(), w.cmd, w.input, w.key);
+    if (placed.kind !== 'COMMITTED' || w.cmd.owner.kind !== 'GUEST')
+      throw new Error('Expected guest placement');
+    const access = {
+      ...w.cmd,
+      guestCredential: checkoutGuestOrderCredential(
+        w.cmd.owner,
+        w.cmd.draftId,
+        placed.receipt.orderId,
+      ),
+    };
+    const claimKey = key();
+    const claim = await payment.submit(
+      db(),
+      access,
+      { transactionId: 'Fixture-Review-Window' },
+      claimKey,
+    );
+    await sql`update payments.payment_intents set expires_at=clock_timestamp()-interval '2 minutes'
+      where order_id=${placed.receipt.orderId}`.execute(db());
+    expect(await processExpiredPaymentOrders(db())).toBe(0);
+    expect(await payment.get(db(), access)).toMatchObject({
+      orderStatus: 'PENDING',
+      transferAvailability: 'PAYMENT_WINDOW_EXPIRED',
+      latestClaim: claim,
+    });
+    await sql`update payments.payment_intents set review_expires_at=clock_timestamp()-interval '1 minute'
+      where order_id=${placed.receipt.orderId}`.execute(db());
+    const entered = gate(),
+      release = gate();
+    const fence = db()
+      .transaction()
+      .execute(async (tx) => {
+        await sql`select id from orders.orders where id=${placed.receipt.orderId} for update`.execute(
+          tx,
+        );
+        entered.open();
+        await release.promise;
+      });
+    await Promise.race([fence, entered.promise]);
+    const worker = processExpiredPaymentOrders(db());
+    let submission: Promise<unknown> | undefined;
+    try {
+      await expectLockWait('select order_status, version::text,customer_id from orders.orders');
+      submission = payment
+        .submit(db(), access, { transactionId: 'Fixture-New-After-Expiry' }, key())
+        .catch((error: unknown) => error);
+      await expectLockWait('select order_number,order_status,total_amount');
+    } finally {
+      release.open();
+    }
+    await fence;
+    expect(await worker).toBe(1);
+    expect(await submission).toMatchObject({ code: 'ORDER_CANCELLED' });
+    expect(await payment.recover(db(), access, claimKey)).toEqual(claim);
+    expect(await payment.get(db(), access)).toMatchObject({
+      orderStatus: 'CANCELLED',
+      instructions: null,
+      transferAvailability: 'ORDER_CANCELLED',
+    });
+  });
+
+  it('serializes distinct claim keys and fails closed after destination suspension and expiry', async () => {
+    const w = await wallet(),
+      payment = checkoutOrderPaymentEngine(true);
+    const placed = await w.engine.place(db(), w.cmd, w.input, w.key);
+    if (placed.kind !== 'COMMITTED' || w.cmd.owner.kind !== 'GUEST')
+      throw new Error('Expected guest placement');
+    const access = {
+      ...w.cmd,
+      guestCredential: checkoutGuestOrderCredential(
+        w.cmd.owner,
+        w.cmd.draftId,
+        placed.receipt.orderId,
+      ),
+    };
+    const result = await Promise.allSettled([
+      payment.submit(db(), access, { transactionId: 'Fixture-Duplicate' }, key()),
+      payment.submit(db(), access, { transactionId: 'Fixture-Duplicate' }, key()),
+    ]);
+    expect(result.filter((item) => item.status === 'fulfilled')).toHaveLength(1);
+    expect(result.find((item) => item.status === 'rejected')).toMatchObject({
+      reason: { code: 'CLAIM_ALREADY_SUBMITTED' },
+    });
+    for (const reference of ['Fixture-One', 'fixture-one', 'Fixture-Three', 'Fixture-Four'])
+      await payment.submit(db(), access, { transactionId: reference }, key());
+    await expect(
+      payment.submit(db(), access, { transactionId: 'Fixture-Limit' }, key()),
+    ).rejects.toMatchObject({ code: 'CLAIM_LIMIT_REACHED' });
+    await sql`update payments.receiving_destinations set state='SUSPENDED',revision=revision+1 where id=${w.destination}`.execute(
+      db(),
+    );
+    expect(await payment.get(db(), access)).toMatchObject({
+      instructions: null,
+      transferAvailability: 'DESTINATION_UNAVAILABLE',
+    });
+    await sql`update payments.payment_intents set expires_at=now()-interval '1 second' where order_id=${placed.receipt.orderId}`.execute(
+      db(),
+    );
+    await expect(
+      payment.submit(db(), access, { transactionId: 'Fixture-Too-Late' }, key()),
+    ).rejects.toMatchObject({ code: 'PAYMENT_WINDOW_EXPIRED' });
+    expect(await payment.get(db(), access)).toMatchObject({
+      instructions: null,
+      transferAvailability: 'PAYMENT_WINDOW_EXPIRED',
+    });
   });
 
   it('writes a private manual obligation, preserves original provenance and releases unpaid stock via Worker expiry', async () => {

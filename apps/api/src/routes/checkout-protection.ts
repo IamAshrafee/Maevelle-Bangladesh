@@ -37,7 +37,17 @@ export function protectCheckoutRoutes(
         400,
         'Checkout does not accept query fields.',
       );
-    if (!['GET', 'HEAD'].includes(request.method)) {
+    const mutation = !['GET', 'HEAD'].includes(request.method);
+    const orderPayment = request.routeOptions.url?.includes('/order-payment');
+    if (
+      !mutation &&
+      orderPayment &&
+      (request.headers['sec-fetch-site'] === 'cross-site' ||
+        (request.headers.origin &&
+          request.headers.origin !== new URL(config.storefrontBaseUrl).origin))
+    )
+      throw new CheckoutRequestError('ORIGIN_REJECTED', 403, 'Request origin is not trusted.');
+    if (mutation) {
       if (
         request.headers.origin !== new URL(config.storefrontBaseUrl).origin ||
         (request.headers['sec-fetch-site'] &&
@@ -55,8 +65,8 @@ export function protectCheckoutRoutes(
     const bootstrap =
       request.routeOptions.url === '/storefront/v1/checkout/guest-sessions' &&
       request.method === 'POST';
-    const bucket = bootstrap ? 'bootstrap' : request.method === 'GET' ? 'read' : 'write';
-    const maximum = bootstrap ? 12 : bucket === 'read' ? 120 : 40;
+    const bucket = bootstrap ? 'bootstrap' : !mutation ? 'read' : orderPayment ? 'claim' : 'write';
+    const maximum = bootstrap || bucket === 'claim' ? 12 : bucket === 'read' ? 120 : 40;
     const hash = createHmac('sha256', config.betterAuthSecret)
       .update(`checkout-rate:v2:${config.storefrontOrganizationCode}:${ip}:${bucket}`)
       .digest('hex');

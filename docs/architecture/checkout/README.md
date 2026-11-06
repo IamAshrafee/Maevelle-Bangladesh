@@ -16,6 +16,8 @@ Phase 05A atomic placement is **PARTIAL** locally and real purchases remain **BL
 
 Phase 05B Storefront placement and confirmation are implemented with **PARTIAL** integration acceptance. See the [implementation report](PHASE_05B_IMPLEMENTATION_REPORT.md) and [post-order handoff](PHASE_05B_NEXT_STAGE_HANDOFF.md). Four real blocked browser journeys pass; successful browser commitment and public financial policy remain unavailable.
 
+Phase 06A adds private committed-Order payment status, gated claim submission and exact claim recovery. Acceptance is **PARTIAL** and public collection remains **BLOCKED**. See the [implementation report](PHASE_06A_IMPLEMENTATION_REPORT.md) and the [Phase 06B handoff](PHASE_06B_HANDOFF.md).
+
 ## Reading order and authority
 
 | Document | Authoritative subject |
