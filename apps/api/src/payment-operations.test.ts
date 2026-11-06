@@ -92,3 +92,54 @@ it('blocks cross-tenant requests even with a valid local reviewer identity', asy
   });
   expect(response.statusCode).toBe(403);
 });
+it('provides authorized claim instructions and balances without creating financial side effects', async () => {
+  const c = await f.order();
+  const response = await app.inject({
+    url: `/admin/payments/attempts/${c.attemptId}/workspace`,
+    headers: headers(f.owner),
+  });
+  expect(response.statusCode).toBe(200);
+  expect(response.json().data).toMatchObject({
+    receivingNumber: '01700000000',
+    expectedAmount: '100.0000',
+    collected: '0.0000',
+    outstanding: '100.0000',
+    paymentId: null,
+  });
+  expect(
+    (
+      await app.inject({
+        url: `/admin/payments/attempts/${c.attemptId}/workspace`,
+        headers: headers(f.reviewer),
+      })
+    ).statusCode,
+  ).toBe(403);
+});
+it('lists actual policy proposals and approvals without an ID-paste workflow', async () => {
+  const proposal = await app.inject({
+    method: 'POST',
+    url: '/admin/payments/operating-policy-proposals',
+    headers: headers(f.owner),
+    payload: { submissionMinutes: 60, reviewMinutes: 30 },
+  });
+  expect(proposal.statusCode).toBe(201);
+  const list = await app.inject({
+    url: '/admin/payments/operating-policies?page=1',
+    headers: headers(f.owner),
+  });
+  expect(list.json().data.items).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({ id: proposal.json().data.id, createdBy: f.owner, policyId: null }),
+    ]),
+  );
+  const approval = await app.inject({
+    method: 'POST',
+    url: '/admin/payments/operating-policies',
+    headers: headers(f.reviewer),
+    payload: {
+      proposalId: proposal.json().data.id,
+      approvalReference: 'Synthetic independent operational approval',
+    },
+  });
+  expect(approval.statusCode).toBe(201);
+});

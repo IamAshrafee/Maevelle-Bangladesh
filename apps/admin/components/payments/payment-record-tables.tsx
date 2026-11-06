@@ -1,6 +1,6 @@
 'use client';
 
-import { CheckCircle2, ExternalLink, Landmark, RotateCcw } from 'lucide-react';
+import { CheckCircle2, Landmark, RotateCcw } from 'lucide-react';
 import Link from 'next/link';
 
 import { Badge } from '@/components/ui/badge';
@@ -227,9 +227,7 @@ export function RefundsTable({
               <TableRow key={refund.id}>
                 <TableCell>
                   <div className="space-y-0.5">
-                    <span className="font-semibold text-foreground">
-                      {refund.refundNumber}
-                    </span>
+                    <span className="font-semibold text-foreground">{refund.refundNumber}</span>
                     <span className="block font-mono text-[11px] text-muted-foreground">
                       Pmt {refund.paymentNumber}
                     </span>
@@ -279,7 +277,9 @@ export function RefundsTable({
                       {refund.externalReference}
                     </code>
                   ) : (
-                    <span className="text-xs text-muted-foreground italic">Awaiting completion</span>
+                    <span className="text-xs text-muted-foreground italic">
+                      Awaiting completion
+                    </span>
                   )}
                 </TableCell>
                 <TableCell className="text-xs text-muted-foreground">
@@ -299,7 +299,9 @@ export function RefundsTable({
                         <CheckCircle2 className="size-3.5" aria-hidden="true" />
                         Complete refund
                       </Button>
-                    ) : refund.status === 'COMPLETED' && !refund.financePosting && canPostFinance ? (
+                    ) : refund.status === 'COMPLETED' &&
+                      !refund.financePosting &&
+                      canPostFinance ? (
                       <Button
                         size="sm"
                         variant="outline"

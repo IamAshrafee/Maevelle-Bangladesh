@@ -56,6 +56,7 @@ export function buildApi(options: BuildApiOptions) {
     logController: new LogController({
       disableRequestLogging: (request) =>
         request.url.startsWith(shopperAuthPrefix) ||
+        /^\/admin\/(?:payments|refunds)(?:[/?]|$)/.test(request.url) ||
         /^\/storefront\/v1\/(?:carts|checkout|checkouts|orders)(?:[/?]|$)/.test(request.url),
     }),
     bodyLimit: 1_048_576,
@@ -291,6 +292,7 @@ export function buildApi(options: BuildApiOptions) {
       });
     const diagnostics =
       request.url.startsWith(shopperAuthPrefix) ||
+      /^\/admin\/(?:payments|refunds)(?:[/?]|$)/.test(request.url) ||
       /^\/storefront\/v1\/(?:checkout|checkouts|orders)(?:[/?]|$)/.test(request.url)
         ? { requestId: request.id, route: request.routeOptions.url }
         : { err: error, requestId: request.id };

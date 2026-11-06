@@ -92,45 +92,18 @@ export function useCheckout() {
 
   // Step 2 Manual Mobile Banking Payment State (bKash / Nagad)
   const [selectedWallet, setSelectedWallet] = useState<MobileWalletType>('bkash');
-  const [senderNumber, setSenderNumber] = useState('01712345678');
+  const [senderNumber, setSenderNumber] = useState('');
   const [manualTrxId, setManualTrxId] = useState('');
-  const [copiedField, setCopiedField] = useState<'number' | 'amount' | null>(null);
+  const [copiedField] = useState<'number' | 'amount' | null>(null);
 
-  const merchantNumber = '01894-623835';
-  const merchantNumberRaw = '01894623835';
-
+  const merchantNumber = '';
   const copyMerchantNumber = async () => {
-    try {
-      await navigator.clipboard.writeText(merchantNumberRaw);
-      setCopiedField('number');
-      setTimeout(() => setCopiedField(null), 2000);
-    } catch {
-      setCopiedField('number');
-      setTimeout(() => setCopiedField(null), 2000);
-    }
+    setStepError('Payment instructions require a committed, authorized Order.');
   };
-
   const copyPayableAmount = async () => {
-    try {
-      await navigator.clipboard.writeText(total.toString());
-      setCopiedField('amount');
-      setTimeout(() => setCopiedField(null), 2000);
-    } catch {
-      setCopiedField('amount');
-      setTimeout(() => setCopiedField(null), 2000);
-    }
+    setStepError('A final payable amount is not available.');
   };
 
-  // Keep sender number synced with contact phone number initially
-  useEffect(() => {
-    if (contact.phone) {
-      const clean = contact.phone.replace(/\D/g, '');
-      const full = clean.startsWith('0') ? clean : '0' + clean;
-      setSenderNumber(full);
-    }
-  }, [contact.phone]);
-
-  // Backend sync references
   const backendCheckoutRef = useRef<BackendCheckout | null>(null);
   const idempotencyKeyRef = useRef<string | null>(null);
 
@@ -252,13 +225,14 @@ export function useCheckout() {
     return `Order Confirmed`;
   }, [currentStep, paymentMethod, selectedWallet, formattedTotal]);
 
-
   // Handlers
   const handleZoneChange = (zone: DeliveryZone) => {
     setAddress((prev) => {
       const matchingDistricts = BANGLADESH_DISTRICTS.filter((d) => d.zone === zone);
       const isCurrentValid = matchingDistricts.some((d) => d.value === prev.district);
-      const newDistrict = isCurrentValid ? prev.district : matchingDistricts[0]?.value || prev.district;
+      const newDistrict = isCurrentValid
+        ? prev.district
+        : matchingDistricts[0]?.value || prev.district;
 
       return {
         ...prev,
@@ -367,7 +341,9 @@ export function useCheckout() {
       }
       const cleanTrx = manualTrxId.trim();
       if (cleanTrx.length < 6) {
-        setStepError('Please enter the Transaction ID (TrxID) received from your bKash / Nagad SMS.');
+        setStepError(
+          'Please enter the Transaction ID (TrxID) received from your bKash / Nagad SMS.',
+        );
         return;
       }
       await executeOrderPlacement(selectedWallet, cleanTrx.toUpperCase(), cleanSender);
@@ -377,7 +353,7 @@ export function useCheckout() {
   const executeOrderPlacement = async (
     paymentCode: PaymentMethodCode | MobileWalletType,
     trxId?: string,
-    sender?: string
+    sender?: string,
   ) => {
     if (isSubmitting) return;
     setIsSubmitting(true);
@@ -391,11 +367,7 @@ export function useCheckout() {
         idempotencyKeyRef.current = key;
 
         const backendMethod =
-          paymentCode === 'cod'
-            ? 'COD'
-            : paymentCode === 'nagad'
-            ? 'NAGAD_MANUAL'
-            : 'BKASH_MANUAL';
+          paymentCode === 'cod' ? 'COD' : paymentCode === 'nagad' ? 'NAGAD_MANUAL' : 'BKASH_MANUAL';
 
         // 1. Update checkout payment method
         await fetch('/api/storefront/v1/checkouts/current/payment-method', {
@@ -449,8 +421,8 @@ export function useCheckout() {
       paymentCode === 'cod'
         ? 'Cash on Delivery (Open Box)'
         : paymentCode === 'nagad'
-        ? 'Nagad Manual Transfer'
-        : 'bKash Manual Transfer';
+          ? 'Nagad Manual Transfer'
+          : 'bKash Manual Transfer';
 
     setTimeout(() => {
       setPlacedOrderSummary({
@@ -524,4 +496,3 @@ export function useCheckout() {
 }
 
 export type UseCheckoutReturn = ReturnType<typeof useCheckout>;
-

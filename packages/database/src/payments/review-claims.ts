@@ -51,16 +51,22 @@ export async function listManualClaimQueue(
   const rows = await sql<{
     id: string;
     orderId: string;
+    currency: string;
+    orderNumber: string;
+    methodName: string;
+    customerReference: string;
+    expectedAmount: string;
     reviewState: string;
     submittedAt: Date;
     reviewExpiresAt: Date | null;
     ageSeconds: string;
     overdue: boolean;
     total: string;
-  }>`select a.id,i.order_id as "orderId",a.review_state as "reviewState",a.submitted_at as "submittedAt",
+  }>`select a.id,i.currency_code as currency,i.order_id as "orderId",i.order_number_snapshot as "orderNumber",m.name as "methodName",a.customer_reference as "customerReference",i.expected_amount::text as "expectedAmount",a.review_state as "reviewState",a.submitted_at as "submittedAt",
       i.review_expires_at as "reviewExpiresAt",extract(epoch from (now()-a.submitted_at))::bigint::text as "ageSeconds",
       (i.review_expires_at is not null and i.review_expires_at<=now()) overdue,count(*) over()::text total
     from payments.payment_attempts a join payments.payment_intents i on i.organization_id=a.organization_id and i.id=a.payment_intent_id
+    join payments.payment_methods m on m.organization_id=i.organization_id and m.id=i.payment_method_id
     where a.organization_id=${input.organizationId} and a.status='PENDING_VERIFICATION' order by a.submitted_at,a.id
     limit ${pageSize} offset ${(page - 1) * pageSize}`.execute(db);
   const totalItems =

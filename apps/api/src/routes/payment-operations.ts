@@ -15,6 +15,8 @@ import {
   proposePaymentOperatingPolicy,
   listReceiptExceptions,
   changeRefundProcessingState,
+  getPaymentClaimWorkspace,
+  listPaymentPolicies,
 } from '@maevelle/database/payments';
 import type { createAuth } from '../auth/auth.js';
 import { paymentAdmin, sendPaymentError } from './payments.js';
@@ -32,6 +34,48 @@ export function registerPaymentOperationsRoutes(
   database: DatabaseClient,
   auth: ReturnType<typeof createAuth>,
 ) {
+  app.get(
+    '/admin/payments/attempts/:id/workspace',
+    { schema: { params: Type.Object({ id: uuid }) } },
+    async (request, reply) => {
+      const c = await paymentAdmin(database, auth, request.headers, 'payments.view');
+      if (!c)
+        return reply
+          .code(403)
+          .send({ error: { code: 'FORBIDDEN', message: 'Payment viewing is required.' } });
+      try {
+        return {
+          data: await getPaymentClaimWorkspace(database.db, {
+            ...c,
+            attemptId: (request.params as { id: string }).id,
+          }),
+        };
+      } catch (e) {
+        return sendPaymentError(reply, e);
+      }
+    },
+  );
+  app.get(
+    '/admin/payments/operating-policies',
+    { schema: { querystring: pagination } },
+    async (request, reply) => {
+      const c = await paymentAdmin(database, auth, request.headers, 'payments.destinations.view');
+      if (!c)
+        return reply
+          .code(403)
+          .send({ error: { code: 'FORBIDDEN', message: 'Configuration viewing is required.' } });
+      try {
+        return {
+          data: await listPaymentPolicies(database.db, {
+            ...c,
+            page: (request.query as { page?: number }).page ?? 1,
+          }),
+        };
+      } catch (e) {
+        return sendPaymentError(reply, e);
+      }
+    },
+  );
   app.get(
     '/admin/payments/receipt-exceptions',
     { schema: { querystring: pagination } },

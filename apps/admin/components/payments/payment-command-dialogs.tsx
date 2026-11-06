@@ -49,7 +49,12 @@ interface BaseCommandModalProps {
 
 function BaseCommandModal({ eyebrow, title, onClose, children }: BaseCommandModalProps) {
   return (
-    <Dialog open onOpenChange={(isOpen) => { if (!isOpen) onClose(); }}>
+    <Dialog
+      open
+      onOpenChange={(isOpen) => {
+        if (!isOpen) onClose();
+      }}
+    >
       <DialogContent className="max-w-lg">
         <DialogHeader className="space-y-1">
           <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
@@ -139,8 +144,8 @@ export function CodCollectionDialog({
         <OperationalFeedback tone="warning">
           <Truck className="size-4 shrink-0" aria-hidden="true" />
           <span>
-            Delivery confirms the parcel reached the customer; this separate command confirms the money collected.
-            You will choose the Treasury account holding it afterward.
+            Delivery confirms the parcel reached the customer; this separate command confirms the
+            money collected. You will choose the Treasury account holding it afterward.
           </span>
         </OperationalFeedback>
         <DialogFooter className="gap-2 sm:gap-0">
@@ -232,11 +237,7 @@ export function VerificationDialog({
           <Button type="button" variant="outline" onClick={onClose} disabled={busy}>
             Cancel
           </Button>
-          <Button
-            variant={isVerify ? 'default' : 'destructive'}
-            disabled={busy}
-            type="submit"
-          >
+          <Button variant={isVerify ? 'default' : 'destructive'} disabled={busy} type="submit">
             {isVerify ? 'Confirm verification' : 'Reject submission'}
           </Button>
         </DialogFooter>
@@ -282,9 +283,7 @@ export function RefundDialog({
         </div>
         <div>
           <span className="text-muted-foreground">Available to refund:</span>{' '}
-          <strong className="text-foreground">
-            {formatMoney(payment.net, payment.currency)}
-          </strong>
+          <strong className="text-foreground">{formatMoney(payment.net, payment.currency)}</strong>
         </div>
       </div>
       <form onSubmit={(event) => void onSubmit(event)} className="space-y-4">
@@ -373,7 +372,9 @@ export function FinancePostingDialog({
         </div>
         <div className="col-span-2">
           <span className="text-muted-foreground">Ledger movement:</span>{' '}
-          <strong className={isPayment ? 'text-emerald-600 dark:text-emerald-400' : 'text-destructive'}>
+          <strong
+            className={isPayment ? 'text-emerald-600 dark:text-emerald-400' : 'text-destructive'}
+          >
             {isPayment ? 'Inflow (Credit cash/bank account)' : 'Outflow (Debit cash/bank account)'}
           </strong>
         </div>
@@ -387,7 +388,8 @@ export function FinancePostingDialog({
             <option value="">Choose a treasury account</option>
             {eligibleAccounts.map((account) => (
               <option key={account.id} value={account.id}>
-                {account.name} · Balance: {formatMoney(account.ledger_balance, account.currency_code)}
+                {account.name} · Balance:{' '}
+                {formatMoney(account.ledger_balance, account.currency_code)}
               </option>
             ))}
           </NativeSelect>
@@ -395,7 +397,8 @@ export function FinancePostingDialog({
         <OperationalFeedback tone="warning">
           <Landmark className="size-4 shrink-0" aria-hidden="true" />
           <span>
-            This creates an immutable financial ledger movement. It does not alter the underlying Payment or Refund record.
+            This creates an immutable financial ledger movement. It does not alter the underlying
+            Payment or Refund record.
           </span>
         </OperationalFeedback>
         {!eligibleAccounts.length ? (
@@ -410,10 +413,7 @@ export function FinancePostingDialog({
           <Button type="button" variant="outline" onClick={onClose} disabled={busy}>
             Cancel
           </Button>
-          <Button
-            disabled={busy || !eligibleAccounts.length}
-            type="submit"
-          >
+          <Button disabled={busy || !eligibleAccounts.length} type="submit">
             {isPayment ? 'Receive into account' : 'Record payout'}
           </Button>
         </DialogFooter>
@@ -459,12 +459,19 @@ export function RefundCompletionDialog({
       <form onSubmit={(event) => void onSubmit(event)} className="space-y-4">
         <div className="space-y-1.5">
           <Label htmlFor="completion-ref">External transaction / gateway reference</Label>
-          <Input id="completion-ref" name="externalReference" autoComplete="off" required autoFocus />
+          <Input
+            id="completion-ref"
+            name="externalReference"
+            autoComplete="off"
+            required
+            autoFocus
+          />
         </div>
         <OperationalFeedback tone="warning">
           <ReceiptText className="size-4 shrink-0" aria-hidden="true" />
           <span>
-            Confirm only after the refund was actually transferred to the customer. Completion is an immutable financial fact.
+            Confirm only after the refund was actually transferred to the customer. Completion is an
+            immutable financial fact.
           </span>
         </OperationalFeedback>
         <DialogFooter className="gap-2 sm:gap-0">

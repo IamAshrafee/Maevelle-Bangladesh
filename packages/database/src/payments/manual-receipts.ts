@@ -298,7 +298,7 @@ export async function getVerifiedReceipt(
     (case when p.status='REVERSED' then 0 else greatest(e.unallocated_amount-coalesce((select sum(a.amount)
       from payments.refund_allocations a join payments.refunds r on r.organization_id=a.organization_id and r.id=a.refund_id
       where r.organization_id=e.organization_id and r.payment_id=e.payment_id and r.status='COMPLETED'
-      and a.component_type='UNALLOCATED_RECEIPT'),0),0) end)::numeric(20,4)::text as "remainingUnallocated",e.disposition,p.status='REVERSED' reversed
+      and a.component_type='UNALLOCATED_RECEIPT'),0),0) end)::numeric(20,4)::text as "remainingUnallocated",e.disposition,p.status='REVERSED' reversed,e.reviewer_id as "verifiedBy"
     from payments.verified_receipt_evidence e join payments.payments p on p.organization_id=e.organization_id and p.id=e.payment_id
     where e.organization_id=${organizationId} and e.payment_id=${paymentId}`.execute(db)
   ).rows[0];

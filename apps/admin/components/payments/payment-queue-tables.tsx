@@ -1,4 +1,5 @@
 'use client';
+import { paymentMoney as formatMoney } from '@/lib/payments/transport';
 
 import { Banknote, CheckCircle2, XCircle } from 'lucide-react';
 import Link from 'next/link';
@@ -14,7 +15,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { formatFinanceDate, formatMoney } from '@/lib/finance/types';
+import { formatFinanceDate } from '@/lib/finance/types';
 
 import type { PaymentAttemptDto, PendingCodCollectionDto } from '@maevelle/contracts';
 
@@ -71,7 +72,11 @@ export function VerificationQueue({ attempts, busy, onDecision }: VerificationQu
                   {formatMoney(attempt.expectedAmount)}
                 </TableCell>
                 <TableCell className="text-right font-medium">
-                  {attempt.claimedAmount ? formatMoney(attempt.claimedAmount) : <span className="text-muted-foreground">—</span>}
+                  {attempt.claimedAmount ? (
+                    formatMoney(attempt.claimedAmount)
+                  ) : (
+                    <span className="text-muted-foreground">—</span>
+                  )}
                 </TableCell>
                 <TableCell>
                   <code className="rounded bg-muted px-1.5 py-0.5 text-xs font-mono font-medium">
@@ -93,7 +98,10 @@ export function VerificationQueue({ attempts, busy, onDecision }: VerificationQu
                       onClick={() => onDecision(attempt, 'verify')}
                       type="button"
                     >
-                      <CheckCircle2 className="size-3.5 text-emerald-600 dark:text-emerald-400" aria-hidden="true" />
+                      <CheckCircle2
+                        className="size-3.5 text-emerald-600 dark:text-emerald-400"
+                        aria-hidden="true"
+                      />
                       Verify
                     </Button>
                     <Button
@@ -152,11 +160,12 @@ export function CodCollectionQueue({ collections, busy, onCollect }: CodCollecti
           <TableBody>
             {collections.map((item) => (
               <TableRow key={item.deliveryId}>
-                <TableCell className="font-medium text-foreground">
-                  {item.deliveryNumber}
-                </TableCell>
+                <TableCell className="font-medium text-foreground">{item.deliveryNumber}</TableCell>
                 <TableCell>
-                  <Link className="font-semibold text-primary hover:underline" href={`/orders/${item.orderId}`}>
+                  <Link
+                    className="font-semibold text-primary hover:underline"
+                    href={`/orders/${item.orderId}`}
+                  >
                     {item.orderNumber}
                   </Link>
                 </TableCell>

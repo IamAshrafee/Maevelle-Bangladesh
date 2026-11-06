@@ -1,0 +1,71 @@
+{
+  "date": "2026-11-05",
+  "timezone": "Asia/Dhaka",
+  "verdict": "PARTIAL",
+  "environment": {
+    "database": "isolated disposable PostgreSQL 18.3",
+    "api": "127.0.0.1:3002",
+    "admin": "localhost:3001",
+    "sessions": "real BetterAuth synthetic owner, reviewer and read-only viewer",
+    "liveProviderUsed": false,
+    "persistentDatabaseUsed": false
+  },
+  "observedJourneys": [
+    "actual readiness remains blocked",
+    "30-claim queue paginated to claim 26",
+    "customer testimony separated from original intended instructions",
+    "independent receipt evidence starts blank",
+    "review then confirm actual 120 BDT against 100 BDT obligation",
+    "successful verification response replaced with 503 then exact retry yields one receipt",
+    "20 BDT excess liability shown separately from allocated 100 BDT",
+    "refund request, processing, unknown outcome, original-source evidenced completion",
+    "current liability zero after refund, original excess remains 20 BDT",
+    "destination draft creation and actual independent reviewer approval",
+    "destination self approval unavailable",
+    "blank policy form, stored proposal, actual independent approval",
+    "policy self approval unavailable",
+    "reversal unavailable with completed refund",
+    "read-only real session denied review queue and private destinations",
+    "rebuilt fresh Admin tab has no warning or error console logs"
+  ],
+  "stableResponsiveObservations": [
+    { "viewportWidth": 320, "dialogClientWidth": 258, "dialogScrollWidth": 258, "bottomActionsReachableByScrolling": true },
+    { "viewportWidth": 390, "mainClientWidth": 375, "mainScrollWidth": 375 },
+    { "viewportWidth": 768, "mainClientWidth": 497, "mainScrollWidth": 497 },
+    { "viewportWidth": 1024, "mainClientWidth": 753, "mainScrollWidth": 753 },
+    { "viewportWidth": 1440, "documentClientWidth": 1425, "horizontalOverflowObserved": false }
+  ],
+  "keyboardSmoke": "Tab moved through labeled independent receipt fields; small-width dialog actions reachable",
+  "financialFacts": {
+    "receipts": 1,
+    "received": "120.0000",
+    "allocatedShownByReceipt": "100.0000",
+    "completedRefund": "20.0000",
+    "remainingLiabilityShownByReceipt": "0.0000",
+    "orderOutstandingShownByReceipt": "0.0000",
+    "financeTransactions": 2
+  },
+  "negativeCheckoutFacts": {
+    "checkoutOrders": 0,
+    "inventoryReservations": 0,
+    "promotionRedemptions": 0,
+    "convertedCarts": 0,
+    "orderPlacedOutboxEvents": 0
+  },
+  "screenshots": {
+    "desktop": "C:/Users/devas/.codex/visualizations/2026/11/04/01a1a79a-4505-7c52-94e5-044cd0612b16/checkout04b-desktop.png",
+    "mobile": "C:/Users/devas/.codex/visualizations/2026/11/04/01a1a79a-4505-7c52-94e5-044cd0612b16/checkout04b-mobile.png"
+  },
+  "limitations": [
+    "Final additive currency read field covered by API/types; financial browser runtime predates that field",
+    "Final confirmation comparison copy typechecked/linted, not separately browser-tested",
+    "Not all management states, partial/late/duplicate/reversal/COD flows repeated through browser",
+    "No full pending-role-revocation, owner-switch, concurrent-reviewer or Worker/browser fault matrix",
+    "Controlled application post-commit 503 is not physical PostgreSQL COMMIT wire loss",
+    "No physical devices, native zoom, human assistive technology, formal contrast/conformance or owner acceptance",
+    "No deployed IAM/ingress/log-sink/retention or representative-load proof"
+  ],
+  "purchasesEnabled": false,
+  "publicPaymentCollectionEnabled": false,
+  "viewportOverrideReset": true
+}

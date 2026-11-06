@@ -1,17 +1,10 @@
 'use client';
 
-import { Banknote, Save } from 'lucide-react';
+import { Save } from 'lucide-react';
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardFooter,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card';
+import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { NativeSelect } from '@/components/ui/native-select';
@@ -55,12 +48,7 @@ export function PaymentMethodSettings({ methods, busy, onSave }: PaymentMethodSe
               <CardContent className="space-y-4 text-sm">
                 <div className="space-y-1.5">
                   <Label htmlFor={`name-${method.id}`}>Display name</Label>
-                  <Input
-                    id={`name-${method.id}`}
-                    defaultValue={method.name}
-                    name="name"
-                    required
-                  />
+                  <Input id={`name-${method.id}`} defaultValue={method.name} name="name" required />
                 </div>
                 <div className="grid grid-cols-2 gap-3">
                   <div className="space-y-1.5">
