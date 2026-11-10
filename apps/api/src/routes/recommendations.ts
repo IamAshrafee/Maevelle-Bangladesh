@@ -3,6 +3,7 @@ import { Type, type Static } from 'typebox';
 import type { DatabaseClient } from '@maevelle/database';
 import { sql } from '@maevelle/database';
 import {
+  deleteCompatibilityRule,
   evaluateProductRecommendations,
   getProductRecommendationSettings,
   listCompatibilityRules,
@@ -424,6 +425,31 @@ export function registerRecommendationRoutes(
               enabled: boolean;
               expectedVersion: number;
             }),
+          }),
+        };
+      } catch (caught) {
+        return error(reply, caught);
+      }
+    },
+  );
+  app.delete(
+    '/admin/recommendations/compatibility-rules/:id',
+    { schema: { params: Type.Object({ id: uuid }) } },
+    async (request, reply) => {
+      const admin = await requireCatalogCapability(
+        database,
+        auth,
+        request.headers,
+        'recommendations.manage',
+      );
+      if (!admin)
+        return reply.code(403).send({ error: { code: 'FORBIDDEN', message: 'Access denied.' } });
+      try {
+        return {
+          data: await deleteCompatibilityRule(database.db, {
+            organizationId: admin.organizationId,
+            actorId: admin.actorId,
+            ruleId: (request.params as { id: string }).id,
           }),
         };
       } catch (caught) {

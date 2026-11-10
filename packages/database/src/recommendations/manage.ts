@@ -285,6 +285,43 @@ export async function saveCompatibilityRule(
   });
 }
 
+export async function deleteCompatibilityRule(
+  db: Kysely<DatabaseSchema>,
+  input: {
+    organizationId: string;
+    actorId: string;
+    ruleId: string;
+  },
+) {
+  return db.transaction().execute(async (tx) => {
+    const existing = await sql<{
+      id: string;
+      version: string;
+      source_product_type_id: string;
+      target_product_type_id: string;
+      strength: number;
+      enabled: boolean;
+    }>`select id::text, version::text, source_product_type_id::text, target_product_type_id::text, strength, enabled
+      from recommendations.compatibility_rules
+      where organization_id=${input.organizationId} and id=${input.ruleId}::uuid
+      for update`.execute(tx);
+    if (!existing.rows[0]) throw new RecommendationError('NOT_FOUND', 'Rule not found.');
+    await sql`delete from recommendations.compatibility_rules
+      where organization_id=${input.organizationId} and id=${input.ruleId}::uuid`.execute(tx);
+    await appendAuditEvent(tx, {
+      organizationId: input.organizationId,
+      actorType: 'USER',
+      actorId: input.actorId,
+      action: 'recommendations.compatibility.deleted',
+      targetType: 'recommendations.compatibility',
+      targetId: input.ruleId,
+      beforeDiff: existing.rows[0],
+      afterDiff: null,
+    });
+    return { id: input.ruleId, deleted: true };
+  });
+}
+
 export async function searchRecommendationProducts(
   db: Kysely<DatabaseSchema>,
   input: {
