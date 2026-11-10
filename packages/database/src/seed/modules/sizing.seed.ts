@@ -13,9 +13,8 @@ import {
   updateSizeGuide,
   updateSizeSystem,
   updateSizingDomain,
-  type MeasurementUnit,
 } from '../../sizing.js';
-import { sizingSeedData, type SizingDomainSeedItem, type SizingSeedData } from '../data/sizing.js';
+import { sizingSeedData, type SizingSeedData } from '../data/sizing.js';
 import type { SeedContext, SeedModule, SeedModuleResult } from '../types.js';
 
 interface ExistingDomainRow {

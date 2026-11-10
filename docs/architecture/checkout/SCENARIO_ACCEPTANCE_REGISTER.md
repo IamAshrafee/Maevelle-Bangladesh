@@ -1,5 +1,17 @@
 # Scenario and acceptance register
 
+## Phase 09A.5 addendum
+
+2026-11-11: [local report/40 outcomes](PHASE_09A5_IMPLEMENTATION_REPORT.md) records806/806 selected cases across83 files on matching source hashes, full lint0, both production builds and migration/security/type checks. Formatting nonregression passes; full formatting still FAILS on1,121 paths. The only non-tooling behavior change is the DB-clock receipt fixture correction; no production guard or financial calculation changed. No browser restriction bypass; all15 new owner/security journeys remain NOT VERIFIED, and public successful Checkout/independent guest recovery and policy approvals stay blocked. Earlier overall verdicts, human/device/Linux/HTTPS/staging conditions and09B authorization remain separate.
+
+## Phase 09A.4 addendum
+
+2026-11-10: [report/38 outcomes](PHASE_09A4_IMPLEMENTATION_REPORT.md) and [lint register](PHASE_09A4_LINT_REGISTER.md) record full lint0 errors/warnings after778 classified corrections, and final806/806 cases across83 files with no failures/skips on matching source hashes. Both builds/types, migration and security checks pass. Earlier646 drifted/799-of806 probe runs are separately retained, not final acceptance. Financial/auth authority and blocked activation remain. Full formatting FAIL and all15 new browser security journeys NOT VERIFIED remain distinct gates; no startup restriction was bypassed. Earlier overall verdicts, human/device/Linux/HTTPS/target/provider/policy requirements and09B restrictions remain.
+
+## Phase 09A.3 addendum
+
+2026-11-10: [40-outcome local register/report](PHASE_09A3_IMPLEMENTATION_REPORT.md) and [regression register](PHASE_09A3_REGRESSION_REGISTER.md) supersede the open local Auth failure for the verified source snapshot:646 selected cases/69 files pass, both UI builds pass, no skipped cases. Four historical errors reproduce as one outdated Admin-realm assertion and three fixture cascades; bounded pool/cancellation/cleanup evidence is expanded. Whole-taka/cash/waiver invariants and blocked application remain. Full-repository lint FAIL778, new real-browser owner transitions NOT VERIFIED after automatic runtime-launch rejection, human/device and external policy/Linux/HTTPS/deployment gates remain open. This does not promote prior overall phase verdicts or authorize09B, publication, deployment or financial activation.
+
 ## Phase 09A.2 addendum
 
 **PARTIAL locally; release BLOCKED.** The [40 outcomes](PHASE_09A2_ACCEPTANCE_REGISTER.md) and [report](PHASE_09A2_IMPLEMENTATION_REPORT.md) record exact monetary UI, protected read models, truthful cash settlement and15 actual browser checks. Financial255 selection passes. Later broad508 rerun remains open on current-source auth and initial pool acquisition timing; isolated pool retry passed. Earlier green507 run is separately qualified. No phase/policy approval or public activation is inferred.

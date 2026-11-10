@@ -453,7 +453,7 @@ function StockBalancePanel({
 // ─── Main Component ───────────────────────────────────────────────────────────
 
 export function AdjustmentsSection() {
-  const router = useRouter();
+  useRouter();
   const searchParameters = useSearchParams();
   const initialVariantId = searchParameters.get('variantId');
   const initialSku = searchParameters.get('sku');

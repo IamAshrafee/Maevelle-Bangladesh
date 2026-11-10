@@ -1,0 +1,12 @@
+[
+  "apps/admin/components/analytics/views/finance-view.tsx",
+  "apps/admin/components/finance-console.tsx",
+  "apps/admin/components/finance/set-opening-balance-dialog.tsx",
+  "apps/admin/components/security/authenticator-setup-wizard.tsx",
+  "apps/api/src/shopper-auth.test.ts",
+  "apps/storefront/features/checkout/components/checkout-confirmed-step.tsx",
+  "apps/storefront/features/checkout/components/checkout-contact-section.tsx",
+  "apps/storefront/features/checkout/components/checkout-header.tsx",
+  "apps/storefront/features/checkout/components/checkout-order-summary.tsx",
+  "scripts/release/manifest.mjs"
+]

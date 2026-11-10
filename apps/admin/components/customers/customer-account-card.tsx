@@ -1,15 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import {
-  CheckCircle,
-  CircleAlert,
-  Link2,
-  Link2Off,
-  Loader2,
-  ShieldCheck,
-  UserCheck,
-} from 'lucide-react';
+import { CheckCircle, Link2, Link2Off, Loader2, UserCheck } from 'lucide-react';
 import type { CustomerAccountDto } from '@maevelle/contracts';
 
 import { Button } from '@/components/ui/button';

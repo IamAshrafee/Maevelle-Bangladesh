@@ -7,7 +7,6 @@ import {
   Eye,
   EyeOff,
   KeyRound,
-  Lock,
   RefreshCw,
   ShieldAlert,
   ShieldOff,

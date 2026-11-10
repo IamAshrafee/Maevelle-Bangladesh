@@ -5,6 +5,8 @@ configuration, deployment or persistent database operation.** Phase 09A used
 only a fresh local PostgreSQL cluster and random disposable databases. Live
 thresholds, responders and provider permissions remain pending.
 
+2026-11-11 local checkpoint: [Phase09A.5](PHASE_09A5_FINAL_LOCAL_ACCEPTANCE.md) provides a source-specific review package only. Keep independent purchase/method/destination/payout/marketing controls and preserve committed Order reads, legitimate claim reconciliation and Finance/outbox evidence. Do not replace them with a routine blanket API shutdown. Before any target action, satisfy the [separate09B prerequisites](PHASE_09A5_NEXT_STAGE_HANDOFF.md), including actual immutable images, explicit operator/target approval, schema compatibility and backup/forward repair or verified restore. No control was executed in09A.5.
+
 ## Preflight and authority
 
 Before any later action identify the approved environment/hostname, operator,

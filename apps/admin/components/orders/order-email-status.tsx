@@ -3,12 +3,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import {
-  Mail,
   RefreshCw,
   CheckCircle2,
   Clock,
   AlertCircle,
-  XCircle,
   AlertTriangle,
   Send,
   RotateCw,
@@ -58,7 +56,7 @@ export function OrderEmailStatus({ orderId }: OrderEmailStatusProps) {
   const [error, setError] = useState('');
 
   // Selected notification for drawer
-  const [selectedNotificationId, setSelectedNotificationId] = useState<string | null>(null);
+  const [, setSelectedNotificationId] = useState<string | null>(null);
   const [notificationDetail, setNotificationDetail] = useState<EmailNotificationDetailDto | null>(null);
   const [detailDrawerOpen, setDetailDrawerOpen] = useState(false);
 

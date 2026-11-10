@@ -2,23 +2,12 @@
 
 import * as React from 'react';
 import { useCallback, useEffect, useState } from 'react';
-import Link from 'next/link';
-import {
-  Activity,
-  ArrowRight,
-  ChevronLeft,
-  ChevronRight,
-  ExternalLink,
-  Eye,
-  Filter,
-  Loader2,
-  Search,
-  SlidersHorizontal,
-} from 'lucide-react';
+
+import { Activity, ChevronLeft, ChevronRight, Loader2, Search } from 'lucide-react';
 import type { NotificationHistoryRowDto } from '@maevelle/contracts';
 import { Button } from '@/components/ui/button';
 import { RefreshButton } from '@/components/ui/refresh-button';
-import { Badge } from '@/components/ui/badge';
+
 import { Input } from '@/components/ui/input';
 import { NativeSelect } from '@/components/ui/native-select';
 import {
@@ -30,7 +19,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { apiRequest } from '@/lib/api';
-import { cn } from '@/lib/utils';
+
 import {
   NotificationChannelBadge,
   NotificationPriorityBadge,
@@ -57,7 +46,7 @@ export function NotificationHistoryTab({
   const [channel, setChannel] = useState<string>(initialChannel || 'ALL');
   const [status, setStatus] = useState<string>(initialStatus || 'ALL');
   const [category, setCategory] = useState<string>('ALL');
-  const [sourceId, setSourceId] = useState<string>(initialSourceId || '');
+  const [sourceId] = useState<string>(initialSourceId || '');
   const [search, setSearch] = useState<string>('');
   const [page, setPage] = useState(1);
   const [pageSize] = useState(25);

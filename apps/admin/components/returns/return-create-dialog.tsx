@@ -1,15 +1,6 @@
 'use client';
 
-import {
-  AlertCircle,
-  Boxes,
-  CheckCircle2,
-  ChevronRight,
-  Loader2,
-  Plus,
-  RotateCcw,
-  Search,
-} from 'lucide-react';
+import { AlertCircle, ChevronRight, Loader2, RotateCcw, Search } from 'lucide-react';
 import React, { useCallback, useEffect, useState } from 'react';
 
 import { Button } from '@/components/ui/button';
@@ -24,10 +15,10 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
+
 import { fetchApiData } from '@/lib/api';
 import { formatMoney } from '@/lib/format/numbers';
-import type { OrderDetailDto, OrderLineDto } from '@maevelle/contracts';
+import type { OrderDetailDto } from '@maevelle/contracts';
 
 interface OrderSummary {
   id: string;

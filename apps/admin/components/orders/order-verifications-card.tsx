@@ -1,19 +1,11 @@
 'use client';
 
-import { useState } from 'react';
-import {
-  CheckCircle2,
-  Clock,
-  MessageSquare,
-  PhoneCall,
-  ShieldCheck,
-  UserCheck,
-  XCircle,
-} from 'lucide-react';
+
+import { PhoneCall } from 'lucide-react';
 
 import type { OrderVerificationDto } from '@maevelle/contracts';
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
+
+
 import { RecordVerificationDialog } from './record-verification-dialog';
 
 interface OrderVerificationsCardProps {

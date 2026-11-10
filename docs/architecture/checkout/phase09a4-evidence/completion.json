@@ -1,0 +1,30 @@
+{
+  "finished": "2026-11-10T17:58:01.653Z",
+  "head": "cf68b53ddbb3321f03570e0b66a627914c1db674",
+  "sourceDigest": "108283ba5131469c95ceaf00109019dff7acfe77904a176462ff774784b1814a",
+  "finalSourceMatches": true,
+  "selected": {
+    "passed": 806,
+    "failed": 0,
+    "skipped": 0,
+    "files": 83
+  },
+  "allVerificationChecksPassed": true,
+  "acceptanceOutcomes": 38,
+  "postDocumentationSecretsExit": 0,
+  "whitespaceExit": 0,
+  "format": {
+    "fullExit": 1,
+    "lastReportedFiles": 1129,
+    "focusedExit": 0
+  },
+  "browser": "NOT_VERIFIED_EXISTING_RUNTIME_RESTRICTION_RESPECTED",
+  "preservation": {
+    "skillsAndLockFilesUnchanged": 97,
+    "migrationFilesUnchanged": 76,
+    "changed": []
+  },
+  "developmentDeclarationsPreserved": true,
+  "ownedContainerAndAnonymousVolumesRemoved": true,
+  "unrelatedProcessesAndContainersUntouched": true
+}

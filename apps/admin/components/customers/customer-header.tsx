@@ -2,18 +2,7 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import {
-  Calendar,
-  Check,
-  Copy,
-  ExternalLink,
-  GitMerge,
-  PlusCircle,
-  ShoppingBag,
-  Tag,
-  FileText,
-  ShieldAlert,
-} from 'lucide-react';
+import { Calendar, Check, Copy, ExternalLink, GitMerge, ShoppingBag } from 'lucide-react';
 import type { CustomerDetailDto } from '@maevelle/contracts';
 
 import { Breadcrumb } from '@/components/ui/breadcrumb';

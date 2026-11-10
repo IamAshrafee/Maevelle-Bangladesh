@@ -1,0 +1,968 @@
+[
+  {
+    "file": "apps/admin/app/email/settings/page.tsx",
+    "before": "73c12cc2030263f5721a8c89d14f28244f7adf256b2846316bff5ec031277306",
+    "after": "262da8771a976eb4ab200b764ac0f0a815698eb9763cb862b60dfebbe683c488",
+    "correction": "Remove only ESLint-identified unused import bindings using TypeScript AST"
+  },
+  {
+    "file": "apps/admin/app/sizing/mappings/page.tsx",
+    "before": "27933d7ed95b9a58e229593b38559ffd6a175fc6d6dda08bfc2683a0f6f23210",
+    "after": "415a2b3a9c481902bac17c824c717ce90d2edf8dd54bf916276ac60dabc7a590",
+    "correction": "Remove only ESLint-identified unused import bindings using TypeScript AST"
+  },
+  {
+    "file": "apps/admin/app/sizing/standards/page.tsx",
+    "before": "f05f823b640704ec17460ad729b78e12b7640a710f45b25465dfaf20e0bcc421",
+    "after": "fec23ddfdbb7a006941fdac3e85b176dc5927a13438ce5d6f33ba6a7eea5b4ff",
+    "correction": "Remove only ESLint-identified unused import bindings using TypeScript AST"
+  },
+  {
+    "file": "apps/admin/components/analytics/analytics-charts.tsx",
+    "before": "f18469b4f2a69c94115b6a264c29d04f951ae12e16f70b868301fd2e7dd95338",
+    "after": "2f133e6e8a5d8a40f7581e11506579bdf8c40b94078222ec6b6f6c68f8318edb",
+    "correction": "Remove only ESLint-identified unused import bindings using TypeScript AST"
+  },
+  {
+    "file": "apps/admin/components/analytics/analytics-kpi-card.tsx",
+    "before": "1d84ed83bcd047fcd1895c51dbc518d61d24c38f4439b782f99b3d7929e3d6b7",
+    "after": "f66d1d2004f51c49e3b108733df42ed9a401056deb251332b52564c390111207",
+    "correction": "Remove only ESLint-identified unused import bindings using TypeScript AST"
+  },
+  {
+    "file": "apps/admin/components/analytics/views/customers-view.tsx",
+    "before": "d85273c8b605d636bef8489af4988cc64b1c5202ecf57159b542d481d6a99d47",
+    "after": "800e1578af46ee56913361b8304ce614a9b5cb04a0cbcb1b2404581adcb33b0b",
+    "correction": "Remove only ESLint-identified unused import bindings using TypeScript AST"
+  },
+  {
+    "file": "apps/admin/components/analytics/views/delivery-view.tsx",
+    "before": "07ba0a08d4335b1d301e5ac1ba84d3fee8455fa70bed514ab082a6839a8efcbd",
+    "after": "74b94ec1fcb24d49efffac53db2d3e76bbf936992cf00f95edba22389118ef5b",
+    "correction": "Remove only ESLint-identified unused import bindings using TypeScript AST"
+  },
+  {
+    "file": "apps/admin/components/analytics/views/finance-view.tsx",
+    "before": "0922d21c5f5271588e873ab4e477be2c571021be12959105361a6918abf55756",
+    "after": "537f11026acc8755d668110530537c6f4672c3283d19f934c5cfae71dd1f97b2",
+    "correction": "Remove only ESLint-identified unused import bindings using TypeScript AST"
+  },
+  {
+    "file": "apps/admin/components/analytics/views/inventory-view.tsx",
+    "before": "af70c8f14168e8b9de016ba29847f10cb8cfb6dca809dc382022f04ad33a4f2e",
+    "after": "ed7207eeb20c5274ea8cf127060973d9cdd1520ab4200ae7753bb0f57ec18358",
+    "correction": "Remove only ESLint-identified unused import bindings using TypeScript AST"
+  },
+  {
+    "file": "apps/admin/components/analytics/views/marketing-view.tsx",
+    "before": "c19e656bc451b3de70e64354466dbb23fc1f37d75c1d794126d3966ed2a0bd11",
+    "after": "6417ee6dcc0ace12a48584944aa7cf19a2a6941a7425958502dd6c0d3290fc0a",
+    "correction": "Remove only ESLint-identified unused import bindings using TypeScript AST"
+  },
+  {
+    "file": "apps/admin/components/analytics/views/operations-view.tsx",
+    "before": "aecb0f96499d083f6b0bdf802324c99c4512c62e1bd845757c404b55019aa1f2",
+    "after": "ecc5698e08063832719cee104a38bac90283e1cd6b0275f957946946b5376ca9",
+    "correction": "Remove only ESLint-identified unused import bindings using TypeScript AST"
+  },
+  {
+    "file": "apps/admin/components/analytics/views/overview-view.tsx",
+    "before": "26d89556f7920e18af028bc2f8b0fda7e28370dd7b3e102e20bf26b9f4df2968",
+    "after": "40429392b607a3e58ae932ad7ce884a9b8b6a3a922a3d27353b24c74b2d87967",
+    "correction": "Remove only ESLint-identified unused import bindings using TypeScript AST"
+  },
+  {
+    "file": "apps/admin/components/analytics/views/products-view.tsx",
+    "before": "3248412c84896b9e2e5adf5086ad849406ef06fb648ac82756254ac24ecae371",
+    "after": "0f687f8f6d87e3f51bdb683f785476f9a4bf87970013573b253f34c416ac30f1",
+    "correction": "Remove only ESLint-identified unused import bindings using TypeScript AST"
+  },
+  {
+    "file": "apps/admin/components/analytics/views/sales-view.tsx",
+    "before": "f8f6d78a92d453eabb42bfa1ac7d601cae0a1b2f6ddc92d9b97fdab2f5f15ca7",
+    "after": "282dc8fc023d64193e2000448deed10ef01f41a664501e497ea445e5e81828ac",
+    "correction": "Remove only ESLint-identified unused import bindings using TypeScript AST"
+  },
+  {
+    "file": "apps/admin/components/analytics/views/settings-view.tsx",
+    "before": "04d6a837268acd0fe57daff22618668e71c36c88dcddeebb68cdd399496ae397",
+    "after": "4fe88879c656a8708d099164462657944e97c53a30ec5d38663f382ba4e85b94",
+    "correction": "Remove only ESLint-identified unused import bindings using TypeScript AST"
+  },
+  {
+    "file": "apps/admin/components/analytics/views/storefront-view.tsx",
+    "before": "5c770f1fbed9e97b88668c73ac92d87b487044d059b68c15ca71e1eaa2aa6b2a",
+    "after": "dd59bddf1f56bb4ad45028c489bcc993334da8407d03a8e5b42e01b1cfefcfa9",
+    "correction": "Remove only ESLint-identified unused import bindings using TypeScript AST"
+  },
+  {
+    "file": "apps/admin/components/analytics/views/supply-view.tsx",
+    "before": "0fbcd17b2abd06b46d16db3ba13c164bff37674a8dbb2a11fd29b9a48452a969",
+    "after": "5f2b7ecb7b8d8227dccc1e6a6de0a8d284a339f0c26d4902df79869443251b57",
+    "correction": "Remove only ESLint-identified unused import bindings using TypeScript AST"
+  },
+  {
+    "file": "apps/admin/components/colors/color-manager.tsx",
+    "before": "37b5c4c033ebce07c6bf0ecf8579585ffcf0b7130017fb1910bcd0c9ead49d4c",
+    "after": "3f01dc987f1e559223aaac0083eb85189b90e41b692e1e90e752a1278ebcea54",
+    "correction": "Remove only ESLint-identified unused import bindings using TypeScript AST"
+  },
+  {
+    "file": "apps/admin/components/customers/customer-account-card.tsx",
+    "before": "fe7bd41683f5b42e702c0a8e43c7b1759b12b1bab71b7dc41aceb77e91888de7",
+    "after": "b366c0dacebaabe38d62962baa76ace45acafd932a4418511f48d04cbeac1445",
+    "correction": "Remove only ESLint-identified unused import bindings using TypeScript AST"
+  },
+  {
+    "file": "apps/admin/components/customers/customer-addresses-section.tsx",
+    "before": "740775226f86b8166c2244540fb27e9c118126df274de8529611adb5a4d523d3",
+    "after": "5be005ccec2bd5fa37682be48e3f396a2085796a14a567c7cb8b13688f401b3f",
+    "correction": "Remove only ESLint-identified unused import bindings using TypeScript AST"
+  },
+  {
+    "file": "apps/admin/components/customers/customer-delivery-risk-card.tsx",
+    "before": "2b73bb4d57756b7458a423027289daab226193f12b76a22734fd4c43d690b619",
+    "after": "5cadc051b23e19a56b03a865de25e2d2c319ba61ae76cf3202f99892b9c938ca",
+    "correction": "Remove only ESLint-identified unused import bindings using TypeScript AST"
+  },
+  {
+    "file": "apps/admin/components/customers/customer-duplicate-merge-dialog.tsx",
+    "before": "9dee8f041aedc29e91295ded7ef51be0784bb7a7769c6a300afc7017953d4bea",
+    "after": "406d12c2285242800cc3f0b9aa16b1b6fcc92db313dbcd25ec30d7f04707b33c",
+    "correction": "Remove only ESLint-identified unused import bindings using TypeScript AST"
+  },
+  {
+    "file": "apps/admin/components/customers/customer-header.tsx",
+    "before": "8d8989cca534907bf60966318c7e6ba579d774a716c9e1d21bddcffb5f4c3b78",
+    "after": "82b27afb900ae29302b02eac755039cb53f05950bcfad984840c96357fe1a311",
+    "correction": "Remove only ESLint-identified unused import bindings using TypeScript AST"
+  },
+  {
+    "file": "apps/admin/components/customers/customer-metrics-strip.tsx",
+    "before": "ca9c95233bf247401a475a35aed18fc70271efa766b26f3f141d34be45f19ec3",
+    "after": "7a8fb149ef1513976fc2be34de6bb553202bde0159777f5d0692c3841183390b",
+    "correction": "Remove only ESLint-identified unused import bindings using TypeScript AST"
+  },
+  {
+    "file": "apps/admin/components/customers/customer-restrictions-card.tsx",
+    "before": "8ac32dd674ea04326bd26f24b5caa5cc73edf2b4617f16288d0a8e56c207ff21",
+    "after": "65d8b1252b1175576654040f8fabe7f15224b13f01fb1518fc230931242aae69",
+    "correction": "Remove only ESLint-identified unused import bindings using TypeScript AST"
+  },
+  {
+    "file": "apps/admin/components/delivery/courier-quote-card.tsx",
+    "before": "18f6062f1cbf47957f46d0e05c4eea025a04c3b6754e4bd11a16ece4c1cfc961",
+    "after": "8b9c503679a417c8a28418223e189756def724f45601c9d8ccac0a45873f49b2",
+    "correction": "Remove only ESLint-identified unused import bindings using TypeScript AST"
+  },
+  {
+    "file": "apps/admin/components/delivery/couriers-console.tsx",
+    "before": "e6a5687dfc24f109dc246685081aac399e1ffcf353aa143cf4384bfb5f209876",
+    "after": "cb3d2551ce9265b5f70fb77ecaf6e5091e98023703d44b7671b7475460e4f965",
+    "correction": "Remove only ESLint-identified unused import bindings using TypeScript AST"
+  },
+  {
+    "file": "apps/admin/components/delivery/customer-delivery-risk-card.tsx",
+    "before": "254f4490fa49b61f151ed44a8cbde157a0a7142e54b500c4a1b09d6923285187",
+    "after": "9cfd3fe37acc18a8f7a7ed6016e0aa3d80a6d16b4568846c1b471fe7ab854555",
+    "correction": "Remove only ESLint-identified unused import bindings using TypeScript AST"
+  },
+  {
+    "file": "apps/admin/components/delivery/delivery-actions-dialogs.tsx",
+    "before": "f10bd21eb7ce27f7848a9beecd23c673f5ce79825365059bf6d78d1a93277885",
+    "after": "9875f972f8f7a7521955cb0cef4f0bef19683c08dc95657fdd19ef94e3c4ca28",
+    "correction": "Remove only ESLint-identified unused import bindings using TypeScript AST"
+  },
+  {
+    "file": "apps/admin/components/delivery/delivery-console.tsx",
+    "before": "93cc41b7af055eb99e5bb91f34ee94afb4b7e3b17230f90a4e4fac13d9b49bea",
+    "after": "7b4f87b4be770efafb138285cc43d46fd146ae9fefd4d2037af1722506d55ac6",
+    "correction": "Remove only ESLint-identified unused import bindings using TypeScript AST"
+  },
+  {
+    "file": "apps/admin/components/delivery/delivery-operations-console.tsx",
+    "before": "fd5e805a7e7d8fef2c91f52570deb22e3769d7bec8bbcdd0efcb62f98f6bcd80",
+    "after": "28bd0679efb241d438b035dcbc7674d801bf6aeb0639d00f9f8be9a203892985",
+    "correction": "Remove only ESLint-identified unused import bindings using TypeScript AST"
+  },
+  {
+    "file": "apps/admin/components/delivery/pathao-booking-dialog.tsx",
+    "before": "81353915e1bc4bde517229f7c707f13d221a33d8de5c7ada7ad6d51c54f37608",
+    "after": "d111713286dd4c3dbec021eed9d7fafd72e1a353e89ca0113adc636b3bb02092",
+    "correction": "Remove only ESLint-identified unused import bindings using TypeScript AST"
+  },
+  {
+    "file": "apps/admin/components/delivery/tracking-timeline.tsx",
+    "before": "a033acbcb2f1abf31fb95eb5c4bc2053157c93020d7afaddcc510c2f92385c37",
+    "after": "5f8ddadea76534e98d1728134dfe68f6ce5feb1a7f11e4b6d0deb143dcc15e96",
+    "correction": "Remove only ESLint-identified unused import bindings using TypeScript AST"
+  },
+  {
+    "file": "apps/admin/components/design-system/design-system-view.tsx",
+    "before": "19aba62f01f50c4086aac26120a028a2c3927513ab7696540b8a410d30cde2a0",
+    "after": "12bbdb290e226062f25b4989faf1af9d27cc2db5f1baa7843bf5b1025a309054",
+    "correction": "Remove only ESLint-identified unused import bindings using TypeScript AST"
+  },
+  {
+    "file": "apps/admin/components/email/email-activity-tab.tsx",
+    "before": "33037e7cf1a9af652c3750a64ef032f13421c00d7a673b3086eab724336f21e2",
+    "after": "4ab2cb73a9c208c46da1febae2d0288bf6d93398d367f0222ebd9e1000ddd084",
+    "correction": "Remove only ESLint-identified unused import bindings using TypeScript AST"
+  },
+  {
+    "file": "apps/admin/components/email/email-detail-drawer.tsx",
+    "before": "1c8ef54fdf2320880af68961b2fd7a52e420d76534abbe8cca27fb9dadc80e71",
+    "after": "a81ad25baa4cb8559ac1ef615bb68f1c12654a2b12c35611237df393dbfa4c1f",
+    "correction": "Remove only ESLint-identified unused import bindings using TypeScript AST"
+  },
+  {
+    "file": "apps/admin/components/email/email-diagnostics-tab.tsx",
+    "before": "e1d6cd4b2775cc2a1ef6dc022bd514a7f07eefa8b6845425939c462b0bcad361",
+    "after": "29be599ae764086cc0ec6ebb85a41241990f012cf64deaf2b4934920c662d99d",
+    "correction": "Remove only ESLint-identified unused import bindings using TypeScript AST"
+  },
+  {
+    "file": "apps/admin/components/email/email-operations-console.tsx",
+    "before": "b8f55eab3f6f7f461472f24b3a99291d3cb8cfc8a3bf087f0614d7444062361f",
+    "after": "52d865b4c7688c9fb51b6ec048e351ba803824c1e335cefb5096c78cbd008219",
+    "correction": "Remove only ESLint-identified unused import bindings using TypeScript AST"
+  },
+  {
+    "file": "apps/admin/components/email/email-overview-tab.tsx",
+    "before": "158585c4c9af90e9f432c52679d082f287cb39780e4964ad77678d013ab3ebea",
+    "after": "351c2e354b507f587980c2160cb1b021b6a2be79d79945abfb3c5f3473b8068e",
+    "correction": "Remove only ESLint-identified unused import bindings using TypeScript AST"
+  },
+  {
+    "file": "apps/admin/components/email/email-policies-tab.tsx",
+    "before": "6446adb61ad6796f3621a1976a5d3b6b50e92d601bff55379416b99c896265cd",
+    "after": "b288dffe26239b40c2483b51e528d4c8b957b7b0cb517072a89c066334e44373",
+    "correction": "Remove only ESLint-identified unused import bindings using TypeScript AST"
+  },
+  {
+    "file": "apps/admin/components/email/email-preview-frame.tsx",
+    "before": "6ec56c1fc3c34fac92d679c6d835e174ec81063ecea75d122875736bd5a106ce",
+    "after": "6ec56c1fc3c34fac92d679c6d835e174ec81063ecea75d122875736bd5a106ce",
+    "correction": "Remove only ESLint-identified unused import bindings using TypeScript AST"
+  },
+  {
+    "file": "apps/admin/components/email/email-settings-tab.tsx",
+    "before": "5ffcff3d286138147a971a21d8528ec423ca028f7f9bc681e05eb9386cbc427f",
+    "after": "fddec950362b802287d91d5b63ccf199ebae430cc86356a356881796fd01ab9a",
+    "correction": "Remove only ESLint-identified unused import bindings using TypeScript AST"
+  },
+  {
+    "file": "apps/admin/components/email/email-templates-tab.tsx",
+    "before": "843fd86a628904c83b5c599b1c6a36eb0e5ff196b51b8eeb9159fb72f2080fec",
+    "after": "df35c18ef011c15a3f07acd9ae4e6cfeb10f8f4e69b559619dd6f984f5bfbb46",
+    "correction": "Remove only ESLint-identified unused import bindings using TypeScript AST"
+  },
+  {
+    "file": "apps/admin/components/email/email-test-lab-tab.tsx",
+    "before": "68282c6c8e96b568a490c996805dfede793d858f604da628e08eebd5b9bd01ed",
+    "after": "35d4975f5dbd9c29ce7e11e06dccd29f18f0851f92333006f197a3813f1b9bd0",
+    "correction": "Remove only ESLint-identified unused import bindings using TypeScript AST"
+  },
+  {
+    "file": "apps/admin/components/finance-console.tsx",
+    "before": "9a5ed0eeb00e7b66dd44e741b0b6d9a0e6d75096739abcf468e21909fe61de71",
+    "after": "4ec44163341bba5e5f9ac1d444c3c46161c14dba32b202406c6139afc753218f",
+    "correction": "Remove only ESLint-identified unused import bindings using TypeScript AST"
+  },
+  {
+    "file": "apps/admin/components/finance/set-opening-balance-dialog.tsx",
+    "before": "c0ab9dca43874649065dca82b75c6d1a4518a3ced731a7e141e9013c7ab2b098",
+    "after": "3a92e2cbf1ac61a720d068554d214e34d3537e644980330c2d0b3cc75b0a7afc",
+    "correction": "Remove only ESLint-identified unused import bindings using TypeScript AST"
+  },
+  {
+    "file": "apps/admin/components/fulfillment-console.tsx",
+    "before": "48031a98d9d4e9c581ced4c6b9262c3d3d83c6df55dbc2abc6c1c22e5886c3a8",
+    "after": "9d90943118414721b02cd1cf914726241d18b056368277f8581e5524cab58b0f",
+    "correction": "Remove only ESLint-identified unused import bindings using TypeScript AST"
+  },
+  {
+    "file": "apps/admin/components/fulfillment/fulfillment-console.tsx",
+    "before": "0b6be1941a0682f43671e32d3e5c88646741e4cc882fe453faa92abc51c1e1dc",
+    "after": "513db9c593e566c8c5a2467b43265e85a6550178f2729f9b56a31a300a0edd95",
+    "correction": "Remove only ESLint-identified unused import bindings using TypeScript AST"
+  },
+  {
+    "file": "apps/admin/components/fulfillment/fulfillment-create-dialog.tsx",
+    "before": "ab54e4dda2323fefdbd24fbc131223e906469e843d4d359f093af337b80bf70d",
+    "after": "eaae1a922fb17ae251513fb4c14e20df33fa7faf8fe7f948accc9c598a0fbe41",
+    "correction": "Remove only ESLint-identified unused import bindings using TypeScript AST"
+  },
+  {
+    "file": "apps/admin/components/fulfillment/fulfillment-unit-pick-dialog.tsx",
+    "before": "4836d5fa91ebf011d5950b8be6a5dcb7bbea38cc4bbf44e30b5102bdacb4d4cc",
+    "after": "d4d3de1ff731a3c51e267eb4cfa8d53c1d045b948578762785cf54b5774abfdd",
+    "correction": "Remove only ESLint-identified unused import bindings using TypeScript AST"
+  },
+  {
+    "file": "apps/admin/components/integrity/checks-tab.tsx",
+    "before": "e3ef3eb16592c060a2719b53d66bff8f950cc9749a892e014432955cc15a74e7",
+    "after": "e651d1158bc700a7d7dd5e12d785ec17814345a47695d4cad67f63a5af9a67ae",
+    "correction": "Remove only ESLint-identified unused import bindings using TypeScript AST"
+  },
+  {
+    "file": "apps/admin/components/integrity/finding-detail-sheet.tsx",
+    "before": "1efc905d0987cfdc82ab959a08707c0b68001fa6d095bef9259818f1d002747a",
+    "after": "a0cdab244de15fbf7c4a62c3b47b87a047ab4cf911739404d09fca8cc1a23a4c",
+    "correction": "Remove only ESLint-identified unused import bindings using TypeScript AST"
+  },
+  {
+    "file": "apps/admin/components/integrity/findings-tab.tsx",
+    "before": "1ae21a2345520189933788a44580062fd396ac7fbc762b5f20f79d747f06529f",
+    "after": "e940d660f149d52291cef51f3d7157ef86ef89592c8f2cb980acd7cda063c2b2",
+    "correction": "Remove only ESLint-identified unused import bindings using TypeScript AST"
+  },
+  {
+    "file": "apps/admin/components/integrity/integrity-center.tsx",
+    "before": "914f963784ac47c8161ec4add70f5b90a8650fb1234292c348b43b374868a561",
+    "after": "9315690e049b98dffbb7e54854008ccb95ef469eb16bd35eba5167655b210803",
+    "correction": "Remove only ESLint-identified unused import bindings using TypeScript AST"
+  },
+  {
+    "file": "apps/admin/components/integrity/operations-tab.tsx",
+    "before": "2cb7dd159cc31cceb2c0c9037350ab9464afb3dc41c41527c237f8dd50a23c3d",
+    "after": "ebca2df82487d864b0bb31332728967847e52d4b6883a2de2c7c7d242aefc4fe",
+    "correction": "Remove only ESLint-identified unused import bindings using TypeScript AST"
+  },
+  {
+    "file": "apps/admin/components/integrity/overview-tab.tsx",
+    "before": "e8aab3cce33a2208c333d654e68f5c52bc681baf2609a40e552300c7fdadea38",
+    "after": "47bca7a128dd018d8914f07ec3526166c6972651cfb8836ad0e6a82a077d801f",
+    "correction": "Remove only ESLint-identified unused import bindings using TypeScript AST"
+  },
+  {
+    "file": "apps/admin/components/integrity/recovery-tab.tsx",
+    "before": "5a08758467123fc21bcad41486c3690d4797a11544335bfb4bbf639981a99dd1",
+    "after": "00b9b03b7c5b6a2bfde2b3a6b3140165ecbc1d13d836d4da38a54053241695a6",
+    "correction": "Remove only ESLint-identified unused import bindings using TypeScript AST"
+  },
+  {
+    "file": "apps/admin/components/integrity/repair-workflow-dialog.tsx",
+    "before": "00128024744ae4d20845260c2e8a4522903cdcf1d86c159fad2462c872f0d6e7",
+    "after": "8c58ff97e6af6f62b7fa231bd4a99af098050c20508c17f2ec16a286789197a3",
+    "correction": "Remove only ESLint-identified unused import bindings using TypeScript AST"
+  },
+  {
+    "file": "apps/admin/components/integrity/run-detail-dialog.tsx",
+    "before": "c5a60db25fa0b715d27bb86269c77b4789111df0dd76b56cb13a48a1c760bd4d",
+    "after": "8aa6f30c3124c9fdda2ec3fc3f460b0d9b7badf78d8d28f01d492d8cc5c47e2c",
+    "correction": "Remove only ESLint-identified unused import bindings using TypeScript AST"
+  },
+  {
+    "file": "apps/admin/components/integrity/scan-launcher-dialog.tsx",
+    "before": "4bdb394131b7fdf76c7874bf186420b5ea1064497791204e7be377ad3bd0f668",
+    "after": "430daf57fbc7c3e97bc7061768a00274eb4ee4b3e5475df4f8dc17b2cece1b93",
+    "correction": "Remove only ESLint-identified unused import bindings using TypeScript AST"
+  },
+  {
+    "file": "apps/admin/components/integrity/scans-tab.tsx",
+    "before": "de01f7836aae84f815a245c4a0c1a94e5e6809290cc775f5a6e023812710d487",
+    "after": "c8d3eb3c6c5233960d435a45e7835a9a353e891c065ef201f6c48706d8026132",
+    "correction": "Remove only ESLint-identified unused import bindings using TypeScript AST"
+  },
+  {
+    "file": "apps/admin/components/integrity/settings-tab.tsx",
+    "before": "c777b5c019eb2ed79fa69418aac570cd24d1d0c2d942229b944ac956afb1e789",
+    "after": "8ad41e4b59afd0869ad0ebf7bb5291a476c4aa025bd29d2b1fb1beba7dae9967",
+    "correction": "Remove only ESLint-identified unused import bindings using TypeScript AST"
+  },
+  {
+    "file": "apps/admin/components/inventory/adjustments-section.tsx",
+    "before": "3e44eea1e4300c3c1e7418d9ef0a7470801bdb64293d1486c239d726bd47029b",
+    "after": "7b73f5893d82e85e74bddf0999082b4526767c44d8d51a9085b5c9cda5608912",
+    "correction": "Remove only ESLint-identified unused import bindings using TypeScript AST"
+  },
+  {
+    "file": "apps/admin/components/inventory/stocktake-form.tsx",
+    "before": "ed9e683e9f460f9bd7c734db0d66bdcb363de387a2cf9f32ad641a0898583bfc",
+    "after": "8c6e233e3754b6cad365d2e4cddd17a529f9d176b3ff53491fda01d5e6e0022d",
+    "correction": "Remove only ESLint-identified unused import bindings using TypeScript AST"
+  },
+  {
+    "file": "apps/admin/components/inventory/units/repairs-queue.tsx",
+    "before": "be8fbef4a311b6ca9c9c13168c600b9ce3a4b62edf8d7b247ff3f2b79895357a",
+    "after": "56e3553ccfc233cdbd45a4f495a10559ccb68f63b2187719048fb3a33c22ebca",
+    "correction": "Remove only ESLint-identified unused import bindings using TypeScript AST"
+  },
+  {
+    "file": "apps/admin/components/inventory/units/unit-reconciliation-dialog.tsx",
+    "before": "9f42f384b85152041907e7e7ad73de41f42b0e7a7f01fc85a2c14ce9d013f63d",
+    "after": "fe037a27c577581bf0b5343a76dddb53d8daf11d5fac62427e36857616bfff60",
+    "correction": "Remove only ESLint-identified unused import bindings using TypeScript AST"
+  },
+  {
+    "file": "apps/admin/components/notifications/notification-bell.tsx",
+    "before": "9baf2f77c7143ef8e48f2c93ed294d60032b3c43025730730f34479230ea1144",
+    "after": "a308ac9f06ec45ed13454b91bac38e8119c764ab04ddebe4f455c9e5fae68d10",
+    "correction": "Remove only ESLint-identified unused import bindings using TypeScript AST"
+  },
+  {
+    "file": "apps/admin/components/notifications/notification-channels-tab.tsx",
+    "before": "12b71fb89c4fe9bae0668655230f9646439e5779d2fda4b904988e9721266cb9",
+    "after": "e5bcb34ed8f1216d6dbab4af6230909c47ec4d41f3e74cdfd5fc6fdba8fea6da",
+    "correction": "Remove only ESLint-identified unused import bindings using TypeScript AST"
+  },
+  {
+    "file": "apps/admin/components/notifications/notification-delivery-drawer.tsx",
+    "before": "32b5b2e9f81c5703f979355d758206bc769ae2ec2cefd30b85ab389df84b16bc",
+    "after": "bb3aed44ddffc1b9bfa144c61cfabf9aa2ab13bb05b9991a3f7f019178ea7507",
+    "correction": "Remove only ESLint-identified unused import bindings using TypeScript AST"
+  },
+  {
+    "file": "apps/admin/components/notifications/notification-history-tab.tsx",
+    "before": "a543e629694e660afa6fa9e98d0803d926a7fd26b66488a694ab9b1780558546",
+    "after": "c620175e6bd7c2109206bbfd99effe37e9eccc766df12c0fa70fd9fc3d48f3f8",
+    "correction": "Remove only ESLint-identified unused import bindings using TypeScript AST"
+  },
+  {
+    "file": "apps/admin/components/notifications/notification-inbox-tab.tsx",
+    "before": "37d80fd613d5b536e62728f902840cbf7fa7d86e5012f07b3873dacd05d9b482",
+    "after": "c648ea2dac8cf07231e5971d6a0ab051942ed85d754ceae4bd7f547d01ff14e5",
+    "correction": "Remove only ESLint-identified unused import bindings using TypeScript AST"
+  },
+  {
+    "file": "apps/admin/components/notifications/notification-operations-tab.tsx",
+    "before": "36cc9c01eb6c5f4136f7d10e8c26a7210be86da6950407a6ab855c0f32de2499",
+    "after": "364aa91db9517457bf529bafe6ff4aac36037a357aef54f9a66dda537718af5f",
+    "correction": "Remove only ESLint-identified unused import bindings using TypeScript AST"
+  },
+  {
+    "file": "apps/admin/components/notifications/notification-preferences-tab.tsx",
+    "before": "ec82848b1d44c6947c873176bff9c581a435bcd22fcaa719c71e24b7cce4645c",
+    "after": "2ddb3f7d0c250965f1784049be233f77ddd2b4d169e7abc55909215c7aab17eb",
+    "correction": "Remove only ESLint-identified unused import bindings using TypeScript AST"
+  },
+  {
+    "file": "apps/admin/components/notifications/notification-rules-tab.tsx",
+    "before": "4f48354b12d9ce04f811655c52a580a5a0cd9089c3e87f4a0b721d9147aa028a",
+    "after": "28034fe0696531dc2009332d6c5373c64cd0929e3adf1898fc8066abd8313aba",
+    "correction": "Remove only ESLint-identified unused import bindings using TypeScript AST"
+  },
+  {
+    "file": "apps/admin/components/notifications/notification-status-badge.tsx",
+    "before": "7db6ec05a0cb7d22ef0c4f97b91fe61da14f6e8d5d79e1485f3e329466946d68",
+    "after": "b97778a2dd6720ca34cc3537ec0be2e5cc7049a0acbceae6c8bef34d02b4cdf1",
+    "correction": "Remove only ESLint-identified unused import bindings using TypeScript AST"
+  },
+  {
+    "file": "apps/admin/components/notifications/notification-templates-tab.tsx",
+    "before": "314c6180d4c11f58e8250ec1e62c1ab91e6b9530d7936e42fab8c07ac34cab80",
+    "after": "e4ddb274287d842bdb811f0fb151196aa81a8bc428a29a3a17db3b17c11e3a6a",
+    "correction": "Remove only ESLint-identified unused import bindings using TypeScript AST"
+  },
+  {
+    "file": "apps/admin/components/notifications/notifications-center.tsx",
+    "before": "353ed0976fc3a952af641165bd94f26d65f2442a6cc7332b0549e6b18b44e8d1",
+    "after": "6d4e1abf09b90f764176ca8f937de2c12e4a8865e3c65a64ca547cbc8406c41c",
+    "correction": "Remove only ESLint-identified unused import bindings using TypeScript AST"
+  },
+  {
+    "file": "apps/admin/components/operations-console.tsx",
+    "before": "80f66d0fc88c160f3967cdeb02daf8c0fd7d56dc8da5e4a58ce19dc429085e6b",
+    "after": "9a705014c06d754c1e4b5136fbda37d3629c7c4a8e952f6a89041ad8151b0dd0",
+    "correction": "Remove only ESLint-identified unused import bindings using TypeScript AST"
+  },
+  {
+    "file": "apps/admin/components/orders/delivery-pricing/delivery-pricing-simulator.tsx",
+    "before": "885f2d4e9bd3ddb861bd1e617bd3f8977c1e758993ff6e1d78ae4433a7bb7e89",
+    "after": "47e18a29b652ab8f399546eb6cd3f90b36df400aed6201713ea849611d14c0e4",
+    "correction": "Remove only ESLint-identified unused import bindings using TypeScript AST"
+  },
+  {
+    "file": "apps/admin/components/orders/delivery-pricing/delivery-pricing-table.tsx",
+    "before": "cede00b95c305d3dad533ebfb87fc59f4109756b094ef19921531cd28a4b92c0",
+    "after": "92dc1efa9e82e8fcf719df196dae69ac8a37ae478b7b69139a64b1d58e05db4c",
+    "correction": "Remove only ESLint-identified unused import bindings using TypeScript AST"
+  },
+  {
+    "file": "apps/admin/components/orders/delivery-pricing/delivery-pricing-toolbar.tsx",
+    "before": "5316a8edf4d87b6cc64cdbcdd3d29f2932c855218a65cab4b31e516bf639a1cd",
+    "after": "9b81f89e92f15a223bc662fe0cc11b4ccb31cceac468744bccf682526b951df9",
+    "correction": "Remove only ESLint-identified unused import bindings using TypeScript AST"
+  },
+  {
+    "file": "apps/admin/components/orders/delivery-pricing/delivery-pricing-workspace.tsx",
+    "before": "39ac294acf48f808a26b68bc5c8b3817d1e6bbda763c816af6e9d652ad0a189d",
+    "after": "be43dfd706f0e3402fa6b37a236d7c4e6bbd681600e0158d91547d13a277f7d6",
+    "correction": "Remove only ESLint-identified unused import bindings using TypeScript AST"
+  },
+  {
+    "file": "apps/admin/components/orders/delivery-pricing/geography-node-selector.tsx",
+    "before": "2fd079667c695a80c7e3a7af1bbcb11b9fb2ca7403e805e1a416a1af452b4a19",
+    "after": "73df0a15ccda3b3143ab759a6fd87121d38575ffe99fb70e8b9cc2bbcc3692e0",
+    "correction": "Remove only ESLint-identified unused import bindings using TypeScript AST"
+  },
+  {
+    "file": "apps/admin/components/orders/manage-order-tags-dialog.tsx",
+    "before": "0643165529cb4cdd026dac0147786926c1eb59e0aeaccfae83e14cda27c76929",
+    "after": "a0c91c913240f5aef5ab8ec27ea2dcd0cf3311e737e9ddce3b33131dc3c87b7a",
+    "correction": "Remove only ESLint-identified unused import bindings using TypeScript AST"
+  },
+  {
+    "file": "apps/admin/components/orders/order-customer-address-card.tsx",
+    "before": "0e283a75f465291dc76a86b63d949140d9f551c51b0207ac9a2537090c8c01e7",
+    "after": "08f1511d0c213953c2f2c10f849a64924f6c586f91996a22742979ed596ab8db",
+    "correction": "Remove only ESLint-identified unused import bindings using TypeScript AST"
+  },
+  {
+    "file": "apps/admin/components/orders/order-detail-console.tsx",
+    "before": "4222af20552efcec7ae8a528389a48c84e02ad3ee56c86bdf3edb1544343c53a",
+    "after": "215abec269d8dd36e32c1a451fa6cba635e7b14c7aa2538f9000a65e30266b56",
+    "correction": "Remove only ESLint-identified unused import bindings using TypeScript AST"
+  },
+  {
+    "file": "apps/admin/components/orders/order-email-status.tsx",
+    "before": "a0006c583ea80982caaf505c54ad06a7b2e18df1507ab3f49ec0a3ca47e72991",
+    "after": "0e9a229a898f9b7eb592dcc3183870f6b41792d05ce773615fb471b031c192b8",
+    "correction": "Remove only ESLint-identified unused import bindings using TypeScript AST"
+  },
+  {
+    "file": "apps/admin/components/orders/order-fulfillment-delivery-card.tsx",
+    "before": "8e0d95a5559438085285f6ae7badbf3ae93b9fb4745e4cd756dc76c59b1b3ea4",
+    "after": "119fdb5c8bbb2f761b67e6b1f6a99ec6c8dece07a253f5370d7f9f77795da74d",
+    "correction": "Remove only ESLint-identified unused import bindings using TypeScript AST"
+  },
+  {
+    "file": "apps/admin/components/orders/order-header-actions.tsx",
+    "before": "fbf1a536bfa4162ecb3a9375682e4bcf14a158fdf749d5160ece4bd58e5fb8f5",
+    "after": "09bf14762f305f9e7bcbb6b283746d0bdf8bd759591ae9d90eec88caf0d6bc43",
+    "correction": "Remove only ESLint-identified unused import bindings using TypeScript AST"
+  },
+  {
+    "file": "apps/admin/components/orders/order-returns-refunds-card.tsx",
+    "before": "1ee7c39c83cf5ddf8fd354f928aee8c9777d772147c29d598e4273d402c6e324",
+    "after": "10c745485c485a61667244ec9c965046500dbf8cfd4db3500cdcd3020687f603",
+    "correction": "Remove only ESLint-identified unused import bindings using TypeScript AST"
+  },
+  {
+    "file": "apps/admin/components/orders/order-review-status-card.tsx",
+    "before": "20c81bae3da7339bab052e5072415b998ed8533b5f5eef094d189a33a033d4ac",
+    "after": "9b5c2e162520a3204833771d52e2bf46031727f1f43d47777092984dd35ff3f1",
+    "correction": "Remove only ESLint-identified unused import bindings using TypeScript AST"
+  },
+  {
+    "file": "apps/admin/components/orders/order-risk-card.tsx",
+    "before": "507749836f524235434c26403563d7b12d7e23a6383238f395744d91919f5883",
+    "after": "0a0bf81bd1a5ad3ea51cd888675cb5de6c71ab5afc63e39e847dbd39bdc17fe7",
+    "correction": "Remove only ESLint-identified unused import bindings using TypeScript AST"
+  },
+  {
+    "file": "apps/admin/components/orders/order-summary-strip.tsx",
+    "before": "1d9fbf859d0529d83f85eb8b667b416e4cc950b0d225f321f29fe49e01a986aa",
+    "after": "7734e632836a4fbbdec85486331bb1a462abc00e4f4aee0dce69717c2d726bb5",
+    "correction": "Remove only ESLint-identified unused import bindings using TypeScript AST"
+  },
+  {
+    "file": "apps/admin/components/orders/order-timeline-card.tsx",
+    "before": "81faa78943227d8624f5bec169045c0f294444d0b9a760c0c58752b36eb865ce",
+    "after": "a022d737ec8cf0cd1250d0f019c4f3c6f1414b1ed3510567a22e5136f5ea84f1",
+    "correction": "Remove only ESLint-identified unused import bindings using TypeScript AST"
+  },
+  {
+    "file": "apps/admin/components/orders/order-verifications-card.tsx",
+    "before": "182223488bd4c4c56d158a959349d4be86083df3a8bf77cb3d3ecaaa410cfb5d",
+    "after": "61f788be48b922867d64c1abc9c766c9574e5079ee9267dfb0741b9c0819b41b",
+    "correction": "Remove only ESLint-identified unused import bindings using TypeScript AST"
+  },
+  {
+    "file": "apps/admin/components/orders/orders-list.tsx",
+    "before": "3a328dc8d34376f2a92660fb0b95b61309cd2ccab37a2cdbcc845a04c5b00027",
+    "after": "56c925c5fe66f2a8f9991c3fbef66192db706dd07d7d34016712e21a08588391",
+    "correction": "Remove only ESLint-identified unused import bindings using TypeScript AST"
+  },
+  {
+    "file": "apps/admin/components/pricing/archive-price-dialog.tsx",
+    "before": "a45fcf74e3306721fa986d9fde0ccc4971dee1c79a22d3c422f0559d5f285ef3",
+    "after": "6b78fae20ebccdffbc5082bca6accf5ef0622f72267f8e01619cf7030117da1a",
+    "correction": "Remove only ESLint-identified unused import bindings using TypeScript AST"
+  },
+  {
+    "file": "apps/admin/components/products/creator/media-placement-field.tsx",
+    "before": "55dc2605fa6d6f174cd068f244bba30060aa0fb9b36b8a7624a04e126b7fa41a",
+    "after": "6cb8a70b3c7e00eff3f7747b7539d0c05b172a463fa82029c74f22d2a4b1be08",
+    "correction": "Remove only ESLint-identified unused import bindings using TypeScript AST"
+  },
+  {
+    "file": "apps/admin/components/promotions/create-promotion-sheet.tsx",
+    "before": "f0cade937e33bd5a21e93c0dae011ff73c780b3eeabd48a9f6fdda686952c818",
+    "after": "536c362717243acaabfb43cba7b4c0010fdf73389ec7e6013b03b7f45b7f9574",
+    "correction": "Remove only ESLint-identified unused import bindings using TypeScript AST"
+  },
+  {
+    "file": "apps/admin/components/promotions/edit-promotion-dialog.tsx",
+    "before": "0a32d1aa1afd299cbab96ce647a1a9949317013871e559140bf79a9ffcc438db",
+    "after": "1aa16632c6520744af1b53739f18021f7356f9c91be16ea79564ebb72c720ef7",
+    "correction": "Remove only ESLint-identified unused import bindings using TypeScript AST"
+  },
+  {
+    "file": "apps/admin/components/promotions/promotion-detail-drawer.tsx",
+    "before": "99b46006304bdaa4bac102672547984eed8f60a7faac973a0d9e42781247e7d0",
+    "after": "5aa246b2001c8d4da14892b23f2d0131afe770756cd3551c9d5e0c12151f4761",
+    "correction": "Remove only ESLint-identified unused import bindings using TypeScript AST"
+  },
+  {
+    "file": "apps/admin/components/promotions/promotion-status-dialog.tsx",
+    "before": "c82d8dea04630d23ad4b519d367a3487c47b51153293c412855c8d0d8d17f0e1",
+    "after": "ec760944bc4f93025f62fbe30b3a4968ad2d4abce97b8e7f5fcc240a261cb742",
+    "correction": "Remove only ESLint-identified unused import bindings using TypeScript AST"
+  },
+  {
+    "file": "apps/admin/components/promotions/promotions-stats.tsx",
+    "before": "0b5a27de6556b40da3051ede0f72864baeed4d829d75671f255ecc8a45e2e4a0",
+    "after": "a5231c84e24549b6c29b1712a46477be370f773557c7393362da0c57f350920f",
+    "correction": "Remove only ESLint-identified unused import bindings using TypeScript AST"
+  },
+  {
+    "file": "apps/admin/components/promotions/promotions-table.tsx",
+    "before": "b2a770e9db736eb7b3313125a050479b960ee675f7deedbd9e01462a1749bcaf",
+    "after": "17638daa789260e04caef88a54812c122ea1f07ba20b3e6915d54c972fc80e95",
+    "correction": "Remove only ESLint-identified unused import bindings using TypeScript AST"
+  },
+  {
+    "file": "apps/admin/components/promotions/promotions-workspace.tsx",
+    "before": "181aa69080cb4c8c91b1eb509754bca5ce9536fb04abcc5becb4c7ad9379db29",
+    "after": "f8ee5628eaf9730f1e01f66ae90fe70f1bbd10362c32b57d5084108c511d0f9e",
+    "correction": "Remove only ESLint-identified unused import bindings using TypeScript AST"
+  },
+  {
+    "file": "apps/admin/components/recommendations/bulk-merchandising-sheet.tsx",
+    "before": "efdcee94611d7ccc30805dce54b3d050c76621629786eb4270a195a8e3092bd5",
+    "after": "5a05ddb966099aa4fb004d97dae42abc29c070a3baeeea3685c80b0107898a79",
+    "correction": "Remove only ESLint-identified unused import bindings using TypeScript AST"
+  },
+  {
+    "file": "apps/admin/components/recommendations/compatibility-rule-dialog.tsx",
+    "before": "d4cb62e9c7dcecf20895badad063eba912986fcac4fb441465ee1b0d391eab8b",
+    "after": "298cf68cb57aca68da0650ad5f063ccd0657f8aa27af4dcc9d763297e92b7d66",
+    "correction": "Remove only ESLint-identified unused import bindings using TypeScript AST"
+  },
+  {
+    "file": "apps/admin/components/recommendations/recommendations-types.ts",
+    "before": "bb710825e1dab03b1a3a46c040bea6cb4184a92c5ce658628ab098cd6e61e983",
+    "after": "e7a5f148a58529fe501380bb3b04531308b7f7d0608a8d40ff18e689a1623792",
+    "correction": "Remove only ESLint-identified unused import bindings using TypeScript AST"
+  },
+  {
+    "file": "apps/admin/components/recommendations/recommendations-workspace.tsx",
+    "before": "20e275a3b21b9ea516d4d69390f2fc87b22b217158aa032478ec198fb89b3f5e",
+    "after": "d67bc7c9e924d3d0fdbb3a082f3b9243ef65faba4f6aa449b2370e7409688b1a",
+    "correction": "Remove only ESLint-identified unused import bindings using TypeScript AST"
+  },
+  {
+    "file": "apps/admin/components/recommendations/tabs/analytics-tab.tsx",
+    "before": "6c0fb539b0c43e43390e249372fd79a507b53fcc44daae39a4d331e50583aeb0",
+    "after": "95324790748f9b39f55429996d38643ab84ac7980c7b71844a26c7c81a46425a",
+    "correction": "Remove only ESLint-identified unused import bindings using TypeScript AST"
+  },
+  {
+    "file": "apps/admin/components/recommendations/tabs/compatibility-rules-tab.tsx",
+    "before": "44f8033fd994a262fd333c6e3638dac076f06c0165b8191a96a91e434ca08a5e",
+    "after": "099bd2f5815bc344e0ddc3119165ab791b1ff8316c69c9e2b78ce21e89f72521",
+    "correction": "Remove only ESLint-identified unused import bindings using TypeScript AST"
+  },
+  {
+    "file": "apps/admin/components/recommendations/tabs/coverage-tab.tsx",
+    "before": "448ec2df75479f105ae4d1383e615c4251a71c942f71efa3331a9174a619fe01",
+    "after": "c2903428f1f1e76ba7bf299c16b1454103e93e4e81bf668bebfb69f81c923e89",
+    "correction": "Remove only ESLint-identified unused import bindings using TypeScript AST"
+  },
+  {
+    "file": "apps/admin/components/recommendations/tabs/placements-tab.tsx",
+    "before": "1e69c335bcc36ccff2d5db96ddd8b16356794bc9737c4c0ecbd8cc5a268a976e",
+    "after": "a179b56369307f8c367411004da1554af673907889d5b3e78c643d89cfd6a5d5",
+    "correction": "Remove only ESLint-identified unused import bindings using TypeScript AST"
+  },
+  {
+    "file": "apps/admin/components/recommendations/tabs/preview-inspector-tab.tsx",
+    "before": "6fca04133bbcfc35dc52cfb524fc3324f4458be5b242dcfbc798349260c38cb8",
+    "after": "389b1ee4b3693e7bad71e9b84a7a884223af88fac5190fa81198b0c7e685c7d2",
+    "correction": "Remove only ESLint-identified unused import bindings using TypeScript AST"
+  },
+  {
+    "file": "apps/admin/components/returns/return-action-dialogs.tsx",
+    "before": "bc2849a4726d44055cbb38c16177a3b848fe6c1745cd021f7e78ee41581fbfcf",
+    "after": "7a74847223d8ee3b8980ec88bc55f8a1f63c8b9e4c075a97b3ec9ac8a6c66072",
+    "correction": "Remove only ESLint-identified unused import bindings using TypeScript AST"
+  },
+  {
+    "file": "apps/admin/components/returns/return-create-dialog.tsx",
+    "before": "0fa1d1a20041cfac0d04a1a3f86d4cb6d9a1757eae4a610db50f13f85d544810",
+    "after": "7d797604fe771d55990f4595b1464a9296dadd247671339d52233cec37990b84",
+    "correction": "Remove only ESLint-identified unused import bindings using TypeScript AST"
+  },
+  {
+    "file": "apps/admin/components/returns/returns-console.tsx",
+    "before": "af21e42bd9a6c311c6d68b828d484c21ad35ef955a24c0afb14df3b87ad9d424",
+    "after": "39d431e20ea9124034c6677682f87316fc7227859df91919b9758e1ca3fded19",
+    "correction": "Remove only ESLint-identified unused import bindings using TypeScript AST"
+  },
+  {
+    "file": "apps/admin/components/returns/rto-create-dialog.tsx",
+    "before": "37f1d70c4d58ca578b0c7b50d5b052627acfcd1846e7e850033c6fa20a2da68f",
+    "after": "539a04883e1a1f6f356e238ba5994e88be63ce6110e2241016afe92c9235df1e",
+    "correction": "Remove only ESLint-identified unused import bindings using TypeScript AST"
+  },
+  {
+    "file": "apps/admin/components/reviews/review-detail-drawer.tsx",
+    "before": "20f41a91b8f119e38f798ee9dd3cc05c32422053063475627fd7783c8678207e",
+    "after": "b489a85578da355cc5a15e95d5d7a6abc92c03e9112ab8ebe6a52e2e7b10cf1b",
+    "correction": "Remove only ESLint-identified unused import bindings using TypeScript AST"
+  },
+  {
+    "file": "apps/admin/components/reviews/review-status-badge.tsx",
+    "before": "56596910689e6af210b77f63388f7859efe63663c8f8e554f4b8906b67f1a274",
+    "after": "75e360bbfe9fe0f4a2667e2a946c799b716872dd68982b582452b53160eb2f80",
+    "correction": "Remove only ESLint-identified unused import bindings using TypeScript AST"
+  },
+  {
+    "file": "apps/admin/components/reviews/reviews-stats-strip.tsx",
+    "before": "09f499218c2b31199e7df486172b9702cd947a0818bc4edb24d9f21f3fc776ba",
+    "after": "8a5777f7de7a94600159074a0819212e0058b52f9246cb602c71ac1a59e29ea0",
+    "correction": "Remove only ESLint-identified unused import bindings using TypeScript AST"
+  },
+  {
+    "file": "apps/admin/components/reviews/reviews-table.tsx",
+    "before": "ae7617a2e4e9d30f2f71a3a25202ec3f352283dec2c261b2b378aecc57ced675",
+    "after": "0878d34e74f277c4a04ae1426588179c84919e4a0e25d3c898e4fb9fa36cdc90",
+    "correction": "Remove only ESLint-identified unused import bindings using TypeScript AST"
+  },
+  {
+    "file": "apps/admin/components/reviews/reviews-workspace.tsx",
+    "before": "1d74ae81fd9bea4f53ee82915529d69d0746788e3f8b8698791a740ebc47a15a",
+    "after": "19331601961a842906d96b9c2dd29af299057f06635e3fefbda559e1f7a4e4d4",
+    "correction": "Remove only ESLint-identified unused import bindings using TypeScript AST"
+  },
+  {
+    "file": "apps/admin/components/security/authenticator-setup-wizard.tsx",
+    "before": "0e7f5533432c8c0ab72c7da7bd6593b9001b7511754964ae97f503e07f290d91",
+    "after": "797b7c12c80e095105d6b93b18770f6bdf34dbdd1a58fb1e3f914ce7e83550ea",
+    "correction": "Remove only ESLint-identified unused import bindings using TypeScript AST"
+  },
+  {
+    "file": "apps/admin/components/security/two-factor-management-dialog.tsx",
+    "before": "6d31b4064d978b2ccb2c898d70d75f903bf40fe39db50cababd7ff3aab139ce6",
+    "after": "ea541fb21e23789d2f188ab28c6c68572f7079a0975498e39de7ef7d352c2388",
+    "correction": "Remove only ESLint-identified unused import bindings using TypeScript AST"
+  },
+  {
+    "file": "apps/admin/components/security/two-factor-required-gate.tsx",
+    "before": "a9a9660262b812a6500036133e680313e9f04aa7e035f4e92fb886aeb362b881",
+    "after": "ac50f5eec652fd50e1b960c46dbd496117bd8a1af011b8579ad41490e623ba1c",
+    "correction": "Remove only ESLint-identified unused import bindings using TypeScript AST"
+  },
+  {
+    "file": "apps/admin/components/security/two-factor-security-console.tsx",
+    "before": "4818e9769bdacd218b3d0cbb1a5fcd686bb0cd3f2dfa659696550ebe5bfa1841",
+    "after": "30e632da3469ff7596049f11fa4f89dcdc519d4270f890713d3355d00181d623",
+    "correction": "Remove only ESLint-identified unused import bindings using TypeScript AST"
+  },
+  {
+    "file": "apps/admin/components/settings/configuration-health-console.tsx",
+    "before": "1fb0478a05479f1aaa4c1b9761f26f45ca171cb3ae22fe1711c8c2f74c197e07",
+    "after": "fd517d0380c19fbda2521aa7d31e65ab1550b2815ba050505957467e6d7d5a3e",
+    "correction": "Remove only ESLint-identified unused import bindings using TypeScript AST"
+  },
+  {
+    "file": "apps/admin/components/settings/general-settings-console.tsx",
+    "before": "9605621bd86a1854126925598a33e6af94827c525de6706ecc0e1496a7cbf077",
+    "after": "eb0494b0f1149d0f47d85c38b7a4acb3d64232f55e490477026df7bd4b753950",
+    "correction": "Remove only ESLint-identified unused import bindings using TypeScript AST"
+  },
+  {
+    "file": "apps/admin/components/settings/resend-integration-console.tsx",
+    "before": "066d059d78e2d2cee0957c96ebc6bae7985d2e7da88b8f1647958b5349c72756",
+    "after": "d5eac61dc8657ffced57a2bef7dde1a929cdb8fa3ccc5875a2c633805d72be3a",
+    "correction": "Remove only ESLint-identified unused import bindings using TypeScript AST"
+  },
+  {
+    "file": "apps/admin/components/settings/setting-status-badge.tsx",
+    "before": "adc99df6d04d64c41bb3dc7893d52c62bf42025ab36753c4232db1ee3b2c2ad2",
+    "after": "d884bdfe5d6b27cbfb4503f97118f514ab5e2dab8d5b5b4eb91c7218cc3a3208",
+    "correction": "Remove only ESLint-identified unused import bindings using TypeScript AST"
+  },
+  {
+    "file": "apps/admin/components/settings/settings-nav.tsx",
+    "before": "1dc2a39798acc4f1321425646e2a1931d056808d9564e330ce6ac4e9a325eceb",
+    "after": "6092d26b8cc5c30f4b00d576ce781f120d6dfb600cd1cdfb603f9af36bb2cbc8",
+    "correction": "Remove only ESLint-identified unused import bindings using TypeScript AST"
+  },
+  {
+    "file": "apps/admin/components/settings/settings-save-bar.tsx",
+    "before": "d4ae70c6aa61df5caf5b82d07deab7dc512f96a1cdcbc171cb551bd564c1b8c5",
+    "after": "d5689fb8781362f7219090e48f6ff86b523f83971a048487add232da3e8f46a0",
+    "correction": "Remove only ESLint-identified unused import bindings using TypeScript AST"
+  },
+  {
+    "file": "apps/admin/components/settings/storefront-settings-console.tsx",
+    "before": "19ad337759722cee26d928619b74ec95af83a36d5f29bfa03d25f650c1e22584",
+    "after": "431cc5bddaa06c244d2f4c9962d4f291b8a8777247316d7e7c6903a2c21efbe2",
+    "correction": "Remove only ESLint-identified unused import bindings using TypeScript AST"
+  },
+  {
+    "file": "apps/admin/components/settings/two-factor-policy-card.tsx",
+    "before": "d5907b798a738a51b03d2d789c3e80bb45237986aa40dd284d2fcb92f174b926",
+    "after": "65222f26f6e73fe28e368efbd382d19f167b97baef3d5be23e25b5d38b0bd1a4",
+    "correction": "Remove only ESLint-identified unused import bindings using TypeScript AST"
+  },
+  {
+    "file": "apps/admin/components/sms/sms-operations-console.tsx",
+    "before": "d0475c826ef2095aeda4b7a1f2cddb5621a1783bd688fc0676d7c1381aaaaccc",
+    "after": "da986a5e6da6acab6e3fc7a12c89b42d678496965502514fb281fdf81c3ce3cf",
+    "correction": "Remove only ESLint-identified unused import bindings using TypeScript AST"
+  },
+  {
+    "file": "apps/admin/components/supply/receipt-register-units-dialog.tsx",
+    "before": "c26f69bfcad3f099b7edd7eda0e04374e1eb8668b2407c26943991d8f6cef372",
+    "after": "82ed13967c089e0172898edcdd59fa624021a7e4065914e221a46ef15ba772c7",
+    "correction": "Remove only ESLint-identified unused import bindings using TypeScript AST"
+  },
+  {
+    "file": "apps/admin/components/team/team-audit-timeline.tsx",
+    "before": "855f77edee9e814a737c1c42923f593d196962827246d283a30c17faad1e7b0a",
+    "after": "da7ce62f9e5a9d88a1d8e94c280b0a42b25101f13efd67e2820ef3c694bd5640",
+    "correction": "Remove only ESLint-identified unused import bindings using TypeScript AST"
+  },
+  {
+    "file": "apps/admin/components/team/team-console.tsx",
+    "before": "b13919ff484c8cca47d40f2a727a834a3a0764f6750ee2455d21c48fac55b846",
+    "after": "83fcdedd97f4c748354eff1fdd9d4fac6af8afafcb29ee341e5eae4dd6aecf45",
+    "correction": "Remove only ESLint-identified unused import bindings using TypeScript AST"
+  },
+  {
+    "file": "apps/admin/components/team/team-invitations-list.tsx",
+    "before": "cff014e96e4fe9f13115974736c39e9182f865a84eac5fbfa487a6f95f67411c",
+    "after": "3c4955f7b08755ac25c4a2cabd0206f6d1458b5394cbd51ac0f265fd0dd9279d",
+    "correction": "Remove only ESLint-identified unused import bindings using TypeScript AST"
+  },
+  {
+    "file": "apps/admin/components/team/team-members-list.tsx",
+    "before": "63f53c17acb9a50ac87fbf927c05787f0b0f8e03457e30fea69a1c524fc0b0f6",
+    "after": "69ecb6a10c70377b0dccac43452ca81e0fadfd28d5b2c287a323c43b31c58578",
+    "correction": "Remove only ESLint-identified unused import bindings using TypeScript AST"
+  },
+  {
+    "file": "apps/admin/components/team/team-owner-transfer-dialog.tsx",
+    "before": "5db544311b40cc7a046a4398c9b44d7d676c86dc3a86cb06a6258202f7345dfe",
+    "after": "f17d70b7b18a63082afc0b00e5b63bca0d87c27c7f0cb0052712c3e515b96271",
+    "correction": "Remove only ESLint-identified unused import bindings using TypeScript AST"
+  },
+  {
+    "file": "apps/admin/components/team/team-permissions-editor.tsx",
+    "before": "399c3d6c7908e03a15f0c008ba6fa11593552c00c55637f56bfa8acca0687c6b",
+    "after": "d4ab034c0670ba7452bd52dd39dec79bdd492e9a3c4179d687acfa4f700b2724",
+    "correction": "Remove only ESLint-identified unused import bindings using TypeScript AST"
+  },
+  {
+    "file": "apps/admin/components/team/team-roles-presets.tsx",
+    "before": "eeae90c1f0b2556745836c0be84026f051e640461e8621bc3256f596c9991a04",
+    "after": "3b6e43205455ac4ea85a013ddfd8ce07f8f9d1f16b3ec46a1d39a403addf8021",
+    "correction": "Remove only ESLint-identified unused import bindings using TypeScript AST"
+  },
+  {
+    "file": "apps/admin/components/team/team-types.ts",
+    "before": "29fd6074333931a0590aa6f1c9db56eba52793f81596c05129e7b208d03dc73b",
+    "after": "470a1b9af0c872f10ec3ea990d67d9b6a3747d5dca805cdcaf6499baa091e983",
+    "correction": "Remove only ESLint-identified unused import bindings using TypeScript AST"
+  },
+  {
+    "file": "apps/admin/components/ui/page-shell.tsx",
+    "before": "79de0cafeb935483587494dbd7cd25ed1ae4cc3d71b294f35d80d3b751f440a3",
+    "after": "db9807f001679fcb08b4bcc5ac89030d078c03b88e752697b4603ef70fd60242",
+    "correction": "Remove only ESLint-identified unused import bindings using TypeScript AST"
+  },
+  {
+    "file": "apps/admin/lib/analytics/api.ts",
+    "before": "aa463e031187be03610873cc889a33efa274fbb5d8f48d5aa4e536d59025ce0a",
+    "after": "5a95b6d41812913b1ab1cf7881e98c53637c699017c176bbb004019be43b6b79",
+    "correction": "Remove only ESLint-identified unused import bindings using TypeScript AST"
+  },
+  {
+    "file": "apps/storefront/features/checkout/components/checkout-confirmed-step.tsx",
+    "before": "d78b050ae4eba5f9c4db8e61c122de57a553d6506f3e2a0c970cb34e6119a570",
+    "after": "e22775ca3f90d08166328fd7d36d81bc6999028f874fc2e6e3239e6c836cb749",
+    "correction": "Remove only ESLint-identified unused import bindings using TypeScript AST"
+  },
+  {
+    "file": "apps/storefront/features/checkout/components/checkout-contact-section.tsx",
+    "before": "32d63a9667826e55f05af4fdb028d7fc50b2152f25df99bf39419c82cd92c8f1",
+    "after": "32d63a9667826e55f05af4fdb028d7fc50b2152f25df99bf39419c82cd92c8f1",
+    "correction": "Remove only ESLint-identified unused import bindings using TypeScript AST"
+  },
+  {
+    "file": "apps/storefront/features/checkout/components/checkout-header.tsx",
+    "before": "022664324cde4494dc0ff2275c15cd2988bebdcd9e675f55392dfff7bf891e4d",
+    "after": "62134e17cec9ac9625140c8d5f33513c3307a481c1cab4516940cb69170f4512",
+    "correction": "Remove only ESLint-identified unused import bindings using TypeScript AST"
+  },
+  {
+    "file": "apps/storefront/features/checkout/components/checkout-order-summary.tsx",
+    "before": "9ee311f1fbee9d08f1001703673c22b8b6a1325a9d9e7d7f059133fd3f87f750",
+    "after": "98dbe6e1d07d6d772672f02cebd114b126727cc022317f9d6bb84ee751212ea5",
+    "correction": "Remove only ESLint-identified unused import bindings using TypeScript AST"
+  },
+  {
+    "file": "apps/storefront/features/orders/components/order-track-active-consignment.tsx",
+    "before": "86da1d1cb77bf94c59836ef7e3f06b7796f10e1ebcc4795a3ed883053cc25050",
+    "after": "1b064d605f6e20d5e896192e781170ee8aaf0fa80e53494b4b16828506202d7b",
+    "correction": "Remove only ESLint-identified unused import bindings using TypeScript AST"
+  },
+  {
+    "file": "packages/database/src/customers.test.ts",
+    "before": "17a8429418b0e2ab3be3f5b7d8faf44afbc5e62f712d95329d4ce2d9699e790d",
+    "after": "050f3ea0312aff2dcbbdc070529040ec5890087f4c2f9ba8027b61ad3039585e",
+    "correction": "Remove only ESLint-identified unused import bindings using TypeScript AST"
+  },
+  {
+    "file": "packages/database/src/iam-account.ts",
+    "before": "c013a5914e807ba0cff0617240158afac63283a48a7f3cf14c88e6610d7e9ecb",
+    "after": "26101cf75e7839934201f4deca958c6b76a3e37c2d82d29f66e23a35eb8e4854",
+    "correction": "Remove only ESLint-identified unused import bindings using TypeScript AST"
+  },
+  {
+    "file": "packages/database/src/orders/risk.ts",
+    "before": "faf7ad8b97cd143288f2538d4b8592ca0f58686fb3a051670873b3f4a9267a7f",
+    "after": "888dec14bed70a8fc0f8eda6da2884f132d5226d823c4357f5b405502f4b5303",
+    "correction": "Remove only ESLint-identified unused import bindings using TypeScript AST"
+  },
+  {
+    "file": "packages/database/src/orders/timeline.ts",
+    "before": "66493b8c5ca7e92625b5cf5d5744d385ca4e674d6ffd04b88ced4c06428f4bf9",
+    "after": "66493b8c5ca7e92625b5cf5d5744d385ca4e674d6ffd04b88ced4c06428f4bf9",
+    "correction": "Remove only ESLint-identified unused import bindings using TypeScript AST"
+  },
+  {
+    "file": "packages/database/src/procurement.test.ts",
+    "before": "6d4643d52ae4a5a508d2f7e8e126f5d516d96d6f7788c162fd63acc820b255b4",
+    "after": "f1f7e5de0f282d8a13d2ce58e50de37dfe90b9671829d304698acf14b9be6f04",
+    "correction": "Remove only ESLint-identified unused import bindings using TypeScript AST"
+  },
+  {
+    "file": "packages/database/src/seed/modules/sizing.seed.ts",
+    "before": "2ac2e537fdbbe1cb52e24b019a43ceb71dee468ca7ff5121a5c13cdd6d0c275f",
+    "after": "472269affe309186f6f275bf21866783b87aff9be9d13f5e2baab7f1c8044b84",
+    "correction": "Remove only ESLint-identified unused import bindings using TypeScript AST"
+  },
+  {
+    "file": "packages/database/src/seed/modules/warehouses.seed.ts",
+    "before": "d77b00e73b74908b3a3ce825d61802b8275612cead8c15c9bd9d4fa1fdc12989",
+    "after": "882a1645cf0d2eac90ee237bc6f31fe02d2f2157bb5472fbaad5afe3370c23f1",
+    "correction": "Remove only ESLint-identified unused import bindings using TypeScript AST"
+  },
+  {
+    "file": "packages/database/src/seed/seed.test.ts",
+    "before": "af9d0fe91102f8bed40d79dfb0e2632f42717561843b32ebac9dfe0276ec4186",
+    "after": "831582c38e06a72383994f8fc512e2375b94f7a29fc1d1a67b61f2df3946967a",
+    "correction": "Remove only ESLint-identified unused import bindings using TypeScript AST"
+  },
+  {
+    "file": "packages/database/src/steadfast.ts",
+    "before": "325fc8bf6e43a2e2260e84d9144758ed4c0ad94b29e02e16e705afe20640dd43",
+    "after": "f34ac41b652be1b0daf216c2a5153f3ef157e3236d09e8875be0c258ccd28aa1",
+    "correction": "Remove only ESLint-identified unused import bindings using TypeScript AST"
+  }
+]

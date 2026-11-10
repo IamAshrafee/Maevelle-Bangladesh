@@ -2,41 +2,15 @@
 
 import * as React from 'react';
 import Link from 'next/link';
-import {
-  AlertCircle,
-  AlertTriangle,
-  ArrowRight,
-  CheckCircle2,
-  Clock,
-  ExternalLink,
-  History,
-  Info,
-  Lock,
-  RefreshCw,
-  ShieldAlert,
-  Wrench,
-  X,
-} from 'lucide-react';
+import { ArrowRight, ExternalLink, History, Info, Lock, RefreshCw, Wrench } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { StatusBadge } from '@/components/status-badge';
-import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetHeader,
-  SheetTitle,
-} from '@/components/ui/sheet';
+import { Sheet, SheetContent, SheetDescription, SheetTitle } from '@/components/ui/sheet';
 import { PagePanel } from '@/components/ui/page-shell';
 import { useAdminCapability } from '@/components/admin-capabilities';
-import {
-  fetchIntegrityFinding,
-  updateFindingStatus,
-} from '@/lib/integrity/api';
-import type {
-  IntegrityFindingDetailDto,
-  IntegrityFindingListItemDto,
-} from '@/lib/integrity/types';
+import { fetchIntegrityFinding, updateFindingStatus } from '@/lib/integrity/api';
+import type { IntegrityFindingDetailDto, IntegrityFindingListItemDto } from '@/lib/integrity/types';
 
 interface FindingDetailSheetProps {
   finding: IntegrityFindingListItemDto | null;

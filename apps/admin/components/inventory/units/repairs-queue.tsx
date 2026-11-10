@@ -33,7 +33,7 @@ import { UnitConditionBadge } from './unit-condition-badge';
 import { UnitRepairDialog } from './unit-repair-dialog';
 import { UnitInspectDialog } from './unit-inspect-dialog';
 import { UnitReleaseDialog } from './unit-release-dialog';
-import { cn } from '@/lib/utils';
+
 import { useAdminCapability } from '@/components/admin-capabilities';
 import { QualityWorkspaceTabs } from './quality-workspace-tabs';
 import {

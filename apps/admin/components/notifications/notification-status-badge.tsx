@@ -7,14 +7,12 @@ import {
   Clock,
   AlertCircle,
   XCircle,
-  AlertTriangle,
   RotateCw,
   Mail,
   MessageSquare,
   Ban,
   Send,
   Smartphone,
-  Eye,
   HelpCircle,
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';

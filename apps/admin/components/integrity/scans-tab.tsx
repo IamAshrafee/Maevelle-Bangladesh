@@ -1,18 +1,7 @@
 'use client';
 
 import * as React from 'react';
-import {
-  Activity,
-  AlertCircle,
-  ArrowRight,
-  CheckCircle2,
-  Clock,
-  Layers,
-  Play,
-  RefreshCw,
-  ShieldAlert,
-  X,
-} from 'lucide-react';
+import { Clock, Play, RefreshCw, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { RefreshButton } from '@/components/ui/refresh-button';
 import { StatusBadge } from '@/components/status-badge';
@@ -24,7 +13,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { PagePanel, PageSection } from '@/components/ui/page-shell';
+import { PagePanel } from '@/components/ui/page-shell';
 import { RunDetailDialog } from './run-detail-dialog';
 import { cancelIntegrityRun } from '@/lib/integrity/api';
 import type { IntegrityRunDto } from '@/lib/integrity/types';

@@ -1,7 +1,7 @@
 import { Kysely, PostgresDialect } from 'kysely';
 import { Pool } from 'pg';
 import { createManagedCategory } from '../../packages/database/src/catalog-classification';
-import { DatabaseSchema } from '../../packages/database/src/schema';
+import type { DatabaseSchema } from '../../packages/database/src/schema';
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL || 'postgres://postgres:postgres@localhost:5432/maevelle',

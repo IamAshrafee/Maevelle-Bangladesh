@@ -1,4 +1,5 @@
 'use client';
+import { ErrorState } from '@/components/ui/page-shell';
 
 import * as React from 'react';
 import { useCallback, useEffect, useState } from 'react';
@@ -8,17 +9,11 @@ import {
   ArrowRight,
   Bell,
   CheckCircle2,
-  ExternalLink,
-  Info,
   Loader2,
   Lock,
   Mail,
   MessageSquare,
   Send,
-  ShieldAlert,
-  ShieldCheck,
-  Smartphone,
-  XCircle,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { RefreshButton } from '@/components/ui/refresh-button';
@@ -34,8 +29,8 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { apiRequest } from '@/lib/api';
-import { cn } from '@/lib/utils';
-import { NotificationChannelBadge } from './notification-status-badge';
+
+
 
 interface EmailDiagnostics {
   readonly provider: string;
@@ -148,6 +143,7 @@ export function NotificationChannelsTab() {
 
   return (
     <div className="space-y-6">
+      {error ? <ErrorState message={error} /> : null}
       {/* Notifications Success Feedback */}
       {(emailTestSuccess || smsTestSuccess) && (
         <div className="p-3.5 rounded-lg border border-emerald-500/30 bg-emerald-50 text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300 text-xs flex items-center justify-between">

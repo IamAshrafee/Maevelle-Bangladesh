@@ -2,18 +2,11 @@
 
 import * as React from 'react';
 import Link from 'next/link';
-import {
-  CreditCard,
-  ExternalLink,
-  Layers,
-  ShoppingBag,
-  Store,
-  Tag,
-} from 'lucide-react';
+import { CreditCard, ExternalLink, Layers, Store, Tag } from 'lucide-react';
 
-import { StatusBadge } from '@/components/status-badge';
-import { Button } from '@/components/ui/button';
-import { EmptyState, ErrorState, LoadingState, PagePanel, PageSection } from '@/components/ui/page-shell';
+
+
+import { ErrorState, PagePanel, PageSection } from '@/components/ui/page-shell';
 import { DistributionList, SalesTrendChart } from '../analytics-charts';
 import { MetricCard } from '../analytics-kpi-card';
 import {
@@ -85,15 +78,14 @@ export function SalesView({ selection }: SalesViewProps) {
 
   const ordersCount = Number(totals?.eligible_orders ?? 0);
   const priorOrders = Number(prior?.eligible_orders ?? 0);
-  const ordersDelta = calculateComparisonChange(ordersCount, priorOrders);
+
 
   const aov = ordersCount > 0 ? netSales / ordersCount : 0;
   const priorAov = priorOrders > 0 ? priorNet / priorOrders : 0;
   const aovDelta = calculateComparisonChange(aov, priorAov);
 
-  const refunds = Number(totals?.refunds ?? 0);
-  const priorRefunds = Number(prior?.refunds ?? 0);
-  const refundDelta = calculateComparisonChange(refunds, priorRefunds, true);
+
+
 
   // Time Series
   const chartData = (salesReport?.series ?? []).map((s) => ({

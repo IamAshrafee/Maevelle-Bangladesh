@@ -155,12 +155,7 @@ export async function createSteadfastProvider(
     getCapabilities(): CourierCapabilities {
       return STEADFAST_CAPABILITIES;
     },
-    async checkServiceability(_input?: {
-      readonly district?: string;
-      readonly city?: string;
-      readonly area?: string;
-      readonly postalCode?: string;
-    }): Promise<{ readonly serviceable: boolean; readonly reasonCode?: string }> {
+    async checkServiceability(): Promise<{ readonly serviceable: boolean; readonly reasonCode?: string }> {
       // Steadfast covers all 64 districts in Bangladesh nationwide
       return { serviceable: true };
     },

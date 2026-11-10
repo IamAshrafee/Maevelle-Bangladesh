@@ -1,0 +1,154 @@
+[
+  {
+    "file": "D:\\Projects FINAL\\Web Development\\Nextjs\\Maevelle-Bangladesh\\apps\\admin\\components\\analytics\\analytics-kpi-card.tsx",
+    "edits": 1
+  },
+  {
+    "file": "D:\\Projects FINAL\\Web Development\\Nextjs\\Maevelle-Bangladesh\\apps\\admin\\components\\analytics\\views\\delivery-view.tsx",
+    "edits": 1
+  },
+  {
+    "file": "D:\\Projects FINAL\\Web Development\\Nextjs\\Maevelle-Bangladesh\\apps\\admin\\components\\analytics\\views\\finance-view.tsx",
+    "edits": 1
+  },
+  {
+    "file": "D:\\Projects FINAL\\Web Development\\Nextjs\\Maevelle-Bangladesh\\apps\\admin\\components\\analytics\\views\\products-view.tsx",
+    "edits": 1
+  },
+  {
+    "file": "D:\\Projects FINAL\\Web Development\\Nextjs\\Maevelle-Bangladesh\\apps\\admin\\components\\analytics\\views\\sales-view.tsx",
+    "edits": 2
+  },
+  {
+    "file": "D:\\Projects FINAL\\Web Development\\Nextjs\\Maevelle-Bangladesh\\apps\\admin\\components\\analytics\\views\\settings-view.tsx",
+    "edits": 1
+  },
+  {
+    "file": "D:\\Projects FINAL\\Web Development\\Nextjs\\Maevelle-Bangladesh\\apps\\admin\\components\\design-system\\design-system-view.tsx",
+    "edits": 1
+  },
+  {
+    "file": "D:\\Projects FINAL\\Web Development\\Nextjs\\Maevelle-Bangladesh\\apps\\admin\\components\\email\\email-diagnostics-tab.tsx",
+    "edits": 1
+  },
+  {
+    "file": "D:\\Projects FINAL\\Web Development\\Nextjs\\Maevelle-Bangladesh\\apps\\admin\\components\\email\\email-preview-frame.tsx",
+    "edits": 1
+  },
+  {
+    "file": "D:\\Projects FINAL\\Web Development\\Nextjs\\Maevelle-Bangladesh\\apps\\admin\\components\\fulfillment\\fulfillment-unit-pick-dialog.tsx",
+    "edits": 2
+  },
+  {
+    "file": "D:\\Projects FINAL\\Web Development\\Nextjs\\Maevelle-Bangladesh\\apps\\admin\\components\\integrity\\checks-tab.tsx",
+    "edits": 1
+  },
+  {
+    "file": "D:\\Projects FINAL\\Web Development\\Nextjs\\Maevelle-Bangladesh\\apps\\admin\\components\\integrity\\integrity-center.tsx",
+    "edits": 1
+  },
+  {
+    "file": "D:\\Projects FINAL\\Web Development\\Nextjs\\Maevelle-Bangladesh\\apps\\admin\\components\\integrity\\operations-tab.tsx",
+    "edits": 1
+  },
+  {
+    "file": "D:\\Projects FINAL\\Web Development\\Nextjs\\Maevelle-Bangladesh\\apps\\admin\\components\\integrity\\recovery-tab.tsx",
+    "edits": 1
+  },
+  {
+    "file": "D:\\Projects FINAL\\Web Development\\Nextjs\\Maevelle-Bangladesh\\apps\\admin\\components\\integrity\\repair-workflow-dialog.tsx",
+    "edits": 1
+  },
+  {
+    "file": "D:\\Projects FINAL\\Web Development\\Nextjs\\Maevelle-Bangladesh\\apps\\admin\\components\\inventory\\adjustments-section.tsx",
+    "edits": 1
+  },
+  {
+    "file": "D:\\Projects FINAL\\Web Development\\Nextjs\\Maevelle-Bangladesh\\apps\\admin\\components\\inventory\\stocktake-form.tsx",
+    "edits": 1
+  },
+  {
+    "file": "D:\\Projects FINAL\\Web Development\\Nextjs\\Maevelle-Bangladesh\\apps\\admin\\components\\notifications\\notification-delivery-drawer.tsx",
+    "edits": 1
+  },
+  {
+    "file": "D:\\Projects FINAL\\Web Development\\Nextjs\\Maevelle-Bangladesh\\apps\\admin\\components\\notifications\\notification-history-tab.tsx",
+    "edits": 1
+  },
+  {
+    "file": "D:\\Projects FINAL\\Web Development\\Nextjs\\Maevelle-Bangladesh\\apps\\admin\\components\\orders\\delivery-pricing\\delivery-pricing-simulator.tsx",
+    "edits": 1
+  },
+  {
+    "file": "D:\\Projects FINAL\\Web Development\\Nextjs\\Maevelle-Bangladesh\\apps\\admin\\components\\orders\\order-email-status.tsx",
+    "edits": 1
+  },
+  {
+    "file": "D:\\Projects FINAL\\Web Development\\Nextjs\\Maevelle-Bangladesh\\apps\\admin\\components\\orders\\order-fulfillment-delivery-card.tsx",
+    "edits": 1
+  },
+  {
+    "file": "D:\\Projects FINAL\\Web Development\\Nextjs\\Maevelle-Bangladesh\\apps\\admin\\components\\orders\\order-header-actions.tsx",
+    "edits": 1
+  },
+  {
+    "file": "D:\\Projects FINAL\\Web Development\\Nextjs\\Maevelle-Bangladesh\\apps\\admin\\components\\recommendations\\tabs\\analytics-tab.tsx",
+    "edits": 1
+  },
+  {
+    "file": "D:\\Projects FINAL\\Web Development\\Nextjs\\Maevelle-Bangladesh\\apps\\admin\\components\\recommendations\\tabs\\preview-inspector-tab.tsx",
+    "edits": 1
+  },
+  {
+    "file": "D:\\Projects FINAL\\Web Development\\Nextjs\\Maevelle-Bangladesh\\apps\\admin\\components\\reviews\\reviews-workspace.tsx",
+    "edits": 1
+  },
+  {
+    "file": "D:\\Projects FINAL\\Web Development\\Nextjs\\Maevelle-Bangladesh\\apps\\admin\\components\\security\\authenticator-setup-wizard.tsx",
+    "edits": 1
+  },
+  {
+    "file": "D:\\Projects FINAL\\Web Development\\Nextjs\\Maevelle-Bangladesh\\apps\\admin\\components\\settings\\two-factor-policy-card.tsx",
+    "edits": 1
+  },
+  {
+    "file": "D:\\Projects FINAL\\Web Development\\Nextjs\\Maevelle-Bangladesh\\apps\\admin\\components\\team\\team-audit-timeline.tsx",
+    "edits": 2
+  },
+  {
+    "file": "D:\\Projects FINAL\\Web Development\\Nextjs\\Maevelle-Bangladesh\\apps\\admin\\components\\team\\team-console.tsx",
+    "edits": 1
+  },
+  {
+    "file": "D:\\Projects FINAL\\Web Development\\Nextjs\\Maevelle-Bangladesh\\apps\\admin\\components\\team\\team-permissions-editor.tsx",
+    "edits": 1
+  },
+  {
+    "file": "D:\\Projects FINAL\\Web Development\\Nextjs\\Maevelle-Bangladesh\\apps\\storefront\\features\\checkout\\components\\checkout-contact-section.tsx",
+    "edits": 1
+  },
+  {
+    "file": "D:\\Projects FINAL\\Web Development\\Nextjs\\Maevelle-Bangladesh\\apps\\storefront\\features\\checkout\\components\\checkout-order-summary.tsx",
+    "edits": 1
+  },
+  {
+    "file": "D:\\Projects FINAL\\Web Development\\Nextjs\\Maevelle-Bangladesh\\packages\\database\\src\\iam-account.ts",
+    "edits": 1
+  },
+  {
+    "file": "D:\\Projects FINAL\\Web Development\\Nextjs\\Maevelle-Bangladesh\\packages\\database\\src\\orders\\timeline.ts",
+    "edits": 2
+  },
+  {
+    "file": "D:\\Projects FINAL\\Web Development\\Nextjs\\Maevelle-Bangladesh\\packages\\database\\src\\procurement.test.ts",
+    "edits": 1
+  },
+  {
+    "file": "D:\\Projects FINAL\\Web Development\\Nextjs\\Maevelle-Bangladesh\\packages\\database\\src\\seed\\seed.test.ts",
+    "edits": 2
+  },
+  {
+    "file": "D:\\Projects FINAL\\Web Development\\Nextjs\\Maevelle-Bangladesh\\packages\\database\\src\\steadfast.ts",
+    "edits": 1
+  }
+]

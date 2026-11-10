@@ -11,7 +11,6 @@ export function CheckoutContactSection({ checkout }: CheckoutContactSectionProps
   const { contact, setContact } = checkout;
 
   const isNameValid = contact.fullName.trim().length >= 2;
-  const isPhoneValid = contact.phone.replace(/\D/g, '').length >= 10;
 
   return (
     <section aria-labelledby="contactHeading" className="flex flex-col gap-3">
@@ -105,7 +104,9 @@ export function CheckoutContactSection({ checkout }: CheckoutContactSectionProps
             <label className="text-xs font-semibold text-on-surface" htmlFor="emailAddress">
               Email Address
             </label>
-            <span className="text-[11px] text-on-surface-variant">Optional for digital invoice</span>
+            <span className="text-[11px] text-on-surface-variant">
+              Optional for digital invoice
+            </span>
           </div>
           <input
             autoComplete="email"

@@ -2,18 +2,7 @@
 
 import { useEffect, useState, useDeferredValue } from 'react';
 import { useRouter } from 'next/navigation';
-import {
-  AlertTriangle,
-  ArrowRight,
-  CheckCircle2,
-  CircleAlert,
-  GitMerge,
-  Loader2,
-  Search,
-  ShieldAlert,
-  UsersRound,
-  XCircle,
-} from 'lucide-react';
+import { AlertTriangle, CircleAlert, GitMerge, Loader2, Search, XCircle } from 'lucide-react';
 import type {
   CustomerDetailDto,
   CustomerDuplicateCandidateDto,

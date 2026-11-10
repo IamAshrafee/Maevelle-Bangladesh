@@ -3,11 +3,9 @@
 import {
   AlertCircle,
   Boxes,
-  CheckCircle2,
   ChevronRight,
   Loader2,
   PackagePlus,
-  RefreshCw,
   Search,
   Warehouse,
 } from 'lucide-react';
@@ -27,7 +25,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { fetchApiData } from '@/lib/api';
 import { formatMoney } from '@/lib/format/numbers';
-import type { ApiEnvelope, OrderDetailDto, OrderLineDto, WarehouseLocationDto } from '@maevelle/contracts';
+import type { OrderDetailDto, WarehouseLocationDto } from '@maevelle/contracts';
 
 interface EligibleOrderSummary {
   id: string;

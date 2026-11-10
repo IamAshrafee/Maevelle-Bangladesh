@@ -1079,6 +1079,10 @@ describe('Checkout atomic placement on disposable PostgreSQL', () => {
       id: first.id,
       reviewState: 'UNDER_REVIEW',
     });
+    // Keep synthetic receipt evidence on the same clock as the financial guard.
+    const receiptValueTime = (
+      await sql<{ at: Date }>`select clock_timestamp()-interval '1 second' as at`.execute(db())
+    ).rows[0]!.at.toISOString();
     const verify = (
       attemptId: string,
       reference: string,
@@ -1096,7 +1100,7 @@ describe('Checkout atomic placement on disposable PostgreSQL', () => {
           financialAccountId: accountId,
           receivingNumber: '01700000000',
           currency: 'BDT',
-          valueTime: new Date().toISOString(),
+          valueTime: receiptValueTime,
           source: 'ACCOUNT_HISTORY',
           evidenceReference: 'Isolated statement fixture',
         },

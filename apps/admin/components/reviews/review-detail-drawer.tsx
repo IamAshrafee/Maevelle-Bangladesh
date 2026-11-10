@@ -5,24 +5,17 @@ import Link from 'next/link';
 import {
   AlertCircle,
   AlertTriangle,
-  ArrowRight,
   CheckCircle2,
-  ExternalLink,
   Eye,
   EyeOff,
   History,
   Image as ImageIcon,
   MessageSquare,
   Package,
-  RotateCcw,
   ShieldAlert,
-  ShieldCheck,
-  Star,
   User,
-  Video,
-  X,
 } from 'lucide-react';
-import { cn } from '@/lib/utils';
+
 import { Button } from '@/components/ui/button';
 import { NativeSelect } from '@/components/ui/native-select';
 import { Textarea } from '@/components/ui/textarea';

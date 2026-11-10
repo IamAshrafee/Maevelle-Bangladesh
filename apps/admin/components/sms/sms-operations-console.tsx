@@ -34,7 +34,7 @@ import { SmsSuppressionsTab } from './sms-suppressions-tab';
 import { SmsTemplatesTab } from './sms-templates-tab';
 import { SmsTestLabTab } from './sms-test-lab-tab';
 import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
+
 import { RefreshButton } from '@/components/ui/refresh-button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 

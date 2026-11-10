@@ -1,37 +1,14 @@
 'use client';
 
 import { useState } from 'react';
-import {
-  AlertCircle,
-  ArrowRight,
-  Bell,
-  Check,
-  CheckCircle2,
-  ChevronRight,
-  Copy,
-  Download,
-  Filter,
-  Info,
-  Layers,
-  Moon,
-  Package,
-  Plus,
-  RefreshCw,
-  Search,
-  Settings,
-  Shield,
-  Sparkles,
-  Sun,
-  Trash2,
-  Upload,
-} from 'lucide-react';
+import { Download, Moon, Plus, RefreshCw, Search, Sparkles, Sun } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { RefreshButton } from '@/components/ui/refresh-button';
 import { Input } from '@/components/ui/input';
 import { NativeSelect } from '@/components/ui/native-select';
 import { Textarea } from '@/components/ui/textarea';
-import { Badge } from '@/components/ui/badge';
+
 import { StatusBadge } from '@/components/status-badge';
 import {
   Table,
@@ -41,12 +18,9 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { Stats, StatsCard, StatsTitle, StatsValue, StatsDescription } from '@/components/ui/stats';
+
 import {
   AdminPage,
-  EmptyState,
-  ErrorState,
-  LoadingState,
   PageActions,
   PageDescription,
   PageHeader,
@@ -55,7 +29,7 @@ import {
   PageTitle,
 } from '@/components/ui/page-shell';
 
-export function DesignSystemView({ hideHeader }: { hideHeader?: boolean } = {}) {
+export function DesignSystemView() {
   const [isDark, setIsDark] = useState(false);
   const [activeTab, setActiveTab] = useState<'tokens' | 'typography' | 'buttons' | 'forms' | 'tables' | 'surfaces'>('tokens');
 

@@ -3,15 +3,11 @@
 import * as React from 'react';
 import {
   Archive,
-  ArrowUpDown,
   BadgePercent,
-  Calendar,
   Check,
   ChevronDown,
-  Clock,
   Copy,
   Edit3,
-  ExternalLink,
   Eye,
   Filter,
   MoreHorizontal,
@@ -19,12 +15,17 @@ import {
   PlayCircle,
   Plus,
   Search,
-  Sparkles,
-  Tag,
   Ticket,
 } from 'lucide-react';
 
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { StatusBadge } from '@/components/status-badge';

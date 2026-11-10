@@ -2,7 +2,6 @@
 
 import {
   CheckCircle2,
-  Clock,
   AlertTriangle,
   Server,
   Radio,
@@ -10,7 +9,6 @@ import {
   ShieldAlert,
   ArrowRight,
   TrendingUp,
-  Ban,
   Activity,
   Zap,
 } from 'lucide-react';

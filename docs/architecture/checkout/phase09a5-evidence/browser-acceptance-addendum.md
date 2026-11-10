@@ -1,0 +1,9 @@
+# Browser acceptance evidence addendum
+
+All15 journeys in the [09A.4 plan](../phase09a4-evidence/browser-acceptance-plan.md) remain **NOT VERIFIED** at the real-browser layer. The prior automatic rejection (`blocked by policy`) was respected; no new startup attempt or workaround occurred. The existing CDP driver covers its recorded financial/read scenarios; it does not by itself implement all owner-transition journeys.
+
+When legitimately permitted, extend that driver in a disposable actual Next/Fastify/PostgreSQL environment. Use the existing scenario numbers01–15 as stable IDs. For each case record the source digest, browser/version/profile, synthetic account/organization labels, requested route and sanitized status, frontend visible/hidden projection, backend independent denial/allowance, whether a response was deliberately held/released, and PASS/FAIL/NOT VERIFIED with exact reason. Do not store credentials, cookie/grant values, private payloads or fabricated screenshots. Assert server denial and state hiding independently; cancellation or a successful request alone cannot close the case.
+
+For pending responses, first obtain the actual authorized response under A, hold delivery, switch to B or revoke authority, release it, then assert no A projection was rendered. Test a fresh direct B/revoked request separately. For Back/Forward and background resume, record whether BFCache/navigation restore actually occurred; do not equate a reload with a restore. For confirmation refresh and consent withdrawal, compare synthetic outbox/conversion facts and current consent revision without using a live adapter. Leave public placement blocked unless a separately approved safe policy-composition environment exists.
+
+Native zoom, human assistive technology, physical devices, Safari/Firefox and Support drills are separate evidence rows; emulation/component tests do not sign them off. No new browser or human result is recorded by this addendum.

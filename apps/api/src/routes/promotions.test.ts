@@ -6,7 +6,7 @@ import { registerPromotionRoutes } from './promotions.js';
 
 function createMockDatabase(): DatabaseClient {
   return {
-    db: {} as any,
+    db: {} as DatabaseClient['db'],
     ping: vi.fn().mockResolvedValue(undefined),
     close: vi.fn().mockResolvedValue(undefined),
   };
@@ -20,7 +20,7 @@ describe('Promotions API routes', () => {
       api: {
         getSession: vi.fn().mockResolvedValue(null),
       },
-    } as any;
+    } as unknown as Parameters<typeof registerPromotionRoutes>[2];
 
     registerPromotionRoutes(app, database, mockAuth);
 
@@ -40,7 +40,7 @@ describe('Promotions API routes', () => {
       api: {
         getSession: vi.fn().mockResolvedValue(null),
       },
-    } as any;
+    } as unknown as Parameters<typeof registerPromotionRoutes>[2];
 
     registerPromotionRoutes(app, database, mockAuth);
 
@@ -60,7 +60,7 @@ describe('Promotions API routes', () => {
       api: {
         getSession: vi.fn().mockResolvedValue(null),
       },
-    } as any;
+    } as unknown as Parameters<typeof registerPromotionRoutes>[2];
 
     registerPromotionRoutes(app, database, mockAuth);
 
@@ -81,7 +81,7 @@ describe('Promotions API routes', () => {
       api: {
         getSession: vi.fn().mockResolvedValue(null),
       },
-    } as any;
+    } as unknown as Parameters<typeof registerPromotionRoutes>[2];
 
     registerPromotionRoutes(app, database, mockAuth);
 
@@ -102,7 +102,7 @@ describe('Promotions API routes', () => {
       api: {
         getSession: vi.fn().mockResolvedValue(null),
       },
-    } as any;
+    } as unknown as Parameters<typeof registerPromotionRoutes>[2];
 
     registerPromotionRoutes(app, database, mockAuth);
 

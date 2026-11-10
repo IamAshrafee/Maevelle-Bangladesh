@@ -6,7 +6,6 @@ import {
   AlertTriangle,
   CheckCircle2,
   Clock,
-  Copy,
   ExternalLink,
   Info,
   Loader2,
@@ -19,7 +18,7 @@ import {
 import Link from 'next/link';
 
 import type { OrderDeliveryRiskAssessmentDto } from '@maevelle/contracts';
-import { Badge } from '@/components/ui/badge';
+
 import { Button } from '@/components/ui/button';
 import { fetchApiData } from '@/lib/api';
 import { RecordVerificationDialog } from './record-verification-dialog';

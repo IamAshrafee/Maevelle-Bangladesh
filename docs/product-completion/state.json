@@ -2,13 +2,13 @@
   "program": "Maevelle Product Completion V2",
   "version": 2,
   "active_area": "storefront-checkout",
-  "active_substage": "CHECKOUT_PHASE_09A2_FINANCIAL_PRESENTATION_PARTIAL",
+  "active_substage": "CHECKOUT_PHASE_09A5_LOCAL_TECHNICAL_ACCEPTANCE_PARTIAL",
   "active_status": "IN_PROGRESS",
   "baseline_commit": "d2cce2c",
   "last_checkpoint_commit": "c3413e3",
   "last_verified_commit": "16f648a",
-  "last_completed_action": "Phase 09A.2 integrated exact retail presentation, truthful customer/Admin settlement, protected policy discovery and blocked eligibility, fractional-price review, approved-operation correction UI and financial privacy projection. Financial255-case selection and15 browser cases pass; concurrent broader Auth/Wishlist regression remains open. Owner-authorized local split commits record this work; no push, deployment, persistent migration or activation.",
-  "next_action": "Read PHASE_09A2_IMPLEMENTATION_REPORT.md, acceptance register and next-stage handoff. Reconcile concurrent authentication regression, approve rounding/tax/invoice/accounting/courier/authoring policy, complete correction/allocation and human/device acceptance, then seek separately authorized candidate/deployment work. Public financial gates remain closed.",
+  "last_completed_action": "Phase 09A.5 safely formatted seven reviewed files plus package tooling, froze inherited formatter debt, added a no-new-debt gate and expanded nonpublishing CI validation. Full formatting1129→1121 remains FAIL; lint0,806/806 tests/83 files, both production builds, types, migration/security/tooling checks pass on matching source hashes. Fixed mixed-clock receipt fixture without production guard change. Browser15 journeys NOT VERIFIED. No commit/push/publication/deployment/persistent migration/activation.",
+  "next_action": "Read PHASE_09A5_IMPLEMENTATION_REPORT.md, formatting register, final local acceptance and authorization handoff. Review remaining scoped formatting; execute owner-transition browser tests only in permitted runtime, obtain policy/provider/human evidence, and separately authorize candidate/Linux/HTTPS/staging work. Public financial gates remain closed.",
   "interrupted": false,
   "blocked_by": [
     "SIZING_OWNER_RESPONSIVE_AND_ACCESSIBILITY_ACCEPTANCE_PENDING",
@@ -52,8 +52,9 @@
     "CHECKOUT_WHOLE_TAKA_ROUNDING_TAX_INVOICE_APPROVAL_PENDING",
     "CHECKOUT_CASH_WAIVER_ACCOUNTING_LIMITS_AND_COURIER_APPROVAL_PENDING",
     "CHECKOUT_PHASE09A2_MONETARY_UI_AND_FINANCIAL_CORRECTION_GATES_OPEN",
-    "CHECKOUT_PHASE09A2_BROADER_AUTH_REGRESSION_OPEN",
-    "CHECKOUT_PHASE09A2_AUTHORING_POLICY_AND_FINANCIAL_UI_HUMAN_ACCEPTANCE_PENDING"
+    "CHECKOUT_PHASE09A2_AUTHORING_POLICY_AND_FINANCIAL_UI_HUMAN_ACCEPTANCE_PENDING",
+    "CHECKOUT_PHASE09A5_BROWSER_OWNER_TRANSITIONS_NOT_VERIFIED",
+    "CHECKOUT_REPOSITORY_FORMATTING_DEBT_OPEN"
   ],
   "owner_review_status": "PENDING",
   "verified_complete_areas": [

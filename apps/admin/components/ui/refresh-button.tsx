@@ -10,8 +10,10 @@ import { cn } from '@/lib/utils';
 
 export type RefreshPhase = 'idle' | 'refreshing' | 'success' | 'error';
 
-export interface RefreshButtonProps
-  extends Omit<React.ComponentProps<typeof Button>, 'children' | 'render'> {
+export interface RefreshButtonProps extends Omit<
+  React.ComponentProps<typeof Button>,
+  'children' | 'render'
+> {
   /**
    * Refresh callback. Can be synchronous or asynchronous.
    * If an async function / Promise is returned, the button automatically
@@ -293,18 +295,22 @@ export function RefreshButton({
         if (slowTimerRef.current !== undefined) clearTimeout(slowTimerRef.current);
         isExecutingRef.current = false;
 
-        if (!mountedRef.current) return;
-
-        if (failed) {
+        if (mountedRef.current && failed) {
           setPhase('error');
-          resetTimerRef.current = setTimeout(() => {
-            if (mountedRef.current) setPhase('idle');
-          }, Math.max(0, errorDuration ?? 1200));
-        } else {
+          resetTimerRef.current = setTimeout(
+            () => {
+              if (mountedRef.current) setPhase('idle');
+            },
+            Math.max(0, errorDuration ?? 1200),
+          );
+        } else if (mountedRef.current) {
           setPhase('success');
-          resetTimerRef.current = setTimeout(() => {
-            if (mountedRef.current) setPhase('idle');
-          }, Math.max(0, successDuration ?? 800));
+          resetTimerRef.current = setTimeout(
+            () => {
+              if (mountedRef.current) setPhase('idle');
+            },
+            Math.max(0, successDuration ?? 800),
+          );
         }
       }
     },
@@ -350,7 +356,15 @@ export function RefreshButton({
       // Case 3: Normal idle click
       void executeRefresh(event);
     },
-    [consumerDisabled, isExecutingRef, isRefreshing, queueRapidClicks, isSuccess, isError, executeRefresh],
+    [
+      consumerDisabled,
+      isExecutingRef,
+      isRefreshing,
+      queueRapidClicks,
+      isSuccess,
+      isError,
+      executeRefresh,
+    ],
   );
 
   // Dynamic context-aware tooltip & accessible labels
@@ -365,7 +379,7 @@ export function RefreshButton({
       ? successLabel
       : isError
         ? errorLabel
-        : label ?? (typeof tooltipText === 'string' ? tooltipText : 'Refresh');
+        : (label ?? (typeof tooltipText === 'string' ? tooltipText : 'Refresh'));
 
   // Hard disable only if consumer explicitly passed disabled, or if external query is active
   const isButtonDisabled = Boolean(consumerDisabled || externalLoading);
@@ -385,7 +399,8 @@ export function RefreshButton({
         'active:scale-95 motion-reduce:transition-none',
 
         // Idle state: neutral styling
-        visualPhase === 'idle' && 'text-muted-foreground hover:text-foreground hover:bg-muted/50 border-border bg-card',
+        visualPhase === 'idle' &&
+          'text-muted-foreground hover:text-foreground hover:bg-muted/50 border-border bg-card',
 
         // Refreshing state: brand primary accent
         isRefreshing && 'border-primary/40 bg-primary/10 text-primary',

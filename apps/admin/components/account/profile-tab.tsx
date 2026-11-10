@@ -5,16 +5,13 @@ import { useRef, useState } from 'react';
 import {
   Building2,
   Calendar,
-  CheckCircle2,
   Clock,
   Info,
-  Mail,
   RefreshCw,
   Shield,
   Trash2,
   Upload,
   User,
-  XCircle,
 } from 'lucide-react';
 import type {
   ApiEnvelope,

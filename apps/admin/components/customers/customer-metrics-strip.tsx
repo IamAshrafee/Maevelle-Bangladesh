@@ -1,16 +1,6 @@
 'use client';
 
-import {
-  Banknote,
-  CheckCircle,
-  Clock,
-  Coins,
-  Package,
-  RotateCcw,
-  ShoppingBag,
-  TrendingUp,
-  XCircle,
-} from 'lucide-react';
+import { Banknote, CheckCircle, Clock, Coins, ShoppingBag, TrendingUp } from 'lucide-react';
 import type { CustomerDetailDto } from '@maevelle/contracts';
 
 interface CustomerMetricsStripProps {

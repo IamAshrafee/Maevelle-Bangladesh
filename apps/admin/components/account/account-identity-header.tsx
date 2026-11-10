@@ -1,7 +1,7 @@
 'use client';
 
 import * as React from 'react';
-import { Building2, Laptop, ShieldCheck, User } from 'lucide-react';
+import { Building2, Laptop, User } from 'lucide-react';
 import type { UserAccountOverviewDto } from '@maevelle/contracts';
 import { StatusBadge } from '@/components/status-badge';
 import { getInitials } from './account-utils';

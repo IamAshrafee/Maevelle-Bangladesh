@@ -1,6 +1,6 @@
 'use client';
 
-import { Calculator, CircleDollarSign, Info, Truck } from 'lucide-react';
+import { CircleDollarSign, Info, Truck } from 'lucide-react';
 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { cn } from '@/lib/utils';

@@ -1,4 +1,5 @@
 'use client';
+import { ErrorState } from '@/components/ui/page-shell';
 
 import * as React from 'react';
 import { useCallback, useEffect, useState } from 'react';
@@ -10,12 +11,8 @@ import {
   ArrowRight,
   CheckCircle2,
   Clock,
-  ExternalLink,
-  Eye,
-  Filter,
   Flame,
   HelpCircle,
-  Layers,
   Loader2,
   Mail,
   MessageSquare,
@@ -42,11 +39,7 @@ import {
 } from '@/components/ui/table';
 import { apiRequest } from '@/lib/api';
 import { cn } from '@/lib/utils';
-import {
-  NotificationChannelBadge,
-  NotificationPriorityBadge,
-  NotificationStatusBadge,
-} from './notification-status-badge';
+import { NotificationChannelBadge, NotificationStatusBadge } from './notification-status-badge';
 import { NotificationDeliveryDrawer } from './notification-delivery-drawer';
 
 interface OperationalDiagnostics {
@@ -163,6 +156,8 @@ export function NotificationOperationsTab() {
 
   return (
     <div className="space-y-6">
+      {diagnosticsError ? <ErrorState message={diagnosticsError} /> : null}
+      {failuresError ? <ErrorState message={failuresError} /> : null}
       {/* Top Header / Actions */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
@@ -401,7 +396,7 @@ export function NotificationOperationsTab() {
             <NativeSelect
               value={statusFilter}
               onChange={(e) => {
-                setStatusFilter(e.target.value as any);
+                setStatusFilter(e.target.value as typeof statusFilter);
                 setPage(1);
               }}
               className="h-8 text-xs w-[180px] bg-card"

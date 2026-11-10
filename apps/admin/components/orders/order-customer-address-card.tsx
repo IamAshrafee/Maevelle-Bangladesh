@@ -1,20 +1,11 @@
 'use client';
 
 import { useState } from 'react';
-import {
-  Check,
-  Copy,
-  ExternalLink,
-  Mail,
-  MapPin,
-  Pencil,
-  Phone,
-  User,
-} from 'lucide-react';
+import { Check, Copy, ExternalLink, Mail, MapPin, Phone, User } from 'lucide-react';
 import Link from 'next/link';
 
 import type { OrderDetailDto } from '@maevelle/contracts';
-import { Button } from '@/components/ui/button';
+
 import { CorrectCustomerContactDialog } from './correct-customer-contact-dialog';
 import { CorrectDeliveryAddressDialog } from './correct-delivery-address-dialog';
 

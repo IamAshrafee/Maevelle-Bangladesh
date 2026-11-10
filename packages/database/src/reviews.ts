@@ -33,11 +33,17 @@ const hash = (token: string) => createHash('sha256').update(token).digest('hex')
  * Sanitizes user-provided review text by stripping control characters and unsafe markup.
  * Preserves standard Bangla, English, numerals, and punctuation.
  */
-export function sanitizeReviewText(text: string | null | undefined, maxLength: number): string | null {
+export function sanitizeReviewText(
+  text: string | null | undefined,
+  maxLength: number,
+): string | null {
   if (!text) return null;
-  const normalized = text
-    .normalize('NFC')
-    .replaceAll(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, '')
+  const normalized = Array.from(text.normalize('NFC'))
+    .filter((character) => {
+      const code = character.codePointAt(0)!;
+      return code !== 0x7f && (code > 0x1f || code === 9 || code === 10 || code === 13);
+    })
+    .join('')
     .replaceAll(/<[^>]*>/g, '') // Strip HTML tags
     .trim();
   if (normalized.length === 0) return null;
@@ -64,7 +70,9 @@ export function formatSafeAuthorName(displayName: string | null | undefined): st
 function formatVariantLabel(optionSnapshot: unknown, skuSnapshot?: string | null): string | null {
   if (Array.isArray(optionSnapshot) && optionSnapshot.length > 0) {
     const parts = optionSnapshot
-      .map((opt) => (typeof opt === 'object' && opt !== null && 'value' in opt ? String(opt.value) : ''))
+      .map((opt) =>
+        typeof opt === 'object' && opt !== null && 'value' in opt ? String(opt.value) : '',
+      )
       .filter(Boolean);
     if (parts.length > 0) return parts.join(' / ');
   }
@@ -109,7 +117,10 @@ async function attachOwnedReviewMedia(
 ): Promise<void> {
   const assetIds = input.mediaAssetIds ?? [];
   if (assetIds.length > 5 || new Set(assetIds).size !== assetIds.length) {
-    throw new ReviewDomainError('VALIDATION_FAILED', 'A Review can include up to 5 distinct media attachments.');
+    throw new ReviewDomainError(
+      'VALIDATION_FAILED',
+      'A Review can include up to 5 distinct media attachments.',
+    );
   }
   const guestOwnerHash = hash(input.accessToken);
   for (let i = 0; i < assetIds.length; i++) {
@@ -328,8 +339,7 @@ export async function checkReviewEligibility(
     }
 
     const isQualified =
-      line.delivery_outcome === 'DELIVERED' ||
-      line.fulfillment_status === 'DISPATCHED';
+      line.delivery_outcome === 'DELIVERED' || line.fulfillment_status === 'DISPATCHED';
 
     if (!isQualified) {
       return { eligible: false, reason: 'NOT_DELIVERED' };
@@ -850,7 +860,7 @@ export async function withdrawReview(
     await appendAuditEvent(tx, {
       organizationId: input.organizationId,
       actorType: input.actorId ? 'USER' : 'SYSTEM',
-      actorId: input.actorId ?? 'system',
+      ...(input.actorId ? { actorId: input.actorId } : {}),
       action: 'reviews.review.withdrawn',
       targetType: 'reviews.review',
       targetId: input.reviewId,
@@ -1115,14 +1125,16 @@ export async function listPublicReviews(
         sort?: 'NEWEST' | 'RATING_DESC' | 'RATING_ASC' | 'WITH_PHOTOS' | undefined;
       }
     | undefined,
-  options?: {
-    page?: number | undefined;
-    pageSize?: number | undefined;
-    rating?: number | undefined;
-    withMedia?: boolean | undefined;
-    verifiedOnly?: boolean | undefined;
-    sort?: 'NEWEST' | 'RATING_DESC' | 'RATING_ASC' | 'WITH_PHOTOS' | undefined;
-  } | undefined,
+  options?:
+    | {
+        page?: number | undefined;
+        pageSize?: number | undefined;
+        rating?: number | undefined;
+        withMedia?: boolean | undefined;
+        verifiedOnly?: boolean | undefined;
+        sort?: 'NEWEST' | 'RATING_DESC' | 'RATING_ASC' | 'WITH_PHOTOS' | undefined;
+      }
+    | undefined,
 ) {
   const input =
     typeof inputOrOrg === 'string'
@@ -1193,7 +1205,15 @@ export async function listPublicReviews(
     merchant_response_body: string | null;
     merchant_response_created_at: string | null;
     merchant_response_updated_at: string | null;
-    media_json: unknown;
+    media_json:
+      | {
+          assetId: string;
+          mediaType: string;
+          position: number;
+          url: string;
+          thumbnailUrl: string;
+        }[]
+      | null;
   }>`
     select
       review.id::text,
@@ -1241,7 +1261,7 @@ export async function listPublicReviews(
   `.execute(db);
 
   const items = rows.rows.map((row) => {
-    const mediaItems = Array.isArray(row.media_json) ? (row.media_json as any[]) : [];
+    const mediaItems = Array.isArray(row.media_json) ? row.media_json : [];
     return {
       id: row.id,
       rating: row.rating,
@@ -1290,43 +1310,46 @@ export async function getRatingSummary(
   db: Kysely<DatabaseSchema>,
   org: string,
   productId: string,
-): Promise<{
-  productId: string;
-  product_id?: string;
-  ratingCount: number;
-  rating_count?: number;
-  ratingSum: number;
-  rating_sum?: number;
-  averageRating: string | null;
-  average_rating?: string | null;
-  formattedAverage: string | null;
-  formatted_average?: string | null;
-  rating1Count: number;
-  rating_1_count?: number;
-  rating2Count: number;
-  rating_2_count?: number;
-  rating3Count: number;
-  rating_3_count?: number;
-  rating4Count: number;
-  rating_4_count?: number;
-  rating5Count: number;
-  rating_5_count?: number;
-  textReviewCount: number;
-  text_review_count?: number;
-  mediaReviewCount: number;
-  media_review_count?: number;
-  verifiedReviewCount: number;
-  verified_review_count?: number;
-  distributionPercentages: {
-    star1: number;
-    star2: number;
-    star3: number;
-    star4: number;
-    star5: number;
-  };
-  updatedAt: string;
-  updated_at?: string;
-} | undefined> {
+): Promise<
+  | {
+      productId: string;
+      product_id?: string;
+      ratingCount: number;
+      rating_count?: number;
+      ratingSum: number;
+      rating_sum?: number;
+      averageRating: string | null;
+      average_rating?: string | null;
+      formattedAverage: string | null;
+      formatted_average?: string | null;
+      rating1Count: number;
+      rating_1_count?: number;
+      rating2Count: number;
+      rating_2_count?: number;
+      rating3Count: number;
+      rating_3_count?: number;
+      rating4Count: number;
+      rating_4_count?: number;
+      rating5Count: number;
+      rating_5_count?: number;
+      textReviewCount: number;
+      text_review_count?: number;
+      mediaReviewCount: number;
+      media_review_count?: number;
+      verifiedReviewCount: number;
+      verified_review_count?: number;
+      distributionPercentages: {
+        star1: number;
+        star2: number;
+        star3: number;
+        star4: number;
+        star5: number;
+      };
+      updatedAt: string;
+      updated_at?: string;
+    }
+  | undefined
+> {
   const row = await sql<{
     rating_count: number;
     rating_sum: number;
@@ -1417,21 +1440,39 @@ export async function listAdminReviews(
     | string
     | {
         organizationId: string;
-        queue?: 'ALL' | 'PENDING' | 'VISIBLE' | 'REJECTED' | 'HIDDEN' | 'NEEDS_RESPONSE' | 'MEDIA' | undefined;
+        queue?:
+          | 'ALL'
+          | 'PENDING'
+          | 'VISIBLE'
+          | 'REJECTED'
+          | 'HIDDEN'
+          | 'NEEDS_RESPONSE'
+          | 'MEDIA'
+          | undefined;
         rating?: number | undefined;
         search?: string | undefined;
         page?: number | undefined;
         pageSize?: number | undefined;
         sort?: 'NEWEST' | 'OLDEST' | 'RATING_DESC' | 'RATING_ASC' | undefined;
       },
-  options?: {
-    queue?: 'ALL' | 'PENDING' | 'VISIBLE' | 'REJECTED' | 'HIDDEN' | 'NEEDS_RESPONSE' | 'MEDIA' | undefined;
-    rating?: number | undefined;
-    search?: string | undefined;
-    page?: number | undefined;
-    pageSize?: number | undefined;
-    sort?: 'NEWEST' | 'OLDEST' | 'RATING_DESC' | 'RATING_ASC' | undefined;
-  } | undefined,
+  options?:
+    | {
+        queue?:
+          | 'ALL'
+          | 'PENDING'
+          | 'VISIBLE'
+          | 'REJECTED'
+          | 'HIDDEN'
+          | 'NEEDS_RESPONSE'
+          | 'MEDIA'
+          | undefined;
+        rating?: number | undefined;
+        search?: string | undefined;
+        page?: number | undefined;
+        pageSize?: number | undefined;
+        sort?: 'NEWEST' | 'OLDEST' | 'RATING_DESC' | 'RATING_ASC' | undefined;
+      }
+    | undefined,
 ) {
   const input =
     typeof inputOrOrg === 'string'
@@ -1928,9 +1969,7 @@ export async function getCustomerReviewHistory(
         pageSize?: number | undefined;
       },
   customerIdOrOptions?:
-    | string
-    | { page?: number | undefined; pageSize?: number | undefined }
-    | undefined,
+    string | { page?: number | undefined; pageSize?: number | undefined } | undefined,
   options?: { page?: number | undefined; pageSize?: number | undefined } | undefined,
 ) {
   const input =
@@ -2160,7 +2199,10 @@ export async function getOrderLinesReviewState(
 /**
  * Diagnostic and integrity auditor for Reviews domain.
  */
-export async function verifyReviewIntegrity(db: Kysely<DatabaseSchema>, org: string): Promise<string[]> {
+export async function verifyReviewIntegrity(
+  db: Kysely<DatabaseSchema>,
+  org: string,
+): Promise<string[]> {
   const issues: string[] = [];
 
   const duplicate = await sql`

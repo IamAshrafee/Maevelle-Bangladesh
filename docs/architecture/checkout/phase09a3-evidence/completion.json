@@ -1,0 +1,14 @@
+{
+  "date": "2026-11-10T14:49:07.321Z",
+  "head": "cf68b53ddbb3321f03570e0b66a627914c1db674",
+  "sourceDigest": "aa1c5b09992866bada552b71baf2e16e48337feef529d44291f23c7fad1407e2",
+  "finalSourceMatches": true,
+  "acceptanceOutcomes": 40,
+  "focusedLintExit": 0,
+  "postDocumentationSecretsExit": 0,
+  "whitespaceExit": 0,
+  "ownedContainerRemoved": "maevelle-phase09a3-pg",
+  "sharedContainersUntouched": true,
+  "browser": "NOT_VERIFIED_AUTOMATIC_RUNTIME_LAUNCH_REJECTION",
+  "generatedDeclarations": "development references restored after builds"
+}

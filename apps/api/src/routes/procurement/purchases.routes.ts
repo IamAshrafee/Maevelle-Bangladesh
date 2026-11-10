@@ -60,7 +60,7 @@ export function registerPurchaseRoutes(
       const active = await requireAdmin(database, auth, request.headers, 'procurement.view');
       if (!active) return reply.code(403).send({ error: 'FORBIDDEN' });
       try {
-        const query = request.query as Record<string, string | undefined>;
+        const query = request.query as Static<typeof listPurchasesQuerySchema>;
         const page = query.page ? Number.parseInt(query.page, 10) : undefined;
         const pageSize = query.pageSize ? Number.parseInt(query.pageSize, 10) : undefined;
         const search = query.search ?? query.q;
@@ -78,8 +78,8 @@ export function registerPurchaseRoutes(
             : {}),
           ...(query.fromDate !== undefined ? { fromDate: query.fromDate } : {}),
           ...(query.toDate !== undefined ? { toDate: query.toDate } : {}),
-          ...(query.sortBy !== undefined ? { sortBy: query.sortBy as any } : {}),
-          ...(query.sortOrder !== undefined ? { sortOrder: query.sortOrder as any } : {}),
+          ...(query.sortBy !== undefined ? { sortBy: query.sortBy } : {}),
+          ...(query.sortOrder !== undefined ? { sortOrder: query.sortOrder } : {}),
         });
         return { data: result.items, pagination: result.pagination };
       } catch (error) {

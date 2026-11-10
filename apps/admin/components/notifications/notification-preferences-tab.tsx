@@ -2,25 +2,14 @@
 
 import * as React from 'react';
 import { useCallback, useEffect, useState } from 'react';
-import {
-  Bell,
-  CheckCircle2,
-  Filter,
-  Info,
-  Loader2,
-  Lock,
-  Mail,
-  Search,
-  Shield,
-  ShieldAlert,
-  Sliders,
-  Sparkles,
-  UserCheck,
-} from 'lucide-react';
-import type { NotificationEventCatalogItemDto, NotificationPreferenceDto } from '@maevelle/contracts';
+import { Bell, Info, Loader2, Lock, Mail, Search, Sliders } from 'lucide-react';
+import type {
+  NotificationEventCatalogItemDto,
+  NotificationPreferenceDto,
+} from '@maevelle/contracts';
 import { Button } from '@/components/ui/button';
 import { RefreshButton } from '@/components/ui/refresh-button';
-import { Badge } from '@/components/ui/badge';
+
 import { Input } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
 import {
@@ -32,7 +21,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { apiRequest } from '@/lib/api';
-import { cn } from '@/lib/utils';
+
 import { NotificationPriorityBadge } from './notification-status-badge';
 
 interface PreferenceState {

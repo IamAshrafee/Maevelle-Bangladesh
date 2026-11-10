@@ -1,5 +1,5 @@
 import * as React from 'react';
-import { AlertCircle, AlertTriangle, CheckCircle2, Inbox, Loader2 } from 'lucide-react';
+import { AlertCircle, Inbox, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from './button';
 

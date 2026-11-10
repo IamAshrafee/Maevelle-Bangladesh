@@ -1,28 +1,11 @@
 'use client';
 
 import * as React from 'react';
-import { useCallback, useEffect, useState } from 'react';
+import { useState } from 'react';
 import Link from 'next/link';
-import {
-  ArrowRight,
-  Code2,
-  ExternalLink,
-  Eye,
-  FileCode,
-  Layers,
-  LayoutTemplate,
-  Loader2,
-  Mail,
-  MessageSquare,
-  Monitor,
-  Plus,
-  RefreshCw,
-  Search,
-  Smartphone,
-  Sparkles,
-} from 'lucide-react';
+import { ArrowRight, Eye, Loader2, Monitor, Plus, Search, Smartphone } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
+
 import { Input } from '@/components/ui/input';
 import { NativeSelect } from '@/components/ui/native-select';
 import {

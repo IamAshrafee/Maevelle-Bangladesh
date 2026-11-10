@@ -1,17 +1,7 @@
 'use client';
 
 import * as React from 'react';
-import {
-  Calculator,
-  Edit2,
-  Globe,
-  MapPin,
-  Power,
-  RotateCw,
-  Search,
-  ShieldAlert,
-  Sparkles,
-} from 'lucide-react';
+import { Calculator, Edit2, Globe, MapPin, Power, Search } from 'lucide-react';
 
 import {
   Table,

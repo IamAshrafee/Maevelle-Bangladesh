@@ -1,21 +1,17 @@
 'use client';
 
 import {
-  AlertCircle,
   AlertTriangle,
   ArrowRight,
   Check,
   CircleAlert,
   Copy,
   Download,
-  ExternalLink,
   FilePlus2,
-  Filter,
   PackageSearch,
   RefreshCw,
   Search,
   ShieldAlert,
-  ShieldCheck,
   SlidersHorizontal,
   X,
 } from 'lucide-react';
@@ -26,7 +22,7 @@ import { useDeferredValue, useEffect, useState } from 'react';
 import type { OrderSummaryDto, OrderTagDto, PaginatedEnvelope } from '@maevelle/contracts';
 
 import { StatusBadge } from '@/components/status-badge';
-import { Badge } from '@/components/ui/badge';
+
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';

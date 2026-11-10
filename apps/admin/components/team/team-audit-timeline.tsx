@@ -1,17 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import {
-  Activity,
-  ArrowRight,
-  ChevronLeft,
-  ChevronRight,
-  Clock,
-  Filter,
-  Search,
-  Shield,
-  User,
-} from 'lucide-react';
+import { Activity, ArrowRight, ChevronLeft, ChevronRight, Clock, Search, User } from 'lucide-react';
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -19,10 +9,7 @@ import { RefreshButton } from '@/components/ui/refresh-button';
 import { Input } from '@/components/ui/input';
 
 import { useTeam } from './team-context';
-import {
-  formatAuditAction,
-  type TeamAuditItemDto,
-} from './team-types';
+import { formatAuditAction, type TeamAuditItemDto } from './team-types';
 
 export function TeamAuditTimeline({
   initialSearch = '',
@@ -37,7 +24,7 @@ export function TeamAuditTimeline({
   const [page, setPage] = useState(1);
   const [totalItems, setTotalItems] = useState(0);
   const [totalPages, setTotalPages] = useState(1);
-  const [expandedDiffs, setExpandedDiffs] = useState<Record<string, boolean>>({});
+
 
   useEffect(() => {
     if (initialSearch) {
@@ -46,9 +33,7 @@ export function TeamAuditTimeline({
     }
   }, [initialSearch]);
 
-  const toggleDiff = (id: string) => {
-    setExpandedDiffs((prev) => ({ ...prev, [id]: !prev[id] }));
-  };
+
 
   const loadEvents = useCallback(async () => {
     setLoading(true);
@@ -157,15 +142,15 @@ export function TeamAuditTimeline({
           <div className="divide-y divide-border">
             {events.map((event) => {
               const meta = formatAuditAction(event.action);
-              const isExpanded = expandedDiffs[event.id] ?? false;
+
 
               // Parse diff details
-              const before = (event.beforeDiff ?? event.before_diff ?? {}) as Record<string, any>;
-              const after = (event.afterDiff ?? event.after_diff ?? {}) as Record<string, any>;
+              const before = (event.beforeDiff ?? event.before_diff ?? {}) as Record<string, unknown>;
+              const after = (event.afterDiff ?? event.after_diff ?? {}) as Record<string, unknown>;
 
               // Calculate capability diffs if present
-              const beforeCaps: string[] = before.capabilities ?? [];
-              const afterCaps: string[] = after.capabilities ?? [];
+              const beforeCaps: string[] = Array.isArray(before.capabilities) ? before.capabilities.filter((value): value is string => typeof value === 'string') : [];
+              const afterCaps: string[] = Array.isArray(after.capabilities) ? after.capabilities.filter((value): value is string => typeof value === 'string') : [];
               const addedCaps = afterCaps.filter((c) => !beforeCaps.includes(c));
               const removedCaps = beforeCaps.filter((c) => !afterCaps.includes(c));
               const hasCapDiff = addedCaps.length > 0 || removedCaps.length > 0;
@@ -269,7 +254,7 @@ export function TeamAuditTimeline({
                   ) : null}
 
                   {/* Status transition diff */}
-                  {before.status && after.status ? (
+                  {typeof before.status === 'string' && typeof after.status === 'string' ? (
                     <div className="flex items-center gap-1.5 text-xs pt-1">
                       <span className="text-muted-foreground">Status transition:</span>
                       <Badge variant="outline" className="text-[10px]">

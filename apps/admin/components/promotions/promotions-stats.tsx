@@ -2,7 +2,7 @@
 
 import * as React from 'react';
 import { motion } from 'motion/react';
-import { BadgePercent, CalendarCheck, Coins, Sparkles, Ticket } from 'lucide-react';
+import { BadgePercent, CalendarCheck, Coins, Ticket } from 'lucide-react';
 
 import { Stats, StatsCard, StatsDescription, StatsTitle, StatsValue } from '@/components/ui/stats';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';

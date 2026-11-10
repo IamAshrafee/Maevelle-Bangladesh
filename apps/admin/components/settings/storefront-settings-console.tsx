@@ -1,14 +1,12 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import Link from 'next/link';
+
 import {
   AlertCircle,
   CheckCircle2,
   Globe,
   History,
-  Mail,
-  Phone,
   RefreshCw,
   RotateCcw,
   Store,

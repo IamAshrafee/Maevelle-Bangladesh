@@ -2,7 +2,7 @@
 
 import * as React from 'react';
 import { useState } from 'react';
-import { ArrowRight, LockKeyhole, LogOut, ShieldAlert, ShieldCheck } from 'lucide-react';
+import { ArrowRight, LogOut, ShieldAlert, ShieldCheck } from 'lucide-react';
 
 import type { AdminContextDto } from '@maevelle/contracts';
 import { Button } from '@/components/ui/button';

@@ -1,16 +1,8 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import {
-  CheckCircle2,
-  Copy,
-  MessageSquare,
-  Package,
-  RefreshCw,
-  Share2,
-  XCircle,
-} from 'lucide-react';
-import Link from 'next/link';
+import { CheckCircle2, MessageSquare, RefreshCw, XCircle } from 'lucide-react';
+
 
 import type { OrderDetailDto } from '@maevelle/contracts';
 

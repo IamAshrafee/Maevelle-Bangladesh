@@ -1,7 +1,7 @@
 'use client';
 
 import * as React from 'react';
-import { CheckCircle2, AlertCircle, Layers, Search, Sparkles, X, ShieldAlert } from 'lucide-react';
+import { CheckCircle2, AlertCircle, Layers, Search, X } from 'lucide-react';
 import {
   Sheet,
   SheetContent,
@@ -16,12 +16,8 @@ import { NativeSelect } from '@/components/ui/native-select';
 import { Slider } from '@/components/ui/slider';
 import { Badge } from '@/components/ui/badge';
 import { fetchApiData } from '@/lib/api';
-import type {
-  CoverageItem,
-  PlacementCode,
-  ProductPickerItem,
-} from './recommendations-types';
-import { PLACEMENT_LABELS } from './recommendations-types';
+import type { CoverageItem, PlacementCode, ProductPickerItem } from './recommendations-types';
+
 
 interface BulkMerchandisingSheetProps {
   open: boolean;

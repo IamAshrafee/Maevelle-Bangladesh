@@ -3,25 +3,19 @@
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import {
-  ArrowLeft,
   ArrowUpRight,
   CheckCircle2,
   ExternalLink,
   Globe,
-  History,
-  KeyRound,
   Loader2,
   Mail,
-  Plug,
   RefreshCw,
-  RotateCw,
-  Server,
   Shield,
   Zap,
 } from 'lucide-react';
 import { Button, buttonVariants } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-import { SettingsCard, SettingsSection } from './settings-card';
+
+import { SettingsSection } from './settings-card';
 import { SettingsPageHeader } from './settings-page-header';
 import { IntegrationCredentialField } from './integration-credential-field';
 import { SettingStatusBadge } from './setting-status-badge';

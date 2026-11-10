@@ -7,7 +7,6 @@ import {
   Sparkles,
   Layers,
   Settings2,
-  SlidersHorizontal,
   Eye,
   BarChart3,
   CheckCircle2,
@@ -15,9 +14,7 @@ import {
   ExternalLink,
   RefreshCw,
 } from 'lucide-react';
-import type {
-  RecommendationPlacementSettingsDto,
-} from '@maevelle/contracts';
+import type { RecommendationPlacementSettingsDto } from '@maevelle/contracts';
 import { fetchApiData } from '@/lib/api';
 import { AdminPage, PageHeader } from '@/components/ui/page-shell';
 import { Button } from '@/components/ui/button';

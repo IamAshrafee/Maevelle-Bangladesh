@@ -2,7 +2,7 @@
 
 import * as React from 'react';
 import { useState } from 'react';
-import { Eye, EyeOff, Lock, Mail, RefreshCw, ShieldCheck } from 'lucide-react';
+import { Eye, EyeOff, Mail, RefreshCw, ShieldCheck } from 'lucide-react';
 import type { ApiEnvelope } from '@maevelle/contracts';
 import { apiRequest } from '@/lib/api';
 import { Button } from '@/components/ui/button';

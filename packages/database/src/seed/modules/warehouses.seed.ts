@@ -1,20 +1,8 @@
 import { sql } from 'kysely';
 
-import {
-  createLocation,
-  updateLocation,
-  type LocationCapability,
-} from '../../warehouse.js';
-import {
-  ALL_LOCATION_CAPABILITIES,
-  warehouseSeedData,
-} from '../data/warehouses.js';
-import type {
-  SeedContext,
-  SeedModule,
-  SeedModuleResult,
-  WarehouseSeedItem,
-} from '../types.js';
+import { createLocation, updateLocation } from '../../warehouse.js';
+import { ALL_LOCATION_CAPABILITIES, warehouseSeedData } from '../data/warehouses.js';
+import type { SeedContext, SeedModule, SeedModuleResult, WarehouseSeedItem } from '../types.js';
 
 interface ExistingWarehouseRow {
   readonly id: string;

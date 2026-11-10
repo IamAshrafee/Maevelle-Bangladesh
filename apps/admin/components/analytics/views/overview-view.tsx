@@ -1,24 +1,21 @@
 'use client';
 
 import * as React from 'react';
-import Link from 'next/link';
+
 import {
   ArrowRight,
   Boxes,
   CreditCard,
-  HelpCircle,
   PackageSearch,
   RotateCcw,
   ShoppingBag,
-  Sparkles,
-  TrendingUp,
   Truck,
   Users,
 } from 'lucide-react';
 
 import { StatusBadge } from '@/components/status-badge';
 import { Button } from '@/components/ui/button';
-import { EmptyState, ErrorState, LoadingState, PagePanel, PageSection } from '@/components/ui/page-shell';
+import { ErrorState, PagePanel, PageSection } from '@/components/ui/page-shell';
 import {
   Table,
   TableBody,
@@ -33,12 +30,10 @@ import {
   calculateComparisonChange,
   formatAnalyticsCount,
   formatAnalyticsMoney,
-  formatAnalyticsPercent,
   type AnalyticsReportEnvelopeDto,
   type AnalyticsViewKey,
   type DateRangeSelection,
   type DeliveryReportTotalsDto,
-  type InventoryReportTotalsDto,
   type ProductsReportBreakdownDto,
   type ReturnsReportTotalsDto,
   type SalesReportSeriesDto,

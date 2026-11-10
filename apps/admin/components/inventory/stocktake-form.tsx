@@ -4,7 +4,6 @@ import { useState, useEffect, useMemo, useRef } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import {
-  Save,
   ArrowLeft,
   Loader2,
   Building2,
@@ -13,7 +12,6 @@ import {
   Package,
   Layers,
   ArrowRight,
-  ShieldAlert,
   Info,
 } from 'lucide-react';
 import { z } from 'zod';
@@ -57,7 +55,7 @@ export function StocktakeForm() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   // Active stocktake conflict detection state
-  const [isCheckingConflict, setIsCheckingConflict] = useState(false);
+  const [, setIsCheckingConflict] = useState(false);
   const [activeConflict, setActiveConflict] = useState<StocktakeSessionDto | null>(null);
 
   // Facility stock footprint preview state

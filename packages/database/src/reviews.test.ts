@@ -102,7 +102,9 @@ describe('Reviews', () => {
       mediaAssetIds: [privateAsset.rows[0]!.id],
       idempotencyKey: crypto.randomUUID(),
     });
-    expect(await listPublicReviews(database.db, data.organizationId, data.productId)).toEqual([]);
+    expect(
+      (await listPublicReviews(database.db, data.organizationId, data.productId)).items,
+    ).toEqual([]);
     await expect(
       moderateReview(database.db, {
         organizationId: data.organizationId,
@@ -181,9 +183,11 @@ describe('Reviews', () => {
       revisionId: submitted.revisionId!,
       decision: 'APPROVE',
     });
-    expect(await listPublicReviews(database.db, a.organizationId, b.productId)).toEqual([]);
-    expect(await listAdminReviews(database.db, a.organizationId)).toEqual([]);
-    expect(await listAdminReviews(database.db, b.organizationId)).toHaveLength(1);
+    expect((await listPublicReviews(database.db, a.organizationId, b.productId)).items).toEqual([]);
+    expect((await listAdminReviews(database.db, a.organizationId)).items).toEqual([]);
+    const ownReviews = await listAdminReviews(database.db, b.organizationId, { queue: 'ALL' });
+    expect(ownReviews.items).toHaveLength(1);
+    expect(ownReviews.items[0]?.id).toBe(submitted.id);
     await expect(
       moderateReview(database.db, {
         organizationId: a.organizationId,
@@ -227,7 +231,17 @@ describe('Reviews', () => {
     expect(formatSafeAuthorName('')).toBe('Verified customer');
 
     const dirty = '<script>alert("hack")</script>Loved this <b>dress</b>!\x00\x08';
-    expect(sanitizeReviewText(dirty, 100)).toBe('Loved this dress!');
+    // Markup is removed; inert text remains text rather than being interpreted as HTML.
+    expect(sanitizeReviewText(dirty, 100)).toBe('alert("hack")Loved this dress!');
+    // Keep the exact legacy control-character policy, including permitted whitespace.
+    for (let code = 0; code < 128; code++) {
+      const character = String.fromCodePoint(code);
+      const removed = code === 127 || (code < 32 && ![9, 10, 13].includes(code));
+      expect(sanitizeReviewText(`A${character}B`, 100)).toBe(removed ? 'AB' : `A${character}B`);
+    }
+    expect(sanitizeReviewText('  সুন্দর পোশাক 👗\tধন্যবাদ  ', 100)).toBe(
+      'সুন্দর পোশাক 👗\tধন্যবাদ',
+    );
   });
 
   it('enforces invariant REV-INV-009: exactly one active review per customer per product', async () => {
@@ -244,11 +258,11 @@ describe('Reviews', () => {
     // Create a second token for the same customer and product
     const secondToken = crypto.randomUUID();
     const customer = await sql<{ id: string }>`
-      select customer_id::text from reviews.review_access_tokens
+      select customer_id::text as id from reviews.review_access_tokens
       where organization_id = ${data.organizationId} and token_hash = ${tokenHash(data.token)}
     `.execute(database.db);
     const line = await sql<{ id: string }>`
-      select order_line_id::text from reviews.review_access_tokens
+      select order_line_id::text as id from reviews.review_access_tokens
       where organization_id = ${data.organizationId} and token_hash = ${tokenHash(data.token)}
     `.execute(database.db);
 
@@ -299,6 +313,11 @@ describe('Reviews', () => {
       reason: 'Customer requested removal',
     });
     expect(withdrawn.reviewId).toBe(submitted.id);
+    const audit = await sql<{ actor_type: string; actor_id: string | null }>`
+      select actor_type,actor_id::text from audit.audit_events
+      where organization_id=${data.organizationId} and target_id=${submitted.id}::uuid
+        and action='reviews.review.withdrawn'`.execute(database.db);
+    expect(audit.rows).toEqual([{ actor_type: 'SYSTEM', actor_id: null }]);
 
     // Summary must immediately update to 0 ratings
     const summaryAfter = await getRatingSummary(database.db, data.organizationId, data.productId);
@@ -344,10 +363,14 @@ describe('Reviews', () => {
 
     // Verify customer review history
     const customer = await sql<{ id: string }>`
-      select customer_id::text from reviews.review_access_tokens
+      select customer_id::text as id from reviews.review_access_tokens
       where organization_id = ${data.organizationId} and token_hash = ${tokenHash(data.token)}
     `.execute(database.db);
-    const history = await getCustomerReviewHistory(database.db, data.organizationId, customer.rows[0]!.id);
+    const history = await getCustomerReviewHistory(
+      database.db,
+      data.organizationId,
+      customer.rows[0]!.id,
+    );
     expect(history.items).toHaveLength(1);
     expect(history.metrics.totalSubmitted).toBe(1);
     expect(history.metrics.averageRatingGiven).toBe(4);
@@ -359,7 +382,11 @@ describe('Reviews', () => {
       where rat.token_hash = ${tokenHash(data.token)}
       limit 1
     `.execute(database.db);
-    const orderReviewState = await getOrderLinesReviewState(database.db, data.organizationId, order.rows[0]!.id);
+    const orderReviewState = await getOrderLinesReviewState(
+      database.db,
+      data.organizationId,
+      order.rows[0]!.id,
+    );
     expect(orderReviewState).toHaveLength(1);
     expect(orderReviewState[0]?.reviewSubmitted).toBe(true);
     expect(orderReviewState[0]?.reviewRating).toBe(4);

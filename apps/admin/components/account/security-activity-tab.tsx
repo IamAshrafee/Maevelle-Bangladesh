@@ -8,7 +8,6 @@ import {
   Mail,
   RefreshCw,
   Shield,
-  ShieldAlert,
   ShieldCheck,
   UserCheck,
 } from 'lucide-react';

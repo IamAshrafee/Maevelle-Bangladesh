@@ -3,9 +3,7 @@
 import { useState } from 'react';
 import {
   CheckCircle2,
-  Clock,
   MoreVertical,
-  PackagePlus,
   PauseCircle,
   PhoneCall,
   PlayCircle,
@@ -47,7 +45,7 @@ export function OrderHeaderActions({
   onConfirmed,
 }: OrderHeaderActionsProps) {
   const [resuming, setResuming] = useState(false);
-  const [verificationOpen, setVerificationOpen] = useState(false);
+  const [, setVerificationOpen] = useState(false);
 
   const { capabilities } = order;
 

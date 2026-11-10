@@ -1,18 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import {
-  Check,
-  Edit2,
-  Layers,
-  Plus,
-  Search,
-  Shield,
-  ShieldAlert,
-  ShieldCheck,
-  Trash2,
-  Users,
-} from 'lucide-react';
+import { Edit2, Layers, Plus, Search, ShieldCheck, Trash2, Users } from 'lucide-react';
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -26,15 +15,11 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
+
 
 import { useTeam } from './team-context';
 import { TeamPermissionsEditor, type PermissionsEditorValue } from './team-permissions-editor';
-import {
-  formatIamErrorMessage,
-  getSensitivityBadge,
-  type PermissionPresetDto,
-} from './team-types';
+import { formatIamErrorMessage, getSensitivityBadge, type PermissionPresetDto } from './team-types';
 
 export function TeamRolesPresets({
   onRefresh,

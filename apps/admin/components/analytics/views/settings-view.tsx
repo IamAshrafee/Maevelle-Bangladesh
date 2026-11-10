@@ -3,30 +3,31 @@
 import * as React from 'react';
 import Link from 'next/link';
 import {
-  AlertCircle,
   BookOpen,
   CheckCircle2,
   Database,
   Download,
   ExternalLink,
-  Flame,
-  Globe,
   Loader2,
   Plug,
   RefreshCw,
-  Search,
-  ShieldAlert,
   ShieldCheck,
-  Sparkles,
 } from 'lucide-react';
 
 import { useAdminCapability } from '@/components/admin-capabilities';
 import { StatusBadge } from '@/components/status-badge';
 import { Button } from '@/components/ui/button';
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { NativeSelect } from '@/components/ui/native-select';
-import { EmptyState, ErrorState, LoadingState, PagePanel, PageSection } from '@/components/ui/page-shell';
+import { ErrorState, PagePanel, PageSection } from '@/components/ui/page-shell';
 import {
   Table,
   TableBody,
@@ -84,7 +85,7 @@ export function SettingsView({ selection, freshness, onRebuildCompleted }: Setti
   const [destinations, setDestinations] = React.useState<readonly DestinationStatusDto[]>([]);
 
   const [metricSearch, setMetricSearch] = React.useState('');
-  const [loading, setLoading] = React.useState(true);
+  const [, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
 
   const loadData = React.useCallback(async () => {

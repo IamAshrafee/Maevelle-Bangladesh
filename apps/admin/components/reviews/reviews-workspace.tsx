@@ -2,15 +2,9 @@
 
 import React, { useCallback, useEffect, useState, useTransition } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
-import {
-  ChevronLeft,
-  ChevronRight,
-  Filter,
-  Search,
-  SlidersHorizontal,
-} from 'lucide-react';
-import { cn } from '@/lib/utils';
-import { AdminPage, PageActions, PageDescription, PageHeader, PageTitle } from '@/components/ui/page-shell';
+import { ChevronLeft, ChevronRight, Search, SlidersHorizontal } from 'lucide-react';
+
+import { AdminPage, PageHeader } from '@/components/ui/page-shell';
 import { Button } from '@/components/ui/button';
 import { RefreshButton } from '@/components/ui/refresh-button';
 import { Input } from '@/components/ui/input';
@@ -24,7 +18,7 @@ export function ReviewsWorkspace() {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const [isPending, startTransition] = useTransition();
+  const [, startTransition] = useTransition();
 
   // URL state
   const queueParam = searchParams.get('queue') || 'PENDING';

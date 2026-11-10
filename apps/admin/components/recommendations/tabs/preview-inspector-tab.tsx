@@ -1,19 +1,7 @@
 'use client';
 
 import * as React from 'react';
-import {
-  Search,
-  Eye,
-  Sparkles,
-  Layers,
-  ArrowRight,
-  Sliders,
-  CheckCircle2,
-  XCircle,
-  HelpCircle,
-  Info,
-  Package,
-} from 'lucide-react';
+import { Search, Eye, Sparkles, Package } from 'lucide-react';
 import type {
   RecommendationPlacementCodeDto,
   RecommendationPlacementSettingsDto,
@@ -23,7 +11,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { NativeSelect } from '@/components/ui/native-select';
 import { Badge } from '@/components/ui/badge';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+
 import { EmptyState, LoadingState } from '@/components/ui/page-shell';
 import { fetchApiData } from '@/lib/api';
 import type { ProductPickerItem } from '../recommendations-types';
@@ -45,7 +33,7 @@ export function PreviewInspectorTab({
   const [searchResults, setSearchResults] = React.useState<ProductPickerItem[]>([]);
   const [selectedProduct, setSelectedProduct] = React.useState<ProductPickerItem | null>(null);
 
-  const [searching, setSearching] = React.useState(false);
+  const [, setSearching] = React.useState(false);
   const [evaluating, setEvaluating] = React.useState(false);
   const [previewData, setPreviewData] = React.useState<RecommendationPreviewDto | null>(null);
   const [error, setError] = React.useState('');

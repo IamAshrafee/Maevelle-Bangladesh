@@ -6,16 +6,10 @@ import {
   BadgePercent,
   Calendar,
   Check,
-  Coins,
-  Copy,
-  Info,
-  Layers,
   Loader2,
   Plus,
   Sparkles,
-  Tag,
   Ticket,
-  X,
 } from 'lucide-react';
 
 import {

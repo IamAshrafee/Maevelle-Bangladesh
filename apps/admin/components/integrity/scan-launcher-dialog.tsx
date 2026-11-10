@@ -1,14 +1,7 @@
 'use client';
 
 import * as React from 'react';
-import {
-  AlertTriangle,
-  Layers,
-  Play,
-  RefreshCw,
-  Shield,
-  Zap,
-} from 'lucide-react';
+import { Play, RefreshCw, Zap } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { NativeSelect } from '@/components/ui/native-select';
 import {
@@ -119,7 +112,7 @@ export function ScanLauncherDialog({
               <label className="font-semibold text-foreground">Scan Scope</label>
               <NativeSelect
                 value={scopeMode}
-                onChange={(e) => setScopeMode(e.target.value as any)}
+                onChange={(e) => setScopeMode(e.target.value as typeof scopeMode)}
                 className="h-9 text-xs"
               >
                 <option value="ALL">All Eligible Platform Checks (Comprehensive)</option>

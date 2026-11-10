@@ -2,23 +2,7 @@
 
 import * as React from 'react';
 import { useCallback, useEffect, useState } from 'react';
-import {
-  Bell,
-  CheckCircle2,
-  Clock,
-  Filter,
-  Info,
-  Loader2,
-  Lock,
-  Mail,
-  MessageSquare,
-  Search,
-  ShieldAlert,
-  ShieldCheck,
-  Sliders,
-  SlidersHorizontal,
-  Users,
-} from 'lucide-react';
+import { Loader2, Lock, Search, ShieldCheck } from 'lucide-react';
 import type { NotificationEventCatalogItemDto } from '@maevelle/contracts';
 import { Button } from '@/components/ui/button';
 import { RefreshButton } from '@/components/ui/refresh-button';
@@ -36,10 +20,7 @@ import {
 } from '@/components/ui/table';
 import { apiRequest } from '@/lib/api';
 import { cn } from '@/lib/utils';
-import {
-  NotificationChannelBadge,
-  NotificationPriorityBadge,
-} from './notification-status-badge';
+import { NotificationPriorityBadge } from './notification-status-badge';
 
 interface PolicyRecord {
   readonly notificationType: string;

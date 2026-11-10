@@ -1,19 +1,15 @@
 'use client';
 
 import {
-  AlertCircle,
-  Box,
   CheckCircle2,
   Clock,
   CreditCard,
-  FileText,
   MessageSquare,
   Package,
   PhoneCall,
   RotateCcw,
   ShoppingBag,
   Truck,
-  User,
   XCircle,
 } from 'lucide-react';
 

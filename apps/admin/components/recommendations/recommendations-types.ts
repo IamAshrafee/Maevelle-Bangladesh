@@ -1,8 +1,4 @@
-import type {
-  RecommendationPlacementCodeDto,
-  RecommendationPlacementSettingsDto,
-  RecommendationPreviewDto,
-} from '@maevelle/contracts';
+import type { RecommendationPlacementCodeDto } from '@maevelle/contracts';
 
 export type PlacementCode = RecommendationPlacementCodeDto;
 

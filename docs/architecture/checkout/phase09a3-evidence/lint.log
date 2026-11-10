@@ -1,0 +1,1141 @@
+
+D:\Projects FINAL\Web Development\Nextjs\Maevelle-Bangladesh\apps\admin\app\email\settings\page.tsx
+  3:10  error  'ArrowLeft' is defined but never used  @typescript-eslint/no-unused-vars
+
+D:\Projects FINAL\Web Development\Nextjs\Maevelle-Bangladesh\apps\admin\app\sizing\mappings\page.tsx
+  5:3  error  'ArrowRight' is defined but never used  @typescript-eslint/no-unused-vars
+
+D:\Projects FINAL\Web Development\Nextjs\Maevelle-Bangladesh\apps\admin\app\sizing\standards\page.tsx
+   5:3  error  'ArrowUpDown' is defined but never used        @typescript-eslint/no-unused-vars
+   6:3  error  'Check' is defined but never used              @typescript-eslint/no-unused-vars
+  10:3  error  'Loader2' is defined but never used            @typescript-eslint/no-unused-vars
+  16:3  error  'SlidersHorizontal' is defined but never used  @typescript-eslint/no-unused-vars
+  56:3  error  'PageActions' is defined but never used        @typescript-eslint/no-unused-vars
+  57:3  error  'PageDescription' is defined but never used    @typescript-eslint/no-unused-vars
+  60:3  error  'PageSection' is defined but never used        @typescript-eslint/no-unused-vars
+  61:3  error  'PageTitle' is defined but never used          @typescript-eslint/no-unused-vars
+
+D:\Projects FINAL\Web Development\Nextjs\Maevelle-Bangladesh\apps\admin\components\analytics\analytics-charts.tsx
+   7:3   error  'Bar' is defined but never used         @typescript-eslint/no-unused-vars
+   8:3   error  'BarChart' is defined but never used    @typescript-eslint/no-unused-vars
+  10:3   error  'Cell' is defined but never used        @typescript-eslint/no-unused-vars
+  11:3   error  'Legend' is defined but never used      @typescript-eslint/no-unused-vars
+  17:34  error  'HelpCircle' is defined but never used  @typescript-eslint/no-unused-vars
+
+D:\Projects FINAL\Web Development\Nextjs\Maevelle-Bangladesh\apps\admin\components\analytics\analytics-kpi-card.tsx
+  41:3  error  'statusLabel' is defined but never used  @typescript-eslint/no-unused-vars
+
+D:\Projects FINAL\Web Development\Nextjs\Maevelle-Bangladesh\apps\admin\components\analytics\views\customers-view.tsx
+   7:3   error  'HelpCircle' is defined but never used      @typescript-eslint/no-unused-vars
+   8:3   error  'Repeat' is defined but never used          @typescript-eslint/no-unused-vars
+   9:3   error  'UserCheck' is defined but never used       @typescript-eslint/no-unused-vars
+  10:3   error  'UserPlus' is defined but never used        @typescript-eslint/no-unused-vars
+  17:10  error  'EmptyState' is defined but never used      @typescript-eslint/no-unused-vars
+  17:22  error  'ErrorState' is defined but never used      @typescript-eslint/no-unused-vars
+  17:34  error  'LoadingState' is defined but never used    @typescript-eslint/no-unused-vars
+  17:48  error  'PagePanel' is defined but never used       @typescript-eslint/no-unused-vars
+  45:10  error  'error' is assigned a value but never used  @typescript-eslint/no-unused-vars
+
+D:\Projects FINAL\Web Development\Nextjs\Maevelle-Bangladesh\apps\admin\components\analytics\views\delivery-view.tsx
+   6:3   error  'CheckCircle2' is defined but never used            @typescript-eslint/no-unused-vars
+   9:3   error  'RotateCcw' is defined but never used               @typescript-eslint/no-unused-vars
+  10:3   error  'ShieldAlert' is defined but never used             @typescript-eslint/no-unused-vars
+  11:3   error  'Truck' is defined but never used                   @typescript-eslint/no-unused-vars
+  12:3   error  'XCircle' is defined but never used                 @typescript-eslint/no-unused-vars
+  16:10  error  'Button' is defined but never used                  @typescript-eslint/no-unused-vars
+  17:10  error  'EmptyState' is defined but never used              @typescript-eslint/no-unused-vars
+  17:34  error  'LoadingState' is defined but never used            @typescript-eslint/no-unused-vars
+  17:48  error  'PagePanel' is defined but never used               @typescript-eslint/no-unused-vars
+  68:9   error  'totalAttempts' is assigned a value but never used  @typescript-eslint/no-unused-vars
+
+D:\Projects FINAL\Web Development\Nextjs\Maevelle-Bangladesh\apps\admin\components\analytics\views\finance-view.tsx
+    7:3   error  'Banknote' is defined but never used                   @typescript-eslint/no-unused-vars
+    8:3   error  'CircleDollarSign' is defined but never used           @typescript-eslint/no-unused-vars
+    9:3   error  'CreditCard' is defined but never used                 @typescript-eslint/no-unused-vars
+   11:3   error  'Landmark' is defined but never used                   @typescript-eslint/no-unused-vars
+   12:3   error  'Receipt' is defined but never used                    @typescript-eslint/no-unused-vars
+   13:3   error  'Scale' is defined but never used                      @typescript-eslint/no-unused-vars
+   19:10  error  'Button' is defined but never used                     @typescript-eslint/no-unused-vars
+   20:10  error  'EmptyState' is defined but never used                 @typescript-eslint/no-unused-vars
+   20:34  error  'LoadingState' is defined but never used               @typescript-eslint/no-unused-vars
+   20:48  error  'PagePanel' is defined but never used                  @typescript-eslint/no-unused-vars
+   31:3   error  'calculateComparisonChange' is defined but never used  @typescript-eslint/no-unused-vars
+  126:9   error  'refundAmount' is assigned a value but never used      @typescript-eslint/no-unused-vars
+
+D:\Projects FINAL\Web Development\Nextjs\Maevelle-Bangladesh\apps\admin\components\analytics\views\inventory-view.tsx
+   7:3   error  'Camera' is defined but never used          @typescript-eslint/no-unused-vars
+   9:3   error  'Layers' is defined but never used          @typescript-eslint/no-unused-vars
+  10:3   error  'MapPin' is defined but never used          @typescript-eslint/no-unused-vars
+  11:3   error  'Warehouse' is defined but never used       @typescript-eslint/no-unused-vars
+  14:10  error  'StatusBadge' is defined but never used     @typescript-eslint/no-unused-vars
+  15:10  error  'Button' is defined but never used          @typescript-eslint/no-unused-vars
+  16:10  error  'EmptyState' is defined but never used      @typescript-eslint/no-unused-vars
+  16:22  error  'ErrorState' is defined but never used      @typescript-eslint/no-unused-vars
+  16:34  error  'LoadingState' is defined but never used    @typescript-eslint/no-unused-vars
+  16:48  error  'PagePanel' is defined but never used       @typescript-eslint/no-unused-vars
+  43:10  error  'error' is assigned a value but never used  @typescript-eslint/no-unused-vars
+
+D:\Projects FINAL\Web Development\Nextjs\Maevelle-Bangladesh\apps\admin\components\analytics\views\marketing-view.tsx
+   4:8   error  'Link' is defined but never used                    @typescript-eslint/no-unused-vars
+   6:3   error  'AlertCircle' is defined but never used             @typescript-eslint/no-unused-vars
+   7:3   error  'ExternalLink' is defined but never used            @typescript-eslint/no-unused-vars
+   8:3   error  'Flame' is defined but never used                   @typescript-eslint/no-unused-vars
+   9:3   error  'Globe' is defined but never used                   @typescript-eslint/no-unused-vars
+  11:3   error  'Share2' is defined but never used                  @typescript-eslint/no-unused-vars
+  12:3   error  'Tag' is defined but never used                     @typescript-eslint/no-unused-vars
+  15:10  error  'StatusBadge' is defined but never used             @typescript-eslint/no-unused-vars
+  16:10  error  'Button' is defined but never used                  @typescript-eslint/no-unused-vars
+  17:10  error  'EmptyState' is defined but never used              @typescript-eslint/no-unused-vars
+  17:34  error  'LoadingState' is defined but never used            @typescript-eslint/no-unused-vars
+  17:48  error  'PagePanel' is defined but never used               @typescript-eslint/no-unused-vars
+  29:3   error  'formatAnalyticsPercent' is defined but never used  @typescript-eslint/no-unused-vars
+
+D:\Projects FINAL\Web Development\Nextjs\Maevelle-Bangladesh\apps\admin\components\analytics\views\operations-view.tsx
+  13:3   error  'Star' is defined but never used          @typescript-eslint/no-unused-vars
+  17:10  error  'Button' is defined but never used        @typescript-eslint/no-unused-vars
+  18:10  error  'EmptyState' is defined but never used    @typescript-eslint/no-unused-vars
+  18:34  error  'LoadingState' is defined but never used  @typescript-eslint/no-unused-vars
+
+D:\Projects FINAL\Web Development\Nextjs\Maevelle-Bangladesh\apps\admin\components\analytics\views\overview-view.tsx
+   4:8   error  'Link' is defined but never used                      @typescript-eslint/no-unused-vars
+   9:3   error  'HelpCircle' is defined but never used                @typescript-eslint/no-unused-vars
+  13:3   error  'Sparkles' is defined but never used                  @typescript-eslint/no-unused-vars
+  14:3   error  'TrendingUp' is defined but never used                @typescript-eslint/no-unused-vars
+  21:10  error  'EmptyState' is defined but never used                @typescript-eslint/no-unused-vars
+  21:34  error  'LoadingState' is defined but never used              @typescript-eslint/no-unused-vars
+  36:3   error  'formatAnalyticsPercent' is defined but never used    @typescript-eslint/no-unused-vars
+  41:8   error  'InventoryReportTotalsDto' is defined but never used  @typescript-eslint/no-unused-vars
+
+D:\Projects FINAL\Web Development\Nextjs\Maevelle-Bangladesh\apps\admin\components\analytics\views\products-view.tsx
+   6:3   error  'ArrowDownUp' is defined but never used                 @typescript-eslint/no-unused-vars
+   7:3   error  'Boxes' is defined but never used                       @typescript-eslint/no-unused-vars
+  10:3   error  'Percent' is defined but never used                     @typescript-eslint/no-unused-vars
+  11:3   error  'TrendingUp' is defined but never used                  @typescript-eslint/no-unused-vars
+  17:10  error  'EmptyState' is defined but never used                  @typescript-eslint/no-unused-vars
+  17:22  error  'ErrorState' is defined but never used                  @typescript-eslint/no-unused-vars
+  17:34  error  'LoadingState' is defined but never used                @typescript-eslint/no-unused-vars
+  17:48  error  'PagePanel' is defined but never used                   @typescript-eslint/no-unused-vars
+  45:10  error  'error' is assigned a value but never used              @typescript-eslint/no-unused-vars
+  82:9   error  'recognizedCostSum' is assigned a value but never used  @typescript-eslint/no-unused-vars
+
+D:\Projects FINAL\Web Development\Nextjs\Maevelle-Bangladesh\apps\admin\components\analytics\views\sales-view.tsx
+   9:3   error  'ShoppingBag' is defined but never used           @typescript-eslint/no-unused-vars
+  14:10  error  'StatusBadge' is defined but never used           @typescript-eslint/no-unused-vars
+  15:10  error  'Button' is defined but never used                @typescript-eslint/no-unused-vars
+  16:10  error  'EmptyState' is defined but never used            @typescript-eslint/no-unused-vars
+  16:34  error  'LoadingState' is defined but never used          @typescript-eslint/no-unused-vars
+  88:9   error  'ordersDelta' is assigned a value but never used  @typescript-eslint/no-unused-vars
+  96:9   error  'refundDelta' is assigned a value but never used  @typescript-eslint/no-unused-vars
+
+D:\Projects FINAL\Web Development\Nextjs\Maevelle-Bangladesh\apps\admin\components\analytics\views\settings-view.tsx
+   6:3   error  'AlertCircle' is defined but never used       @typescript-eslint/no-unused-vars
+  12:3   error  'Flame' is defined but never used             @typescript-eslint/no-unused-vars
+  13:3   error  'Globe' is defined but never used             @typescript-eslint/no-unused-vars
+  17:3   error  'Search' is defined but never used            @typescript-eslint/no-unused-vars
+  18:3   error  'ShieldAlert' is defined but never used       @typescript-eslint/no-unused-vars
+  20:3   error  'Sparkles' is defined but never used          @typescript-eslint/no-unused-vars
+  29:10  error  'EmptyState' is defined but never used        @typescript-eslint/no-unused-vars
+  29:34  error  'LoadingState' is defined but never used      @typescript-eslint/no-unused-vars
+  87:10  error  'loading' is assigned a value but never used  @typescript-eslint/no-unused-vars
+
+D:\Projects FINAL\Web Development\Nextjs\Maevelle-Bangladesh\apps\admin\components\analytics\views\storefront-view.tsx
+   4:8   error  'Link' is defined but never used               @typescript-eslint/no-unused-vars
+   7:3   error  'AlertCircle' is defined but never used        @typescript-eslint/no-unused-vars
+   8:3   error  'Eye' is defined but never used                @typescript-eslint/no-unused-vars
+   9:3   error  'MousePointerClick' is defined but never used  @typescript-eslint/no-unused-vars
+  10:3   error  'ShoppingBag' is defined but never used        @typescript-eslint/no-unused-vars
+  11:3   error  'ShoppingCart' is defined but never used       @typescript-eslint/no-unused-vars
+  12:3   error  'Users' is defined but never used              @typescript-eslint/no-unused-vars
+  15:10  error  'StatusBadge' is defined but never used        @typescript-eslint/no-unused-vars
+  16:10  error  'Button' is defined but never used             @typescript-eslint/no-unused-vars
+  17:10  error  'EmptyState' is defined but never used         @typescript-eslint/no-unused-vars
+  17:34  error  'LoadingState' is defined but never used       @typescript-eslint/no-unused-vars
+
+D:\Projects FINAL\Web Development\Nextjs\Maevelle-Bangladesh\apps\admin\components\analytics\views\supply-view.tsx
+   8:3   error  'Package' is defined but never used       @typescript-eslint/no-unused-vars
+   9:3   error  'ShoppingBag' is defined but never used   @typescript-eslint/no-unused-vars
+  10:3   error  'Truck' is defined but never used         @typescript-eslint/no-unused-vars
+  13:10  error  'StatusBadge' is defined but never used   @typescript-eslint/no-unused-vars
+  14:10  error  'Button' is defined but never used        @typescript-eslint/no-unused-vars
+  15:10  error  'EmptyState' is defined but never used    @typescript-eslint/no-unused-vars
+  15:34  error  'LoadingState' is defined but never used  @typescript-eslint/no-unused-vars
+  15:48  error  'PagePanel' is defined but never used     @typescript-eslint/no-unused-vars
+
+D:\Projects FINAL\Web Development\Nextjs\Maevelle-Bangladesh\apps\admin\components\colors\color-manager.tsx
+  10:3   error  'Filter' is defined but never used          @typescript-eslint/no-unused-vars
+  48:23  error  'catalogRequest' is defined but never used  @typescript-eslint/no-unused-vars
+  53:10  error  'ColorSwatch' is defined but never used     @typescript-eslint/no-unused-vars
+
+D:\Projects FINAL\Web Development\Nextjs\Maevelle-Bangladesh\apps\admin\components\customers\customer-account-card.tsx
+   6:3  error  'CircleAlert' is defined but never used  @typescript-eslint/no-unused-vars
+  10:3  error  'ShieldCheck' is defined but never used  @typescript-eslint/no-unused-vars
+
+D:\Projects FINAL\Web Development\Nextjs\Maevelle-Bangladesh\apps\admin\components\customers\customer-addresses-section.tsx
+  12:10  error  'Button' is defined but never used  @typescript-eslint/no-unused-vars
+
+D:\Projects FINAL\Web Development\Nextjs\Maevelle-Bangladesh\apps\admin\components\customers\customer-delivery-risk-card.tsx
+   6:3  error  'AlertTriangle' is defined but never used  @typescript-eslint/no-unused-vars
+   7:3  error  'CheckCircle' is defined but never used    @typescript-eslint/no-unused-vars
+   9:3  error  'HelpCircle' is defined but never used     @typescript-eslint/no-unused-vars
+  11:3  error  'PackageCheck' is defined but never used   @typescript-eslint/no-unused-vars
+  12:3  error  'RotateCcw' is defined but never used      @typescript-eslint/no-unused-vars
+  13:3  error  'ShieldAlert' is defined but never used    @typescript-eslint/no-unused-vars
+
+D:\Projects FINAL\Web Development\Nextjs\Maevelle-Bangladesh\apps\admin\components\customers\customer-duplicate-merge-dialog.tsx
+   7:3  error  'ArrowRight' is defined but never used    @typescript-eslint/no-unused-vars
+   8:3  error  'CheckCircle2' is defined but never used  @typescript-eslint/no-unused-vars
+  13:3  error  'ShieldAlert' is defined but never used   @typescript-eslint/no-unused-vars
+  14:3  error  'UsersRound' is defined but never used    @typescript-eslint/no-unused-vars
+
+D:\Projects FINAL\Web Development\Nextjs\Maevelle-Bangladesh\apps\admin\components\customers\customer-header.tsx
+  11:3  error  'PlusCircle' is defined but never used   @typescript-eslint/no-unused-vars
+  13:3  error  'Tag' is defined but never used          @typescript-eslint/no-unused-vars
+  14:3  error  'FileText' is defined but never used     @typescript-eslint/no-unused-vars
+  15:3  error  'ShieldAlert' is defined but never used  @typescript-eslint/no-unused-vars
+
+D:\Projects FINAL\Web Development\Nextjs\Maevelle-Bangladesh\apps\admin\components\customers\customer-metrics-strip.tsx
+   8:3  error  'Package' is defined but never used    @typescript-eslint/no-unused-vars
+   9:3  error  'RotateCcw' is defined but never used  @typescript-eslint/no-unused-vars
+  12:3  error  'XCircle' is defined but never used    @typescript-eslint/no-unused-vars
+
+D:\Projects FINAL\Web Development\Nextjs\Maevelle-Bangladesh\apps\admin\components\customers\customer-restrictions-card.tsx
+  5:3  error  'AlertCircle' is defined but never used  @typescript-eslint/no-unused-vars
+  6:3  error  'Ban' is defined but never used          @typescript-eslint/no-unused-vars
+
+D:\Projects FINAL\Web Development\Nextjs\Maevelle-Bangladesh\apps\admin\components\delivery\courier-quote-card.tsx
+  3:10  error  'Calculator' is defined but never used  @typescript-eslint/no-unused-vars
+
+D:\Projects FINAL\Web Development\Nextjs\Maevelle-Bangladesh\apps\admin\components\delivery\couriers-console.tsx
+   5:3  error  'ArrowRight' is defined but never used     @typescript-eslint/no-unused-vars
+   6:3  error  'Boxes' is defined but never used          @typescript-eslint/no-unused-vars
+   7:3  error  'Building' is defined but never used       @typescript-eslint/no-unused-vars
+   9:3  error  'ExternalLink' is defined but never used   @typescript-eslint/no-unused-vars
+  15:3  error  'Phone' is defined but never used          @typescript-eslint/no-unused-vars
+  37:3  error  'CardFooter' is defined but never used     @typescript-eslint/no-unused-vars
+  48:3  error  'DialogTrigger' is defined but never used  @typescript-eslint/no-unused-vars
+
+D:\Projects FINAL\Web Development\Nextjs\Maevelle-Bangladesh\apps\admin\components\delivery\customer-delivery-risk-card.tsx
+  3:75  error  'XCircle' is defined but never used  @typescript-eslint/no-unused-vars
+
+D:\Projects FINAL\Web Development\Nextjs\Maevelle-Bangladesh\apps\admin\components\delivery\delivery-actions-dialogs.tsx
+    5:3   error  'AlertTriangle' is defined but never used  @typescript-eslint/no-unused-vars
+    6:3   error  'Calendar' is defined but never used       @typescript-eslint/no-unused-vars
+   11:3   error  'RotateCcw' is defined but never used      @typescript-eslint/no-unused-vars
+  601:60  error  Unexpected any. Specify a different type   @typescript-eslint/no-explicit-any
+  738:64  error  Unexpected any. Specify a different type   @typescript-eslint/no-explicit-any
+
+D:\Projects FINAL\Web Development\Nextjs\Maevelle-Bangladesh\apps\admin\components\delivery\delivery-console.tsx
+   6:3   error  'ArrowDownLeft' is defined but never used    @typescript-eslint/no-unused-vars
+  10:3   error  'ChevronRight' is defined but never used     @typescript-eslint/no-unused-vars
+  14:3   error  'Info' is defined but never used             @typescript-eslint/no-unused-vars
+  18:3   error  'PackageX' is defined but never used         @typescript-eslint/no-unused-vars
+  25:3   error  'ShieldCheck' is defined but never used      @typescript-eslint/no-unused-vars
+  37:29  error  'CardDescription' is defined but never used  @typescript-eslint/no-unused-vars
+
+D:\Projects FINAL\Web Development\Nextjs\Maevelle-Bangladesh\apps\admin\components\delivery\delivery-operations-console.tsx
+   6:3  error  'ArrowRight' is defined but never used    @typescript-eslint/no-unused-vars
+   8:3  error  'CheckCircle2' is defined but never used  @typescript-eslint/no-unused-vars
+  11:3  error  'ExternalLink' is defined but never used  @typescript-eslint/no-unused-vars
+  12:3  error  'HelpCircle' is defined but never used    @typescript-eslint/no-unused-vars
+  14:3  error  'Package' is defined but never used       @typescript-eslint/no-unused-vars
+  16:3  error  'PackageOpen' is defined but never used   @typescript-eslint/no-unused-vars
+  19:3  error  'Send' is defined but never used          @typescript-eslint/no-unused-vars
+  21:3  error  'Store' is defined but never used         @typescript-eslint/no-unused-vars
+  25:3  error  'XCircle' is defined but never used       @typescript-eslint/no-unused-vars
+
+D:\Projects FINAL\Web Development\Nextjs\Maevelle-Bangladesh\apps\admin\components\delivery\pathao-booking-dialog.tsx
+   5:3  error  'Building2' is defined but never used     @typescript-eslint/no-unused-vars
+   7:3  error  'CheckCircle2' is defined but never used  @typescript-eslint/no-unused-vars
+   8:3  error  'Clock' is defined but never used         @typescript-eslint/no-unused-vars
+  10:3  error  'MapPin' is defined but never used        @typescript-eslint/no-unused-vars
+  11:3  error  'Package' is defined but never used       @typescript-eslint/no-unused-vars
+  12:3  error  'Phone' is defined but never used         @typescript-eslint/no-unused-vars
+
+D:\Projects FINAL\Web Development\Nextjs\Maevelle-Bangladesh\apps\admin\components\delivery\tracking-timeline.tsx
+   9:3  error  'MapPin' is defined but never used       @typescript-eslint/no-unused-vars
+  11:3  error  'PackageOpen' is defined but never used  @typescript-eslint/no-unused-vars
+
+D:\Projects FINAL\Web Development\Nextjs\Maevelle-Bangladesh\apps\admin\components\design-system\design-system-view.tsx
+   5:3   error  'AlertCircle' is defined but never used          @typescript-eslint/no-unused-vars
+   6:3   error  'ArrowRight' is defined but never used           @typescript-eslint/no-unused-vars
+   7:3   error  'Bell' is defined but never used                 @typescript-eslint/no-unused-vars
+   8:3   error  'Check' is defined but never used                @typescript-eslint/no-unused-vars
+   9:3   error  'CheckCircle2' is defined but never used         @typescript-eslint/no-unused-vars
+  10:3   error  'ChevronRight' is defined but never used         @typescript-eslint/no-unused-vars
+  11:3   error  'Copy' is defined but never used                 @typescript-eslint/no-unused-vars
+  13:3   error  'Filter' is defined but never used               @typescript-eslint/no-unused-vars
+  14:3   error  'Info' is defined but never used                 @typescript-eslint/no-unused-vars
+  15:3   error  'Layers' is defined but never used               @typescript-eslint/no-unused-vars
+  17:3   error  'Package' is defined but never used              @typescript-eslint/no-unused-vars
+  21:3   error  'Settings' is defined but never used             @typescript-eslint/no-unused-vars
+  22:3   error  'Shield' is defined but never used               @typescript-eslint/no-unused-vars
+  25:3   error  'Trash2' is defined but never used               @typescript-eslint/no-unused-vars
+  26:3   error  'Upload' is defined but never used               @typescript-eslint/no-unused-vars
+  34:10  error  'Badge' is defined but never used                @typescript-eslint/no-unused-vars
+  44:10  error  'Stats' is defined but never used                @typescript-eslint/no-unused-vars
+  44:17  error  'StatsCard' is defined but never used            @typescript-eslint/no-unused-vars
+  44:28  error  'StatsTitle' is defined but never used           @typescript-eslint/no-unused-vars
+  44:40  error  'StatsValue' is defined but never used           @typescript-eslint/no-unused-vars
+  44:52  error  'StatsDescription' is defined but never used     @typescript-eslint/no-unused-vars
+  47:3   error  'EmptyState' is defined but never used           @typescript-eslint/no-unused-vars
+  48:3   error  'ErrorState' is defined but never used           @typescript-eslint/no-unused-vars
+  49:3   error  'LoadingState' is defined but never used         @typescript-eslint/no-unused-vars
+  58:36  error  'hideHeader' is assigned a value but never used  @typescript-eslint/no-unused-vars
+
+D:\Projects FINAL\Web Development\Nextjs\Maevelle-Bangladesh\apps\admin\components\email\email-activity-tab.tsx
+   9:3  error  'Send' is defined but never used         @typescript-eslint/no-unused-vars
+  13:3  error  'ShieldAlert' is defined but never used  @typescript-eslint/no-unused-vars
+
+D:\Projects FINAL\Web Development\Nextjs\Maevelle-Bangladesh\apps\admin\components\email\email-detail-drawer.tsx
+   6:3   error  'X' is defined but never used                 @typescript-eslint/no-unused-vars
+  16:3   error  'Hash' is defined but never used              @typescript-eslint/no-unused-vars
+  21:31  error  'SheetHeader' is defined but never used       @typescript-eslint/no-unused-vars
+  21:56  error  'SheetDescription' is defined but never used  @typescript-eslint/no-unused-vars
+
+D:\Projects FINAL\Web Development\Nextjs\Maevelle-Bangladesh\apps\admin\components\email\email-diagnostics-tab.tsx
+   7:3   error  'Radio' is defined but never used         @typescript-eslint/no-unused-vars
+   8:3   error  'ExternalLink' is defined but never used  @typescript-eslint/no-unused-vars
+  12:3   error  'Clock' is defined but never used         @typescript-eslint/no-unused-vars
+  13:3   error  'Mail' is defined but never used          @typescript-eslint/no-unused-vars
+  14:3   error  'Activity' is defined but never used      @typescript-eslint/no-unused-vars
+  15:3   error  'Layers' is defined but never used        @typescript-eslint/no-unused-vars
+  19:10  error  'Button' is defined but never used        @typescript-eslint/no-unused-vars
+  30:51  error  'onRefresh' is defined but never used     @typescript-eslint/no-unused-vars
+
+D:\Projects FINAL\Web Development\Nextjs\Maevelle-Bangladesh\apps\admin\components\email\email-operations-console.tsx
+  13:3   error  'Mail' is defined but never used    @typescript-eslint/no-unused-vars
+  18:10  error  'Button' is defined but never used  @typescript-eslint/no-unused-vars
+
+D:\Projects FINAL\Web Development\Nextjs\Maevelle-Bangladesh\apps\admin\components\email\email-overview-tab.tsx
+   5:3  error  'Clock' is defined but never used  @typescript-eslint/no-unused-vars
+  13:3  error  'Ban' is defined but never used    @typescript-eslint/no-unused-vars
+
+D:\Projects FINAL\Web Development\Nextjs\Maevelle-Bangladesh\apps\admin\components\email\email-policies-tab.tsx
+   5:3  error  'Sliders' is defined but never used       @typescript-eslint/no-unused-vars
+   6:3  error  'CheckCircle2' is defined but never used  @typescript-eslint/no-unused-vars
+   8:3  error  'Info' is defined but never used          @typescript-eslint/no-unused-vars
+  11:3  error  'Mail' is defined but never used          @typescript-eslint/no-unused-vars
+  12:3  error  'RotateCw' is defined but never used      @typescript-eslint/no-unused-vars
+
+D:\Projects FINAL\Web Development\Nextjs\Maevelle-Bangladesh\apps\admin\components\email\email-preview-frame.tsx
+  35:3  error  'templateKey' is defined but never used      @typescript-eslint/no-unused-vars
+  36:3  error  'templateVersion' is defined but never used  @typescript-eslint/no-unused-vars
+
+D:\Projects FINAL\Web Development\Nextjs\Maevelle-Bangladesh\apps\admin\components\email\email-settings-tab.tsx
+  10:3   error  'ExternalLink' is defined but never used       @typescript-eslint/no-unused-vars
+  12:3   error  'KeyRound' is defined but never used           @typescript-eslint/no-unused-vars
+  20:3   error  'Trash2' is defined but never used             @typescript-eslint/no-unused-vars
+  22:3   error  'Zap' is defined but never used                @typescript-eslint/no-unused-vars
+  50:3   error  'EmailReadinessDto' is defined but never used  @typescript-eslint/no-unused-vars
+  81:10  error  'error' is assigned a value but never used     @typescript-eslint/no-unused-vars
+
+D:\Projects FINAL\Web Development\Nextjs\Maevelle-Bangladesh\apps\admin\components\email\email-templates-tab.tsx
+   5:3   error  'FileText' is defined but never used      @typescript-eslint/no-unused-vars
+   7:3   error  'Sliders' is defined but never used       @typescript-eslint/no-unused-vars
+   8:3   error  'Sparkles' is defined but never used      @typescript-eslint/no-unused-vars
+   9:3   error  'Search' is defined but never used        @typescript-eslint/no-unused-vars
+  10:3   error  'CheckCircle2' is defined but never used  @typescript-eslint/no-unused-vars
+  11:3   error  'AlertCircle' is defined but never used   @typescript-eslint/no-unused-vars
+  12:3   error  'Copy' is defined but never used          @typescript-eslint/no-unused-vars
+  13:3   error  'Check' is defined but never used         @typescript-eslint/no-unused-vars
+  19:10  error  'Label' is defined but never used         @typescript-eslint/no-unused-vars
+
+D:\Projects FINAL\Web Development\Nextjs\Maevelle-Bangladesh\apps\admin\components\email\email-test-lab-tab.tsx
+   8:3  error  'CheckCircle2' is defined but never used   @typescript-eslint/no-unused-vars
+   9:3  error  'AlertTriangle' is defined but never used  @typescript-eslint/no-unused-vars
+  10:3  error  'Radio' is defined but never used          @typescript-eslint/no-unused-vars
+  11:3  error  'ShieldCheck' is defined but never used    @typescript-eslint/no-unused-vars
+  12:3  error  'Server' is defined but never used         @typescript-eslint/no-unused-vars
+  14:3  error  'User' is defined but never used           @typescript-eslint/no-unused-vars
+
+D:\Projects FINAL\Web Development\Nextjs\Maevelle-Bangladesh\apps\admin\components\finance-console.tsx
+  14:34  error  'useMemo' is defined but never used       @typescript-eslint/no-unused-vars
+  46:10  error  'Input' is defined but never used         @typescript-eslint/no-unused-vars
+  47:10  error  'NativeSelect' is defined but never used  @typescript-eslint/no-unused-vars
+
+D:\Projects FINAL\Web Development\Nextjs\Maevelle-Bangladesh\apps\admin\components\finance\set-opening-balance-dialog.tsx
+  11:10  error  'Input' is defined but never used  @typescript-eslint/no-unused-vars
+
+D:\Projects FINAL\Web Development\Nextjs\Maevelle-Bangladesh\apps\admin\components\fulfillment-console.tsx
+  3:10  error  'ArrowRight' is defined but never used  @typescript-eslint/no-unused-vars
+
+D:\Projects FINAL\Web Development\Nextjs\Maevelle-Bangladesh\apps\admin\components\fulfillment\fulfillment-console.tsx
+   8:3   error  'ChevronRight' is defined but never used     @typescript-eslint/no-unused-vars
+   9:3   error  'Clock' is defined but never used            @typescript-eslint/no-unused-vars
+  14:3   error  'PackageOpen' is defined but never used      @typescript-eslint/no-unused-vars
+  26:10  error  'Badge' is defined but never used            @typescript-eslint/no-unused-vars
+  28:29  error  'CardDescription' is defined but never used  @typescript-eslint/no-unused-vars
+
+D:\Projects FINAL\Web Development\Nextjs\Maevelle-Bangladesh\apps\admin\components\fulfillment\fulfillment-create-dialog.tsx
+   6:3   error  'CheckCircle2' is defined but never used  @typescript-eslint/no-unused-vars
+  10:3   error  'RefreshCw' is defined but never used     @typescript-eslint/no-unused-vars
+  30:15  error  'ApiEnvelope' is defined but never used   @typescript-eslint/no-unused-vars
+  30:44  error  'OrderLineDto' is defined but never used  @typescript-eslint/no-unused-vars
+
+D:\Projects FINAL\Web Development\Nextjs\Maevelle-Bangladesh\apps\admin\components\fulfillment\fulfillment-unit-pick-dialog.tsx
+   5:3   error  'ScanBarcode' is defined but never used                 @typescript-eslint/no-unused-vars
+   7:3   error  'AlertTriangle' is defined but never used               @typescript-eslint/no-unused-vars
+  11:3   error  'X' is defined but never used                           @typescript-eslint/no-unused-vars
+  50:10  error  'successMsg' is assigned a value but never used         @typescript-eslint/no-unused-vars
+  66:9   error  'allLinesSatisfied' is assigned a value but never used  @typescript-eslint/no-unused-vars
+
+D:\Projects FINAL\Web Development\Nextjs\Maevelle-Bangladesh\apps\admin\components\integrity\checks-tab.tsx
+   5:3   error  'Activity' is defined but never used      @typescript-eslint/no-unused-vars
+   6:3   error  'CheckCircle2' is defined but never used  @typescript-eslint/no-unused-vars
+   8:3   error  'Layers' is defined but never used        @typescript-eslint/no-unused-vars
+  18:10  error  'StatusBadge' is defined but never used   @typescript-eslint/no-unused-vars
+  19:21  error  'PageSection' is defined but never used   @typescript-eslint/no-unused-vars
+  31:3   error  'loading' is defined but never used       @typescript-eslint/no-unused-vars
+
+D:\Projects FINAL\Web Development\Nextjs\Maevelle-Bangladesh\apps\admin\components\integrity\finding-detail-sheet.tsx
+   6:3  error  'AlertCircle' is defined but never used    @typescript-eslint/no-unused-vars
+   7:3  error  'AlertTriangle' is defined but never used  @typescript-eslint/no-unused-vars
+   9:3  error  'CheckCircle2' is defined but never used   @typescript-eslint/no-unused-vars
+  10:3  error  'Clock' is defined but never used          @typescript-eslint/no-unused-vars
+  16:3  error  'ShieldAlert' is defined but never used    @typescript-eslint/no-unused-vars
+  18:3  error  'X' is defined but never used              @typescript-eslint/no-unused-vars
+  27:3  error  'SheetHeader' is defined but never used    @typescript-eslint/no-unused-vars
+
+D:\Projects FINAL\Web Development\Nextjs\Maevelle-Bangladesh\apps\admin\components\integrity\findings-tab.tsx
+   6:3   error  'AlertCircle' is defined but never used    @typescript-eslint/no-unused-vars
+   7:3   error  'AlertTriangle' is defined but never used  @typescript-eslint/no-unused-vars
+   8:3   error  'ArrowRight' is defined but never used     @typescript-eslint/no-unused-vars
+  11:3   error  'Filter' is defined but never used         @typescript-eslint/no-unused-vars
+  14:3   error  'Shield' is defined but never used         @typescript-eslint/no-unused-vars
+  31:21  error  'EmptyState' is defined but never used     @typescript-eslint/no-unused-vars
+  52:40  error  Unexpected any. Specify a different type   @typescript-eslint/no-explicit-any
+
+D:\Projects FINAL\Web Development\Nextjs\Maevelle-Bangladesh\apps\admin\components\integrity\integrity-center.tsx
+   13:3   error  'Search' is defined but never used              @typescript-eslint/no-unused-vars
+   14:3   error  'Shield' is defined but never used              @typescript-eslint/no-unused-vars
+   15:3   error  'ShieldAlert' is defined but never used         @typescript-eslint/no-unused-vars
+   17:3   error  'Sliders' is defined but never used             @typescript-eslint/no-unused-vars
+   76:9   error  'canRepair' is assigned a value but never used  @typescript-eslint/no-unused-vars
+  273:51  error  Unexpected any. Specify a different type        @typescript-eslint/no-explicit-any
+
+D:\Projects FINAL\Web Development\Nextjs\Maevelle-Bangladesh\apps\admin\components\integrity\operations-tab.tsx
+   8:3   error  'ArrowRight' is defined but never used                @typescript-eslint/no-unused-vars
+   9:3   error  'CheckCircle2' is defined but never used              @typescript-eslint/no-unused-vars
+  10:3   error  'Cpu' is defined but never used                       @typescript-eslint/no-unused-vars
+  16:3   error  'Shield' is defined but never used                    @typescript-eslint/no-unused-vars
+  17:3   error  'ShieldAlert' is defined but never used               @typescript-eslint/no-unused-vars
+  20:10  error  'StatusBadge' is defined but never used               @typescript-eslint/no-unused-vars
+  41:9   error  'isWorkerHealthy' is assigned a value but never used  @typescript-eslint/no-unused-vars
+
+D:\Projects FINAL\Web Development\Nextjs\Maevelle-Bangladesh\apps\admin\components\integrity\overview-tab.tsx
+   4:8   error  'Link' is defined but never used                       @typescript-eslint/no-unused-vars
+  11:3   error  'Clock' is defined but never used                      @typescript-eslint/no-unused-vars
+  24:3   error  'IntegrityModuleSummaryDto' is defined but never used  @typescript-eslint/no-unused-vars
+  33:22  error  Unexpected any. Specify a different type               @typescript-eslint/no-explicit-any
+
+D:\Projects FINAL\Web Development\Nextjs\Maevelle-Bangladesh\apps\admin\components\integrity\recovery-tab.tsx
+   5:3  error  'AlertTriangle' is defined but never used  @typescript-eslint/no-unused-vars
+   6:3  error  'ArrowRight' is defined but never used     @typescript-eslint/no-unused-vars
+   9:3  error  'Layers' is defined but never used         @typescript-eslint/no-unused-vars
+  10:3  error  'Lock' is defined but never used           @typescript-eslint/no-unused-vars
+  11:3  error  'Shield' is defined but never used         @typescript-eslint/no-unused-vars
+  12:3  error  'ShieldAlert' is defined but never used    @typescript-eslint/no-unused-vars
+  20:3  error  'Table' is defined but never used          @typescript-eslint/no-unused-vars
+  21:3  error  'TableBody' is defined but never used      @typescript-eslint/no-unused-vars
+  22:3  error  'TableCell' is defined but never used      @typescript-eslint/no-unused-vars
+  23:3  error  'TableHead' is defined but never used      @typescript-eslint/no-unused-vars
+  24:3  error  'TableHeader' is defined but never used    @typescript-eslint/no-unused-vars
+  25:3  error  'TableRow' is defined but never used       @typescript-eslint/no-unused-vars
+  46:3  error  'onStartRepair' is defined but never used  @typescript-eslint/no-unused-vars
+
+D:\Projects FINAL\Web Development\Nextjs\Maevelle-Bangladesh\apps\admin\components\integrity\repair-workflow-dialog.tsx
+   7:3   error  'Lock' is defined but never used                @typescript-eslint/no-unused-vars
+  12:3   error  'X' is defined but never used                   @typescript-eslint/no-unused-vars
+  56:10  error  'executing' is assigned a value but never used  @typescript-eslint/no-unused-vars
+
+D:\Projects FINAL\Web Development\Nextjs\Maevelle-Bangladesh\apps\admin\components\integrity\run-detail-dialog.tsx
+   6:3  error  'CheckCircle2' is defined but never used  @typescript-eslint/no-unused-vars
+   7:3  error  'Clock' is defined but never used         @typescript-eslint/no-unused-vars
+   8:3  error  'Layers' is defined but never used        @typescript-eslint/no-unused-vars
+  10:3  error  'Shield' is defined but never used        @typescript-eslint/no-unused-vars
+  11:3  error  'X' is defined but never used             @typescript-eslint/no-unused-vars
+
+D:\Projects FINAL\Web Development\Nextjs\Maevelle-Bangladesh\apps\admin\components\integrity\scan-launcher-dialog.tsx
+    5:3   error  'AlertTriangle' is defined but never used  @typescript-eslint/no-unused-vars
+    6:3   error  'Layers' is defined but never used         @typescript-eslint/no-unused-vars
+    9:3   error  'Shield' is defined but never used         @typescript-eslint/no-unused-vars
+  122:65  error  Unexpected any. Specify a different type   @typescript-eslint/no-explicit-any
+
+D:\Projects FINAL\Web Development\Nextjs\Maevelle-Bangladesh\apps\admin\components\integrity\scans-tab.tsx
+   5:3   error  'Activity' is defined but never used      @typescript-eslint/no-unused-vars
+   6:3   error  'AlertCircle' is defined but never used   @typescript-eslint/no-unused-vars
+   7:3   error  'ArrowRight' is defined but never used    @typescript-eslint/no-unused-vars
+   8:3   error  'CheckCircle2' is defined but never used  @typescript-eslint/no-unused-vars
+  10:3   error  'Layers' is defined but never used        @typescript-eslint/no-unused-vars
+  13:3   error  'ShieldAlert' is defined but never used   @typescript-eslint/no-unused-vars
+  27:21  error  'PageSection' is defined but never used   @typescript-eslint/no-unused-vars
+
+D:\Projects FINAL\Web Development\Nextjs\Maevelle-Bangladesh\apps\admin\components\integrity\settings-tab.tsx
+  10:3  error  'Info' is defined but never used               @typescript-eslint/no-unused-vars
+  11:3  error  'Lock' is defined but never used               @typescript-eslint/no-unused-vars
+  12:3  error  'Radio' is defined but never used              @typescript-eslint/no-unused-vars
+  13:3  error  'Shield' is defined but never used             @typescript-eslint/no-unused-vars
+  14:3  error  'Sliders' is defined but never used            @typescript-eslint/no-unused-vars
+  15:3  error  'SlidersHorizontal' is defined but never used  @typescript-eslint/no-unused-vars
+
+D:\Projects FINAL\Web Development\Nextjs\Maevelle-Bangladesh\apps\admin\components\inventory\adjustments-section.tsx
+  456:9  error  'router' is assigned a value but never used  @typescript-eslint/no-unused-vars
+
+D:\Projects FINAL\Web Development\Nextjs\Maevelle-Bangladesh\apps\admin\components\inventory\stocktake-form.tsx
+   7:3   error  'Save' is defined but never used                         @typescript-eslint/no-unused-vars
+  16:3   error  'ShieldAlert' is defined but never used                  @typescript-eslint/no-unused-vars
+  60:10  error  'isCheckingConflict' is assigned a value but never used  @typescript-eslint/no-unused-vars
+
+D:\Projects FINAL\Web Development\Nextjs\Maevelle-Bangladesh\apps\admin\components\inventory\units\repairs-queue.tsx
+  36:10  error  'cn' is defined but never used  @typescript-eslint/no-unused-vars
+
+D:\Projects FINAL\Web Development\Nextjs\Maevelle-Bangladesh\apps\admin\components\inventory\units\unit-reconciliation-dialog.tsx
+   9:3  error  'RefreshCw' is defined but never used     @typescript-eslint/no-unused-vars
+  10:3  error  'ExternalLink' is defined but never used  @typescript-eslint/no-unused-vars
+
+D:\Projects FINAL\Web Development\Nextjs\Maevelle-Bangladesh\apps\admin\components\notifications\notification-bell.tsx
+   4:34  error  'useRef' is defined but never used                   @typescript-eslint/no-unused-vars
+  10:3   error  'ExternalLink' is defined but never used             @typescript-eslint/no-unused-vars
+  13:3   error  'CreditCard' is defined but never used               @typescript-eslint/no-unused-vars
+  14:3   error  'Truck' is defined but never used                    @typescript-eslint/no-unused-vars
+  15:3   error  'RotateCcw' is defined but never used                @typescript-eslint/no-unused-vars
+  16:3   error  'Star' is defined but never used                     @typescript-eslint/no-unused-vars
+  20:3   error  'Circle' is defined but never used                   @typescript-eslint/no-unused-vars
+  39:3   error  'NotificationStatusBadge' is defined but never used  @typescript-eslint/no-unused-vars
+
+D:\Projects FINAL\Web Development\Nextjs\Maevelle-Bangladesh\apps\admin\components\notifications\notification-channels-tab.tsx
+  11:3   error  'ExternalLink' is defined but never used              @typescript-eslint/no-unused-vars
+  12:3   error  'Info' is defined but never used                      @typescript-eslint/no-unused-vars
+  18:3   error  'ShieldAlert' is defined but never used               @typescript-eslint/no-unused-vars
+  19:3   error  'ShieldCheck' is defined but never used               @typescript-eslint/no-unused-vars
+  20:3   error  'Smartphone' is defined but never used                @typescript-eslint/no-unused-vars
+  21:3   error  'XCircle' is defined but never used                   @typescript-eslint/no-unused-vars
+  37:10  error  'cn' is defined but never used                        @typescript-eslint/no-unused-vars
+  38:10  error  'NotificationChannelBadge' is defined but never used  @typescript-eslint/no-unused-vars
+  66:10  error  'error' is assigned a value but never used            @typescript-eslint/no-unused-vars
+
+D:\Projects FINAL\Web Development\Nextjs\Maevelle-Bangladesh\apps\admin\components\notifications\notification-delivery-drawer.tsx
+  13:3   error  'Clock' is defined but never used                         @typescript-eslint/no-unused-vars
+  16:3   error  'HelpCircle' is defined but never used                    @typescript-eslint/no-unused-vars
+  17:3   error  'Info' is defined but never used                          @typescript-eslint/no-unused-vars
+  19:3   error  'Mail' is defined but never used                          @typescript-eslint/no-unused-vars
+  20:3   error  'MessageSquare' is defined but never used                 @typescript-eslint/no-unused-vars
+  21:3   error  'RefreshCw' is defined but never used                     @typescript-eslint/no-unused-vars
+  23:3   error  'Send' is defined but never used                          @typescript-eslint/no-unused-vars
+  24:3   error  'ShieldAlert' is defined but never used                   @typescript-eslint/no-unused-vars
+  25:3   error  'User' is defined but never used                          @typescript-eslint/no-unused-vars
+  26:3   error  'X' is defined but never used                             @typescript-eslint/no-unused-vars
+  27:3   error  'XCircle' is defined but never used                       @typescript-eslint/no-unused-vars
+  29:38  error  'NotificationAttemptDto' is defined but never used        @typescript-eslint/no-unused-vars
+  29:62  error  'NotificationTimelineEventDto' is defined but never used  @typescript-eslint/no-unused-vars
+  50:10  error  'cn' is defined but never used                            @typescript-eslint/no-unused-vars
+  74:10  error  'copied' is assigned a value but never used               @typescript-eslint/no-unused-vars
+
+D:\Projects FINAL\Web Development\Nextjs\Maevelle-Bangladesh\apps\admin\components\notifications\notification-history-tab.tsx
+   5:8   error  'Link' is defined but never used                  @typescript-eslint/no-unused-vars
+   8:3   error  'ArrowRight' is defined but never used            @typescript-eslint/no-unused-vars
+  11:3   error  'ExternalLink' is defined but never used          @typescript-eslint/no-unused-vars
+  12:3   error  'Eye' is defined but never used                   @typescript-eslint/no-unused-vars
+  13:3   error  'Filter' is defined but never used                @typescript-eslint/no-unused-vars
+  16:3   error  'SlidersHorizontal' is defined but never used     @typescript-eslint/no-unused-vars
+  21:10  error  'Badge' is defined but never used                 @typescript-eslint/no-unused-vars
+  33:10  error  'cn' is defined but never used                    @typescript-eslint/no-unused-vars
+  60:20  error  'setSourceId' is assigned a value but never used  @typescript-eslint/no-unused-vars
+
+D:\Projects FINAL\Web Development\Nextjs\Maevelle-Bangladesh\apps\admin\components\notifications\notification-inbox-tab.tsx
+   9:3  error  'CheckCircle2' is defined but never used             @typescript-eslint/no-unused-vars
+  12:3  error  'ExternalLink' is defined but never used             @typescript-eslint/no-unused-vars
+  13:3  error  'Filter' is defined but never used                   @typescript-eslint/no-unused-vars
+  20:3  error  'Info' is defined but never used                     @typescript-eslint/no-unused-vars
+  32:3  error  'NotificationStatusBadge' is defined but never used  @typescript-eslint/no-unused-vars
+
+D:\Projects FINAL\Web Development\Nextjs\Maevelle-Bangladesh\apps\admin\components\notifications\notification-operations-tab.tsx
+   13:3   error  'ExternalLink' is defined but never used               @typescript-eslint/no-unused-vars
+   14:3   error  'Eye' is defined but never used                        @typescript-eslint/no-unused-vars
+   15:3   error  'Filter' is defined but never used                     @typescript-eslint/no-unused-vars
+   18:3   error  'Layers' is defined but never used                     @typescript-eslint/no-unused-vars
+   47:3   error  'NotificationPriorityBadge' is defined but never used  @typescript-eslint/no-unused-vars
+   65:10  error  'diagnosticsError' is assigned a value but never used  @typescript-eslint/no-unused-vars
+   71:10  error  'failuresError' is assigned a value but never used     @typescript-eslint/no-unused-vars
+  404:51  error  Unexpected any. Specify a different type               @typescript-eslint/no-explicit-any
+
+D:\Projects FINAL\Web Development\Nextjs\Maevelle-Bangladesh\apps\admin\components\notifications\notification-preferences-tab.tsx
+   7:3   error  'CheckCircle2' is defined but never used  @typescript-eslint/no-unused-vars
+   8:3   error  'Filter' is defined but never used        @typescript-eslint/no-unused-vars
+  14:3   error  'Shield' is defined but never used        @typescript-eslint/no-unused-vars
+  15:3   error  'ShieldAlert' is defined but never used   @typescript-eslint/no-unused-vars
+  17:3   error  'Sparkles' is defined but never used      @typescript-eslint/no-unused-vars
+  18:3   error  'UserCheck' is defined but never used     @typescript-eslint/no-unused-vars
+  23:10  error  'Badge' is defined but never used         @typescript-eslint/no-unused-vars
+  35:10  error  'cn' is defined but never used            @typescript-eslint/no-unused-vars
+
+D:\Projects FINAL\Web Development\Nextjs\Maevelle-Bangladesh\apps\admin\components\notifications\notification-rules-tab.tsx
+   6:3  error  'Bell' is defined but never used                      @typescript-eslint/no-unused-vars
+   7:3  error  'CheckCircle2' is defined but never used              @typescript-eslint/no-unused-vars
+   8:3  error  'Clock' is defined but never used                     @typescript-eslint/no-unused-vars
+   9:3  error  'Filter' is defined but never used                    @typescript-eslint/no-unused-vars
+  10:3  error  'Info' is defined but never used                      @typescript-eslint/no-unused-vars
+  13:3  error  'Mail' is defined but never used                      @typescript-eslint/no-unused-vars
+  14:3  error  'MessageSquare' is defined but never used             @typescript-eslint/no-unused-vars
+  16:3  error  'ShieldAlert' is defined but never used               @typescript-eslint/no-unused-vars
+  18:3  error  'Sliders' is defined but never used                   @typescript-eslint/no-unused-vars
+  19:3  error  'SlidersHorizontal' is defined but never used         @typescript-eslint/no-unused-vars
+  20:3  error  'Users' is defined but never used                     @typescript-eslint/no-unused-vars
+  40:3  error  'NotificationChannelBadge' is defined but never used  @typescript-eslint/no-unused-vars
+
+D:\Projects FINAL\Web Development\Nextjs\Maevelle-Bangladesh\apps\admin\components\notifications\notification-status-badge.tsx
+  10:3  error  'AlertTriangle' is defined but never used  @typescript-eslint/no-unused-vars
+  17:3  error  'Eye' is defined but never used            @typescript-eslint/no-unused-vars
+
+D:\Projects FINAL\Web Development\Nextjs\Maevelle-Bangladesh\apps\admin\components\notifications\notification-templates-tab.tsx
+   4:10  error  'useCallback' is defined but never used     @typescript-eslint/no-unused-vars
+   4:23  error  'useEffect' is defined but never used       @typescript-eslint/no-unused-vars
+   8:3   error  'Code2' is defined but never used           @typescript-eslint/no-unused-vars
+   9:3   error  'ExternalLink' is defined but never used    @typescript-eslint/no-unused-vars
+  11:3   error  'FileCode' is defined but never used        @typescript-eslint/no-unused-vars
+  12:3   error  'Layers' is defined but never used          @typescript-eslint/no-unused-vars
+  13:3   error  'LayoutTemplate' is defined but never used  @typescript-eslint/no-unused-vars
+  15:3   error  'Mail' is defined but never used            @typescript-eslint/no-unused-vars
+  16:3   error  'MessageSquare' is defined but never used   @typescript-eslint/no-unused-vars
+  19:3   error  'RefreshCw' is defined but never used       @typescript-eslint/no-unused-vars
+  22:3   error  'Sparkles' is defined but never used        @typescript-eslint/no-unused-vars
+  25:10  error  'Badge' is defined but never used           @typescript-eslint/no-unused-vars
+
+D:\Projects FINAL\Web Development\Nextjs\Maevelle-Bangladesh\apps\admin\components\notifications\notifications-center.tsx
+   8:3   error  'Bell' is defined but never used       @typescript-eslint/no-unused-vars
+  13:3   error  'Settings2' is defined but never used  @typescript-eslint/no-unused-vars
+  19:10  error  'Badge' is defined but never used      @typescript-eslint/no-unused-vars
+
+D:\Projects FINAL\Web Development\Nextjs\Maevelle-Bangladesh\apps\admin\components\operations-console.tsx
+  10:10  error  'Button' is defined but never used       @typescript-eslint/no-unused-vars
+  13:3   error  'Table' is defined but never used        @typescript-eslint/no-unused-vars
+  14:3   error  'TableBody' is defined but never used    @typescript-eslint/no-unused-vars
+  15:3   error  'TableCell' is defined but never used    @typescript-eslint/no-unused-vars
+  16:3   error  'TableHead' is defined but never used    @typescript-eslint/no-unused-vars
+  17:3   error  'TableHeader' is defined but never used  @typescript-eslint/no-unused-vars
+  18:3   error  'TableRow' is defined but never used     @typescript-eslint/no-unused-vars
+
+D:\Projects FINAL\Web Development\Nextjs\Maevelle-Bangladesh\apps\admin\components\orders\cancel-order-dialog.tsx
+  101:52  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  142:65  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+D:\Projects FINAL\Web Development\Nextjs\Maevelle-Bangladesh\apps\admin\components\orders\complete-order-dialog.tsx
+  59:52  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+D:\Projects FINAL\Web Development\Nextjs\Maevelle-Bangladesh\apps\admin\components\orders\delivery-pricing\delivery-pricing-simulator.tsx
+   9:3  error  'ArrowRight' is defined but never used  @typescript-eslint/no-unused-vars
+  35:3  error  'rules' is defined but never used       @typescript-eslint/no-unused-vars
+
+D:\Projects FINAL\Web Development\Nextjs\Maevelle-Bangladesh\apps\admin\components\orders\delivery-pricing\delivery-pricing-table.tsx
+  10:3  error  'RotateCw' is defined but never used     @typescript-eslint/no-unused-vars
+  12:3  error  'ShieldAlert' is defined but never used  @typescript-eslint/no-unused-vars
+  13:3  error  'Sparkles' is defined but never used     @typescript-eslint/no-unused-vars
+
+D:\Projects FINAL\Web Development\Nextjs\Maevelle-Bangladesh\apps\admin\components\orders\delivery-pricing\delivery-pricing-toolbar.tsx
+  4:42  error  'SlidersHorizontal' is defined but never used  @typescript-eslint/no-unused-vars
+
+D:\Projects FINAL\Web Development\Nextjs\Maevelle-Bangladesh\apps\admin\components\orders\delivery-pricing\delivery-pricing-workspace.tsx
+  10:3  error  'Truck' is defined but never used  @typescript-eslint/no-unused-vars
+
+D:\Projects FINAL\Web Development\Nextjs\Maevelle-Bangladesh\apps\admin\components\orders\delivery-pricing\geography-node-selector.tsx
+  6:10  error  'Button' is defined but never used  @typescript-eslint/no-unused-vars
+
+D:\Projects FINAL\Web Development\Nextjs\Maevelle-Bangladesh\apps\admin\components\orders\hold-order-dialog.tsx
+  61:52  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+D:\Projects FINAL\Web Development\Nextjs\Maevelle-Bangladesh\apps\admin\components\orders\manage-order-tags-dialog.tsx
+  3:50  error  'Trash2' is defined but never used     @typescript-eslint/no-unused-vars
+  4:10  error  'useEffect' is defined but never used  @typescript-eslint/no-unused-vars
+
+D:\Projects FINAL\Web Development\Nextjs\Maevelle-Bangladesh\apps\admin\components\orders\order-customer-address-card.tsx
+  10:3   error  'Pencil' is defined but never used  @typescript-eslint/no-unused-vars
+  17:10  error  'Button' is defined but never used  @typescript-eslint/no-unused-vars
+
+D:\Projects FINAL\Web Development\Nextjs\Maevelle-Bangladesh\apps\admin\components\orders\order-detail-console.tsx
+   6:3  error  'Copy' is defined but never used     @typescript-eslint/no-unused-vars
+   8:3  error  'Package' is defined but never used  @typescript-eslint/no-unused-vars
+  10:3  error  'Share2' is defined but never used   @typescript-eslint/no-unused-vars
+  13:8  error  'Link' is defined but never used     @typescript-eslint/no-unused-vars
+
+D:\Projects FINAL\Web Development\Nextjs\Maevelle-Bangladesh\apps\admin\components\orders\order-email-status.tsx
+   6:3   error  'Mail' is defined but never used                             @typescript-eslint/no-unused-vars
+  11:3   error  'XCircle' is defined but never used                          @typescript-eslint/no-unused-vars
+  61:10  error  'selectedNotificationId' is assigned a value but never used  @typescript-eslint/no-unused-vars
+
+D:\Projects FINAL\Web Development\Nextjs\Maevelle-Bangladesh\apps\admin\components\orders\order-fulfillment-delivery-card.tsx
+   6:3   error  'Copy' is defined but never used          @typescript-eslint/no-unused-vars
+   9:3   error  'PackageCheck' is defined but never used  @typescript-eslint/no-unused-vars
+  10:3   error  'PackagePlus' is defined but never used   @typescript-eslint/no-unused-vars
+  11:3   error  'RefreshCw' is defined but never used     @typescript-eslint/no-unused-vars
+  18:10  error  'Button' is defined but never used        @typescript-eslint/no-unused-vars
+  38:3   error  'onUpdated' is defined but never used     @typescript-eslint/no-unused-vars
+
+D:\Projects FINAL\Web Development\Nextjs\Maevelle-Bangladesh\apps\admin\components\orders\order-header-actions.tsx
+   6:3   error  'Clock' is defined but never used                      @typescript-eslint/no-unused-vars
+   8:3   error  'PackagePlus' is defined but never used                @typescript-eslint/no-unused-vars
+  50:10  error  'verificationOpen' is assigned a value but never used  @typescript-eslint/no-unused-vars
+
+D:\Projects FINAL\Web Development\Nextjs\Maevelle-Bangladesh\apps\admin\components\orders\order-returns-refunds-card.tsx
+  8:10  error  'Button' is defined but never used  @typescript-eslint/no-unused-vars
+
+D:\Projects FINAL\Web Development\Nextjs\Maevelle-Bangladesh\apps\admin\components\orders\order-review-status-card.tsx
+  5:39  error  'ShieldCheck' is defined but never used  @typescript-eslint/no-unused-vars
+  5:52  error  'Star' is defined but never used         @typescript-eslint/no-unused-vars
+
+D:\Projects FINAL\Web Development\Nextjs\Maevelle-Bangladesh\apps\admin\components\orders\order-risk-card.tsx
+   9:3   error  'Copy' is defined but never used   @typescript-eslint/no-unused-vars
+  22:10  error  'Badge' is defined but never used  @typescript-eslint/no-unused-vars
+
+D:\Projects FINAL\Web Development\Nextjs\Maevelle-Bangladesh\apps\admin\components\orders\order-summary-strip.tsx
+  4:3  error  'AlertTriangle' is defined but never used  @typescript-eslint/no-unused-vars
+  5:3  error  'Box' is defined but never used            @typescript-eslint/no-unused-vars
+  6:3  error  'CheckCircle2' is defined but never used   @typescript-eslint/no-unused-vars
+  8:3  error  'Clock' is defined but never used          @typescript-eslint/no-unused-vars
+
+D:\Projects FINAL\Web Development\Nextjs\Maevelle-Bangladesh\apps\admin\components\orders\order-timeline-card.tsx
+   4:3  error  'AlertCircle' is defined but never used  @typescript-eslint/no-unused-vars
+   5:3  error  'Box' is defined but never used          @typescript-eslint/no-unused-vars
+   9:3  error  'FileText' is defined but never used     @typescript-eslint/no-unused-vars
+  16:3  error  'User' is defined but never used         @typescript-eslint/no-unused-vars
+
+D:\Projects FINAL\Web Development\Nextjs\Maevelle-Bangladesh\apps\admin\components\orders\order-verifications-card.tsx
+   3:10  error  'useState' is defined but never used       @typescript-eslint/no-unused-vars
+   5:3   error  'CheckCircle2' is defined but never used   @typescript-eslint/no-unused-vars
+   6:3   error  'Clock' is defined but never used          @typescript-eslint/no-unused-vars
+   7:3   error  'MessageSquare' is defined but never used  @typescript-eslint/no-unused-vars
+   9:3   error  'ShieldCheck' is defined but never used    @typescript-eslint/no-unused-vars
+  10:3   error  'UserCheck' is defined but never used      @typescript-eslint/no-unused-vars
+  11:3   error  'XCircle' is defined but never used        @typescript-eslint/no-unused-vars
+  15:10  error  'Badge' is defined but never used          @typescript-eslint/no-unused-vars
+  16:10  error  'Button' is defined but never used         @typescript-eslint/no-unused-vars
+
+D:\Projects FINAL\Web Development\Nextjs\Maevelle-Bangladesh\apps\admin\components\orders\orders-list.tsx
+   4:3   error  'AlertCircle' is defined but never used   @typescript-eslint/no-unused-vars
+  11:3   error  'ExternalLink' is defined but never used  @typescript-eslint/no-unused-vars
+  13:3   error  'Filter' is defined but never used        @typescript-eslint/no-unused-vars
+  18:3   error  'ShieldCheck' is defined but never used   @typescript-eslint/no-unused-vars
+  29:10  error  'Badge' is defined but never used         @typescript-eslint/no-unused-vars
+
+D:\Projects FINAL\Web Development\Nextjs\Maevelle-Bangladesh\apps\admin\components\orders\record-verification-dialog.tsx
+  92:52  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+D:\Projects FINAL\Web Development\Nextjs\Maevelle-Bangladesh\apps\admin\components\pricing\archive-price-dialog.tsx
+  8:3  error  'AlertDialogAction' is defined but never used  @typescript-eslint/no-unused-vars
+
+D:\Projects FINAL\Web Development\Nextjs\Maevelle-Bangladesh\apps\admin\components\products\creator\media-placement-field.tsx
+   5:3  error  'HelpCircle' is defined but never used  @typescript-eslint/no-unused-vars
+  10:3  error  'Sparkles' is defined but never used    @typescript-eslint/no-unused-vars
+
+D:\Projects FINAL\Web Development\Nextjs\Maevelle-Bangladesh\apps\admin\components\promotions\create-promotion-sheet.tsx
+   9:3  error  'Coins' is defined but never used   @typescript-eslint/no-unused-vars
+  10:3  error  'Copy' is defined but never used    @typescript-eslint/no-unused-vars
+  11:3  error  'Info' is defined but never used    @typescript-eslint/no-unused-vars
+  12:3  error  'Layers' is defined but never used  @typescript-eslint/no-unused-vars
+  16:3  error  'Tag' is defined but never used     @typescript-eslint/no-unused-vars
+  18:3  error  'X' is defined but never used       @typescript-eslint/no-unused-vars
+
+D:\Projects FINAL\Web Development\Nextjs\Maevelle-Bangladesh\apps\admin\components\promotions\edit-promotion-dialog.tsx
+  4:55  error  'Layers' is defined but never used      @typescript-eslint/no-unused-vars
+  4:63  error  'DollarSign' is defined but never used  @typescript-eslint/no-unused-vars
+
+D:\Projects FINAL\Web Development\Nextjs\Maevelle-Bangladesh\apps\admin\components\promotions\promotion-detail-drawer.tsx
+   6:3  error  'Archive' is defined but never used       @typescript-eslint/no-unused-vars
+   7:3  error  'BadgePercent' is defined but never used  @typescript-eslint/no-unused-vars
+   8:3  error  'Calendar' is defined but never used      @typescript-eslint/no-unused-vars
+  10:3  error  'Clock' is defined but never used         @typescript-eslint/no-unused-vars
+  11:3  error  'Coins' is defined but never used         @typescript-eslint/no-unused-vars
+  14:3  error  'ExternalLink' is defined but never used  @typescript-eslint/no-unused-vars
+  15:3  error  'Layers' is defined but never used        @typescript-eslint/no-unused-vars
+  21:3  error  'Ticket' is defined but never used        @typescript-eslint/no-unused-vars
+  22:3  error  'User' is defined but never used          @typescript-eslint/no-unused-vars
+  23:3  error  'X' is defined but never used             @typescript-eslint/no-unused-vars
+
+D:\Projects FINAL\Web Development\Nextjs\Maevelle-Bangladesh\apps\admin\components\promotions\promotion-status-dialog.tsx
+  4:34  error  'CheckCircle2' is defined but never used  @typescript-eslint/no-unused-vars
+
+D:\Projects FINAL\Web Development\Nextjs\Maevelle-Bangladesh\apps\admin\components\promotions\promotions-stats.tsx
+  5:46  error  'Sparkles' is defined but never used  @typescript-eslint/no-unused-vars
+
+D:\Projects FINAL\Web Development\Nextjs\Maevelle-Bangladesh\apps\admin\components\promotions\promotions-table.tsx
+   6:3  error  'ArrowUpDown' is defined but never used   @typescript-eslint/no-unused-vars
+   8:3  error  'Calendar' is defined but never used      @typescript-eslint/no-unused-vars
+  11:3  error  'Clock' is defined but never used         @typescript-eslint/no-unused-vars
+  14:3  error  'ExternalLink' is defined but never used  @typescript-eslint/no-unused-vars
+  22:3  error  'Sparkles' is defined but never used      @typescript-eslint/no-unused-vars
+  23:3  error  'Tag' is defined but never used           @typescript-eslint/no-unused-vars
+
+D:\Projects FINAL\Web Development\Nextjs\Maevelle-Bangladesh\apps\admin\components\promotions\promotions-workspace.tsx
+   7:3  error  'BadgePercent' is defined but never used  @typescript-eslint/no-unused-vars
+  10:3  error  'RefreshCw' is defined but never used     @typescript-eslint/no-unused-vars
+  11:3  error  'Sparkles' is defined but never used      @typescript-eslint/no-unused-vars
+
+D:\Projects FINAL\Web Development\Nextjs\Maevelle-Bangladesh\apps\admin\components\recommendations\bulk-merchandising-sheet.tsx
+   4:53  error  'Sparkles' is defined but never used          @typescript-eslint/no-unused-vars
+   4:66  error  'ShieldAlert' is defined but never used       @typescript-eslint/no-unused-vars
+  24:10  error  'PLACEMENT_LABELS' is defined but never used  @typescript-eslint/no-unused-vars
+
+D:\Projects FINAL\Web Development\Nextjs\Maevelle-Bangladesh\apps\admin\components\recommendations\compatibility-rule-dialog.tsx
+  14:10  error  'Input' is defined but never used  @typescript-eslint/no-unused-vars
+
+D:\Projects FINAL\Web Development\Nextjs\Maevelle-Bangladesh\apps\admin\components\recommendations\recommendations-types.ts
+  3:3  error  'RecommendationPlacementSettingsDto' is defined but never used  @typescript-eslint/no-unused-vars
+  4:3  error  'RecommendationPreviewDto' is defined but never used            @typescript-eslint/no-unused-vars
+
+D:\Projects FINAL\Web Development\Nextjs\Maevelle-Bangladesh\apps\admin\components\recommendations\recommendations-workspace.tsx
+  10:3  error  'SlidersHorizontal' is defined but never used  @typescript-eslint/no-unused-vars
+
+D:\Projects FINAL\Web Development\Nextjs\Maevelle-Bangladesh\apps\admin\components\recommendations\tabs\analytics-tab.tsx
+   4:27  error  'Percent' is defined but never used            @typescript-eslint/no-unused-vars
+   4:36  error  'Eye' is defined but never used                @typescript-eslint/no-unused-vars
+   4:41  error  'MousePointerClick' is defined but never used  @typescript-eslint/no-unused-vars
+   4:60  error  'TrendingUp' is defined but never used         @typescript-eslint/no-unused-vars
+   4:72  error  'Users' is defined but never used              @typescript-eslint/no-unused-vars
+  15:10  error  'Badge' is defined but never used              @typescript-eslint/no-unused-vars
+  16:10  error  'Tooltip' is defined but never used            @typescript-eslint/no-unused-vars
+  16:19  error  'TooltipContent' is defined but never used     @typescript-eslint/no-unused-vars
+  16:35  error  'TooltipProvider' is defined but never used    @typescript-eslint/no-unused-vars
+  16:52  error  'TooltipTrigger' is defined but never used     @typescript-eslint/no-unused-vars
+  30:3   error  'loading' is defined but never used            @typescript-eslint/no-unused-vars
+
+D:\Projects FINAL\Web Development\Nextjs\Maevelle-Bangladesh\apps\admin\components\recommendations\tabs\compatibility-rules-tab.tsx
+  4:61  error  'Filter' is defined but never used  @typescript-eslint/no-unused-vars
+
+D:\Projects FINAL\Web Development\Nextjs\Maevelle-Bangladesh\apps\admin\components\recommendations\tabs\coverage-tab.tsx
+   8:3   error  'ExternalLink' is defined but never used  @typescript-eslint/no-unused-vars
+  29:10  error  'Badge' is defined but never used         @typescript-eslint/no-unused-vars
+  32:15  error  'CoverageItem' is defined but never used  @typescript-eslint/no-unused-vars
+
+D:\Projects FINAL\Web Development\Nextjs\Maevelle-Bangladesh\apps\admin\components\recommendations\tabs\placements-tab.tsx
+  4:28  error  'Settings2' is defined but never used     @typescript-eslint/no-unused-vars
+  4:49  error  'CheckCircle2' is defined but never used  @typescript-eslint/no-unused-vars
+
+D:\Projects FINAL\Web Development\Nextjs\Maevelle-Bangladesh\apps\admin\components\recommendations\tabs\preview-inspector-tab.tsx
+   8:3   error  'Layers' is defined but never used              @typescript-eslint/no-unused-vars
+   9:3   error  'ArrowRight' is defined but never used          @typescript-eslint/no-unused-vars
+  10:3   error  'Sliders' is defined but never used             @typescript-eslint/no-unused-vars
+  11:3   error  'CheckCircle2' is defined but never used        @typescript-eslint/no-unused-vars
+  12:3   error  'XCircle' is defined but never used             @typescript-eslint/no-unused-vars
+  13:3   error  'HelpCircle' is defined but never used          @typescript-eslint/no-unused-vars
+  14:3   error  'Info' is defined but never used                @typescript-eslint/no-unused-vars
+  26:10  error  'Tooltip' is defined but never used             @typescript-eslint/no-unused-vars
+  26:19  error  'TooltipContent' is defined but never used      @typescript-eslint/no-unused-vars
+  26:35  error  'TooltipProvider' is defined but never used     @typescript-eslint/no-unused-vars
+  26:52  error  'TooltipTrigger' is defined but never used      @typescript-eslint/no-unused-vars
+  48:10  error  'searching' is assigned a value but never used  @typescript-eslint/no-unused-vars
+
+D:\Projects FINAL\Web Development\Nextjs\Maevelle-Bangladesh\apps\admin\components\returns\return-action-dialogs.tsx
+  6:3  error  'ArrowRight' is defined but never used  @typescript-eslint/no-unused-vars
+
+D:\Projects FINAL\Web Development\Nextjs\Maevelle-Bangladesh\apps\admin\components\returns\return-create-dialog.tsx
+   5:3   error  'Boxes' is defined but never used         @typescript-eslint/no-unused-vars
+   6:3   error  'CheckCircle2' is defined but never used  @typescript-eslint/no-unused-vars
+   9:3   error  'Plus' is defined but never used          @typescript-eslint/no-unused-vars
+  27:10  error  'Textarea' is defined but never used      @typescript-eslint/no-unused-vars
+  30:31  error  'OrderLineDto' is defined but never used  @typescript-eslint/no-unused-vars
+
+D:\Projects FINAL\Web Development\Nextjs\Maevelle-Bangladesh\apps\admin\components\returns\returns-console.tsx
+   5:3   error  'Archive' is defined but never used       @typescript-eslint/no-unused-vars
+   6:3   error  'ArrowLeft' is defined but never used     @typescript-eslint/no-unused-vars
+   7:3   error  'ArrowRight' is defined but never used    @typescript-eslint/no-unused-vars
+   9:3   error  'Calendar' is defined but never used      @typescript-eslint/no-unused-vars
+  11:3   error  'ChevronRight' is defined but never used  @typescript-eslint/no-unused-vars
+  14:3   error  'Filter' is defined but never used        @typescript-eslint/no-unused-vars
+  15:3   error  'Info' is defined but never used          @typescript-eslint/no-unused-vars
+  23:3   error  'ShieldAlert' is defined but never used   @typescript-eslint/no-unused-vars
+  25:3   error  'User' is defined but never used          @typescript-eslint/no-unused-vars
+  27:3   error  'XCircle' is defined but never used       @typescript-eslint/no-unused-vars
+  73:16  error  'TabsContent' is defined but never used   @typescript-eslint/no-unused-vars
+  74:10  error  'apiRequest' is defined but never used    @typescript-eslint/no-unused-vars
+
+D:\Projects FINAL\Web Development\Nextjs\Maevelle-Bangladesh\apps\admin\components\returns\rto-create-dialog.tsx
+   7:3  error  'PackageOpen' is defined but never used  @typescript-eslint/no-unused-vars
+   9:3  error  'Search' is defined but never used       @typescript-eslint/no-unused-vars
+  10:3  error  'Truck' is defined but never used        @typescript-eslint/no-unused-vars
+
+D:\Projects FINAL\Web Development\Nextjs\Maevelle-Bangladesh\apps\admin\components\reviews\rebuild-summary-dialog.tsx
+  24:54  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+D:\Projects FINAL\Web Development\Nextjs\Maevelle-Bangladesh\apps\admin\components\reviews\review-detail-drawer.tsx
+   8:3   error  'ArrowRight' is defined but never used    @typescript-eslint/no-unused-vars
+  10:3   error  'ExternalLink' is defined but never used  @typescript-eslint/no-unused-vars
+  17:3   error  'RotateCcw' is defined but never used     @typescript-eslint/no-unused-vars
+  19:3   error  'ShieldCheck' is defined but never used   @typescript-eslint/no-unused-vars
+  20:3   error  'Star' is defined but never used          @typescript-eslint/no-unused-vars
+  22:3   error  'Video' is defined but never used         @typescript-eslint/no-unused-vars
+  23:3   error  'X' is defined but never used             @typescript-eslint/no-unused-vars
+  25:10  error  'cn' is defined but never used            @typescript-eslint/no-unused-vars
+
+D:\Projects FINAL\Web Development\Nextjs\Maevelle-Bangladesh\apps\admin\components\reviews\review-status-badge.tsx
+  2:30  error  'ShieldCheck' is defined but never used  @typescript-eslint/no-unused-vars
+
+D:\Projects FINAL\Web Development\Nextjs\Maevelle-Bangladesh\apps\admin\components\reviews\reviews-stats-strip.tsx
+  4:23  error  'CheckCircle2' is defined but never used  @typescript-eslint/no-unused-vars
+
+D:\Projects FINAL\Web Development\Nextjs\Maevelle-Bangladesh\apps\admin\components\reviews\reviews-table.tsx
+   7:3  error  'ExternalLink' is defined but never used  @typescript-eslint/no-unused-vars
+  11:3  error  'Star' is defined but never used          @typescript-eslint/no-unused-vars
+
+D:\Projects FINAL\Web Development\Nextjs\Maevelle-Bangladesh\apps\admin\components\reviews\reviews-workspace.tsx
+   8:3   error  'Filter' is defined but never used              @typescript-eslint/no-unused-vars
+  12:10  error  'cn' is defined but never used                  @typescript-eslint/no-unused-vars
+  13:21  error  'PageActions' is defined but never used         @typescript-eslint/no-unused-vars
+  13:34  error  'PageDescription' is defined but never used     @typescript-eslint/no-unused-vars
+  13:63  error  'PageTitle' is defined but never used           @typescript-eslint/no-unused-vars
+  27:10  error  'isPending' is assigned a value but never used  @typescript-eslint/no-unused-vars
+
+D:\Projects FINAL\Web Development\Nextjs\Maevelle-Bangladesh\apps\admin\components\security\authenticator-setup-wizard.tsx
+  17:3   error  'Lock' is defined but never used                               @typescript-eslint/no-unused-vars
+  73:10  error  'hasAttemptedVerification' is assigned a value but never used  @typescript-eslint/no-unused-vars
+
+D:\Projects FINAL\Web Development\Nextjs\Maevelle-Bangladesh\apps\admin\components\security\two-factor-management-dialog.tsx
+  10:3  error  'Lock' is defined but never used  @typescript-eslint/no-unused-vars
+
+D:\Projects FINAL\Web Development\Nextjs\Maevelle-Bangladesh\apps\admin\components\security\two-factor-required-gate.tsx
+  5:22  error  'LockKeyhole' is defined but never used  @typescript-eslint/no-unused-vars
+
+D:\Projects FINAL\Web Development\Nextjs\Maevelle-Bangladesh\apps\admin\components\security\two-factor-security-console.tsx
+   7:3  error  'Clock' is defined but never used   @typescript-eslint/no-unused-vars
+  10:3  error  'Lock' is defined but never used    @typescript-eslint/no-unused-vars
+  11:3  error  'Shield' is defined but never used  @typescript-eslint/no-unused-vars
+
+D:\Projects FINAL\Web Development\Nextjs\Maevelle-Bangladesh\apps\admin\components\settings\configuration-health-console.tsx
+  11:3   error  'HeartPulse' is defined but never used                   @typescript-eslint/no-unused-vars
+  26:3   error  'ConfigurationHealthIssueDto' is defined but never used  @typescript-eslint/no-unused-vars
+  65:39  error  Unexpected any. Specify a different type                 @typescript-eslint/no-explicit-any
+
+D:\Projects FINAL\Web Development\Nextjs\Maevelle-Bangladesh\apps\admin\components\settings\general-settings-console.tsx
+   8:3  error  'Clock' is defined but never used    @typescript-eslint/no-unused-vars
+   9:3  error  'Coins' is defined but never used    @typescript-eslint/no-unused-vars
+  11:3  error  'Lock' is defined but never used     @typescript-eslint/no-unused-vars
+  12:3  error  'Package' is defined but never used  @typescript-eslint/no-unused-vars
+  15:3  error  'Shield' is defined but never used   @typescript-eslint/no-unused-vars
+
+D:\Projects FINAL\Web Development\Nextjs\Maevelle-Bangladesh\apps\admin\components\settings\resend-integration-console.tsx
+   6:3   error  'ArrowLeft' is defined but never used     @typescript-eslint/no-unused-vars
+  11:3   error  'History' is defined but never used       @typescript-eslint/no-unused-vars
+  12:3   error  'KeyRound' is defined but never used      @typescript-eslint/no-unused-vars
+  15:3   error  'Plug' is defined but never used          @typescript-eslint/no-unused-vars
+  17:3   error  'RotateCw' is defined but never used      @typescript-eslint/no-unused-vars
+  18:3   error  'Server' is defined but never used        @typescript-eslint/no-unused-vars
+  23:10  error  'Badge' is defined but never used         @typescript-eslint/no-unused-vars
+  24:10  error  'SettingsCard' is defined but never used  @typescript-eslint/no-unused-vars
+
+D:\Projects FINAL\Web Development\Nextjs\Maevelle-Bangladesh\apps\admin\components\settings\setting-status-badge.tsx
+  7:3  error  'Clock' is defined but never used        @typescript-eslint/no-unused-vars
+  9:3  error  'MinusCircle' is defined but never used  @typescript-eslint/no-unused-vars
+
+D:\Projects FINAL\Web Development\Nextjs\Maevelle-Bangladesh\apps\admin\components\settings\settings-nav.tsx
+  6:3  error  'Activity' is defined but never used  @typescript-eslint/no-unused-vars
+
+D:\Projects FINAL\Web Development\Nextjs\Maevelle-Bangladesh\apps\admin\components\settings\settings-save-bar.tsx
+  3:19  error  'RefreshCw' is defined but never used  @typescript-eslint/no-unused-vars
+
+D:\Projects FINAL\Web Development\Nextjs\Maevelle-Bangladesh\apps\admin\components\settings\storefront-settings-console.tsx
+   4:8  error  'Link' is defined but never used   @typescript-eslint/no-unused-vars
+  10:3  error  'Mail' is defined but never used   @typescript-eslint/no-unused-vars
+  11:3  error  'Phone' is defined but never used  @typescript-eslint/no-unused-vars
+
+D:\Projects FINAL\Web Development\Nextjs\Maevelle-Bangladesh\apps\admin\components\settings\two-factor-policy-card.tsx
+    8:3  error  'HelpCircle' is defined but never used        @typescript-eslint/no-unused-vars
+   11:3  error  'Shield' is defined but never used            @typescript-eslint/no-unused-vars
+   12:3  error  'ShieldAlert' is defined but never used       @typescript-eslint/no-unused-vars
+   14:3  error  'Users' is defined but never used             @typescript-eslint/no-unused-vars
+  189:9  error  'isDirty' is assigned a value but never used  @typescript-eslint/no-unused-vars
+
+D:\Projects FINAL\Web Development\Nextjs\Maevelle-Bangladesh\apps\admin\components\sms\sms-operations-console.tsx
+  37:10  error  'Button' is defined but never used  @typescript-eslint/no-unused-vars
+
+D:\Projects FINAL\Web Development\Nextjs\Maevelle-Bangladesh\apps\admin\components\supply\receipt-register-units-dialog.tsx
+  4:45  error  'CheckCircle2' is defined but never used  @typescript-eslint/no-unused-vars
+
+D:\Projects FINAL\Web Development\Nextjs\Maevelle-Bangladesh\apps\admin\components\team\team-audit-timeline.tsx
+   10:3   error  'Filter' is defined but never used               @typescript-eslint/no-unused-vars
+   12:3   error  'Shield' is defined but never used               @typescript-eslint/no-unused-vars
+   49:9   error  'toggleDiff' is assigned a value but never used  @typescript-eslint/no-unused-vars
+  160:21  error  'isExpanded' is assigned a value but never used  @typescript-eslint/no-unused-vars
+  163:94  error  Unexpected any. Specify a different type         @typescript-eslint/no-explicit-any
+  164:91  error  Unexpected any. Specify a different type         @typescript-eslint/no-explicit-any
+
+D:\Projects FINAL\Web Development\Nextjs\Maevelle-Bangladesh\apps\admin\components\team\team-console.tsx
+   6:3   error  'AlertCircle' is defined but never used         @typescript-eslint/no-unused-vars
+   7:3   error  'ArrowRightLeft' is defined but never used      @typescript-eslint/no-unused-vars
+   8:3   error  'KeyRound' is defined but never used            @typescript-eslint/no-unused-vars
+  12:3   error  'ShieldCheck' is defined but never used         @typescript-eslint/no-unused-vars
+  13:3   error  'UserCheck' is defined but never used           @typescript-eslint/no-unused-vars
+  14:3   error  'UserPlus' is defined but never used            @typescript-eslint/no-unused-vars
+  16:3   error  'UserX' is defined but never used               @typescript-eslint/no-unused-vars
+  20:10  error  'Button' is defined but never used              @typescript-eslint/no-unused-vars
+  50:5   error  'canInvite' is assigned a value but never used  @typescript-eslint/no-unused-vars
+
+D:\Projects FINAL\Web Development\Nextjs\Maevelle-Bangladesh\apps\admin\components\team\team-invitations-list.tsx
+  5:3  error  'AlertCircle' is defined but never used  @typescript-eslint/no-unused-vars
+  6:3  error  'Clock' is defined but never used        @typescript-eslint/no-unused-vars
+
+D:\Projects FINAL\Web Development\Nextjs\Maevelle-Bangladesh\apps\admin\components\team\team-invite-dialog.tsx
+  92:52  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+D:\Projects FINAL\Web Development\Nextjs\Maevelle-Bangladesh\apps\admin\components\team\team-members-list.tsx
+  11:3  error  'ShieldAlert' is defined but never used  @typescript-eslint/no-unused-vars
+  12:3  error  'ShieldCheck' is defined but never used  @typescript-eslint/no-unused-vars
+
+D:\Projects FINAL\Web Development\Nextjs\Maevelle-Bangladesh\apps\admin\components\team\team-owner-transfer-dialog.tsx
+   7:3   error  'CheckCircle2' is defined but never used  @typescript-eslint/no-unused-vars
+  10:3   error  'ShieldCheck' is defined but never used   @typescript-eslint/no-unused-vars
+  24:10  error  'Input' is defined but never used         @typescript-eslint/no-unused-vars
+
+D:\Projects FINAL\Web Development\Nextjs\Maevelle-Bangladesh\apps\admin\components\team\team-permissions-editor.tsx
+    7:3   error  'Filter' is defined but never used                 @typescript-eslint/no-unused-vars
+    8:3   error  'Info' is defined but never used                   @typescript-eslint/no-unused-vars
+   11:3   error  'Shield' is defined but never used                 @typescript-eslint/no-unused-vars
+   12:3   error  'ShieldAlert' is defined but never used            @typescript-eslint/no-unused-vars
+   26:8   error  'DomainMeta' is defined but never used             @typescript-eslint/no-unused-vars
+  214:19  error  'someAssigned' is assigned a value but never used  @typescript-eslint/no-unused-vars
+
+D:\Projects FINAL\Web Development\Nextjs\Maevelle-Bangladesh\apps\admin\components\team\team-roles-presets.tsx
+   5:3   error  'Check' is defined but never used        @typescript-eslint/no-unused-vars
+  10:3   error  'Shield' is defined but never used       @typescript-eslint/no-unused-vars
+  11:3   error  'ShieldAlert' is defined but never used  @typescript-eslint/no-unused-vars
+  29:10  error  'Textarea' is defined but never used     @typescript-eslint/no-unused-vars
+
+D:\Projects FINAL\Web Development\Nextjs\Maevelle-Bangladesh\apps\admin\components\team\team-types.ts
+  11:3  error  'KeyRound' is defined but never used  @typescript-eslint/no-unused-vars
+
+D:\Projects FINAL\Web Development\Nextjs\Maevelle-Bangladesh\apps\admin\components\ui\breadcrumb.tsx
+  161:26  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+D:\Projects FINAL\Web Development\Nextjs\Maevelle-Bangladesh\apps\admin\components\ui\page-shell.tsx
+  2:23  error  'AlertTriangle' is defined but never used  @typescript-eslint/no-unused-vars
+  2:38  error  'CheckCircle2' is defined but never used   @typescript-eslint/no-unused-vars
+
+D:\Projects FINAL\Web Development\Nextjs\Maevelle-Bangladesh\apps\admin\components\ui\refresh-button.tsx
+  296:34  error  Unsafe usage of ReturnStatement  no-unsafe-finally
+
+D:\Projects FINAL\Web Development\Nextjs\Maevelle-Bangladesh\apps\admin\components\ui\select.tsx
+  125:50  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+D:\Projects FINAL\Web Development\Nextjs\Maevelle-Bangladesh\apps\admin\lib\analytics\api.ts
+  1:24  error  'apiRequest' is defined but never used  @typescript-eslint/no-unused-vars
+
+D:\Projects FINAL\Web Development\Nextjs\Maevelle-Bangladesh\apps\admin\src\user-menu.test.tsx
+  23:14  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+D:\Projects FINAL\Web Development\Nextjs\Maevelle-Bangladesh\apps\api\scratch-test.ts
+  4:1  error  All imports in the declaration are only used as types. Use `import type`  @typescript-eslint/consistent-type-imports
+
+D:\Projects FINAL\Web Development\Nextjs\Maevelle-Bangladesh\apps\api\src\routes\pricing.test.ts
+   9:15  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  23:10  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  43:10  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  68:10  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  92:10  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+D:\Projects FINAL\Web Development\Nextjs\Maevelle-Bangladesh\apps\api\src\routes\procurement\purchases.routes.ts
+  81:70  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  82:79  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+D:\Projects FINAL\Web Development\Nextjs\Maevelle-Bangladesh\apps\api\src\routes\procurement\shipments.routes.ts
+  63:70  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  64:79  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+D:\Projects FINAL\Web Development\Nextjs\Maevelle-Bangladesh\apps\api\src\routes\procurement\suppliers.routes.ts
+  47:70  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  48:79  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+D:\Projects FINAL\Web Development\Nextjs\Maevelle-Bangladesh\apps\api\src\routes\promotions.test.ts
+    9:15  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+   23:10  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+   43:10  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+   63:10  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+   84:10  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  105:10  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+D:\Projects FINAL\Web Development\Nextjs\Maevelle-Bangladesh\apps\storefront\features\checkout\components\checkout-confirmed-step.tsx
+   10:3   error  'CelebrationIcon' is defined but never used                    @typescript-eslint/no-unused-vars
+   17:3   error  'HomeIcon' is defined but never used                           @typescript-eslint/no-unused-vars
+  558:17  error  Definition for rule '@next/next/no-img-element' was not found  @next/next/no-img-element
+
+D:\Projects FINAL\Web Development\Nextjs\Maevelle-Bangladesh\apps\storefront\features\checkout\components\checkout-contact-section.tsx
+  14:9  error  'isPhoneValid' is assigned a value but never used  @typescript-eslint/no-unused-vars
+
+D:\Projects FINAL\Web Development\Nextjs\Maevelle-Bangladesh\apps\storefront\features\checkout\components\checkout-header.tsx
+  6:35  error  'ShieldCheckIcon' is defined but never used  @typescript-eslint/no-unused-vars
+
+D:\Projects FINAL\Web Development\Nextjs\Maevelle-Bangladesh\apps\storefront\features\checkout\components\checkout-order-summary.tsx
+  45:10  error  'isApplyingVoucher' is assigned a value but never used     @typescript-eslint/no-unused-vars
+  45:29  error  'setIsApplyingVoucher' is assigned a value but never used  @typescript-eslint/no-unused-vars
+
+D:\Projects FINAL\Web Development\Nextjs\Maevelle-Bangladesh\apps\storefront\features\orders\components\order-track-active-consignment.tsx
+  12:3  error  'CheckCircleIcon' is defined but never used  @typescript-eslint/no-unused-vars
+
+D:\Projects FINAL\Web Development\Nextjs\Maevelle-Bangladesh\packages\database\src\customers.test.ts
+  17:3  error  'listCustomerRestrictions' is defined but never used  @typescript-eslint/no-unused-vars
+  26:3  error  'CustomerDomainError' is defined but never used       @typescript-eslint/no-unused-vars
+
+D:\Projects FINAL\Web Development\Nextjs\Maevelle-Bangladesh\packages\database\src\iam-account.ts
+   5:3   error  'hashToken' is defined but never used     @typescript-eslint/no-unused-vars
+  13:8   error  'IamActor' is defined but never used      @typescript-eslint/no-unused-vars
+  23:10  error  'resolveActor' is defined but never used  @typescript-eslint/no-unused-vars
+
+D:\Projects FINAL\Web Development\Nextjs\Maevelle-Bangladesh\packages\database\src\orders\risk.ts
+  6:3  error  'normalizeBangladeshCustomerPhone' is defined but never used  @typescript-eslint/no-unused-vars
+
+D:\Projects FINAL\Web Development\Nextjs\Maevelle-Bangladesh\packages\database\src\orders\timeline.ts
+  122:11  error  'typeLabel' is assigned a value but never used     @typescript-eslint/no-unused-vars
+  123:11  error  'outcomeLabel' is assigned a value but never used  @typescript-eslint/no-unused-vars
+
+D:\Projects FINAL\Web Development\Nextjs\Maevelle-Bangladesh\packages\database\src\procurement.test.ts
+    36:3   error  'getInboundReceipt' is defined but never used    @typescript-eslint/no-unused-vars
+    39:3   error  'listInboundReceipts' is defined but never used  @typescript-eslint/no-unused-vars
+    41:3   error  'listShipments' is defined but never used        @typescript-eslint/no-unused-vars
+  1579:11  error  's2' is assigned a value but never used          @typescript-eslint/no-unused-vars
+
+D:\Projects FINAL\Web Development\Nextjs\Maevelle-Bangladesh\packages\database\src\reviews.ts
+    40:17  error  Unexpected control character(s) in regular expression: \x00, \x08, \x0b, \x0c, \x0e, \x1f  no-control-regex
+  1244:75  error  Unexpected any. Specify a different type                                                   @typescript-eslint/no-explicit-any
+
+D:\Projects FINAL\Web Development\Nextjs\Maevelle-Bangladesh\packages\database\src\seed\modules\sizing.seed.ts
+  16:8   error  'MeasurementUnit' is defined but never used       @typescript-eslint/no-unused-vars
+  18:31  error  'SizingDomainSeedItem' is defined but never used  @typescript-eslint/no-unused-vars
+
+D:\Projects FINAL\Web Development\Nextjs\Maevelle-Bangladesh\packages\database\src\seed\modules\warehouses.seed.ts
+  6:8  error  'LocationCapability' is defined but never used  @typescript-eslint/no-unused-vars
+
+D:\Projects FINAL\Web Development\Nextjs\Maevelle-Bangladesh\packages\database\src\seed\seed.test.ts
+    8:10  error  'categorySeedData' is defined but never used              @typescript-eslint/no-unused-vars
+   12:10  error  'tagsSeedModule' is defined but never used                @typescript-eslint/no-unused-vars
+   13:10  error  'occasionsSeedModule' is defined but never used           @typescript-eslint/no-unused-vars
+   13:31  error  'createOccasionsSeedModule' is defined but never used     @typescript-eslint/no-unused-vars
+   14:10  error  'collectionsSeedModule' is defined but never used         @typescript-eslint/no-unused-vars
+   14:33  error  'createCollectionsSeedModule' is defined but never used   @typescript-eslint/no-unused-vars
+   15:10  error  'sizingSeedModule' is defined but never used              @typescript-eslint/no-unused-vars
+   17:3   error  'productTypesSeedModule' is defined but never used        @typescript-eslint/no-unused-vars
+   18:3   error  'createProductTypesSeedModule' is defined but never used  @typescript-eslint/no-unused-vars
+   21:3   error  'warehousesSeedModule' is defined but never used          @typescript-eslint/no-unused-vars
+   25:3   error  'colorsSeedModule' is defined but never used              @typescript-eslint/no-unused-vars
+   29:3   error  'accountsSeedModule' is defined but never used            @typescript-eslint/no-unused-vars
+   33:3   error  'productsSeedModule' is defined but never used            @typescript-eslint/no-unused-vars
+   34:3   error  'createProductsSeedModule' is defined but never used      @typescript-eslint/no-unused-vars
+   36:10  error  'warehouseSeedData' is defined but never used             @typescript-eslint/no-unused-vars
+   38:10  error  'accountSeedData' is defined but never used               @typescript-eslint/no-unused-vars
+   39:10  error  'productSeedData' is defined but never used               @typescript-eslint/no-unused-vars
+   43:3   error  'ColorSeedItem' is defined but never used                 @typescript-eslint/no-unused-vars
+   44:3   error  'FinancialAccountSeedItem' is defined but never used      @typescript-eslint/no-unused-vars
+   45:3   error  'ProductSeedItem' is defined but never used               @typescript-eslint/no-unused-vars
+   48:3   error  'WarehouseSeedItem' is defined but never used             @typescript-eslint/no-unused-vars
+  136:34  error  Unexpected any. Specify a different type                  @typescript-eslint/no-explicit-any
+  144:34  error  Unexpected any. Specify a different type                  @typescript-eslint/no-explicit-any
+  774:33  error  'organizationId' is assigned a value but never used       @typescript-eslint/no-unused-vars
+  918:33  error  'organizationId' is assigned a value but never used       @typescript-eslint/no-unused-vars
+
+D:\Projects FINAL\Web Development\Nextjs\Maevelle-Bangladesh\packages\database\src\steadfast.ts
+  158:31  error  '_input' is defined but never used  @typescript-eslint/no-unused-vars
+
+D:\Projects FINAL\Web Development\Nextjs\Maevelle-Bangladesh\scripts\release\manifest.mjs
+  27:39  error  Spaces are hard to count. Use {2}  no-regex-spaces
+
+D:\Projects FINAL\Web Development\Nextjs\Maevelle-Bangladesh\test-api.mjs
+  19:23  error  'console' is not defined  no-undef
+  22:17  error  'console' is not defined  no-undef
+
+✖ 778 problems (778 errors, 0 warnings)
+  2 errors and 0 warnings potentially fixable with the `--fix` option.

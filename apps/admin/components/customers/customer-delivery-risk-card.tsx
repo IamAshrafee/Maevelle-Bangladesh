@@ -2,17 +2,7 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import {
-  AlertTriangle,
-  CheckCircle,
-  ExternalLink,
-  HelpCircle,
-  Info,
-  PackageCheck,
-  RotateCcw,
-  ShieldAlert,
-  Truck,
-} from 'lucide-react';
+import { ExternalLink, Info, Truck } from 'lucide-react';
 
 import { Badge } from '@/components/ui/badge';
 import { CustomerRiskBadge } from './customer-risk-badge';

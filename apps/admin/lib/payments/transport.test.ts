@@ -57,8 +57,9 @@ describe('financial frontend intent integrity', () => {
     expect(fetcher.mock.calls[0]![1].headers.get('idempotency-key')).toBe(intent.key);
   });
   it('keeps money exact beyond Number precision and never relabels unknown money as zero', () => {
-    expect(paymentMoney('9999999999999999.9999')).toBe('BDT 9,999,999,999,999,999.9999');
-    expect(paymentMoney('0.0000')).toBe('BDT 0.0000');
+    expect(paymentMoney('9999999999999999.9999')).toBe('৳9,999,999,999,999,999.9999');
+    expect(paymentMoney('0.0000')).toBe('৳0');
+    expect(paymentMoney('299.2500')).toBe('৳299.25');
     expect(paymentMoney('NaN')).toBe('Amount unavailable');
   });
   it('does not echo sensitive server messages and distinguishes rejection from uncertainty', () => {

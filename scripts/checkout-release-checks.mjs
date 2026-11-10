@@ -36,6 +36,29 @@ export const checkoutRegressionPaths = [
   'apps/storefront/lib/analytics',
   'apps/admin/src/commerce-analytics.test.tsx',
   'packages/observability/src/index.test.ts',
+  'apps/api/src/admin-access.test.ts',
+  'apps/admin/lib/auth/access.test.ts',
+  'apps/admin/src/admin-proxy.test.ts',
+  'apps/admin/src/account-ui.test.tsx',
+  'apps/admin/lib/payments/transport.test.ts',
+  'apps/api/src/account-cart.test.ts',
+  'apps/storefront/features/cart',
+  'packages/database/src/wishlist/account.test.ts',
+  'packages/database/src/wishlist-sharing.test.ts',
+  'apps/admin/src/refresh-button.test.tsx',
+  'apps/admin/src/user-menu.test.tsx',
+  'apps/api/src/routes/pricing.test.ts',
+  'apps/api/src/routes/promotions.test.ts',
+  'packages/database/src/reviews.test.ts',
+  'packages/database/src/iam.test.ts',
+  'packages/database/src/orders.test.ts',
+  'packages/database/src/procurement.test.ts',
+  'packages/database/src/inventory.test.ts',
+  'packages/database/src/inventory-units.test.ts',
+  'packages/database/src/seed/seed.test.ts',
+  'packages/database/src/integrity.test.ts',
+  'packages/database/src/catalog.test.ts',
+  'packages/database/src/catalog-variants.test.ts',
 ];
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
@@ -62,10 +85,14 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
       if (result.status !== 0) process.exit(result.status ?? 1);
     };
     node(['scripts/check-migration-history.mjs']);
+    node(['scripts/check-formatting.mjs']);
+    node(['node_modules/eslint/bin/eslint.js', '.', '--max-warnings=0']);
     node([
       '--test',
       'scripts/check-migration-history.test.mjs',
       'scripts/check-secrets.test.mjs',
+      'scripts/check-formatting.test.mjs',
+      'scripts/format-safety.test.mjs',
       'scripts/release/credentials.test.mjs',
       'scripts/release/manifest.test.mjs',
       'scripts/release/registry.test.mjs',

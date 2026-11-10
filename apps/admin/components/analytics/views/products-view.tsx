@@ -2,19 +2,12 @@
 
 import * as React from 'react';
 import Link from 'next/link';
-import {
-  ArrowDownUp,
-  Boxes,
-  ExternalLink,
-  PackageSearch,
-  Percent,
-  TrendingUp,
-} from 'lucide-react';
+import { ExternalLink, PackageSearch } from 'lucide-react';
 
 import { StatusBadge } from '@/components/status-badge';
 import { Button } from '@/components/ui/button';
 import { NativeSelect } from '@/components/ui/native-select';
-import { EmptyState, ErrorState, LoadingState, PagePanel, PageSection } from '@/components/ui/page-shell';
+import { ErrorState, PageSection } from '@/components/ui/page-shell';
 import {
   Table,
   TableBody,
@@ -79,10 +72,7 @@ export function ProductsView({ selection }: ProductsViewProps) {
   const hasRestrictedCost = rows.some((r) => r.profitability_status === 'RESTRICTED');
   const hasPartialCost = rows.some((r) => r.profitability_status === 'PARTIAL');
 
-  const recognizedCostSum = rows.reduce(
-    (sum, r) => (r.recognized_cost ? sum + Number(r.recognized_cost) : sum),
-    0,
-  );
+
   const grossMarginSum = rows.reduce(
     (sum, r) => (r.gross_margin ? sum + Number(r.gross_margin) : sum),
     0,
@@ -90,6 +80,7 @@ export function ProductsView({ selection }: ProductsViewProps) {
 
   return (
     <div className="space-y-6">
+      {error ? <ErrorState message={error} /> : null}
       {/* 1. Products Summary KPIs */}
       <PageSection
         title="Product & Variant Demand"

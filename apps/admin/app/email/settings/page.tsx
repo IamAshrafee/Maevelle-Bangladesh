@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
-import { ArrowLeft, Mail } from 'lucide-react';
+import { Mail } from 'lucide-react';
 import { EmailSettingsTab } from '@/components/email/email-settings-tab';
 
 export const metadata: Metadata = {

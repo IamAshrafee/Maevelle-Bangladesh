@@ -2,13 +2,7 @@
 
 import * as React from 'react';
 import Link from 'next/link';
-import {
-  ArrowDownRight,
-  ArrowUpRight,
-  ChevronRight,
-  HelpCircle,
-  Minus,
-} from 'lucide-react';
+import { ArrowDownRight, ArrowUpRight, ChevronRight, HelpCircle, Minus } from 'lucide-react';
 
 import { StatusBadge } from '@/components/status-badge';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
@@ -31,21 +25,7 @@ export interface MetricCardProps {
   readonly className?: string;
 }
 
-export function MetricCard({
-  title,
-  value,
-  comparison,
-  description,
-  definitionTooltip,
-  status,
-  statusLabel,
-  drillDownHref,
-  drillDownLabel = 'View details',
-  icon: Icon,
-  subtitle,
-  loading = false,
-  className,
-}: MetricCardProps) {
+export function MetricCard({ title, value, comparison, description, definitionTooltip, status, drillDownHref, drillDownLabel = 'View details', icon: Icon, subtitle, loading = false, className }: MetricCardProps) {
   if (loading) {
     return (
       <article

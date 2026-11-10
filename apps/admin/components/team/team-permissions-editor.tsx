@@ -1,16 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import {
-  ChevronDown,
-  ChevronRight,
-  Filter,
-  Info,
-  MapPin,
-  Search,
-  Shield,
-  ShieldAlert,
-} from 'lucide-react';
+import { ChevronDown, ChevronRight, MapPin, Search } from 'lucide-react';
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -23,7 +14,6 @@ import {
   getSensitivityBadge,
   type AccessScopeDto,
   type CapabilityCatalogItemDto,
-  type DomainMeta,
 } from './team-types';
 
 export interface PermissionsEditorValue {
@@ -211,7 +201,7 @@ export function TeamPermissionsEditor({
               value.capabilityCodes.includes(code),
             ).length;
             const allAssigned = assignedCount === domainCodes.length && domainCodes.length > 0;
-            const someAssigned = assignedCount > 0 && !allAssigned;
+
             const isOpen = openDomains[domain.id] ?? (search.length > 0 || assignedCount > 0);
             const DomainIcon = domain.icon;
 

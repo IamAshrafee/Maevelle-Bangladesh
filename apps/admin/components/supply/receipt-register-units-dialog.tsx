@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import { Boxes, Plus, Loader2, AlertCircle, CheckCircle2 } from 'lucide-react';
+import { Boxes, Plus, Loader2, AlertCircle } from 'lucide-react';
 import type { InboundReceiptDto, InboundReceiptLineDto } from '@maevelle/contracts';
 import {
   Dialog,

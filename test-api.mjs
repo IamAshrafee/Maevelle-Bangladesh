@@ -1,4 +1,5 @@
 import http from 'http';
+import console from 'node:console';
 
 const data = JSON.stringify({ displayName: 'Test Customer 4' });
 

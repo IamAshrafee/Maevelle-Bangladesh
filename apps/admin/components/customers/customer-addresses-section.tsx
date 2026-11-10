@@ -1,15 +1,10 @@
 'use client';
 
 import { useState } from 'react';
-import {
-  Check,
-  Copy,
-  MapPin,
-  Star,
-} from 'lucide-react';
+import { Check, Copy, MapPin, Star } from 'lucide-react';
 import type { CustomerAddressDto } from '@maevelle/contracts';
 
-import { Button } from '@/components/ui/button';
+
 import { Badge } from '@/components/ui/badge';
 import { useAdminCapability } from '@/components/admin-capabilities';
 import { AddAddressDialog } from './add-address-dialog';

@@ -1,33 +1,17 @@
 'use client';
 
-import {
-  ShieldCheck,
-  Server,
-  Key,
-  Radio,
-  ExternalLink,
-  CheckCircle2,
-  AlertCircle,
-  HelpCircle,
-  Clock,
-  Mail,
-  Activity,
-  Layers,
-} from 'lucide-react';
+import { ShieldCheck, Server, Key, CheckCircle2, AlertCircle, HelpCircle } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
-import {
-  type EmailDiagnosticsDto,
-  formatDateTime,
-} from './email-types';
+
+import { type EmailDiagnosticsDto, formatDateTime } from './email-types';
 
 interface EmailDiagnosticsTabProps {
   readonly diagnostic: EmailDiagnosticsDto | undefined;
   readonly onRefresh: () => void;
 }
 
-export function EmailDiagnosticsTab({ diagnostic, onRefresh }: EmailDiagnosticsTabProps) {
+export function EmailDiagnosticsTab({ diagnostic }: EmailDiagnosticsTabProps) {
   const isResendConfigured = Boolean(diagnostic?.providerConfigured);
   const isWebhookConfigured = Boolean(diagnostic?.webhookConfigured);
   const isWorkerHealthy = diagnostic?.worker_status === 'HEALTHY' || diagnostic?.worker_status === 'IDLE';

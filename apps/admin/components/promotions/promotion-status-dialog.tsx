@@ -1,7 +1,7 @@
 'use client';
 
 import * as React from 'react';
-import { AlertTriangle, Archive, CheckCircle2, Loader2, PauseCircle, PlayCircle } from 'lucide-react';
+import { AlertTriangle, Archive, Loader2, PauseCircle, PlayCircle } from 'lucide-react';
 
 import {
   Dialog,

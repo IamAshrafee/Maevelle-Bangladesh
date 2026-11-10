@@ -3,24 +3,14 @@
 import * as React from 'react';
 import {
   AlertCircle,
-  Archive,
-  BadgePercent,
-  Calendar,
   Check,
-  Clock,
-  Coins,
   Copy,
   Edit3,
-  ExternalLink,
-  Layers,
   Loader2,
   PauseCircle,
   PlayCircle,
   Plus,
   Tag,
-  Ticket,
-  User,
-  X,
 } from 'lucide-react';
 
 import {
@@ -34,7 +24,14 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import { StatusBadge } from '@/components/status-badge';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
 import { apiRequest, ApiRequestError } from '@/lib/api';
 import type { PromotionDetail, PromotionItem, PromotionStatus } from './types';
 

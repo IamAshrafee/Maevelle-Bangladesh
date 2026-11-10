@@ -5,14 +5,9 @@ import {
   AlertCircle,
   Building2,
   CheckCircle2,
-  Clock,
-  Coins,
   History,
-  Lock,
-  Package,
   RefreshCw,
   RotateCcw,
-  Shield,
   SlidersHorizontal,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';

@@ -23,22 +23,7 @@ interface EmailPreviewFrameProps {
   readonly className?: string | undefined;
 }
 
-export function EmailPreviewFrame({
-  subject,
-  html,
-  text,
-  from = 'Maevelle <orders@maevelle.com>',
-  replyTo = 'maevelleBangladesh@gmail.com',
-  recipient,
-  intendedRecipient,
-  supportEmail,
-  templateKey,
-  templateVersion,
-  isSampleFixture = false,
-  fixtureName,
-  showBanner = true,
-  className,
-}: EmailPreviewFrameProps) {
+export function EmailPreviewFrame({ subject, html, text, from = 'Maevelle <orders@maevelle.com>', replyTo = 'maevelleBangladesh@gmail.com', recipient, intendedRecipient, supportEmail, isSampleFixture = false, fixtureName, showBanner = true, className }: EmailPreviewFrameProps) {
   const effectiveRecipient = recipient ?? intendedRecipient ?? 'customer@example.com';
   const effectiveReplyTo = supportEmail ?? replyTo;
   const [mode, setMode] = useState<'desktop' | 'mobile' | 'text'>('desktop');

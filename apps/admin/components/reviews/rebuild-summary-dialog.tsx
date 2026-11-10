@@ -1,5 +1,6 @@
 'use client';
 
+import type { ProductRatingSummaryDto } from '@maevelle/contracts';
 import React, { useState } from 'react';
 import { AlertCircle, CheckCircle2, Database, RefreshCw, ShieldCheck, Wrench } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -21,7 +22,7 @@ export function RebuildSummaryDialog() {
   const [productId, setProductId] = useState('');
   const [loading, setLoading] = useState(false);
   const [integrityIssues, setIntegrityIssues] = useState<readonly string[] | null>(null);
-  const [rebuildResult, setRebuildResult] = useState<any | null>(null);
+  const [rebuildResult, setRebuildResult] = useState<ProductRatingSummaryDto | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const canRunIntegrity = useAdminCapability('reviews.integrity');
@@ -89,7 +90,8 @@ export function RebuildSummaryDialog() {
             Reviews Integrity & Projections
           </DialogTitle>
           <DialogDescription className="text-xs text-muted-foreground">
-            Verify reviews consistency and rebuild product rating summary projections from authoritative published review records.
+            Verify reviews consistency and rebuild product rating summary projections from
+            authoritative published review records.
           </DialogDescription>
         </DialogHeader>
 
@@ -133,7 +135,8 @@ export function RebuildSummaryDialog() {
               )
             ) : (
               <p className="text-muted-foreground">
-                Audit inspects for orphaned review revisions, uncalculated rating aggregates, or missing tokens.
+                Audit inspects for orphaned review revisions, uncalculated rating aggregates, or
+                missing tokens.
               </p>
             )}
           </div>
@@ -145,7 +148,8 @@ export function RebuildSummaryDialog() {
                 Rebuild Product Rating Projection
               </label>
               <p className="text-muted-foreground">
-                Recalculates average rating, review count, and star distribution directly from active published reviews.
+                Recalculates average rating, review count, and star distribution directly from
+                active published reviews.
               </p>
               <div className="flex items-center gap-2 pt-1">
                 <Input
@@ -165,12 +169,13 @@ export function RebuildSummaryDialog() {
             {rebuildResult ? (
               <div className="rounded-md border border-emerald-500/30 bg-emerald-500/10 p-3 text-emerald-800 dark:text-emerald-300 space-y-1">
                 <div className="flex items-center gap-1.5 font-semibold">
-                  <CheckCircle2 className="size-4" /> Rating summary projection rebuilt successfully!
+                  <CheckCircle2 className="size-4" /> Rating summary projection rebuilt
+                  successfully!
                 </div>
                 <div className="font-mono text-[11px] grid grid-cols-2 gap-1 pt-1">
                   <span>Average Rating: {rebuildResult.averageRating}★</span>
-                  <span>Review Count: {rebuildResult.reviewCount}</span>
-                  <span>Verified Count: {rebuildResult.verifiedCount ?? 0}</span>
+                  <span>Review Count: {rebuildResult.ratingCount}</span>
+                  <span>Verified Count: {rebuildResult.verifiedReviewCount}</span>
                 </div>
               </div>
             ) : null}

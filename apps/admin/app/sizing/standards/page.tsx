@@ -2,18 +2,14 @@
 
 import {
   Archive,
-  ArrowUpDown,
-  Check,
   CheckCircle2,
   FolderTree,
   Layers,
-  Loader2,
   Pencil,
   Plus,
   RotateCcw,
   Ruler,
   Search,
-  SlidersHorizontal,
   X,
 } from 'lucide-react';
 import { useSearchParams } from 'next/navigation';
@@ -53,12 +49,8 @@ import {
   EmptyState,
   ErrorState,
   LoadingState,
-  PageActions,
-  PageDescription,
   PageHeader,
   PagePanel,
-  PageSection,
-  PageTitle,
 } from '@/components/ui/page-shell';
 import { Button } from '@/components/ui/button';
 import { RefreshButton } from '@/components/ui/refresh-button';

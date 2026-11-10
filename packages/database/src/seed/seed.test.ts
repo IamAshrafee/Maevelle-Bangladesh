@@ -5,48 +5,25 @@ import { createDatabase } from '../index.js';
 import { createOrganization } from '../platform.js';
 import { createManagedCategory, createCatalogVocabularyItem } from '../catalog-classification.js';
 import { createSizingDomain } from '../sizing.js';
-import { categorySeedData } from './data/categories.js';
+
 import { sizingSeedData } from './data/sizing.js';
 import { slugify } from './helpers/slug.js';
 import { categoriesSeedModule, createCategoriesSeedModule } from './modules/categories.seed.js';
-import { tagsSeedModule, createTagsSeedModule } from './modules/tags.seed.js';
-import { occasionsSeedModule, createOccasionsSeedModule } from './modules/occasions.seed.js';
-import { collectionsSeedModule, createCollectionsSeedModule } from './modules/collections.seed.js';
-import { sizingSeedModule, createSizingSeedModule } from './modules/sizing.seed.js';
-import {
-  productTypesSeedModule,
-  createProductTypesSeedModule,
-} from './modules/product-types.seed.js';
-import {
-  warehousesSeedModule,
-  createWarehousesSeedModule,
-} from './modules/warehouses.seed.js';
-import {
-  colorsSeedModule,
-  createColorsSeedModule,
-} from './modules/colors.seed.js';
-import {
-  accountsSeedModule,
-  createAccountsSeedModule,
-} from './modules/accounts.seed.js';
-import {
-  productsSeedModule,
-  createProductsSeedModule,
-} from './modules/products.seed.js';
-import { warehouseSeedData, ALL_LOCATION_CAPABILITIES } from './data/warehouses.js';
+import { createTagsSeedModule } from './modules/tags.seed.js';
+
+
+import { createSizingSeedModule } from './modules/sizing.seed.js';
+
+import { createWarehousesSeedModule } from './modules/warehouses.seed.js';
+import { createColorsSeedModule } from './modules/colors.seed.js';
+import { createAccountsSeedModule } from './modules/accounts.seed.js';
+
+import { ALL_LOCATION_CAPABILITIES } from './data/warehouses.js';
 import { colorSeedData } from './data/colors.js';
-import { accountSeedData } from './data/accounts.js';
-import { productSeedData } from './data/products.js';
+
+
 import { runSeeds, sortSeedModules, DEFAULT_SEED_MODULES } from './runner.js';
-import type {
-  CategorySeedItem,
-  ColorSeedItem,
-  FinancialAccountSeedItem,
-  ProductSeedItem,
-  SeedModule,
-  VocabularySeedItem,
-  WarehouseSeedItem,
-} from './types.js';
+import type { CategorySeedItem, SeedModule, VocabularySeedItem } from './types.js';
 
 
 
@@ -133,7 +110,7 @@ describe('database seed system', () => {
         description: '',
         scope: 'bootstrap',
         dependencies: ['b'],
-        run: async () => ({}) as any,
+        run: async () => { throw new Error('Cyclic seed modules must never execute.'); },
       };
       const modB: SeedModule = {
         id: 'b',
@@ -141,7 +118,7 @@ describe('database seed system', () => {
         description: '',
         scope: 'bootstrap',
         dependencies: ['a'],
-        run: async () => ({}) as any,
+        run: async () => { throw new Error('Cyclic seed modules must never execute.'); },
       };
       expect(() => sortSeedModules([modA, modB])).toThrow(/Circular seed module dependency/);
     });
@@ -157,9 +134,9 @@ describe('database seed system', () => {
 
       expect(outcome.results).toHaveLength(1);
       const catResult = outcome.results[0]!;
-      expect(catResult.rootCount).toBe(7);
-      expect(catResult.totalCount).toBe(44);
-      expect(catResult.createdCount).toBe(44);
+      expect(catResult.rootCount).toBe(8);
+      expect(catResult.totalCount).toBe(49);
+      expect(catResult.createdCount).toBe(49);
       expect(catResult.updatedCount).toBe(0);
       expect(catResult.unchangedCount).toBe(0);
 
@@ -173,7 +150,7 @@ describe('database seed system', () => {
         `.execute(database.db)
       ).rows;
 
-      expect(rows).toHaveLength(44);
+      expect(rows).toHaveLength(49);
 
       // Check root categories have no parent
       const hairAccessories = rows.find((r) => r.handle === 'hair-accessories');
@@ -204,7 +181,7 @@ describe('database seed system', () => {
       const outcome1 = await runSeeds(database.db, { organizationCode, verbose: false }, [
         categoriesSeedModule,
       ]);
-      expect(outcome1.results[0]?.createdCount).toBe(44);
+      expect(outcome1.results[0]?.createdCount).toBe(49);
       expect(outcome1.results[0]?.unchangedCount).toBe(0);
 
       // Run 2: immediately re-run
@@ -213,7 +190,7 @@ describe('database seed system', () => {
       ]);
       expect(outcome2.results[0]?.createdCount).toBe(0);
       expect(outcome2.results[0]?.updatedCount).toBe(0);
-      expect(outcome2.results[0]?.unchangedCount).toBe(44);
+      expect(outcome2.results[0]?.unchangedCount).toBe(49);
 
       // Run 3: third run
       const outcome3 = await runSeeds(database.db, { organizationCode, verbose: false }, [
@@ -221,13 +198,13 @@ describe('database seed system', () => {
       ]);
       expect(outcome3.results[0]?.createdCount).toBe(0);
       expect(outcome3.results[0]?.updatedCount).toBe(0);
-      expect(outcome3.results[0]?.unchangedCount).toBe(44);
+      expect(outcome3.results[0]?.unchangedCount).toBe(49);
 
       // Total count in database remains exactly 44
       const countResult = await sql<{ count: string }>`
         select count(*)::text count from catalog.categories where organization_id = ${organizationId}
       `.execute(database.db);
-      expect(Number(countResult.rows[0]?.count)).toBe(44);
+      expect(Number(countResult.rows[0]?.count)).toBe(49);
     });
 
     it('updates matching categories in-place when display names or positions change', async () => {
@@ -771,7 +748,7 @@ describe('database seed system', () => {
     });
 
     it('is strictly idempotent when run repeatedly', async () => {
-      const { organizationCode, organizationId } = await createTestOrg();
+      const { organizationCode } = await createTestOrg();
 
       // Run 1: initial seed
       await runSeeds(
@@ -915,7 +892,7 @@ describe('database seed system', () => {
     });
 
     it('is strictly idempotent when run repeatedly', async () => {
-      const { organizationCode, organizationId } = await createTestOrg();
+      const { organizationCode } = await createTestOrg();
 
       // Run 1: initial seed
       await runSeeds(
@@ -1213,18 +1190,22 @@ describe('database seed system', () => {
           id: string;
           product_id: string;
           role: string;
-          object_key: string;
+          source_url: string;
+          status: string;
+          current_object_id: string | null;
         }>`
-          select pm.id::text, pm.product_id::text, pm.role, mo.object_key
+          select pm.id::text, pm.product_id::text, pm.role, job.source_url, job.status, ma.current_object_id::text
           from catalog.product_media pm
           join media.media_assets ma on ma.id = pm.asset_id
-          join media.media_objects mo on mo.id = ma.current_object_id
+          join media.external_image_imports job on job.asset_id=ma.id and job.organization_id=pm.organization_id
           where pm.organization_id = ${organizationId}
         `.execute(database.db);
 
         expect(mediaLinks.rows.length).toBeGreaterThanOrEqual(8);
         for (const m of mediaLinks.rows) {
-          expect(m.object_key).toMatch(/^https?:\/\//);
+          expect(m.source_url).toMatch(/^https?:\/\//);
+          expect(m.status).toBe('PENDING');
+          expect(m.current_object_id).toBeNull();
         }
 
         // 4. Verify inventory stocks across both warehouses
@@ -1269,10 +1250,10 @@ describe('database seed system', () => {
           'categories',
           'product-types',
         ]);
-        expect(outcome.results[1]?.createdCount).toBe(23);
+        expect(outcome.results[1]?.createdCount).toBe(25);
         const types = await sql<{ count: string }>`select count(*)::text from catalog.product_types
           where organization_id=${organizationId}`.execute(database.db);
-        expect(Number(types.rows[0]?.count)).toBe(23);
+        expect(Number(types.rows[0]?.count)).toBe(25);
       });
 
       it('seeds categories, product types, tags, occasions, collections, sizing, warehouses, colors, accounts, and products together in one transaction', async () => {
@@ -1300,8 +1281,8 @@ describe('database seed system', () => {
         ]);
 
         const [catRes, typeRes, attributeRes, tagRes, occRes, colRes, sizRes, whRes, colorRes, accRes, prodRes] = outcome.results;
-        expect(catRes?.createdCount).toBe(44);
-        expect(typeRes?.createdCount).toBe(23);
+        expect(catRes?.createdCount).toBe(49);
+        expect(typeRes?.createdCount).toBe(25);
         expect(attributeRes?.totalCount).toBe(148);
         expect(tagRes?.createdCount).toBe(29);
         expect(occRes?.createdCount).toBe(9);
@@ -1370,8 +1351,8 @@ describe('database seed system', () => {
           ),
         ]);
 
-        expect(Number(cats.rows[0]?.count)).toBe(44);
-        expect(Number(types.rows[0]?.count)).toBe(23);
+        expect(Number(cats.rows[0]?.count)).toBe(49);
+        expect(Number(types.rows[0]?.count)).toBe(25);
         expect(Number(fields.rows[0]?.count)).toBe(148);
         expect(Number(tags.rows[0]?.count)).toBe(29);
         expect(Number(occs.rows[0]?.count)).toBe(9);

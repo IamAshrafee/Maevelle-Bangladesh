@@ -6,18 +6,14 @@ import Link from 'next/link';
 import {
   Bell,
   CheckCheck,
-  CheckCircle2,
   ChevronLeft,
   ChevronRight,
-  ExternalLink,
-  Filter,
   Loader2,
   Search,
   ShieldAlert,
   ShoppingBag,
   Boxes,
   ArrowRight,
-  Info,
 } from 'lucide-react';
 import type { NotificationInboxItemDto } from '@maevelle/contracts';
 import { Button } from '@/components/ui/button';
@@ -27,10 +23,7 @@ import { Input } from '@/components/ui/input';
 import { NativeSelect } from '@/components/ui/native-select';
 import { apiRequest } from '@/lib/api';
 import { cn } from '@/lib/utils';
-import {
-  NotificationPriorityBadge,
-  NotificationStatusBadge,
-} from './notification-status-badge';
+import { NotificationPriorityBadge } from './notification-status-badge';
 import { NotificationDeliveryDrawer } from './notification-delivery-drawer';
 
 interface NotificationInboxTabProps {

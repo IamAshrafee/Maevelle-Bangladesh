@@ -3,15 +3,7 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import {
-  ChevronLeft,
-  ChevronRight,
-  MapPin,
-  Search,
-  ShieldAlert,
-  ShieldCheck,
-  Users,
-} from 'lucide-react';
+import { ChevronLeft, ChevronRight, MapPin, Search, Users } from 'lucide-react';
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -19,10 +11,7 @@ import { Input } from '@/components/ui/input';
 
 import { StatusBadge } from '../status-badge';
 import { useTeam } from './team-context';
-import {
-  getRoleSummary,
-  type TeamMemberListItemDto,
-} from './team-types';
+import { getRoleSummary, type TeamMemberListItemDto } from './team-types';
 
 export function TeamMembersList({
   members,

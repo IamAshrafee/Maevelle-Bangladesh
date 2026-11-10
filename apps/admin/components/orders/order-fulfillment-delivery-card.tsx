@@ -1,21 +1,11 @@
 'use client';
 
-import {
-  AlertTriangle,
-  Box,
-  Copy,
-  ExternalLink,
-  Package,
-  PackageCheck,
-  PackagePlus,
-  RefreshCw,
-  Truck,
-} from 'lucide-react';
+import { AlertTriangle, Box, ExternalLink, Package, Truck } from 'lucide-react';
 import Link from 'next/link';
 
 import type { OrderDetailDto } from '@maevelle/contracts';
 import { StatusBadge } from '@/components/status-badge';
-import { Button } from '@/components/ui/button';
+
 import { CreateFulfillmentDialog } from './create-fulfillment-dialog';
 
 interface OrderFulfillmentDeliveryCardProps {
@@ -33,10 +23,7 @@ function formatDate(value?: string | null): string {
   }).format(date);
 }
 
-export function OrderFulfillmentDeliveryCard({
-  order,
-  onUpdated,
-}: OrderFulfillmentDeliveryCardProps) {
+export function OrderFulfillmentDeliveryCard({ order }: OrderFulfillmentDeliveryCardProps) {
   const { fulfillments = [], deliveries = [], capabilities } = order;
   const activeLines = order.lines.filter((line) => line.status === 'ACTIVE');
 

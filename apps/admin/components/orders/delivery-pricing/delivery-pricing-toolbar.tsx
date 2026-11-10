@@ -1,7 +1,7 @@
 'use client';
 
 import * as React from 'react';
-import { AlignJustify, RotateCcw, Rows2, SlidersHorizontal } from 'lucide-react';
+import { AlignJustify, RotateCcw, Rows2 } from 'lucide-react';
 
 import { SearchInput } from '@/components/ui/search-input';
 import { NativeSelect } from '@/components/ui/native-select';

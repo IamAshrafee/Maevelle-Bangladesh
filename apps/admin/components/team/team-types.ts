@@ -8,7 +8,6 @@ import {
   CircleDollarSign,
   HeartHandshake,
   Image,
-  KeyRound,
   Landmark,
   PackageCheck,
   PackageSearch,

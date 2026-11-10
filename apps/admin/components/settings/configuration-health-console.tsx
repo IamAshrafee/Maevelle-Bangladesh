@@ -8,7 +8,6 @@ import {
   ArrowRight,
   CheckCircle2,
   HardDrive,
-  HeartPulse,
   Info,
   Mail,
   RefreshCw,
@@ -22,10 +21,7 @@ import { Badge } from '@/components/ui/badge';
 import { SettingsNav } from '@/components/settings/settings-nav';
 import { SettingStatusBadge } from '@/components/settings/setting-status-badge';
 import { fetchApiData } from '@/lib/api';
-import type {
-  ConfigurationHealthIssueDto,
-  ConfigurationHealthResponseDto,
-} from '@maevelle/contracts';
+import type { ConfigurationHealthResponseDto } from '@maevelle/contracts';
 
 export function ConfigurationHealthConsole() {
   const [data, setData] = useState<ConfigurationHealthResponseDto>();
@@ -62,7 +58,7 @@ export function ConfigurationHealthConsole() {
   const issues = data?.issues ?? [];
   const moduleStatuses = data?.moduleStatuses ?? {};
 
-  const moduleIconMap: Record<string, any> = {
+  const moduleIconMap: Record<string, typeof Mail> = {
     email: Mail,
     media: HardDrive,
     storefront: Store,

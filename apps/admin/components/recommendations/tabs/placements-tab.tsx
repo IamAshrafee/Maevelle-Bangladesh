@@ -1,7 +1,7 @@
 'use client';
 
 import * as React from 'react';
-import { HelpCircle, Save, Settings2, Sparkles, CheckCircle2 } from 'lucide-react';
+import { HelpCircle, Save, Sparkles } from 'lucide-react';
 import type { RecommendationPlacementSettingsDto } from '@maevelle/contracts';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';

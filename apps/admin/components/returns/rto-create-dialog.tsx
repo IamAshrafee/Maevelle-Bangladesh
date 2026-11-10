@@ -1,14 +1,6 @@
 'use client';
 
-import {
-  AlertCircle,
-  AlertTriangle,
-  Loader2,
-  PackageOpen,
-  RotateCcw,
-  Search,
-  Truck,
-} from 'lucide-react';
+import { AlertCircle, AlertTriangle, Loader2, RotateCcw } from 'lucide-react';
 import React, { useCallback, useEffect, useState } from 'react';
 
 import { Button } from '@/components/ui/button';

@@ -8,12 +8,8 @@ import { ActionDialog } from '@/components/ui/action-dialog';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Field, FieldDescription, FieldError, FieldLabel } from '@/components/ui/field';
-import { Input } from '@/components/ui/input';
-import {
-  InputGroup,
-  InputGroupAddon,
-  InputGroupInput,
-} from '@/components/ui/input-group';
+
+import { InputGroup, InputGroupAddon, InputGroupInput } from '@/components/ui/input-group';
 import { Textarea } from '@/components/ui/textarea';
 import { apiRequest } from '@/lib/api';
 import { formatMoney } from '@/lib/finance/types';
@@ -79,9 +75,7 @@ export function SetOpeningBalanceDialog({
       handleOpenChange(false);
       await onSuccess();
     } catch (err) {
-      setError(
-        err instanceof Error ? err.message : 'Failed to record opening balance.',
-      );
+      setError(err instanceof Error ? err.message : 'Failed to record opening balance.');
     } finally {
       setBusy(false);
     }
@@ -110,7 +104,9 @@ export function SetOpeningBalanceDialog({
           </div>
           <div className="mt-1 flex items-center justify-between text-xs text-muted-foreground">
             <span>Account code: {account.account_number}</span>
-            <span>Current balance: {formatMoney(account.ledger_balance, account.currency_code)}</span>
+            <span>
+              Current balance: {formatMoney(account.ledger_balance, account.currency_code)}
+            </span>
           </div>
         </div>
 
@@ -118,7 +114,8 @@ export function SetOpeningBalanceDialog({
           <AlertTriangle className="size-4 text-amber-600 dark:text-amber-400" />
           <AlertTitle className="text-xs font-semibold">One-time action</AlertTitle>
           <AlertDescription className="text-xs">
-            This opening balance can only be set once while the account balance is zero. After posting, it cannot be changed or resubmitted.
+            This opening balance can only be set once while the account balance is zero. After
+            posting, it cannot be changed or resubmitted.
           </AlertDescription>
         </Alert>
 

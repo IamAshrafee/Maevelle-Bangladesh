@@ -9,7 +9,6 @@ import {
   CheckIcon,
   BikeIcon,
   PhoneIcon,
-  CheckCircleIcon,
 } from '@/components/ui/icons';
 
 export interface OrderTrackActiveConsignmentProps {

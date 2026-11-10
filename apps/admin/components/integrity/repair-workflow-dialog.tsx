@@ -4,12 +4,10 @@ import * as React from 'react';
 import {
   AlertTriangle,
   CheckCircle2,
-  Lock,
   RefreshCw,
   ShieldAlert,
   ShieldCheck,
   Wrench,
-  X,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
@@ -21,14 +19,8 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { PagePanel } from '@/components/ui/page-shell';
-import {
-  executeFindingRepair,
-  previewFindingRepair,
-} from '@/lib/integrity/api';
-import type {
-  IntegrityFindingDetailDto,
-  IntegrityRepairPreviewDto,
-} from '@/lib/integrity/types';
+import { executeFindingRepair, previewFindingRepair } from '@/lib/integrity/api';
+import type { IntegrityFindingDetailDto, IntegrityRepairPreviewDto } from '@/lib/integrity/types';
 
 interface RepairWorkflowDialogProps {
   finding: IntegrityFindingDetailDto | null;
@@ -53,7 +45,7 @@ export function RepairWorkflowDialog({
     status: string;
     verificationRunId?: string;
   } | null>(null);
-  const [executing, setExecuting] = React.useState(false);
+  const [, setExecuting] = React.useState(false);
   const [executionError, setExecutionError] = React.useState<string | null>(null);
 
   // Load repair preview when dialog opens

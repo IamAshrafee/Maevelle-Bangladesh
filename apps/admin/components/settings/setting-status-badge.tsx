@@ -4,9 +4,7 @@ import {
   AlertCircle,
   AlertTriangle,
   CheckCircle2,
-  Clock,
   Lock,
-  MinusCircle,
   Power,
   RotateCcw,
   Shield,
@@ -14,7 +12,12 @@ import {
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
-import type { HealthSeverity, IntegrationStatus, SettingsReadinessStatus, SettingSource } from '@maevelle/contracts';
+import type {
+  HealthSeverity,
+  IntegrationStatus,
+  SettingsReadinessStatus,
+  SettingSource,
+} from '@maevelle/contracts';
 
 interface SettingStatusBadgeProps {
   readonly status?:

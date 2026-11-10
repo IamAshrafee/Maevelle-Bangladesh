@@ -2,18 +2,7 @@
 
 import * as React from 'react';
 import Link from 'next/link';
-import {
-  Bell,
-  Calendar,
-  Clock,
-  ExternalLink,
-  Info,
-  Lock,
-  Radio,
-  Shield,
-  Sliders,
-  SlidersHorizontal,
-} from 'lucide-react';
+import { Bell, Calendar, Clock, ExternalLink } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { PagePanel, PageSection } from '@/components/ui/page-shell';
 

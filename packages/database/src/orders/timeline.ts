@@ -119,8 +119,8 @@ export async function getOrderTimeline(
   `.execute(db);
 
   for (const v of verifications.rows) {
-    const typeLabel = v.verification_type.replace(/_/g, ' ').toLowerCase();
-    const outcomeLabel = v.outcome.replace(/_/g, ' ').toLowerCase();
+
+
     events.push({
       id: `verification-${v.id}`,
       category: 'VERIFICATION',

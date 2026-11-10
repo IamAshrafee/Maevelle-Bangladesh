@@ -2,7 +2,6 @@
 
 import {
   AlertCircle,
-  ArrowRight,
   CheckCircle2,
   ChevronLeft,
   ChevronRight,

@@ -4,19 +4,19 @@ import * as React from 'react';
 import {
   Area,
   AreaChart,
-  Bar,
-  BarChart,
   CartesianGrid,
-  Cell,
-  Legend,
   ResponsiveContainer,
   Tooltip,
   XAxis,
   YAxis,
 } from 'recharts';
-import { AlertCircle, BarChart3, HelpCircle } from 'lucide-react';
+import { AlertCircle, BarChart3 } from 'lucide-react';
 
-import { formatAnalyticsCount, formatAnalyticsMoney, formatAnalyticsPercent } from '@/lib/analytics/types';
+import {
+  formatAnalyticsCount,
+  formatAnalyticsMoney,
+  formatAnalyticsPercent,
+} from '@/lib/analytics/types';
 import { cn } from '@/lib/utils';
 
 // ============================================================================

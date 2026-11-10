@@ -3,15 +3,10 @@
 import * as React from 'react';
 import Link from 'next/link';
 import {
-  AlertCircle,
-  AlertTriangle,
-  ArrowRight,
   CheckCircle2,
   ExternalLink,
-  Filter,
   RefreshCw,
   Search,
-  Shield,
   SlidersHorizontal,
   Wrench,
   X,
@@ -28,13 +23,10 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { PagePanel, EmptyState } from '@/components/ui/page-shell';
-import type {
-  IntegrityCheckDto,
-  IntegrityFindingListItemDto,
-} from '@/lib/integrity/types';
+import { PagePanel } from '@/components/ui/page-shell';
+import type { IntegrityCheckDto, IntegrityFindingListItemDto } from '@/lib/integrity/types';
 
-interface FindingsTabProps {
+export interface FindingsTabProps {
   findings: readonly IntegrityFindingListItemDto[];
   totalItems: number;
   totalPages: number;
@@ -49,7 +41,7 @@ interface FindingsTabProps {
     repairableOnly: boolean;
     q: string;
   };
-  onFilterChange: (key: string, value: any) => void;
+  onFilterChange: <K extends keyof FindingsTabProps['filters']>(key: K, value: FindingsTabProps['filters'][K]) => void;
   onPageChange: (page: number) => void;
   onResetFilters: () => void;
   onOpenFinding: (finding: IntegrityFindingListItemDto) => void;

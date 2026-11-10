@@ -1,14 +1,13 @@
 'use client';
 
 import * as React from 'react';
-import Link from 'next/link';
+
 import {
   Activity,
   AlertCircle,
   AlertTriangle,
   ArrowRight,
   CheckCircle2,
-  Clock,
   Layers,
   Play,
   RefreshCw,
@@ -21,7 +20,7 @@ import { Button } from '@/components/ui/button';
 import { StatusBadge } from '@/components/status-badge';
 import { PagePanel, PageSection } from '@/components/ui/page-shell';
 import type {
-  IntegrityModuleSummaryDto,
+  IntegrityTab,
   IntegrityOverviewDto,
   IntegrityFindingListItemDto,
 } from '@/lib/integrity/types';
@@ -30,7 +29,7 @@ interface OverviewTabProps {
   overview: IntegrityOverviewDto | null;
   loading: boolean;
   onRefresh: () => void;
-  onSelectTab: (tab: any, filterParams?: Record<string, string>) => void;
+  onSelectTab: (tab: IntegrityTab, filterParams?: Record<string, string>) => void;
   onOpenFinding: (finding: IntegrityFindingListItemDto) => void;
   onOpenLauncher: () => void;
   canRunChecks: boolean;

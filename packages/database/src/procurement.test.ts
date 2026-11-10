@@ -33,12 +33,9 @@ import {
   createPurchase,
   createShipment,
   createSupplier,
-  getInboundReceipt,
   getPurchase,
   getShipment,
-  listInboundReceipts,
   listPurchases,
-  listShipments,
   listSuppliers,
   markShipmentArrived,
   markShipmentInTransit,
@@ -502,7 +499,7 @@ describe('procurement, shipment allocation, and canonical inbound receiving', ()
       expectedVersion: updated.version,
       eventCode: 'RECEIVED_CHINA_WAREHOUSE',
       title: 'Received in China warehouse',
-      occurredAt: '2026-11-01T06:04:53.517Z',
+      occurredAt: new Date(new Date(updated.events[0]!.occurredAt).getTime() + 1000).toISOString(),
       locationText: 'Guangzhou, China',
       providerStatusCode: '20',
       idempotencyKey: crypto.randomUUID(),
@@ -1576,7 +1573,7 @@ describe('procurement, shipment allocation, and canonical inbound receiving', ()
       name: 'Alpha Loom Mills',
       countryCode: 'BD',
     });
-    const s2 = await createSupplier(database.db, {
+    await createSupplier(database.db, {
       organizationId: input.organizationId,
       actorId: input.actorId,
       code: `SUP-SRC-2`,

@@ -2,14 +2,7 @@
 
 import React from 'react';
 import Link from 'next/link';
-import {
-  CheckCircle2,
-  ExternalLink,
-  Image as ImageIcon,
-  MessageSquare,
-  ShieldAlert,
-  Star,
-} from 'lucide-react';
+import { CheckCircle2, Image as ImageIcon, MessageSquare, ShieldAlert } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import {

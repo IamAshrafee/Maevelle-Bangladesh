@@ -555,10 +555,10 @@ describe('organization IAM', () => {
 
   it('records an audit event when owner membership is created at bootstrap', async () => {
     const fixture = await createFixture('owner-audit');
-    const audits = await sql<{ event_name: string }>`
-      select event_name from platform.audit_events
+    const audits = await sql<{ action: string }>`
+      select action from audit.audit_events
       where organization_id = ${fixture.organizationId}::uuid
-        and event_name = 'iam.organization.owner_created'
+        and action = 'iam.organization.owner_created'
     `.execute(database.db);
     expect(audits.rows.length).toBeGreaterThan(0);
   });

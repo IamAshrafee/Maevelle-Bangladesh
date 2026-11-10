@@ -1,6 +1,6 @@
 'use client';
 
-import { AlertCircle, ArrowUpRight, CheckCircle2, RotateCcw, ShieldCheck, XCircle } from 'lucide-react';
+import { AlertCircle, ArrowUpRight, CheckCircle2, RotateCcw, ShieldCheck } from 'lucide-react';
 import Link from 'next/link';
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';

@@ -1,23 +1,17 @@
 'use client';
 
 import * as React from 'react';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
   Bell,
   CheckCheck,
-  ExternalLink,
   Loader2,
   ShoppingBag,
-  CreditCard,
-  Truck,
-  RotateCcw,
-  Star,
   Boxes,
   ShieldAlert,
   ArrowRight,
-  Circle,
 } from 'lucide-react';
 import type { NotificationInboxItemDto } from '@maevelle/contracts';
 import { Button } from '@/components/ui/button';
@@ -34,10 +28,7 @@ import {
 } from '@/components/ui/sheet';
 import { fetchApiData, apiRequest } from '@/lib/api';
 import { cn } from '@/lib/utils';
-import {
-  NotificationPriorityBadge,
-  NotificationStatusBadge,
-} from './notification-status-badge';
+import { NotificationPriorityBadge } from './notification-status-badge';
 
 function formatRelativeTime(dateString: string): string {
   try {

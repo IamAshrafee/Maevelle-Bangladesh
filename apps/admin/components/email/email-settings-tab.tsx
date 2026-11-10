@@ -1,4 +1,5 @@
 'use client';
+import { ErrorState } from '@/components/ui/page-shell';
 
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
@@ -7,9 +8,7 @@ import {
   AlertTriangle,
   ArrowUpRight,
   CheckCircle2,
-  ExternalLink,
   History,
-  KeyRound,
   Mail,
   Plus,
   RefreshCw,
@@ -17,9 +16,7 @@ import {
   Send,
   Server,
   Shield,
-  Trash2,
   X,
-  Zap,
 } from 'lucide-react';
 import { Button, buttonVariants } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -47,7 +44,6 @@ import { SettingsAuditDrawer } from '@/components/settings/settings-audit-drawer
 import { SettingStatusBadge, RuntimeEffectBadge } from '@/components/settings/setting-status-badge';
 import { apiRequest, fetchApiData } from '@/lib/api';
 import type {
-  EmailReadinessDto,
   EmailSettingsDto,
   IntegrationSummaryDto,
   ModuleSettingsResponseDto,
@@ -344,6 +340,7 @@ export function EmailSettingsTab() {
 
   return (
     <div className="space-y-6 pb-20 max-w-5xl">
+      {error ? <ErrorState message={error} /> : null}
       {/* Header & Quick Status */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-4 border-b">
         <div>

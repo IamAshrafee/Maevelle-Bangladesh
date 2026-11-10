@@ -23,7 +23,7 @@ interface CancelOrderDialogProps {
   readonly orderNumber?: string;
   readonly currentVersion: number;
   readonly onCompleted?: () => void;
-  readonly trigger?: React.ReactNode;
+  readonly trigger?: React.ComponentProps<typeof DialogTrigger>['render'];
 }
 
 const reasonCodes = [
@@ -98,7 +98,7 @@ export function CancelOrderDialog({
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger render={trigger ? (trigger as any) : undefined}>
+      <DialogTrigger render={trigger}>
         {!trigger && (
           <Button variant="destructive" size="sm">
             <XCircle className="mr-1.5 size-4" />
@@ -139,7 +139,7 @@ export function CancelOrderDialog({
             <select
               id="initiatedBy"
               value={initiatedBy}
-              onChange={(e) => setInitiatedBy(e.target.value as any)}
+              onChange={(e) => setInitiatedBy(e.target.value as typeof initiatedBy)}
               className={selectClassName}
               disabled={busy}
             >

@@ -6,7 +6,7 @@ import { registerPricingRoutes } from './pricing.js';
 
 function createMockDatabase(): DatabaseClient {
   return {
-    db: {} as any,
+    db: {} as DatabaseClient['db'],
     ping: vi.fn().mockResolvedValue(undefined),
     close: vi.fn().mockResolvedValue(undefined),
   };
@@ -20,7 +20,7 @@ describe('Pricing API routes', () => {
       api: {
         getSession: vi.fn().mockResolvedValue(null),
       },
-    } as any;
+    } as unknown as Parameters<typeof registerPricingRoutes>[2];
 
     registerPricingRoutes(app, database, mockAuth);
 
@@ -40,7 +40,7 @@ describe('Pricing API routes', () => {
       api: {
         getSession: vi.fn().mockResolvedValue(null),
       },
-    } as any;
+    } as unknown as Parameters<typeof registerPricingRoutes>[2];
 
     registerPricingRoutes(app, database, mockAuth);
 
@@ -65,7 +65,7 @@ describe('Pricing API routes', () => {
       api: {
         getSession: vi.fn().mockResolvedValue(null),
       },
-    } as any;
+    } as unknown as Parameters<typeof registerPricingRoutes>[2];
 
     registerPricingRoutes(app, database, mockAuth);
 
@@ -89,7 +89,7 @@ describe('Pricing API routes', () => {
       api: {
         getSession: vi.fn().mockResolvedValue(null),
       },
-    } as any;
+    } as unknown as Parameters<typeof registerPricingRoutes>[2];
 
     registerPricingRoutes(app, database, mockAuth);
 

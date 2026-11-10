@@ -1,5 +1,5 @@
 import React from 'react';
-import { Check, Eye, EyeOff, ShieldCheck } from 'lucide-react';
+import { Check, Eye, EyeOff } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 export function ReviewModerationBadge({

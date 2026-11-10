@@ -1,20 +1,12 @@
 'use client';
 
 import * as React from 'react';
-import Link from 'next/link';
-import {
-  AlertCircle,
-  ExternalLink,
-  Flame,
-  Globe,
-  Megaphone,
-  Share2,
-  Tag,
-} from 'lucide-react';
 
-import { StatusBadge } from '@/components/status-badge';
-import { Button } from '@/components/ui/button';
-import { EmptyState, ErrorState, LoadingState, PagePanel, PageSection } from '@/components/ui/page-shell';
+import { Megaphone } from 'lucide-react';
+
+
+
+import { ErrorState, PageSection } from '@/components/ui/page-shell';
 import {
   Table,
   TableBody,
@@ -26,7 +18,6 @@ import {
 import { MetricCard } from '../analytics-kpi-card';
 import {
   formatAnalyticsCount,
-  formatAnalyticsPercent,
   type AnalyticsReportEnvelopeDto,
   type DateRangeSelection,
   type MarketingReportTotalsDto,

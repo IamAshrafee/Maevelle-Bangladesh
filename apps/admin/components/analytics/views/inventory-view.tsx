@@ -2,18 +2,11 @@
 
 import * as React from 'react';
 import Link from 'next/link';
-import {
-  Boxes,
-  Camera,
-  ExternalLink,
-  Layers,
-  MapPin,
-  Warehouse,
-} from 'lucide-react';
+import { Boxes, ExternalLink } from 'lucide-react';
 
-import { StatusBadge } from '@/components/status-badge';
-import { Button } from '@/components/ui/button';
-import { EmptyState, ErrorState, LoadingState, PagePanel, PageSection } from '@/components/ui/page-shell';
+
+
+import { ErrorState, PageSection } from '@/components/ui/page-shell';
 import {
   Table,
   TableBody,
@@ -73,6 +66,7 @@ export function InventoryView({ selection }: InventoryViewProps) {
 
   return (
     <div className="space-y-6">
+      {error ? <ErrorState message={error} /> : null}
       {/* 1. Inventory KPIs */}
       <PageSection
         title="Warehouse Stock Position Snapshot"

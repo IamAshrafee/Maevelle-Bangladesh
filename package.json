@@ -43,7 +43,9 @@
     "dev:all": "concurrently -c \"cyan,magenta,yellow,blue\" -n \"api,worker,admin,storefront\" \"pnpm dev:api\" \"pnpm dev:worker\" \"pnpm dev:admin\" \"pnpm dev:storefront\"",
     "dev": "pnpm db:up && pnpm dev:all",
     "format": "prettier --write .",
-    "format:check": "prettier --check ."
+    "format:check": "prettier --check .",
+    "format:check:regressions": "node scripts/check-formatting.mjs",
+    "test:format-policy": "node --test scripts/check-formatting.test.mjs scripts/format-safety.test.mjs"
   },
   "devDependencies": {
     "@eslint/js": "9.39.5",

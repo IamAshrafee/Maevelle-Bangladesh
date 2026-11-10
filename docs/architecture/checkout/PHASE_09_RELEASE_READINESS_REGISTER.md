@@ -81,3 +81,42 @@ activation is recorded by this register.
 | RC28 P0 Current integrated source | Earlier507/507 broad run and both builds passed; later shared-source508 selection had503 passes/5 failures. Financial selection255 passes; isolated pool recheck passed. | Resolve Shopper/Auth/Wishlist failures and verify settled current-source integration after concurrent auth changes. Do not call earlier green run proof of latest broad closure. PARTIAL. |
 
 RC10/13/23–26 and all applicable existing provider, tax, invoice, accounting, guest recovery, HTTPS, LinuxCI, target compatibility and operational gates remain open. Stored policy review is not activation. No candidate commit/image, persistent migration or deployment was performed by this agent. HEAD advanced externally for Recommendations; dirty Auth and financial work were preserved.
+
+## Phase 09A.3 integration stabilization checkpoint
+
+2026-11-10. **PARTIAL locally; release/activation BLOCKED.** Current baseline is `cf68b53ddbb3321f03570e0b66a627914c1db674` on main plus source-identified uncommitted corrections. Historical entry descriptions above remain historical. [Report and40 outcomes](PHASE_09A3_IMPLEMENTATION_REPORT.md), [exact regression causes](PHASE_09A3_REGRESSION_REGISTER.md), [ledger](phase09a3-evidence/verification.json) and [handoff](PHASE_09A3_NEXT_STAGE_HANDOFF.md).
+
+| Gate | New evidence | Remaining closure |
+|---|---|---|
+| RC28 P0 Current integrated source | **PASS for selected local integration**:646 cases/69 files, no failures/skips, matching before/after executable-source digest. Original four Auth failures reproduce as one obsolete401/403 assertion and three fixture cascades. Pool cold-handshake budget/cleanup corrected and concurrent stress passes. Backend/all types and both production builds pass. | Full-repository lint remains FAIL with778 existing errors. No immutable candidate or Linux/deployed validation; complete browser owner transitions and human/device gates. Overall release remains BLOCKED. |
+| RC27 P1 Financial presentation | Whole/historical exact money, actual-cash/waiver separation, blocked application and privacy projections retain current selected regression. New actual database capability-revocation and foreign-Order reads pass. | **PARTIAL**: no new browser acceptance; runtime launch tool-blocked. Full correction/recovery, owner-switch, allocation and human/operator acceptance remain open. |
+| RC10 / RC23–24 Financial/authoring approvals | Concrete Catalog create/workspace-save/Pricing/promotion/manual/shipping/import writer matrix now available in09A.3 evidence. No policy or Catalog data changed. | **BLOCKED**: actual rounding/tax/invoice/accounting/limits/courier/provider decisions. Approved proposal remains POLICY_BLOCKED; memorandum is not a general-ledger write-off. |
+| RC26 Runtime/schema |75 registered/51 immutable migrations, fresh schema and24 populated upgrades through3226 pass locally. No migration/history changes. | Target compatibility, Linux CI, actual staging migration/recovery/rollback and HTTPS remain NOT VERIFIED. |
+
+No commit, push, publication, persistent migration, VPS/deployment or real financial/provider operation occurred in09A.3. Earlier phase verdicts are not promoted by this scoped checkpoint.
+
+## Phase 09A.4 repository quality checkpoint
+
+2026-11-10. **PARTIAL locally; release/activation BLOCKED.** Current HEAD remains `cf68b53ddbb3321f03570e0b66a627914c1db674` on main plus preserved uncommitted work. [Report/38 outcomes](PHASE_09A4_IMPLEMENTATION_REPORT.md), [lint register](PHASE_09A4_LINT_REGISTER.md), [source-specific ledger](phase09a4-evidence/verification.json) and [handoff](PHASE_09A4_NEXT_STAGE_HANDOFF.md).
+
+| Gate | Current evidence | Remaining closure |
+|---|---|---|
+|RC29 P1 Repository lint|**PASS**: all778 original diagnostics classified/resolved; full lint0 errors/warnings. ESLint configuration/rules/ignores unchanged. Typed boundaries, refresh cleanup, visible failure states, actual review result fields and withdrawal audit correction verified.|Full repository formatting remains FAIL (1,129 reported in later check); no sweeping rewrite of unrelated dirty source. Lint does not certify every Hooks/accessibility/async category beyond enabled rules.|
+|RC28 P0 Current integrated source|**PASS for selected local integration**:806 tests/83 files,0 failures/skips,228.807s; before/after digest `108283ba5131469c95ceaf00109019dff7acfe77904a176462ff774784b1814a`. Both UI production builds, backend/test-inclusive types and tooling pass. Expanded probe failures are individually corrected and retained.|No immutable candidate, actual Linux CI, deployed HTTPS or target compatibility. Current local success is not deployment/activation authorization.|
+|RC27 P1 Financial/browser acceptance|Exact money/cash/waiver, capability/organization boundaries and policy-blocked application preserved in current selection; pool stress passes.|**PARTIAL**: all15 new real-browser owner/security journeys NOT VERIFIED under existing runtime restriction. Human AT/native zoom/physical devices, full operator/correction/recovery and allocation remain open.|
+|RC10/RC23–26 External policy/schema/runtime|No financial/authoring activation, normalization or schema change.75/51 history, fresh schema and24 populated upgrades pass locally; migration source/registry hashes unchanged.|Rounding/tax/invoice/accounting/limits/courier/provider approvals remain BLOCKED; actual staging schema/backup/rollback compatibility and guest proof remain unverified. Memorandum is not a general-ledger write-off.|
+
+97 skill/lock files and76 migration source/registry files remain byte-identical to entry. No commit, push, image publication, persistent migration, deployment, shared VPS operation or real financial/provider/marketing activation occurred. All earlier overall PARTIAL verdicts and applicable approval gates remain.
+
+## Phase 09A.5 controlled local acceptance
+
+2026-11-11. **PARTIAL; release and financial activation remain BLOCKED.** [Report/40 outcomes](PHASE_09A5_IMPLEMENTATION_REPORT.md), [formatting register](PHASE_09A5_FORMATTING_REGISTER.md), [scorecard/blockers](PHASE_09A5_FINAL_LOCAL_ACCEPTANCE.md) and [authorization handoff](PHASE_09A5_NEXT_STAGE_HANDOFF.md).
+
+| Gate | Current local evidence | Remaining closure |
+|---|---|---|
+|RC29 Repository quality|Full lint0 errors/warnings. Seven guarded formatting-only files and package tooling reduce full formatter failures1,129→1,121. New/changed formatting violations fail the content-baseline gate; no formatter/ignore weakening.|Full format **FAIL**; separate reviewed module batches. Historical migration bytes remain protected.|
+|RC28 Current source|806/806 cases across83 files,0 failures/skips,238.633s, matching digest `d343149828f4e5cc7a40fd7850671519e5035b8e02ff337e125b7e6e5b26ed0d`. Both builds/types, migrations/security/tooling pass. The mixed-clock receipt fixture is corrected, production future-date guard unchanged.|Local dirty-source review only; no candidate SHA/digests or actual Linux CI. Nonpublishing validation now gates lint, format regressions and expanded coverage before publishing.|
+|RC01/05/06/27 Browser/owner/recovery|Current authority, financial privacy, expiry and exact amounts preserved in lower-layer selection. Guest grant remains original session or commitment+1h, whichever is earlier.|Successful four-path Checkout and independent guest recovery remain BLOCKED. All15 new real-browser journeys NOT VERIFIED under existing restriction; human/device/exception UX acceptance open.|
+|RC10/23–26 Policies/schema/target|75/51 history, fresh and24 populated upgrade fixtures locally through3226; no migration/hash-anchor change. Actual cash and noncash waiver stay separate; resolver remains POLICY_BLOCKED.|Owner/qualified tax/accounting/provider/courier approvals and target old/new image/schema/recovery/HTTPS validation remain separate gates. No integer-authoring or persistent normalization.|
+
+No commit, push, external CI trigger, publication, deployment, persistent migration, host/provider/financial/marketing activity. No earlier overall PARTIAL verdict is promoted. The [operational runbook](PHASE_09_OPERATIONAL_RUNBOOK.md) remains independently scoped;09A.5 confers no execution authority.

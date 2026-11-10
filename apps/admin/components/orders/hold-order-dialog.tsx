@@ -25,7 +25,7 @@ export function HoldOrderDialog({
   readonly orderId: string;
   readonly currentVersion: number;
   readonly onCompleted?: () => void;
-  readonly trigger?: React.ReactNode;
+  readonly trigger?: React.ComponentProps<typeof DialogTrigger>['render'];
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
@@ -58,7 +58,7 @@ export function HoldOrderDialog({
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger render={trigger ? (trigger as any) : undefined}>
+      <DialogTrigger render={trigger}>
         {!trigger && <Button variant="outline" size="sm">Put On Hold</Button>}
       </DialogTrigger>
       <DialogContent>

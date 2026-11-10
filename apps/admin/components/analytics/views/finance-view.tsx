@@ -2,22 +2,12 @@
 
 import * as React from 'react';
 import Link from 'next/link';
-import {
-  AlertTriangle,
-  Banknote,
-  CircleDollarSign,
-  CreditCard,
-  ExternalLink,
-  Landmark,
-  Receipt,
-  Scale,
-  ShieldAlert,
-} from 'lucide-react';
+import { AlertTriangle, ExternalLink, ShieldAlert } from 'lucide-react';
 
 import { useAdminCapability } from '@/components/admin-capabilities';
 import { StatusBadge } from '@/components/status-badge';
-import { Button } from '@/components/ui/button';
-import { EmptyState, ErrorState, LoadingState, PagePanel, PageSection } from '@/components/ui/page-shell';
+
+import { ErrorState, PageSection } from '@/components/ui/page-shell';
 import {
   Table,
   TableBody,
@@ -28,7 +18,6 @@ import {
 } from '@/components/ui/table';
 import { MetricCard } from '../analytics-kpi-card';
 import {
-  calculateComparisonChange,
   formatAnalyticsCount,
   formatAnalyticsMoney,
   type AnalyticsReportEnvelopeDto,
@@ -120,10 +109,8 @@ export function FinanceView({ selection }: FinanceViewProps) {
     0,
   );
 
-  const refundFacts = paymentTotals.filter(
-    (p) => p.fact_type === 'REFUND' && p.status === 'COMPLETED',
-  );
-  const refundAmount = refundFacts.reduce((sum, p) => sum + Number(p.amount || 0), 0);
+
+
 
   // Sales totals
   const salesTotals = salesReport?.totals?.[0];

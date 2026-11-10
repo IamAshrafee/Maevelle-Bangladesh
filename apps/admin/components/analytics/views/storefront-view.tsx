@@ -1,20 +1,12 @@
 'use client';
 
 import * as React from 'react';
-import Link from 'next/link';
-import {
-  Activity,
-  AlertCircle,
-  Eye,
-  MousePointerClick,
-  ShoppingBag,
-  ShoppingCart,
-  Users,
-} from 'lucide-react';
 
-import { StatusBadge } from '@/components/status-badge';
-import { Button } from '@/components/ui/button';
-import { EmptyState, ErrorState, LoadingState, PagePanel, PageSection } from '@/components/ui/page-shell';
+import { Activity } from 'lucide-react';
+
+
+
+import { ErrorState, PagePanel, PageSection } from '@/components/ui/page-shell';
 import { StorefrontFunnelChart } from '../analytics-charts';
 import { MetricCard } from '../analytics-kpi-card';
 import {

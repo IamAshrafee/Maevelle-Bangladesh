@@ -10,12 +10,11 @@ import {
   Sliders,
   Ban,
   ShieldCheck,
-  Mail,
   AlertTriangle,
   Settings,
 } from 'lucide-react';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
-import { Button } from '@/components/ui/button';
+
 import { RefreshButton } from '@/components/ui/refresh-button';
 import { Badge } from '@/components/ui/badge';
 import { EmailOverviewTab } from './email-overview-tab';

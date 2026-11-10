@@ -1,4 +1,4 @@
-import { fetchApiData, apiRequest } from '@/lib/api';
+import { fetchApiData } from '@/lib/api';
 import type {
   AnalyticsIntegrityFindingDto,
   AnalyticsMetricDefinitionDto,

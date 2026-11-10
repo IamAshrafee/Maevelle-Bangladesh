@@ -1,7 +1,7 @@
 'use client';
 
 import * as React from 'react';
-import { Plus, Search, ArrowRight, Trash2, Edit3, Sparkles, Filter, X } from 'lucide-react';
+import { Plus, Search, ArrowRight, Trash2, Edit3, Sparkles, X } from 'lucide-react';
 import {
   Table,
   TableBody,

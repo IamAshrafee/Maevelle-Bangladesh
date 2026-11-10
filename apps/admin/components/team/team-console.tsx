@@ -1,37 +1,15 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import {
-  Activity,
-  AlertCircle,
-  ArrowRightLeft,
-  KeyRound,
-  Layers,
-  Mail,
-  Shield,
-  ShieldCheck,
-  UserCheck,
-  UserPlus,
-  Users,
-  UserX,
-} from 'lucide-react';
+import { Activity, Layers, Mail, Shield, Users } from 'lucide-react';
 
 import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
+
 import { RefreshButton } from '@/components/ui/refresh-button';
-import {
-  Stats,
-  StatsCard,
-  StatsDescription,
-  StatsTitle,
-  StatsValue,
-} from '@/components/ui/stats';
+import { Stats, StatsCard, StatsDescription, StatsTitle, StatsValue } from '@/components/ui/stats';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
-import {
-  OperationalFeedback,
-  OperationalPageHeader,
-} from '../operational-worklist';
+import { OperationalFeedback, OperationalPageHeader } from '../operational-worklist';
 import { TeamAuditTimeline } from './team-audit-timeline';
 import { TeamProvider, useTeam } from './team-context';
 import { TeamInvitationsList } from './team-invitations-list';
@@ -39,19 +17,10 @@ import { TeamInviteDialog } from './team-invite-dialog';
 import { TeamMembersList } from './team-members-list';
 import { TeamOwnerTransferDialog } from './team-owner-transfer-dialog';
 import { TeamRolesPresets } from './team-roles-presets';
-import type {
-  MembershipInvitationDto,
-  TeamMemberListItemDto,
-} from './team-types';
+import type { MembershipInvitationDto, TeamMemberListItemDto } from './team-types';
 
 function TeamConsoleContent() {
-  const {
-    activeActor,
-    canInvite,
-    isReadOnly,
-    request,
-    reloadMetadata,
-  } = useTeam();
+  const { activeActor, isReadOnly, request, reloadMetadata } = useTeam();
 
   const [activeTab, setActiveTab] = useState<string>('members');
   const [members, setMembers] = useState<readonly TeamMemberListItemDto[]>([]);

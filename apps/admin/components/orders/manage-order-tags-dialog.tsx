@@ -1,7 +1,7 @@
 'use client';
 
-import { Check, CircleAlert, Loader2, Plus, Tag, Trash2 } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { Check, CircleAlert, Loader2, Plus, Tag } from 'lucide-react';
+import { useState } from 'react';
 
 import type { OrderDetailDto, OrderTagDto } from '@maevelle/contracts';
 

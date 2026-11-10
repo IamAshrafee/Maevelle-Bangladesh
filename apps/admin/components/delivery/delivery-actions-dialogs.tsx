@@ -2,13 +2,10 @@
 
 import {
   AlertCircle,
-  AlertTriangle,
-  Calendar,
   CheckCircle2,
   Clock,
   HelpCircle,
   Loader2,
-  RotateCcw,
   ShieldAlert,
   XCircle,
 } from 'lucide-react';
@@ -598,7 +595,7 @@ export function OpenClaimDialog({
               id="claimReason"
               className="w-full rounded-md border bg-background px-3 py-2 text-xs focus:ring-2 focus:ring-primary"
               value={reason}
-              onChange={(e) => setReason(e.target.value as any)}
+              onChange={(e) => setReason(e.target.value as typeof reason)}
             >
               <option value="LOST">Lost in Transit (Courier confirmed parcel missing)</option>
               <option value="DAMAGED">Damaged in Transit (Goods damaged while in courier custody)</option>
@@ -735,7 +732,7 @@ export function TransitionClaimDialog({
               id="nextStatusSelect"
               className="w-full rounded-md border bg-background px-3 py-2 text-xs focus:ring-2 focus:ring-primary"
               value={nextStatus}
-              onChange={(e) => setNextStatus(e.target.value as any)}
+              onChange={(e) => setNextStatus(e.target.value as typeof nextStatus)}
             >
               <option value="SUBMITTED">SUBMITTED (Claim sent to courier)</option>
               <option value="APPROVED">APPROVED (Courier accepted liability)</option>

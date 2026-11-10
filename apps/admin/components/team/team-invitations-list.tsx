@@ -1,16 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import {
-  AlertCircle,
-  Clock,
-  Eye,
-  Mail,
-  RefreshCw,
-  Search,
-  ShieldAlert,
-  Trash2,
-} from 'lucide-react';
+import { Eye, Mail, RefreshCw, Search, ShieldAlert, Trash2 } from 'lucide-react';
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -28,11 +19,7 @@ import { Textarea } from '@/components/ui/textarea';
 
 import { StatusBadge } from '../status-badge';
 import { useTeam } from './team-context';
-import {
-  formatIamErrorMessage,
-  getRoleSummary,
-  type MembershipInvitationDto,
-} from './team-types';
+import { formatIamErrorMessage, getRoleSummary, type MembershipInvitationDto } from './team-types';
 
 export function TeamInvitationsList({
   invitations,

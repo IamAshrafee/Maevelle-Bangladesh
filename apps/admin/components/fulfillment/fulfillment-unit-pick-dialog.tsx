@@ -1,16 +1,7 @@
 'use client';
 
 import React, { useState, useMemo } from 'react';
-import {
-  ScanBarcode,
-  CheckCircle2,
-  AlertTriangle,
-  AlertCircle,
-  Loader2,
-  PackageCheck,
-  X,
-  Trash2,
-} from 'lucide-react';
+import { CheckCircle2, AlertCircle, Loader2, PackageCheck, Trash2 } from 'lucide-react';
 import type { FulfillmentDto, InventoryUnitDto } from '@maevelle/contracts';
 import {
   Dialog,
@@ -47,7 +38,7 @@ export function FulfillmentUnitPickDialog({
   const [allocations, setAllocations] = useState<readonly PickedAllocation[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [successMsg, setSuccessMsg] = useState<string | null>(null);
+  const [, setSuccessMsg] = useState<string | null>(null);
 
   // Verification requirements per line
   const lineRequirements = useMemo(() => {
@@ -63,7 +54,7 @@ export function FulfillmentUnitPickDialog({
     });
   }, [fulfillment.lines, allocations]);
 
-  const allLinesSatisfied = lineRequirements.every((r) => r.isSatisfied);
+
 
   // Scan handler
   const handleCodeScanned = async (code: string) => {

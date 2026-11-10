@@ -1,18 +1,7 @@
 'use client';
 
 import { type FormEvent, useCallback, useEffect, useState } from 'react';
-import {
-  AlertCircle,
-  CheckCircle2,
-  Clock,
-  HelpCircle,
-  KeyRound,
-  RefreshCw,
-  Shield,
-  ShieldAlert,
-  ShieldCheck,
-  Users,
-} from 'lucide-react';
+import { AlertCircle, CheckCircle2, Clock, KeyRound, RefreshCw, ShieldCheck } from 'lucide-react';
 
 import type {
   ApiEnvelope,
@@ -186,9 +175,7 @@ export function TwoFactorPolicyCard() {
     );
   }
 
-  const isDirty = Boolean(
-    policy && (mode !== policy.mode || gracePeriodHours !== policy.gracePeriodHours),
-  );
+
 
   return (
     <SettingsCard

@@ -2,17 +2,12 @@
 
 import {
   AlertCircle,
-  ArrowRight,
-  Boxes,
-  Building,
   CheckCircle2,
-  ExternalLink,
   Info,
   Key,
   Link2,
   Loader2,
   MapPin,
-  Phone,
   Power,
   RefreshCw,
   Send,
@@ -30,14 +25,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { RefreshButton } from '@/components/ui/refresh-button';
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardFooter,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import {
   Dialog,
   DialogContent,
@@ -45,7 +33,6 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';

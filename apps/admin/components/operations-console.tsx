@@ -7,16 +7,9 @@ import type { ApiEnvelope } from '@maevelle/contracts';
 
 import { OperationalFeedback, OperationalPageHeader } from './operational-worklist';
 import { StatusBadge } from './status-badge';
-import { Button } from '@/components/ui/button';
+
 import { RefreshButton } from '@/components/ui/refresh-button';
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
+
 
 type Attention = { domain: string; reason: string; severity: string; count: string; href: string };
 type SearchResult = { kind: string; label: string; detail: string; href: string };

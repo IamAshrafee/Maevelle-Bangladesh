@@ -2,19 +2,11 @@
 
 import * as React from 'react';
 import Link from 'next/link';
-import {
-  CheckCircle2,
-  Clock,
-  ExternalLink,
-  RotateCcw,
-  ShieldAlert,
-  Truck,
-  XCircle,
-} from 'lucide-react';
+import { Clock, ExternalLink } from 'lucide-react';
 
 import { StatusBadge } from '@/components/status-badge';
-import { Button } from '@/components/ui/button';
-import { EmptyState, ErrorState, LoadingState, PagePanel, PageSection } from '@/components/ui/page-shell';
+
+import { ErrorState, PageSection } from '@/components/ui/page-shell';
 import {
   Table,
   TableBody,
@@ -65,7 +57,7 @@ export function DeliveryView({ selection }: DeliveryViewProps) {
 
   const rows = report?.totals ?? [];
   const totalDeliveries = rows.reduce((sum, r) => sum + Number(r.deliveries || 0), 0);
-  const totalAttempts = rows.reduce((sum, r) => sum + Number(r.attempts || 0), 0);
+
   const deliveredRow = rows.find((r) => r.outcome_status === 'DELIVERED');
   const failedRow = rows.find((r) => r.outcome_status === 'FAILED');
 

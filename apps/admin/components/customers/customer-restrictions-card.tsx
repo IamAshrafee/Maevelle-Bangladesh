@@ -1,15 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import {
-  AlertCircle,
-  Ban,
-  Clock,
-  History,
-  ShieldAlert,
-  ShieldCheck,
-  Undo2,
-} from 'lucide-react';
+import { Clock, History, ShieldAlert, ShieldCheck, Undo2 } from 'lucide-react';
 import type { CustomerRestrictionDto } from '@maevelle/contracts';
 
 import { Button } from '@/components/ui/button';

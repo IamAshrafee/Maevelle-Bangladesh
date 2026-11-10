@@ -121,8 +121,14 @@ function extractItemsFromChildren(
       for (const child of node) traverse(child);
       return;
     }
-    if (React.isValidElement(node)) {
-      const props = node.props as Record<string, any> | undefined;
+    if (
+      React.isValidElement<{
+        value?: unknown;
+        label?: React.ReactNode;
+        children?: React.ReactNode;
+      }>(node)
+    ) {
+      const props = node.props;
       if (props && 'value' in props && props.value !== undefined && props.value !== null) {
         const val = String(props.value);
         let label = props.label;
@@ -187,12 +193,14 @@ function SelectValue({ className, ...props }: SelectPrimitive.Value.Props) {
   return (
     <SelectPrimitive.Value
       data-slot="select-value"
-      className={cn('flex min-w-0 flex-1 items-center gap-2 truncate text-left font-normal', className)}
+      className={cn(
+        'flex min-w-0 flex-1 items-center gap-2 truncate text-left font-normal',
+        className,
+      )}
       {...props}
     />
   );
 }
-
 
 type SelectTriggerProps = SelectPrimitive.Trigger.Props &
   VariantProps<typeof triggerVariants> & {
@@ -216,7 +224,11 @@ function SelectTrigger({
     <SelectPrimitive.Trigger
       data-slot="select-trigger"
       // group lets children respond to aria-expanded state on the trigger
-      className={cn(triggerVariants({ size: resolvedSize, status: resolvedStatus }), 'group', className)}
+      className={cn(
+        triggerVariants({ size: resolvedSize, status: resolvedStatus }),
+        'group',
+        className,
+      )}
       {...props}
     >
       {children ? (

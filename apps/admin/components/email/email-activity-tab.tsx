@@ -2,27 +2,14 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import {
-  Search,
-  Filter,
-  Eye,
-  Send,
-  ExternalLink,
-  ChevronLeft,
-  ChevronRight,
-  ShieldAlert,
-} from 'lucide-react';
+import { Search, Filter, Eye, ExternalLink, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { RefreshButton } from '@/components/ui/refresh-button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { EmailStatusBadge } from './email-status-badge';
-import {
-  type EmailNotificationRowDto,
-  formatDateTime,
-  eventDisplayLabels,
-} from './email-types';
+import { type EmailNotificationRowDto, formatDateTime, eventDisplayLabels } from './email-types';
 
 interface EmailActivityTabProps {
   readonly emails: readonly EmailNotificationRowDto[];

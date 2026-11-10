@@ -1,16 +1,12 @@
 import { sql } from 'kysely';
 
-import {
-  generateOpaqueToken,
-  hashToken,
-} from '@maevelle/security';
+import { generateOpaqueToken } from '@maevelle/security';
 
 import {
   appendIamAudit,
   appendIamOutbox,
   enqueueMemberSecurityNotification,
   type IamAccountActor,
-  type IamActor,
   type IamDatabase,
   IamError,
 } from './iam-common.js';
@@ -20,17 +16,7 @@ function normalizedEmail(email: string): string {
   return email.trim().toLowerCase();
 }
 
-function resolveActor(
-  userId: string,
-  membershipId?: string | null,
-  organizationId?: string | null,
-): IamAccountActor {
-  return {
-    userId,
-    membershipId: membershipId ?? null,
-    organizationId: organizationId ?? null,
-  };
-}
+
 
 async function resolveActorContext(
   db: IamDatabase,

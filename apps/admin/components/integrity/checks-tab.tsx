@@ -1,22 +1,12 @@
 'use client';
 
 import * as React from 'react';
-import {
-  Activity,
-  CheckCircle2,
-  Clock,
-  Layers,
-  Play,
-  Search,
-  Shield,
-  Wrench,
-  X,
-} from 'lucide-react';
+import { Clock, Play, Search, Shield, Wrench, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { NativeSelect } from '@/components/ui/native-select';
-import { StatusBadge } from '@/components/status-badge';
-import { PagePanel, PageSection } from '@/components/ui/page-shell';
+
+import { PagePanel } from '@/components/ui/page-shell';
 import type { IntegrityCheckDto } from '@/lib/integrity/types';
 
 interface ChecksTabProps {
@@ -26,12 +16,7 @@ interface ChecksTabProps {
   onRunSingleCheck: (checkId: string) => void;
 }
 
-export function ChecksTab({
-  checks,
-  loading,
-  canRunChecks,
-  onRunSingleCheck,
-}: ChecksTabProps) {
+export function ChecksTab({ checks, canRunChecks, onRunSingleCheck }: ChecksTabProps) {
   const [search, setSearch] = React.useState('');
   const [selectedModule, setSelectedModule] = React.useState('ALL');
   const [selectedCost, setSelectedCost] = React.useState('ALL');

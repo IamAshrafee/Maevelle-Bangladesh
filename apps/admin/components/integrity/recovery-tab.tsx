@@ -1,35 +1,14 @@
 'use client';
 
 import * as React from 'react';
-import {
-  AlertTriangle,
-  ArrowRight,
-  CheckCircle2,
-  Info,
-  Layers,
-  Lock,
-  Shield,
-  ShieldAlert,
-  ShieldCheck,
-  Wrench,
-} from 'lucide-react';
+import { CheckCircle2, Info, ShieldCheck, Wrench } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { RefreshButton } from '@/components/ui/refresh-button';
 import { StatusBadge } from '@/components/status-badge';
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
+
 import { PagePanel, PageSection } from '@/components/ui/page-shell';
 import { useAdminCapability } from '@/components/admin-capabilities';
-import type {
-  IntegrityFindingDetailDto,
-  IntegrityFindingListItemDto,
-} from '@/lib/integrity/types';
+import type { IntegrityFindingDetailDto, IntegrityFindingListItemDto } from '@/lib/integrity/types';
 
 interface RecoveryTabProps {
   repairableFindings: readonly IntegrityFindingListItemDto[];
@@ -39,13 +18,7 @@ interface RecoveryTabProps {
   onOpenFinding: (finding: IntegrityFindingListItemDto) => void;
 }
 
-export function RecoveryTab({
-  repairableFindings,
-  loading,
-  onRefresh,
-  onStartRepair,
-  onOpenFinding,
-}: RecoveryTabProps) {
+export function RecoveryTab({ repairableFindings, loading, onRefresh, onOpenFinding }: RecoveryTabProps) {
   const canRepair = useAdminCapability('admin.integrity.repair');
 
   return (

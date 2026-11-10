@@ -36,7 +36,15 @@ function config(databaseUrl: string, versionedRecovery = false): RuntimeConfig {
     workerHeartbeatIntervalMs: 30_000,
     betterAuthSecret: 'test-only-better-auth-secret-that-is-long-enough',
     authEncryptionKey: 'MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=',
-    ...(versionedRecovery ? { wishlistShareRecovery: { activeId: 'synthetic-2026', roots: { 'synthetic-2026': Buffer.alloc(32, 39).toString('base64') }, readLegacy: true } } : {}),
+    ...(versionedRecovery
+      ? {
+          wishlistShareRecovery: {
+            activeId: 'synthetic-2026',
+            roots: { 'synthetic-2026': Buffer.alloc(32, 39).toString('base64') },
+            readLegacy: true,
+          },
+        }
+      : {}),
     authBaseUrl: 'http://localhost:3000',
     authTrustedOrigins: [origin],
     authTotpIssuer: 'Maevelle',
@@ -206,9 +214,24 @@ describe('shopper realm and private Wishlist', () => {
     });
     expect(session.statusCode).toBe(200);
     expect(session.json().data.partition).toMatch(/^[A-Za-z0-9_-]{43}$/);
-    for (const report of ['summary','activity','products','categories','sharing','operations']) {
-      const denied = await app.inject({ method: 'GET', url: `/admin/analytics/wishlist/${report}?from=2026-11-01&to=2026-11-01`, headers: { cookie: shopperCookie } });
-      expect(denied.statusCode).toBe(403);
+    for (const report of [
+      'summary',
+      'activity',
+      'products',
+      'categories',
+      'sharing',
+      'operations',
+    ]) {
+      const denied = await app.inject({
+        method: 'GET',
+        url: `/admin/analytics/wishlist/${report}?from=2026-11-01&to=2026-11-01`,
+        headers: { cookie: shopperCookie },
+      });
+      // A shopper cookie establishes no Admin session, even for a shared IAM user.
+      expect(denied.statusCode).toBe(401);
+      expect(denied.json()).toEqual({
+        error: { code: 'AUTH_REQUIRED', message: 'Sign in to continue.' },
+      });
     }
     const account = await sql<{ customer_id: string; user_id: string }>`
       select customer_id::text,user_id::text from customers.customer_accounts
@@ -219,21 +242,47 @@ describe('shopper realm and private Wishlist', () => {
     customerId = account.rows[0]!.customer_id;
     shopperUserId = account.rows[0]!.user_id;
     const analyticsPath = '/admin/analytics/wishlist/summary?from=2026-11-01&to=2026-11-01';
-    expect((await app.inject({ method: 'GET', url: analyticsPath, headers: { cookie: adminCookie } })).statusCode).toBe(403);
+    expect(
+      (await app.inject({ method: 'GET', url: analyticsPath, headers: { cookie: adminCookie } }))
+        .statusCode,
+    ).toBe(403);
     const membership = await sql<{ id: string }>`insert into iam.organization_memberships
       (organization_id,user_id,membership_type,status,display_name,activated_at)
-      values (${organizationId},${shopperUserId}::uuid,'STANDARD','ACTIVE','Analytics test',now()) returning id::text`.execute(database.db);
+      values (${organizationId},${shopperUserId}::uuid,'STANDARD','ACTIVE','Analytics test',now()) returning id::text`.execute(
+      database.db,
+    );
     await sql`insert into iam.membership_capability_grants(membership_id,capability_code)
       values (${membership.rows[0]!.id}::uuid,'analytics.view')`.execute(database.db);
-    for (const report of ['summary','activity','products','categories','sharing','operations']) {
-      const authorized = await app.inject({ method: 'GET', url: `/admin/analytics/wishlist/${report}?from=2026-11-01&to=2026-11-01`, headers: { cookie: adminCookie } });
+    for (const report of [
+      'summary',
+      'activity',
+      'products',
+      'categories',
+      'sharing',
+      'operations',
+    ]) {
+      const authorized = await app.inject({
+        method: 'GET',
+        url: `/admin/analytics/wishlist/${report}?from=2026-11-01&to=2026-11-01`,
+        headers: { cookie: adminCookie },
+      });
       expect(authorized.statusCode, authorized.body).toBe(200);
-      const shopperDenied = await app.inject({ method: 'GET', url: `/admin/analytics/wishlist/${report}?from=2026-11-01&to=2026-11-01`, headers: { cookie: shopperCookie } });
-      expect(shopperDenied.statusCode).toBe(403);
+      const shopperDenied = await app.inject({
+        method: 'GET',
+        url: `/admin/analytics/wishlist/${report}?from=2026-11-01&to=2026-11-01`,
+        headers: { cookie: shopperCookie },
+      });
+      expect(shopperDenied.statusCode).toBe(401);
+      expect(shopperDenied.json()).toEqual({
+        error: { code: 'AUTH_REQUIRED', message: 'Sign in to continue.' },
+      });
     }
-    await sql`delete from iam.membership_capability_grants where membership_id=${membership.rows[0]!.id}::uuid`.execute(database.db);
-    await sql`update iam.organization_memberships set status='DISABLED' where id=${membership.rows[0]!.id}::uuid`.execute(database.db);
-
+    await sql`delete from iam.membership_capability_grants where membership_id=${membership.rows[0]!.id}::uuid`.execute(
+      database.db,
+    );
+    await sql`update iam.organization_memberships set status='DISABLED' where id=${membership.rows[0]!.id}::uuid`.execute(
+      database.db,
+    );
 
     const type = await sql<{ id: string }>`
       insert into catalog.product_types (organization_id,code,name)
@@ -361,7 +410,9 @@ describe('shopper realm and private Wishlist', () => {
 
   it('documents provider-idempotent concurrent verification without issuing or transferring sessions', async () => {
     const link = new URL(mailbox[0]!.text.match(/https?:\/\/\S+/)![0]);
-    const results = await Promise.all([1, 2].map(() => app.inject({ method: 'GET', url: `${link.pathname}${link.search}` })));
+    const results = await Promise.all(
+      [1, 2].map(() => app.inject({ method: 'GET', url: `${link.pathname}${link.search}` })),
+    );
     for (const result of results) {
       expect(result.statusCode).toBe(302);
       expect(result.headers.location).not.toContain('error=');
@@ -371,20 +422,47 @@ describe('shopper realm and private Wishlist', () => {
     link.searchParams.set('token', `${token.slice(0, -8)}AAAAAAAA`);
     const modified = await app.inject({ method: 'GET', url: `${link.pathname}${link.search}` });
     expect(modified.headers.location).toContain('INVALID_TOKEN');
-    expect((await app.inject({ method: 'GET', url: '/storefront/v1/wishlist' })).statusCode).toBe(401);
+    expect((await app.inject({ method: 'GET', url: '/storefront/v1/wishlist' })).statusCode).toBe(
+      401,
+    );
     // This is evidence of the mismatch, not a test claiming strict replay rejection.
   });
 
   it('rejects read and mutation after the configured 12-hour session TTL without shortening settings', async () => {
     const login = await post('/shopper-auth/sign-in/email', { email, password });
     const activeCookie = cookie(login, 'maevelle-shopper.session_token');
-    const product = (await sql<{ id: string }>`select id::text from catalog.products where organization_id=${organizationId} and handle='saved'`.execute(database.db)).rows[0]!;
+    const product = (
+      await sql<{
+        id: string;
+      }>`select id::text from catalog.products where organization_id=${organizationId} and handle='saved'`.execute(
+        database.db,
+      )
+    ).rows[0]!;
     vi.useFakeTimers({ toFake: ['Date'] });
     vi.setSystemTime(Date.now() + 12 * 60 * 60 * 1000 + 1000);
     try {
-      expect((await app.inject({ method: 'GET', url: '/storefront/v1/wishlist', headers: { cookie: activeCookie } })).statusCode).toBe(401);
-      expect((await app.inject({ method: 'PUT', url: `/storefront/v1/wishlist/items/${product.id}`, headers: { cookie: activeCookie, origin, 'content-type': 'application/json' }, payload: {} })).statusCode).toBe(401);
-    } finally { vi.useRealTimers(); }
+      expect(
+        (
+          await app.inject({
+            method: 'GET',
+            url: '/storefront/v1/wishlist',
+            headers: { cookie: activeCookie },
+          })
+        ).statusCode,
+      ).toBe(401);
+      expect(
+        (
+          await app.inject({
+            method: 'PUT',
+            url: `/storefront/v1/wishlist/items/${product.id}`,
+            headers: { cookie: activeCookie, origin, 'content-type': 'application/json' },
+            payload: {},
+          })
+        ).statusCode,
+      ).toBe(401);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('resets a password with a single-use capability and invalidates earlier sessions', async () => {
@@ -462,16 +540,34 @@ describe('shopper realm and private Wishlist', () => {
       (organization_id,product_id,handle,title,search_text,published_at)
       values (${organizationId},${productId}::uuid,'saved','Saved','Saved',now())
       on conflict (organization_id,product_id) do nothing`.execute(database.db);
-    const operationId = () => Buffer.from(crypto.getRandomValues(new Uint8Array(32))).toString('base64url');
+    const operationId = () =>
+      Buffer.from(crypto.getRandomValues(new Uint8Array(32))).toString('base64url');
     const expiresAt = new Date(Date.now() + 30 * 86400_000).toISOString();
     const guestBody = { productIds: [productId], operationId: operationId(), expiresAt };
-    expect((await post('/storefront/v1/wishlist/shares', guestBody, undefined, 'https://attacker.example')).statusCode).toBe(403);
+    expect(
+      (
+        await post(
+          '/storefront/v1/wishlist/shares',
+          guestBody,
+          undefined,
+          'https://attacker.example',
+        )
+      ).statusCode,
+    ).toBe(403);
     const guestResponse = await post('/storefront/v1/wishlist/shares', guestBody);
     expect(guestResponse.statusCode).toBe(200);
-    const guest = guestResponse.json().data as { id: string; viewToken: string; manageToken: string };
+    const guest = guestResponse.json().data as {
+      id: string;
+      viewToken: string;
+      manageToken: string;
+    };
     expect(guest.viewToken).not.toBe(guest.manageToken);
-    expect((await post('/storefront/v1/wishlist/shares', guestBody)).json().data).toEqual(guestResponse.json().data);
-    expect((await post('/storefront/v1/wishlist/shares', { ...guestBody, productIds: [] })).statusCode).toBe(400);
+    expect((await post('/storefront/v1/wishlist/shares', guestBody)).json().data).toEqual(
+      guestResponse.json().data,
+    );
+    expect(
+      (await post('/storefront/v1/wishlist/shares', { ...guestBody, productIds: [] })).statusCode,
+    ).toBe(400);
     const opened = await post('/storefront/v1/wishlist/shares/open', { token: guest.viewToken });
     expect(opened.statusCode).toBe(200);
     expect(opened.headers['cache-control']).toContain('no-store');
@@ -480,79 +576,236 @@ describe('shopper realm and private Wishlist', () => {
     expect(JSON.stringify(opened.json())).not.toContain(guest.manageToken);
     expect(JSON.stringify(opened.json())).not.toContain(customerId);
     expect(JSON.stringify(opened.json())).not.toContain(email);
-    expect((await post('/storefront/v1/wishlist/shares/manage', { token: guest.viewToken, action: 'revoke' })).statusCode).toBe(404);
+    expect(
+      (
+        await post('/storefront/v1/wishlist/shares/manage', {
+          token: guest.viewToken,
+          action: 'revoke',
+        })
+      ).statusCode,
+    ).toBe(404);
     const renewedAt = new Date(Date.now() + 40 * 86400_000).toISOString();
-    const renewed = await post('/storefront/v1/wishlist/shares/manage', { token: guest.manageToken, action: 'renew', expiresAt: renewedAt });
+    const renewed = await post('/storefront/v1/wishlist/shares/manage', {
+      token: guest.manageToken,
+      action: 'renew',
+      expiresAt: renewedAt,
+    });
     expect(renewed.statusCode).toBe(200);
-    const renewedAgain = await post('/storefront/v1/wishlist/shares/manage', { token: guest.manageToken, action: 'renew', expiresAt: renewedAt });
+    const renewedAgain = await post('/storefront/v1/wishlist/shares/manage', {
+      token: guest.manageToken,
+      action: 'renew',
+      expiresAt: renewedAt,
+    });
     expect(renewedAgain.json().data.version).toBe(renewed.json().data.version);
-    const accountBody = { operationId: operationId(), expiresAt, selection: 'selected', items: [{ productId }] };
-    expect((await post('/storefront/v1/wishlist/account-shares', accountBody)).statusCode).toBe(401);
-    expect((await post('/storefront/v1/wishlist/account-shares', accountBody, shopperCookie, 'https://attacker.example')).statusCode).toBe(403);
-    const created = await post('/storefront/v1/wishlist/account-shares', accountBody, shopperCookie);
+    const accountBody = {
+      operationId: operationId(),
+      expiresAt,
+      selection: 'selected',
+      items: [{ productId }],
+    };
+    expect((await post('/storefront/v1/wishlist/account-shares', accountBody)).statusCode).toBe(
+      401,
+    );
+    expect(
+      (
+        await post(
+          '/storefront/v1/wishlist/account-shares',
+          accountBody,
+          shopperCookie,
+          'https://attacker.example',
+        )
+      ).statusCode,
+    ).toBe(403);
+    const created = await post(
+      '/storefront/v1/wishlist/account-shares',
+      accountBody,
+      shopperCookie,
+    );
     expect(created.statusCode).toBe(200);
-    const accountShare = created.json().data as { id: string; viewToken: string; itemCount: number };
+    const accountShare = created.json().data as {
+      id: string;
+      viewToken: string;
+      itemCount: number;
+    };
     accountShareId = accountShare.id;
     expect(accountShare.itemCount).toBe(1);
-    expect((await post('/storefront/v1/wishlist/account-shares', accountBody, shopperCookie)).json().data).toEqual(accountShare);
-    const all = await post('/storefront/v1/wishlist/account-shares',
-      { operationId: operationId(), expiresAt, selection: 'all', items: [] }, shopperCookie);
+    expect(
+      (await post('/storefront/v1/wishlist/account-shares', accountBody, shopperCookie)).json()
+        .data,
+    ).toEqual(accountShare);
+    const all = await post(
+      '/storefront/v1/wishlist/account-shares',
+      { operationId: operationId(), expiresAt, selection: 'all', items: [] },
+      shopperCookie,
+    );
     expect(all.statusCode).toBe(200);
     expect(all.json().data.itemCount).toBe(1);
     const otherEmail = `other-share-${crypto.randomUUID()}@example.test`;
-    expect((await post('/shopper-auth/sign-up/email', {
-      name: 'Other shopper', email: otherEmail, password,
-      callbackURL: `${origin}/account?verified=1`,
-    })).statusCode).toBe(200);
+    expect(
+      (
+        await post('/shopper-auth/sign-up/email', {
+          name: 'Other shopper',
+          email: otherEmail,
+          password,
+          callbackURL: `${origin}/account?verified=1`,
+        })
+      ).statusCode,
+    ).toBe(200);
     const verificationUrl = new URL(mailbox.at(-1)!.text.match(/https?:\/\/\S+/)![0]);
-    expect([200, 302]).toContain((await app.inject({ method: 'GET', url: `${verificationUrl.pathname}${verificationUrl.search}` })).statusCode);
+    expect([200, 302]).toContain(
+      (
+        await app.inject({
+          method: 'GET',
+          url: `${verificationUrl.pathname}${verificationUrl.search}`,
+        })
+      ).statusCode,
+    );
     const otherLogin = await post('/shopper-auth/sign-in/email', { email: otherEmail, password });
     expect(otherLogin.statusCode).toBe(200);
     const otherCookie = cookie(otherLogin, 'maevelle-shopper.session_token');
-    expect((await post('/storefront/v1/wishlist/account-shares',
-      { operationId: operationId(), expiresAt, selection: 'selected', items: [{ productId }] }, otherCookie)).statusCode).toBe(422);
-    expect((await post(`/storefront/v1/wishlist/account-shares/${accountShare.id}/link`, {}, otherCookie)).statusCode).toBe(404);
-    expect((await post(`/storefront/v1/wishlist/account-shares/${guest.id}/claim`,
-      { manageToken: guest.viewToken }, otherCookie)).statusCode).toBe(404);
-    const listed = await app.inject({ method: 'GET', url: '/storefront/v1/wishlist/account-shares', headers: { cookie: shopperCookie } });
+    expect(
+      (
+        await post(
+          '/storefront/v1/wishlist/account-shares',
+          { operationId: operationId(), expiresAt, selection: 'selected', items: [{ productId }] },
+          otherCookie,
+        )
+      ).statusCode,
+    ).toBe(422);
+    expect(
+      (
+        await post(
+          `/storefront/v1/wishlist/account-shares/${accountShare.id}/link`,
+          {},
+          otherCookie,
+        )
+      ).statusCode,
+    ).toBe(404);
+    expect(
+      (
+        await post(
+          `/storefront/v1/wishlist/account-shares/${guest.id}/claim`,
+          { manageToken: guest.viewToken },
+          otherCookie,
+        )
+      ).statusCode,
+    ).toBe(404);
+    const listed = await app.inject({
+      method: 'GET',
+      url: '/storefront/v1/wishlist/account-shares',
+      headers: { cookie: shopperCookie },
+    });
     expect(listed.statusCode).toBe(200);
-    expect(listed.json().data.items.some((share: { id: string }) => share.id === accountShare.id)).toBe(true);
+    expect(
+      listed.json().data.items.some((share: { id: string }) => share.id === accountShare.id),
+    ).toBe(true);
     expect(JSON.stringify(listed.json())).not.toContain(accountShare.viewToken);
-    const detail = await app.inject({ method: 'GET', url: `/storefront/v1/wishlist/account-shares/${accountShare.id}`, headers: { cookie: shopperCookie } });
+    const detail = await app.inject({
+      method: 'GET',
+      url: `/storefront/v1/wishlist/account-shares/${accountShare.id}`,
+      headers: { cookie: shopperCookie },
+    });
     expect(detail.statusCode).toBe(200);
-    expect((await post(`/storefront/v1/wishlist/account-shares/${accountShare.id}/link`, {}, shopperCookie)).json().data.viewToken).toBe(accountShare.viewToken);
-    const rotated = await post(`/storefront/v1/wishlist/account-shares/${accountShare.id}/rotate-link`, { expectedVersion: detail.json().data.version }, shopperCookie);
+    expect(
+      (
+        await post(
+          `/storefront/v1/wishlist/account-shares/${accountShare.id}/link`,
+          {},
+          shopperCookie,
+        )
+      ).json().data.viewToken,
+    ).toBe(accountShare.viewToken);
+    const rotated = await post(
+      `/storefront/v1/wishlist/account-shares/${accountShare.id}/rotate-link`,
+      { expectedVersion: detail.json().data.version },
+      shopperCookie,
+    );
     expect(rotated.statusCode).toBe(200);
-    expect((await post('/storefront/v1/wishlist/shares/open', { token: accountShare.viewToken })).statusCode).toBe(404);
-    expect((await post(`/storefront/v1/wishlist/account-shares/${accountShare.id}/rotate-link`, { expectedVersion: detail.json().data.version }, shopperCookie)).statusCode).toBe(409);
-    const claimed = await post(`/storefront/v1/wishlist/account-shares/${guest.id}/claim`, { manageToken: guest.manageToken }, shopperCookie);
+    expect(
+      (await post('/storefront/v1/wishlist/shares/open', { token: accountShare.viewToken }))
+        .statusCode,
+    ).toBe(404);
+    expect(
+      (
+        await post(
+          `/storefront/v1/wishlist/account-shares/${accountShare.id}/rotate-link`,
+          { expectedVersion: detail.json().data.version },
+          shopperCookie,
+        )
+      ).statusCode,
+    ).toBe(409);
+    const claimed = await post(
+      `/storefront/v1/wishlist/account-shares/${guest.id}/claim`,
+      { manageToken: guest.manageToken },
+      shopperCookie,
+    );
     expect(claimed.statusCode).toBe(200);
-    expect((await post('/storefront/v1/wishlist/shares/manage', { token: guest.manageToken, action: 'inspect' })).statusCode).toBe(404);
-    expect((await post('/storefront/v1/wishlist/shares/open', { token: guest.viewToken })).statusCode).toBe(200);
-    const revoke = await app.inject({ method: 'DELETE', url: `/storefront/v1/wishlist/account-shares/${accountShare.id}`, headers: { cookie: shopperCookie, origin } });
+    expect(
+      (
+        await post('/storefront/v1/wishlist/shares/manage', {
+          token: guest.manageToken,
+          action: 'inspect',
+        })
+      ).statusCode,
+    ).toBe(404);
+    expect(
+      (await post('/storefront/v1/wishlist/shares/open', { token: guest.viewToken })).statusCode,
+    ).toBe(200);
+    const revoke = await app.inject({
+      method: 'DELETE',
+      url: `/storefront/v1/wishlist/account-shares/${accountShare.id}`,
+      headers: { cookie: shopperCookie, origin },
+    });
     expect(revoke.statusCode).toBe(415);
-    const revoked = await app.inject({ method: 'DELETE', url: `/storefront/v1/wishlist/account-shares/${accountShare.id}`, headers: { cookie: shopperCookie, origin, 'content-type': 'application/json' }, payload: {} });
+    const revoked = await app.inject({
+      method: 'DELETE',
+      url: `/storefront/v1/wishlist/account-shares/${accountShare.id}`,
+      headers: { cookie: shopperCookie, origin, 'content-type': 'application/json' },
+      payload: {},
+    });
     expect(revoked.statusCode).toBe(200);
-    expect((await post('/storefront/v1/wishlist/shares/open', { token: rotated.json().data.viewToken })).statusCode).toBe(404);
+    expect(
+      (await post('/storefront/v1/wishlist/shares/open', { token: rotated.json().data.viewToken }))
+        .statusCode,
+    ).toBe(404);
   });
 
   it('rejects a share capability from another storefront organization', async () => {
-    const other = await createOrganization(database.db, { code: `other-${crypto.randomUUID().slice(0, 8)}`,
-      displayName: 'Other store', timezone: 'Asia/Dhaka', defaultLocale: 'en', defaultCurrency: 'BDT' });
-    const type = await sql<{ id: string }>`insert into catalog.product_types(organization_id,code,name)
+    const other = await createOrganization(database.db, {
+      code: `other-${crypto.randomUUID().slice(0, 8)}`,
+      displayName: 'Other store',
+      timezone: 'Asia/Dhaka',
+      defaultLocale: 'en',
+      defaultCurrency: 'BDT',
+    });
+    const type = await sql<{
+      id: string;
+    }>`insert into catalog.product_types(organization_id,code,name)
       values (${other.id},'other','Other') returning id::text`.execute(database.db);
     const product = await sql<{ id: string }>`insert into catalog.products
       (organization_id,product_type_id,handle,title,status,publication_status,published_at)
       values (${other.id},${type.rows[0]!.id}::uuid,'other-product','Other product','ACTIVE','PUBLISHED',now())
       returning id::text`.execute(database.db);
     await sql`insert into search.catalog_documents(organization_id,product_id,handle,title,search_text,published_at)
-      values (${other.id},${product.rows[0]!.id}::uuid,'other-product','Other product','Other product',now())`.execute(database.db);
+      values (${other.id},${product.rows[0]!.id}::uuid,'other-product','Other product','Other product',now())`.execute(
+      database.db,
+    );
     const share = await createShare(database.db, other.id, [{ productId: product.rows[0]!.id }], {
-      key: Buffer.alloc(32, 7), operationId: Buffer.from(crypto.getRandomValues(new Uint8Array(32))).toString('base64url'),
+      key: Buffer.alloc(32, 7),
+      operationId: Buffer.from(crypto.getRandomValues(new Uint8Array(32))).toString('base64url'),
       expiresAt: new Date(Date.now() + 30 * 86400_000).toISOString(),
     });
-    expect((await post('/storefront/v1/wishlist/shares/open', { token: share.viewToken })).statusCode).toBe(404);
-    expect((await post('/storefront/v1/wishlist/shares/manage', { token: share.manageToken, action: 'inspect' })).statusCode).toBe(404);
+    expect(
+      (await post('/storefront/v1/wishlist/shares/open', { token: share.viewToken })).statusCode,
+    ).toBe(404);
+    expect(
+      (
+        await post('/storefront/v1/wishlist/shares/manage', {
+          token: share.manageToken,
+          action: 'inspect',
+        })
+      ).statusCode,
+    ).toBe(404);
   });
 
   it('purges account Wishlist data on authorized CRM anonymization without deleting guest shares', async () => {
@@ -588,7 +841,9 @@ describe('shopper realm and private Wishlist', () => {
       where organization_id=${organizationId}
     `.execute(database.db);
     expect(Number(after.rows[0]!.count)).toBe(0);
-    const removedShare = await sql<{ count: number }>`select count(*)::int as count from wishlist.shares
+    const removedShare = await sql<{
+      count: number;
+    }>`select count(*)::int as count from wishlist.shares
       where organization_id=${organizationId} and id=${accountShareId}::uuid`.execute(database.db);
     expect(removedShare.rows[0]!.count).toBe(0);
     const preserved = await sql<{ count: string }>`
@@ -607,37 +862,79 @@ describe('shopper realm and private Wishlist', () => {
     const invalid = Buffer.from(crypto.getRandomValues(new Uint8Array(32))).toString('base64url');
     let blocked: Awaited<ReturnType<typeof post>> | undefined;
     for (let attempt = 0; attempt < 35; attempt += 1) {
-      const response = await post('/storefront/v1/wishlist/shares/manage', { token: invalid, action: 'inspect' });
-      if (response.statusCode === 429) { blocked = response; break; }
+      const response = await post('/storefront/v1/wishlist/shares/manage', {
+        token: invalid,
+        action: 'inspect',
+      });
+      if (response.statusCode === 429) {
+        blocked = response;
+        break;
+      }
       expect(response.statusCode).toBe(404);
     }
     expect(blocked?.statusCode).toBe(429);
     expect(blocked?.headers['retry-after']).toBe('3600');
   });
   it('rate limits consented Wishlist observations through the existing API limiter', async () => {
-    const payload = { schemaVersion: 1, eventId: crypto.randomUUID(), name: 'WISHLIST_PAGE_VIEWED', origin: 'BROWSER',
-      sessionId: crypto.randomUUID(), occurredAt: new Date().toISOString(),
-      consent: { necessary: 'GRANTED', analytics: 'GRANTED', marketing: 'DENIED', preferences: 'UNKNOWN', recordedAt: new Date().toISOString() }, data: { mode: 'GUEST' } };
-    expect((await post('/storefront/v1/analytics/events', payload, undefined, 'https://untrusted.example.test')).statusCode).toBe(403);
-    for (let index=0; index<120; index++) expect((await post('/storefront/v1/analytics/events', payload)).statusCode).toBe(202);
+    const payload = {
+      schemaVersion: 1,
+      eventId: crypto.randomUUID(),
+      name: 'WISHLIST_PAGE_VIEWED',
+      origin: 'BROWSER',
+      sessionId: crypto.randomUUID(),
+      occurredAt: new Date().toISOString(),
+      consent: {
+        necessary: 'GRANTED',
+        analytics: 'GRANTED',
+        marketing: 'DENIED',
+        preferences: 'UNKNOWN',
+        recordedAt: new Date().toISOString(),
+      },
+      data: { mode: 'GUEST' },
+    };
+    expect(
+      (
+        await post(
+          '/storefront/v1/analytics/events',
+          payload,
+          undefined,
+          'https://untrusted.example.test',
+        )
+      ).statusCode,
+    ).toBe(403);
+    for (let index = 0; index < 120; index++)
+      expect((await post('/storefront/v1/analytics/events', payload)).statusCode).toBe(202);
     const blocked = await post('/storefront/v1/analytics/events', payload);
-    expect(blocked.statusCode).toBe(429); expect(blocked.headers['retry-after']).toBeDefined();
+    expect(blocked.statusCode).toBe(429);
+    expect(blocked.headers['retry-after']).toBeDefined();
   });
   it('fails closed when the guest capability limiter database is unavailable', async () => {
     const unavailableUrl = new URL(testUrl!);
     unavailableUrl.port = '1';
-    const unavailableDatabase = createDatabase({ connectionString: unavailableUrl.toString(), maxConnections: 1 });
-    const unavailableApp = buildApi({ database: unavailableDatabase, config: config(unavailableUrl.toString()), logger: false });
+    const unavailableDatabase = createDatabase({
+      connectionString: unavailableUrl.toString(),
+      maxConnections: 1,
+    });
+    const unavailableApp = buildApi({
+      database: unavailableDatabase,
+      config: config(unavailableUrl.toString()),
+      logger: false,
+    });
     try {
       await unavailableApp.ready();
       const response = await unavailableApp.inject({
         method: 'POST',
         url: '/storefront/v1/wishlist/shares/manage',
         headers: { origin, 'content-type': 'application/json' },
-        payload: { token: Buffer.from(crypto.getRandomValues(new Uint8Array(32))).toString('base64url'), action: 'inspect' },
+        payload: {
+          token: Buffer.from(crypto.getRandomValues(new Uint8Array(32))).toString('base64url'),
+          action: 'inspect',
+        },
       });
       expect(response.statusCode).toBe(503);
-      expect(response.json()).toEqual({ error: { code: 'UNAVAILABLE', message: 'Request protection is temporarily unavailable.' } });
+      expect(response.json()).toEqual({
+        error: { code: 'UNAVAILABLE', message: 'Request protection is temporarily unavailable.' },
+      });
     } finally {
       await unavailableApp.close();
       await unavailableDatabase.close();

@@ -7,14 +7,12 @@ import { useRouter } from 'next/navigation';
 import {
   CalendarIcon,
   CardGiftcardIcon,
-  CelebrationIcon,
   ChatCheckIcon,
   CheckCircleIcon,
   CheckIcon,
   ClockIcon,
   CopyIcon,
   DownloadIcon,
-  HomeIcon,
   MapPinIcon,
   PackageCheckIcon,
   ReceiptIcon,
@@ -555,7 +553,6 @@ export function CheckoutConfirmedStep({ checkout, orderData }: CheckoutConfirmed
           <div className="flex items-center gap-3.5 py-3 first:pt-0 last:pb-0" key={item.id}>
             <div className="relative size-16 sm:size-18 shrink-0 overflow-hidden rounded-xl bg-surface-container-low border border-border-subtle">
               {item.imageUrl ? (
-                // eslint-disable-next-line @next/next/no-img-element
                 <img
                   alt={item.imageAlt || item.productTitle}
                   className="size-full object-cover"

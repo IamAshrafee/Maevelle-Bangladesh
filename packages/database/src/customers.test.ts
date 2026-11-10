@@ -14,7 +14,6 @@ import {
   anonymizeCustomer,
   applyCustomerRestriction,
   liftCustomerRestriction,
-  listCustomerRestrictions,
   linkCustomerAccount,
   unlinkCustomerAccount,
   getCustomerAccount,
@@ -23,7 +22,6 @@ import {
   getCustomerTimeline,
   verifyCustomerPhone,
   verifyCustomerEmail,
-  CustomerDomainError,
 } from './customers.js';
 
 const database = createDatabase({

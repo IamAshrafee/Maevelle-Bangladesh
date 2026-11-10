@@ -158,7 +158,7 @@ function BreadcrumbItem({ className, ...props }: React.ComponentProps<'li'>) {
 
 type BreadcrumbLinkProps = Omit<React.ComponentProps<'a'>, 'href'> & {
   href?: string;
-  as?: React.ElementType<any>;
+  as?: React.ElementType;
   disabled?: boolean;
   maxLabelWidth?: string;
 };

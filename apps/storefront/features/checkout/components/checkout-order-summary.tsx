@@ -1,7 +1,5 @@
 'use client';
 
-import { useState } from 'react';
-
 import {
   ChevronDownIcon,
   CloseIcon,
@@ -18,10 +16,7 @@ export interface CheckoutOrderSummaryProps {
   readonly isDesktop?: boolean;
 }
 
-export function CheckoutOrderSummary({
-  checkout,
-  isDesktop = false,
-}: CheckoutOrderSummaryProps) {
+export function CheckoutOrderSummary({ checkout, isDesktop = false }: CheckoutOrderSummaryProps) {
   const {
     items,
     address,
@@ -41,8 +36,6 @@ export function CheckoutOrderSummary({
     handlePrimaryAction,
     isSubmitting,
   } = checkout;
-
-  const [isApplyingVoucher, setIsApplyingVoucher] = useState(false);
 
   const itemCount = items.reduce((acc, it) => acc + it.quantity, 0);
 
@@ -181,9 +174,7 @@ export function CheckoutOrderSummary({
           {discount > 0 ? (
             <div className="flex justify-between text-primary">
               <span>First Order Voucher</span>
-              <span className="font-mono font-semibold tabular-nums">
-                -{formatMoney(discount)}
-              </span>
+              <span className="font-mono font-semibold tabular-nums">-{formatMoney(discount)}</span>
             </div>
           ) : null}
 

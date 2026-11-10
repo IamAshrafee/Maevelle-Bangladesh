@@ -5,19 +5,14 @@ import Link from 'next/link';
 import {
   Activity,
   AlertCircle,
-  ArrowRight,
-  CheckCircle2,
-  Cpu,
   Database,
   ExternalLink,
   Layers,
   RefreshCw,
   Server,
-  Shield,
-  ShieldAlert,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { StatusBadge } from '@/components/status-badge';
+
 import { PagePanel, PageSection } from '@/components/ui/page-shell';
 import type { IntegrityOverviewDto } from '@/lib/integrity/types';
 
@@ -38,7 +33,7 @@ export function OperationsTab({
     failedRuns: 0,
   };
 
-  const isWorkerHealthy = queueHealth.queuedRuns === 0 || queueHealth.runningRuns > 0;
+
 
   return (
     <div className="space-y-6">

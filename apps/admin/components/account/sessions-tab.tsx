@@ -5,12 +5,8 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   AlertTriangle,
-  Globe,
   Info,
-  Laptop,
-  LogOut,
   RefreshCw,
-  ShieldAlert,
 } from 'lucide-react';
 import type { AccountSessionItemDto } from '@maevelle/contracts';
 import { apiRequest } from '@/lib/api';

@@ -1,0 +1,12 @@
+{
+  "file": "packages/database/src/checkout/placement.test.ts",
+  "issue": "Fixture used host time for DB-validated receipt evidence; first broad run rejected future value time",
+  "correction": "Read synthetic past receipt time from database clock before the concurrent transactions; retain production future guard",
+  "formatting": {
+    "beforeHash": "4f2ec71070442ba138811c45172170dfd65d83f97075a3ef850699e42dc1d2fe",
+    "afterHash": "4f2ec71070442ba138811c45172170dfd65d83f97075a3ef850699e42dc1d2fe",
+    "templateBytesEqual": true,
+    "runtimeSyntaxEqual": true,
+    "safe": true
+  }
+}

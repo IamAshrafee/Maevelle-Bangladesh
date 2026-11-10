@@ -1,7 +1,7 @@
 'use client';
 
 import * as React from 'react';
-import { BarChart3, Info, Percent, Eye, MousePointerClick, TrendingUp, Users } from 'lucide-react';
+import { BarChart3, Info } from 'lucide-react';
 import {
   Table,
   TableBody,
@@ -12,8 +12,8 @@ import {
 } from '@/components/ui/table';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+
+
 import type { PerformanceResponse } from '../recommendations-types';
 import { PLACEMENT_LABELS } from '../recommendations-types';
 
@@ -25,13 +25,7 @@ interface AnalyticsTabProps {
   canViewAnalytics: boolean;
 }
 
-export function AnalyticsTab({
-  performance,
-  loading,
-  dateRange,
-  onDateRangeChange,
-  canViewAnalytics,
-}: AnalyticsTabProps) {
+export function AnalyticsTab({ performance, dateRange, onDateRangeChange, canViewAnalytics }: AnalyticsTabProps) {
   const [from, setFrom] = React.useState(dateRange.from);
   const [to, setTo] = React.useState(dateRange.to);
 

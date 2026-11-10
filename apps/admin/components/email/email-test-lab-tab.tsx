@@ -1,25 +1,21 @@
 'use client';
 
 import { useState } from 'react';
-import {
-  Zap,
-  Send,
-  Eye,
-  CheckCircle2,
-  AlertTriangle,
-  Radio,
-  ShieldCheck,
-  Server,
-  Mail,
-  User,
-} from 'lucide-react';
+import { Zap, Send, Eye, Mail } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { RefreshButton } from '@/components/ui/refresh-button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import { EmailPreviewFrame } from './email-preview-frame';
 import { EmailStatusBadge } from './email-status-badge';
 import {

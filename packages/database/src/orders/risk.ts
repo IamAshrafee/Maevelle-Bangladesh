@@ -3,7 +3,6 @@ import { sql, type Kysely } from 'kysely';
 import type { DatabaseSchema } from '../index.js';
 import {
   getCustomerDeliveryHistory,
-  normalizeBangladeshCustomerPhone,
   type CustomerDeliveryHistory,
 } from '../delivery-intelligence.js';
 import {

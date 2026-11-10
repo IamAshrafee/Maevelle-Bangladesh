@@ -2,14 +2,7 @@
 
 import * as React from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import {
-  AlertCircle,
-  BadgePercent,
-  CheckCircle2,
-  Plus,
-  RefreshCw,
-  Sparkles,
-} from 'lucide-react';
+import { AlertCircle, CheckCircle2, Plus } from 'lucide-react';
 
 import { AdminPage, PageActions, PageHeader } from '@/components/ui/page-shell';
 import { Button } from '@/components/ui/button';

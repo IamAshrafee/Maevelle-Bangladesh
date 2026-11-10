@@ -2,19 +2,12 @@
 
 import * as React from 'react';
 import Link from 'next/link';
-import {
-  ExternalLink,
-  HelpCircle,
-  Repeat,
-  UserCheck,
-  UserPlus,
-  Users,
-} from 'lucide-react';
+import { ExternalLink, Users } from 'lucide-react';
 
 import { StatusBadge } from '@/components/status-badge';
 import { Button } from '@/components/ui/button';
 import { NativeSelect } from '@/components/ui/native-select';
-import { EmptyState, ErrorState, LoadingState, PagePanel, PageSection } from '@/components/ui/page-shell';
+import { ErrorState, PageSection } from '@/components/ui/page-shell';
 import {
   Table,
   TableBody,
@@ -82,6 +75,7 @@ export function CustomersView({ selection }: CustomersViewProps) {
 
   return (
     <div className="space-y-6">
+      {error ? <ErrorState message={error} /> : null}
       {/* 1. Customer Acquisition & Value KPIs */}
       <PageSection
         title="Customer Base & Retention Analysis"

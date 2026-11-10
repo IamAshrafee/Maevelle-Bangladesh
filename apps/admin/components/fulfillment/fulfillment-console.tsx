@@ -5,13 +5,10 @@ import {
   ArrowRight,
   Boxes,
   CheckCircle2,
-  ChevronRight,
-  Clock,
   ExternalLink,
   Info,
   Loader2,
   PackageCheck,
-  PackageOpen,
   RefreshCw,
   ScanBarcode,
   Search,
@@ -23,9 +20,9 @@ import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 
-import { Badge } from '@/components/ui/badge';
+
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Stats, StatsCard, StatsDescription, StatsTitle, StatsValue } from '@/components/ui/stats';
 import {

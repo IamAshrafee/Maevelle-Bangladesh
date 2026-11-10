@@ -1,0 +1,26 @@
+{
+  "head": "cf68b53ddbb3321f03570e0b66a627914c1db674",
+  "sourceDigest": "d343149828f4e5cc7a40fd7850671519e5035b8e02ff337e125b7e6e5b26ed0d",
+  "sourceMatches": true,
+  "selected": {
+    "passed": 806,
+    "failed": 0,
+    "skipped": 0,
+    "files": 83
+  },
+  "formatting": {
+    "before": 1129,
+    "after": 1121,
+    "fullExit": 1,
+    "regressionExit": 0
+  },
+  "supportedLintExit": 0,
+  "postDocumentationSecretsExit": 0,
+  "whitespaceExit": 0,
+  "protectedMigrationAndManifestFiles": 77,
+  "preservedUnrelatedConfigurationAndGeneratedFiles": 105,
+  "acceptanceOutcomes": 40,
+  "ownedContainerStopped": true,
+  "ownedContainerAndPreviewDeletion": "AUTO_REVIEW_REJECTED_BLOCKED_BY_POLICY_RETAINED",
+  "browser": "NOT_VERIFIED_EXISTING_RUNTIME_RESTRICTION_RESPECTED"
+}

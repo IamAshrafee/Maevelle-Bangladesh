@@ -1,5 +1,5 @@
-import * as React from 'react';
-import { Laptop, Monitor, Smartphone, Tablet, Globe } from 'lucide-react';
+import type * as React from 'react';
+import { Laptop, Monitor, Smartphone, Tablet } from 'lucide-react';
 import { ApiRequestError } from '@/lib/api';
 
 /**

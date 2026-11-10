@@ -1,0 +1,112 @@
+[
+  {
+    "file": "apps/admin/components/analytics/views/finance-view.tsx",
+    "beforeHash": "a50ecf2cd995ecc965c21bf22221d5d4624903e28a5a736703688ff5d98f1b18",
+    "afterHash": "8450ee9609eafb9401b89e1b9577cc9eb4c0828e1c309fc7293c754fda079f94",
+    "review": {
+      "templateBytesEqual": true,
+      "runtimeSyntaxEqual": false,
+      "safe": false
+    },
+    "applied": false
+  },
+  {
+    "file": "apps/admin/components/finance-console.tsx",
+    "beforeHash": "e2075120ad43efa8f7f71bf3d3bbe987104ac1d86b266e3af821451278c2f773",
+    "afterHash": "916872f12f9347673a6b0bf475c4a244a60dcbfb7ae124fc66d7cd8ba1957c9f",
+    "review": {
+      "templateBytesEqual": true,
+      "runtimeSyntaxEqual": true,
+      "safe": true
+    },
+    "applied": true
+  },
+  {
+    "file": "apps/admin/components/finance/set-opening-balance-dialog.tsx",
+    "beforeHash": "3a92e2cbf1ac61a720d068554d214e34d3537e644980330c2d0b3cc75b0a7afc",
+    "afterHash": "5715da9b31bbc747142c94b8b25be0c687df29ffe8fc15ffe05ef65ee014e8f6",
+    "review": {
+      "templateBytesEqual": true,
+      "runtimeSyntaxEqual": true,
+      "safe": true
+    },
+    "applied": true
+  },
+  {
+    "file": "apps/admin/components/security/authenticator-setup-wizard.tsx",
+    "beforeHash": "a8bf7b84e99936b0d529247eabb31fb7ab005a89f9110406dcbcfbb052c26cba",
+    "afterHash": "1ae3a75cc0529e436b2ae07bf7b1d2c5d0ca79575900c4546b914f19608def23",
+    "review": {
+      "templateBytesEqual": true,
+      "runtimeSyntaxEqual": false,
+      "safe": false
+    },
+    "applied": false
+  },
+  {
+    "file": "apps/api/src/shopper-auth.test.ts",
+    "beforeHash": "3df1900664706daa55c031c533fa6bb573933d79b0db9cb13367c71c4385cf94",
+    "afterHash": "21f43a033e977185a72dda3018f5b3515420ec5f308f7a683989d7f2018a307a",
+    "review": {
+      "templateBytesEqual": true,
+      "runtimeSyntaxEqual": true,
+      "safe": true
+    },
+    "applied": true
+  },
+  {
+    "file": "apps/storefront/features/checkout/components/checkout-confirmed-step.tsx",
+    "beforeHash": "1b86a00584524884c9a82bea1ec1c64bebeea9230ef665f7bd2c642348a2d3e4",
+    "afterHash": "2372376e49e47039c88edc9c3f3ca0bea5c89c2fd63fba4ef7195afe8871e32e",
+    "review": {
+      "templateBytesEqual": true,
+      "runtimeSyntaxEqual": false,
+      "safe": false
+    },
+    "applied": false
+  },
+  {
+    "file": "apps/storefront/features/checkout/components/checkout-contact-section.tsx",
+    "beforeHash": "2e3a4493e580d9232c2c2acccb78ecf21a6c5bc53526bc10807a7732d0c0a76d",
+    "afterHash": "6ac2ddeb8be3ae1c46043ed65d78c0658cd551150713ddb9dc4f37481166e57f",
+    "review": {
+      "templateBytesEqual": true,
+      "runtimeSyntaxEqual": true,
+      "safe": true
+    },
+    "applied": true
+  },
+  {
+    "file": "apps/storefront/features/checkout/components/checkout-header.tsx",
+    "beforeHash": "62134e17cec9ac9625140c8d5f33513c3307a481c1cab4516940cb69170f4512",
+    "afterHash": "07dd5493ebc185e661633b8f59ddd89ba1e6697d50449ad0311cae1823b0a3d5",
+    "review": {
+      "templateBytesEqual": true,
+      "runtimeSyntaxEqual": true,
+      "safe": true
+    },
+    "applied": true
+  },
+  {
+    "file": "apps/storefront/features/checkout/components/checkout-order-summary.tsx",
+    "beforeHash": "385e32add53c678b905ce8bd0fdc9f29ec3645933b4eea1daffa7f1da6786ecd",
+    "afterHash": "52a8fd76c894b81efad41bc7300ad902d6423876f7825b44da67603aacd0d9d6",
+    "review": {
+      "templateBytesEqual": true,
+      "runtimeSyntaxEqual": true,
+      "safe": true
+    },
+    "applied": true
+  },
+  {
+    "file": "scripts/release/manifest.mjs",
+    "beforeHash": "b297e25f41856d728dc390cae1f0ac4632ea9de1a79e6cd48d3ab40b1fd135c3",
+    "afterHash": "da6fcf273f740f9916db16bc9ce91126f81de331894a145a3fe1c2ae53386d3e",
+    "review": {
+      "templateBytesEqual": true,
+      "runtimeSyntaxEqual": true,
+      "safe": true
+    },
+    "applied": true
+  }
+]

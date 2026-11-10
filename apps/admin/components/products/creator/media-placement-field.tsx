@@ -1,15 +1,7 @@
 'use client';
 
 import { useId, useMemo } from 'react';
-import {
-  HelpCircle,
-  Images,
-  Info,
-  PackageSearch,
-  Ruler,
-  Sparkles,
-  SwatchBook,
-} from 'lucide-react';
+import { Images, Info, PackageSearch, Ruler, SwatchBook } from 'lucide-react';
 
 import { Badge } from '@/components/ui/badge';
 import { Label } from '@/components/ui/label';

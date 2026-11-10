@@ -14,7 +14,6 @@ import {
   EyeOff,
   HelpCircle,
   KeyRound,
-  Lock,
   QrCode,
   RefreshCw,
   ShieldCheck,
@@ -70,7 +69,7 @@ export function AuthenticatorSetupWizard({
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [hasAttemptedVerification, setHasAttemptedVerification] = useState(false);
+  const [, setHasAttemptedVerification] = useState(false);
   const [showTimeHelp, setShowTimeHelp] = useState(false);
 
   // Generate QR code locally from enrollment URI when available

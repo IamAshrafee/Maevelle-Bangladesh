@@ -4,11 +4,8 @@ import * as React from 'react';
 import { useCallback, useEffect, useState } from 'react';
 import {
   CheckCircle2,
-  Clock,
   HelpCircle,
   KeyRound,
-  Lock,
-  Shield,
   ShieldAlert,
   ShieldCheck,
   ShieldOff,
@@ -36,10 +33,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { AuthenticatorSetupWizard } from './authenticator-setup-wizard';
-import {
-  TwoFactorManagementDialog,
-  type ManagementMode,
-} from './two-factor-management-dialog';
+import { TwoFactorManagementDialog, type ManagementMode } from './two-factor-management-dialog';
 
 function getErrorMessage(error: unknown): string {
   if (error instanceof ApiRequestError) return error.message;

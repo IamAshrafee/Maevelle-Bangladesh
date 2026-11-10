@@ -3,26 +3,21 @@
 import {
   AlertCircle,
   AlertTriangle,
-  ArrowDownLeft,
   ArrowRight,
   Boxes,
   CheckCircle2,
-  ChevronRight,
   Clock,
   ExternalLink,
   HelpCircle,
-  Info,
   Loader2,
   MapPin,
   PackageCheck,
-  PackageX,
   Phone,
   Receipt,
   RotateCcw,
   Route,
   Search,
   ShieldAlert,
-  ShieldCheck,
   Truck,
   User,
   XCircle,
@@ -34,7 +29,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { RefreshButton } from '@/components/ui/refresh-button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Stats, StatsCard, StatsDescription, StatsTitle, StatsValue } from '@/components/ui/stats';
 import {
@@ -63,10 +58,7 @@ import {
   ResolveExceptionDialog,
   TransitionClaimDialog,
 } from './delivery-actions-dialogs';
-import {
-  DeliveryOutcomeBadge,
-  DeliveryStatusBadge,
-} from './delivery-status-badges';
+import { DeliveryOutcomeBadge, DeliveryStatusBadge } from './delivery-status-badges';
 import { ManualBookingDialog } from './manual-booking-dialog';
 import { PathaoBookingDialog } from './pathao-booking-dialog';
 import { TrackingTimeline } from './tracking-timeline';

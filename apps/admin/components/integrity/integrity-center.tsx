@@ -10,11 +10,7 @@ import {
   Clock,
   Layers,
   Play,
-  Search,
-  Shield,
-  ShieldAlert,
   ShieldCheck,
-  Sliders,
   Wrench,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -23,7 +19,7 @@ import { AdminPage, PageHeader } from '@/components/ui/page-shell';
 import { useAdminCapability } from '@/components/admin-capabilities';
 import { cn } from '@/lib/utils';
 import { OverviewTab } from './overview-tab';
-import { FindingsTab } from './findings-tab';
+import { FindingsTab, type FindingsTabProps } from './findings-tab';
 import { FindingDetailSheet } from './finding-detail-sheet';
 import { RepairWorkflowDialog } from './repair-workflow-dialog';
 import { ChecksTab } from './checks-tab';
@@ -73,7 +69,7 @@ export function IntegrityCenter() {
 
   // Capabilities
   const canRunChecks = useAdminCapability('admin.integrity.run');
-  const canRepair = useAdminCapability('admin.integrity.repair');
+  useAdminCapability('admin.integrity.repair');
 
   // Overview state
   const [overview, setOverview] = React.useState<IntegrityOverviewDto | null>(null);
@@ -270,7 +266,7 @@ export function IntegrityCenter() {
     setLauncherOpen(true);
   };
 
-  const handleFilterChange = (key: string, value: any) => {
+  const handleFilterChange = <K extends keyof FindingsTabProps['filters']>(key: K, value: FindingsTabProps['filters'][K]) => {
     setFindingsPage(1);
     setFilters((prev) => ({ ...prev, [key]: value }));
   };

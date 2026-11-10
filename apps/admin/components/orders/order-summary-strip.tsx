@@ -1,15 +1,6 @@
 'use client';
 
-import {
-  AlertTriangle,
-  Box,
-  CheckCircle2,
-  CircleDollarSign,
-  Clock,
-  Package,
-  Share2,
-  Truck,
-} from 'lucide-react';
+import { CircleDollarSign, Package, Share2, Truck } from 'lucide-react';
 
 import type { OrderDetailDto } from '@maevelle/contracts';
 import { StatusBadge } from '@/components/status-badge';

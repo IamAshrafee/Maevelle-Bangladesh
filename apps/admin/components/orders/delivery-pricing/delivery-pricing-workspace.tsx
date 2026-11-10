@@ -2,14 +2,7 @@
 
 import * as React from 'react';
 import { AnimatePresence, motion } from 'motion/react';
-import {
-  AlertCircle,
-  Calculator,
-  CheckCircle2,
-  Plus,
-  Truck,
-  X,
-} from 'lucide-react';
+import { AlertCircle, Calculator, CheckCircle2, Plus, X } from 'lucide-react';
 
 import {
   AdminPage,

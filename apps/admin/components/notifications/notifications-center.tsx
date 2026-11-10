@@ -3,20 +3,10 @@
 import * as React from 'react';
 import { useTransition } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
-import {
-  Activity,
-  Bell,
-  Clock,
-  FileCode2,
-  Inbox,
-  Radio,
-  Settings2,
-  Sliders,
-  SlidersHorizontal,
-} from 'lucide-react';
+import { Activity, Clock, FileCode2, Inbox, Radio, Sliders, SlidersHorizontal } from 'lucide-react';
 import { AdminPage, PageHeader } from '@/components/ui/page-shell';
 import { RefreshButton } from '@/components/ui/refresh-button';
-import { Badge } from '@/components/ui/badge';
+
 import { cn } from '@/lib/utils';
 import { NotificationInboxTab } from './notification-inbox-tab';
 import { NotificationHistoryTab } from './notification-history-tab';

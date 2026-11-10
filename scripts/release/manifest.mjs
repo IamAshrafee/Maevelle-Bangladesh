@@ -24,7 +24,7 @@ export function digestFromPushOutput(output) {
 
 export function migrationNames(root = resolve(import.meta.dirname, '../..')) {
   const registry = readFileSync(resolve(root, 'packages/database/src/migrations/index.ts'), 'utf8');
-  const names = [...registry.matchAll(/^  '([^']+)': \w+,$/gmu)].map((match) => match[1]);
+  const names = [...registry.matchAll(/^ {2}'([^']+)': \w+,$/gmu)].map((match) => match[1]);
   if (names.length < 51 || new Set(names).size !== names.length)
     throw new Error('Invalid migration registry.');
   return names.sort();

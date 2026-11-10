@@ -1,18 +1,6 @@
 'use client';
 
-import {
-  AlertCircle,
-  Building2,
-  Calculator,
-  CheckCircle2,
-  Clock,
-  Loader2,
-  MapPin,
-  Package,
-  Phone,
-  Truck,
-  User,
-} from 'lucide-react';
+import { AlertCircle, Calculator, Loader2, Truck, User } from 'lucide-react';
 import React, { useEffect, useState } from 'react';
 
 import { Button } from '@/components/ui/button';

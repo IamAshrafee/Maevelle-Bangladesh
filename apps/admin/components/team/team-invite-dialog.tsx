@@ -25,7 +25,7 @@ export function TeamInviteDialog({
   trigger,
 }: {
   readonly onInvited: (message: string) => Promise<void> | void;
-  readonly trigger?: React.ReactNode;
+  readonly trigger?: React.ComponentProps<typeof DialogTrigger>['render'];
 }) {
   const { presets, request, canInvite } = useTeam();
   const [open, setOpen] = useState(false);
@@ -89,7 +89,7 @@ export function TeamInviteDialog({
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger render={trigger ? (trigger as any) : undefined}>
+      <DialogTrigger render={trigger}>
         {!trigger ? (
           <Button className="button primary">
             <UserPlus aria-hidden="true" /> Invite team member

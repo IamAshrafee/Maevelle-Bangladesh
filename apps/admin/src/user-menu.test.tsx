@@ -15,12 +15,22 @@ describe('UserMenu & Account Page Resilience', () => {
     const html = renderToStaticMarkup(
       <UserMenu
         context={{
-          user: { id: 'u1', name: 'Maevelle Bangladesh', email: 'owner@maevelle.com', image: null },
-          organization: { id: 'o1', name: 'Maevelle BD', slug: 'bd' },
+          actorId: 'u1',
+          organizationId: 'o1',
+          membershipId: 'm1',
+          scopes: [],
+          user: { name: 'Maevelle Bangladesh', email: 'owner@maevelle.com', image: null },
+
           membershipType: 'OWNER',
           capabilities: [],
-          twoFactor: { isEnabled: true, required: true, enrollmentRequired: false, enrollmentDeadline: null, accessRestricted: false },
-        } as any}
+          twoFactor: {
+            isEnabled: true,
+            isRequired: true,
+            enrollmentRequired: false,
+            enrollmentDeadline: null,
+            accessRestricted: false,
+          },
+        }}
         onLogout={() => {}}
       />,
     );

@@ -1,7 +1,7 @@
 'use client';
 
 import * as React from 'react';
-import { Edit3, AlertCircle, Save, Loader2, Calendar, Layers, DollarSign } from 'lucide-react';
+import { Edit3, AlertCircle, Save, Loader2, Calendar } from 'lucide-react';
 
 import {
   Dialog,

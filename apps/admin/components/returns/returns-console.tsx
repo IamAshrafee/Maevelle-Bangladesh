@@ -2,17 +2,10 @@
 
 import {
   AlertCircle,
-  Archive,
-  ArrowLeft,
-  ArrowRight,
   Boxes,
-  Calendar,
   CheckCircle2,
-  ChevronRight,
   DollarSign,
   ExternalLink,
-  Filter,
-  Info,
   Loader2,
   PackageCheck,
   Plus,
@@ -20,11 +13,8 @@ import {
   RotateCcw,
   ScanBarcode,
   Search,
-  ShieldAlert,
   Truck,
-  User,
   Warehouse,
-  XCircle,
 } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
@@ -54,13 +44,7 @@ import { ReturnUnitIntakeDialog } from '@/components/returns/return-unit-intake-
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import {
   Select,
@@ -70,8 +54,8 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Stats, StatsCard, StatsTitle, StatsValue } from '@/components/ui/stats';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { apiRequest, fetchApiData } from '@/lib/api';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { fetchApiData } from '@/lib/api';
 
 /* -------------------------------------------------------------------------- */
 /* Data Contracts                                                             */

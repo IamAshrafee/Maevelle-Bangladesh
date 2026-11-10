@@ -1,21 +1,19 @@
 'use client';
 
 import { useState } from 'react';
-import {
-  Sliders,
-  CheckCircle2,
-  AlertTriangle,
-  Info,
-  ShieldCheck,
-  ArrowDown,
-  Mail,
-  RotateCw,
-} from 'lucide-react';
+import { AlertTriangle, ShieldCheck, ArrowDown } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Switch } from '@/components/ui/switch';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import {

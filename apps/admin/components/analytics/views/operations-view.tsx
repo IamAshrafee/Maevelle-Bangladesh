@@ -10,12 +10,11 @@ import {
   Mail,
   MessageSquare,
   RotateCcw,
-  Star,
 } from 'lucide-react';
 
 import { StatusBadge } from '@/components/status-badge';
-import { Button } from '@/components/ui/button';
-import { EmptyState, ErrorState, LoadingState, PagePanel, PageSection } from '@/components/ui/page-shell';
+
+import { ErrorState, PagePanel, PageSection } from '@/components/ui/page-shell';
 import {
   Table,
   TableBody,

@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { AlertCircle, CheckCircle2, Eye, EyeOff, Image, MessageSquare, ShieldAlert } from 'lucide-react';
+import { AlertCircle, Eye, EyeOff, Image, MessageSquare, ShieldAlert } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 export interface ReviewQueueCounts {

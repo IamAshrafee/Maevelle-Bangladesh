@@ -1,15 +1,7 @@
 'use client';
 
 import * as React from 'react';
-import {
-  AlertCircle,
-  CheckCircle2,
-  Clock,
-  Layers,
-  RefreshCw,
-  Shield,
-  X,
-} from 'lucide-react';
+import { AlertCircle, RefreshCw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { StatusBadge } from '@/components/status-badge';
 import {

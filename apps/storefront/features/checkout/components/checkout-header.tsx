@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 
-import { ArrowLeftIcon, LockIcon, ShieldCheckIcon } from '@/components/ui/icons';
+import { ArrowLeftIcon, LockIcon } from '@/components/ui/icons';
 
 export interface CheckoutHeaderProps {
   readonly isDesktop?: boolean | undefined;
@@ -64,7 +64,10 @@ export function CheckoutHeader({ isDesktop = false, onBack, title }: CheckoutHea
 
         {/* Center / Desktop Breadcrumbs */}
         {isDesktop ? (
-          <nav aria-label="Checkout steps breadcrumb" className="hidden md:flex items-center gap-2 text-xs font-medium text-on-surface-variant">
+          <nav
+            aria-label="Checkout steps breadcrumb"
+            className="hidden md:flex items-center gap-2 text-xs font-medium text-on-surface-variant"
+          >
             <Link className="hover:text-primary transition-colors" href="/cart">
               Shopping Bag
             </Link>

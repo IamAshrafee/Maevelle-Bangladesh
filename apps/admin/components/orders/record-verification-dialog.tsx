@@ -22,7 +22,7 @@ interface RecordVerificationDialogProps {
   readonly orderNumber: string;
   readonly customerPhone?: string | null | undefined;
   readonly onCompleted?: (() => void) | undefined;
-  readonly trigger?: React.ReactNode;
+  readonly trigger?: React.ComponentProps<typeof DialogTrigger>['render'];
 }
 
 const verificationTypes = [
@@ -89,7 +89,7 @@ export function RecordVerificationDialog({
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger render={trigger ? (trigger as any) : undefined}>
+      <DialogTrigger render={trigger}>
         {!trigger && (
           <Button variant="outline" size="sm">
             <PhoneCall className="mr-1.5 size-3.5" aria-hidden="true" />

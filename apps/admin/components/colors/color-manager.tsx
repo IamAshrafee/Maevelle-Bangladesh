@@ -7,7 +7,6 @@ import {
   Check,
   Copy,
   Edit2,
-  Filter,
   LayoutGrid,
   List,
   Loader2,
@@ -29,13 +28,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import {
-  Stats,
-  StatsCard,
-  StatsDescription,
-  StatsTitle,
-  StatsValue,
-} from '@/components/ui/stats';
+import { Stats, StatsCard, StatsDescription, StatsTitle, StatsValue } from '@/components/ui/stats';
 import {
   Table,
   TableBody,
@@ -45,12 +38,12 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { SettingsNav } from '@/components/settings/settings-nav';
-import { catalogData, catalogRequest } from '@/lib/catalog/api';
+import { catalogData } from '@/lib/catalog/api';
 
 import { OperationalFeedback, OperationalPageHeader } from '../operational-worklist';
 import { ColorDeleteDialog } from './color-delete-dialog';
 import { ColorDialog } from './color-dialog';
-import { ColorSwatch } from './color-swatch';
+
 
 type ViewMode = 'grid' | 'table';
 type StatusFilter = 'ALL' | 'ACTIVE' | 'ARCHIVED';

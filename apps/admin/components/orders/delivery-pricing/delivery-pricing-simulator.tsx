@@ -6,7 +6,6 @@ import {
   Calculator,
   CheckCircle2,
   AlertTriangle,
-  ArrowRight,
   Globe,
   MapPin,
   Sparkles,
@@ -31,11 +30,7 @@ interface DeliveryPricingSimulatorProps {
   readonly onClearTarget?: () => void;
 }
 
-export function DeliveryPricingSimulator({
-  rules,
-  targetRule,
-  onClearTarget,
-}: DeliveryPricingSimulatorProps) {
+export function DeliveryPricingSimulator({ targetRule, onClearTarget }: DeliveryPricingSimulatorProps) {
   const [selectedNode, setSelectedNode] = React.useState<GeographyNodeOption | null>(null);
   const [currency] = React.useState('BDT');
   const [countryCode] = React.useState('BD');

@@ -1,26 +1,10 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import {
-  Scale,
-  CheckCircle2,
-  AlertTriangle,
-  Loader2,
-  RefreshCw,
-  ExternalLink,
-  Boxes,
-} from 'lucide-react';
+import { Scale, CheckCircle2, AlertTriangle, Loader2, Boxes } from 'lucide-react';
 import Link from 'next/link';
-import type {
-  SerializedStockReconciliationDto,
-  WarehouseLocationDto,
-} from '@maevelle/contracts';
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
+import type { SerializedStockReconciliationDto, WarehouseLocationDto } from '@maevelle/contracts';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { NativeSelect } from '@/components/ui/native-select';
 import { reconcileSerializedInventory } from '@/lib/inventory/units';

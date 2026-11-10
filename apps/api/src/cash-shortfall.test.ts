@@ -1,5 +1,6 @@
 import { beforeAll, afterAll, expect, it } from 'vitest';
 import Fastify from 'fastify';
+import { sql } from '@maevelle/database';
 import { isolatedCartDatabase } from '@maevelle/database/testing/cart';
 import { runMigrations } from '@maevelle/database/migrate';
 import { cashSettlementFixture } from '@maevelle/database/testing/cash-settlement';
@@ -141,4 +142,48 @@ it('rejects caller-supplied approval authority and unsupported cash precision at
         })
       ).statusCode,
     ).toBe(400);
+});
+
+it('denies fresh policy reads and commands after an actual capability revocation', async () => {
+  actor = await f.actor(['payments.cash_policies.manage']);
+  const headers = { 'x-organization-id': f.organizationId };
+  try {
+    expect((await app.inject({ url: '/admin/payments/cash-policies', headers })).statusCode).toBe(
+      200,
+    );
+    await sql`delete from iam.membership_capability_grants where membership_id in
+      (select id from iam.organization_memberships where organization_id=${f.organizationId}
+        and user_id=${actor}::uuid)`.execute(isolated.database.db);
+    const denied = await app.inject({ url: '/admin/payments/cash-policies', headers });
+    expect(denied.statusCode).toBe(403);
+    expect(denied.body).not.toContain('accountingReference');
+    const command = await app.inject({
+      method: 'POST',
+      url: '/admin/payments/cash-shortfalls',
+      payload: c.input,
+      headers: { ...headers, 'idempotency-key': crypto.randomUUID() },
+    });
+    expect(command.statusCode).toBe(403);
+  } finally {
+    actor = f.owner;
+  }
+});
+
+it('hides another organization Order and history even with a valid local viewing capability', async () => {
+  const foreign = await cashSettlementFixture(isolated.database.db);
+  const collection = await foreign.collect();
+  actor = f.owner;
+  for (const suffix of ['cash-settlement', 'cash-adjustments', 'cash-eligibility']) {
+    const response = await app.inject({
+      url: `/admin/payments/orders/${collection.orderId}/${suffix}`,
+      headers: { 'x-organization-id': f.organizationId },
+    });
+    // The history collection intentionally returns an empty tenant-scoped page;
+    // summary/eligibility resources use NOT_FOUND. Neither reveals a foreign Order.
+    expect(response.statusCode).toBe(suffix === 'cash-adjustments' ? 200 : 404);
+    if (suffix === 'cash-adjustments')
+      expect(response.json().data).toMatchObject({ items: [], total: 0 });
+    expect(response.headers['cache-control']).toContain('no-store');
+    expect(response.body).not.toContain(collection.paymentId);
+  }
 });

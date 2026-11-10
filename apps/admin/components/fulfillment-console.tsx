@@ -1,6 +1,6 @@
 'use client';
 
-import { ArrowRight, Boxes, PackageCheck, Truck, Warehouse, X } from 'lucide-react';
+import { Boxes, PackageCheck, Truck, Warehouse, X } from 'lucide-react';
 import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
