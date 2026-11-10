@@ -1,6 +1,7 @@
 import { EMPTY_QUOTE, type QuoteProjection } from './quote-types';
 import { EMPTY_DELIVERY, type DeliveryProjection } from './delivery-types';
 import { EMPTY_PLACEMENT, type PlacementProjection } from './placement-types';
+import { EMPTY_ORDER_PAYMENT, type OrderPaymentProjection } from './order-payment-types';
 import type {
   CheckoutDraftDto,
   CheckoutSourceDto,
@@ -39,6 +40,7 @@ export interface ReviewSnapshot {
   suspended: boolean;
   quote: QuoteProjection;
   placement: PlacementProjection;
+  orderPayment: OrderPaymentProjection;
   deliveryEditing: boolean;
   delivery: DeliveryProjection;
   phase: 'idle' | 'checking' | 'ready' | 'pending' | 'error';
@@ -54,6 +56,7 @@ export const EMPTY_REVIEW: ReviewSnapshot = Object.freeze({
   suspended: false,
   quote: EMPTY_QUOTE,
   placement: EMPTY_PLACEMENT,
+  orderPayment: EMPTY_ORDER_PAYMENT,
   deliveryEditing: false,
   delivery: EMPTY_DELIVERY,
   phase: 'idle',

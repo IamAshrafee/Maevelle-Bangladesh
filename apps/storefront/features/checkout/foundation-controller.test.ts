@@ -272,4 +272,31 @@ describe('Checkout journal and safe failure presentation', () => {
       expect(issue.retryAt).toBe(3100);
     },
   );
+  it('exposes orderPayment operations and clears orderPayment state on invalidate', () => {
+    const f = fixture();
+    expect(f.controller.orderPayment).toBeDefined();
+    expect(typeof f.controller.orderPayment.read).toBe('function');
+    expect(typeof f.controller.orderPayment.submit).toBe('function');
+    expect(typeof f.controller.orderPayment.retry).toBe('function');
+    expect(typeof f.controller.orderPayment.recover).toBe('function');
+    expect(f.controller.getSnapshot().orderPayment).toEqual({
+      phase: 'idle',
+      data: null,
+      pendingClaim: null,
+      submittedClaim: null,
+      issue: null,
+      activeRecoveryKey: null,
+      lastCheckedAt: null,
+    });
+    f.controller.invalidate();
+    expect(f.controller.getSnapshot().orderPayment).toEqual({
+      phase: 'idle',
+      data: null,
+      pendingClaim: null,
+      submittedClaim: null,
+      issue: null,
+      activeRecoveryKey: null,
+      lastCheckedAt: null,
+    });
+  });
 });

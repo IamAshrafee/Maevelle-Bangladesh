@@ -8,6 +8,7 @@ import type { ReviewSnapshot } from '../foundation-types';
 import { orderStatusLabel, paymentStatusLabel } from '../placement-labels';
 import { placementBusy } from '../placement-types';
 import { FinalTermsSummary } from './final-terms-summary';
+import { OrderPaymentPanel } from './order-payment-panel';
 
 export function PlacementConfirmation({
   review,
@@ -101,12 +102,7 @@ export function PlacementConfirmation({
               Current payment status is not available yet.
             </p>
           )}
-          {receipt.terms.method !== 'COD' && (
-            <Notice variant="info">
-              Payment instructions and transaction submissions are unavailable here. Do not send
-              money using this page.
-            </Notice>
-          )}
+          <OrderPaymentPanel review={review} clock={clock} />
         </>
       )}
       <div className="flex flex-wrap gap-3">

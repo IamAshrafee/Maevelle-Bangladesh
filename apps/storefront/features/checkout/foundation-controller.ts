@@ -3,8 +3,11 @@ import type { quoteApi } from './quote-api';
 import type { QuoteScope } from './quote-types';
 import type { createPlacementWorkflow } from './placement-workflow';
 import type { placementApi } from './placement-api';
-import type { CheckoutPlacementMethod } from '@maevelle/contracts';
+import type { createOrderPaymentWorkflow } from './order-payment-workflow';
+import type { orderPaymentApi } from './order-payment-api';
+import type { CheckoutPlacementMethod, SubmitCheckoutPaymentClaimDto } from '@maevelle/contracts';
 import { EMPTY_PLACEMENT, placementLocked } from './placement-types';
+import { EMPTY_ORDER_PAYMENT } from './order-payment-types';
 import { usableTerms } from './placement-eligibility';
 import { StorefrontClientApiError } from '@/lib/api/client/http';
 import { createDeliveryWorkflow, type DeliveryScope } from './delivery-workflow';
@@ -30,6 +33,7 @@ interface Dependencies {
   deliveryApi?: typeof deliveryApi;
   quoteApi?: typeof quoteApi;
   placementApi?: typeof placementApi;
+  orderPaymentApi?: typeof orderPaymentApi;
   journal: ReviewJournal;
   resolveOwner(signal: AbortSignal): Promise<string | null>;
   uuid?: () => string;
@@ -210,6 +214,21 @@ export function createReviewController(deps: Dependencies) {
             },
           }
         : state.delivery,
+      orderPayment: {
+        ...state.orderPayment,
+        phase: state.orderPayment.pendingClaim ? 'error' : 'idle',
+        data: null,
+        ...(state.orderPayment.pendingClaim
+          ? {
+              issue: state.orderPayment.issue ?? {
+                code: 'UNKNOWN_OUTCOME',
+                message: 'Check your session, then retry the same payment claim.',
+                retryable: true,
+                retryAt: now(),
+              },
+            }
+          : {}),
+      },
     });
   }
   function resume() {
@@ -248,6 +267,7 @@ export function createReviewController(deps: Dependencies) {
       delivery: EMPTY_REVIEW.delivery,
       quote: EMPTY_REVIEW.quote,
       placement: EMPTY_PLACEMENT,
+      orderPayment: EMPTY_ORDER_PAYMENT,
       deliveryEditing: false,
       issue: null,
     });
@@ -492,6 +512,34 @@ export function createReviewController(deps: Dependencies) {
         publish({ placement: { ...state.placement, terms: null } });
     },
   };
+  let orderPaymentWorkflow: ReturnType<typeof createOrderPaymentWorkflow> | undefined;
+  async function orderPaymentAction<T>(
+    action: (workflow: ReturnType<typeof createOrderPaymentWorkflow>) => Promise<T>,
+  ) {
+    const epoch = generation;
+    const { createOrderPaymentWorkflow } = await import('./order-payment-workflow');
+    assertCurrent(epoch);
+    orderPaymentWorkflow ??= createOrderPaymentWorkflow({
+      ...(deps.orderPaymentApi ? { api: deps.orderPaymentApi } : {}),
+      get: () => state,
+      publish: (patch) => publish({ orderPayment: { ...state.orderPayment, ...patch } }),
+      now,
+      uuid,
+      run: (action) => runPrivate('placement', action),
+    });
+    return action(orderPaymentWorkflow);
+  }
+  const orderPayment = {
+    read: () => orderPaymentAction((p) => p.read()),
+    submit: (input: SubmitCheckoutPaymentClaimDto) => orderPaymentAction((p) => p.submit(input)),
+    retry: () => orderPaymentAction((p) => p.retry()),
+    recover: (key: string) => orderPaymentAction((p) => p.recover(key)),
+    clearIssue: () =>
+      orderPaymentAction((p) => {
+        p.clearIssue();
+        return Promise.resolve();
+      }),
+  };
   return {
     getSnapshot: () => state,
     subscribe(fn: () => void) {
@@ -502,6 +550,7 @@ export function createReviewController(deps: Dependencies) {
     delivery,
     quote,
     placement,
+    orderPayment,
     deliveryEditing: (value: boolean) => publish({ deliveryEditing: value }),
     suspend,
     resume,
