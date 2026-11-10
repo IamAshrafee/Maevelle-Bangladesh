@@ -1,0 +1,12 @@
+{
+  "environment": "Windows; PostgreSQL 18; loopback; disposable synthetic database",
+  "scenario": "5 x 100 duplicate Order events before/after migration; two concurrent consumers",
+  "baselineBatchMs": [2.8096, 1.3870, 1.9539, 1.1494, 1.7694],
+  "instrumentedBatchMs": [7.4867, 3.6693, 3.3815, 3.6072, 4.2074],
+  "drainMs": 500.0685,
+  "processedByConsumer": [255, 245],
+  "facts": 1,
+  "pending": 0,
+  "factRelationBytes": 98304,
+  "limits": "Microbenchmark, not representative traffic or placement p95/p99; query counts and production capacity not measured. Includes concurrent regression load."
+}

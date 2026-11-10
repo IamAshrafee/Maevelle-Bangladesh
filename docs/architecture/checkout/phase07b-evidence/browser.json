@@ -1,0 +1,71 @@
+{
+  "browser": "Dedicated Chromium CDP profile; actual local Next development proxies + Fastify + disposable PostgreSQL 18",
+  "cases": [
+    {
+      "name": "Anonymous UNKNOWN through actual Next proxy",
+      "status": "PASS",
+      "durationMs": 1863
+    },
+    {
+      "name": "Independent analytics grant and advertising refusal via visible controls",
+      "status": "PASS",
+      "durationMs": 875
+    },
+    {
+      "name": "Mobile tablet desktop landscape and text reflow",
+      "status": "PASS",
+      "durationMs": 178
+    },
+    {
+      "name": "Keyboard focus containment and Escape",
+      "status": "PASS",
+      "durationMs": 628
+    },
+    {
+      "name": "Authorized reload and proof-bound browser observation through actual proxy",
+      "status": "PASS",
+      "durationMs": 2146
+    },
+    {
+      "name": "Stale revision cannot overwrite withdrawal in another tab",
+      "status": "PASS",
+      "durationMs": 2043
+    },
+    {
+      "name": "Offline save pauses locally and does not claim a server save",
+      "status": "PASS",
+      "durationMs": 2154
+    },
+    {
+      "name": "Unavailable preference API stays paused and recovers",
+      "status": "PASS",
+      "durationMs": 747
+    },
+    {
+      "name": "Cleared preference cookie cannot submit old context",
+      "status": "PASS",
+      "durationMs": 320
+    },
+    {
+      "name": "Real shopper account A refusal, account B isolation and logout",
+      "status": "PASS",
+      "durationMs": 2201
+    },
+    {
+      "name": "Admin permissions, real aggregate reporting and synthetic exclusion",
+      "status": "PASS",
+      "durationMs": 4012
+    }
+  ],
+  "network": {
+    "requests": 407,
+    "thirdPartyMarketingRequests": 0
+  },
+  "notVerified": [
+    "Human assistive technology",
+    "Physical touch devices",
+    "Native browser zoom",
+    "Successful public Order/payment flow",
+    "Live vendor acceptance"
+  ]
+}

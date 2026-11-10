@@ -103,3 +103,52 @@ See [the 35-outcome acceptance register](PHASE_05A_IMPLEMENTATION_REPORT.md#acce
 ## Phase 05B Storefront evidence
 
 See [the 30-outcome acceptance register](PHASE_05B_IMPLEMENTATION_REPORT.md#acceptance-register). Both purchase sources and both ownership types exercise the actual blocked payment check in Chromium with no purchase effects. The separate contract tests cover confirmed and uncertain responses; committed browser and provider journeys remain unverified. Overall PARTIAL, activation BLOCKED. Earlier outcomes and migration byte failure are unchanged.
+
+## Phase 06A Post-Order Payment Backend evidence
+
+See [the 30-outcome acceptance register](PHASE_06A_IMPLEMENTATION_REPORT.md#acceptance-register) and [Phase 06B handoff](PHASE_06B_HANDOFF.md). The private backend operations for committed-Order payment access, manual claim recording, exact-key idempotency recovery, destination snapshot verification, and guest 1-hour credential boundaries were verified in isolated PostgreSQL. Overall **PARTIAL**; public collection, automated cross-device recovery, and provider activation remain **BLOCKED**.
+
+## Phase 06B Storefront Payment Tracking & Claim Submission evidence
+
+See [the 34-outcome acceptance register](PHASE_06B_IMPLEMENTATION_REPORT.md#14-phase-06b-acceptance-register) and [Phase 06B handoff](PHASE_06B_NEXT_STAGE_HANDOFF.md). The Storefront now provides authorized committed-Order payment tracking, conditional bKash PRA instructions, minimal Transaction ID submission with double-click protection, exact-key lost-response recovery, rate-limit cooldown handling, and separate COD presentation. 227 Storefront tests in 21 test files pass, including 143 checkout tests. Overall **PARTIAL**; public purchases, real wallet instructions, and live collection remain **BLOCKED**.
+
+
+## Phase 07A backend evidence (2026-11-10)
+
+The [07A report](PHASE_07A_IMPLEMENTATION_REPORT.md) contains the independent 33-outcome register; overall remains PARTIAL. These notes do not replace prior browser/human/vendor outcomes.
+
+| Scenario | Current local evidence | Remaining scope |
+| --- | --- | --- |
+| S38/S39 | PostgreSQL transactional consumer, injected interruption, fake uncertain acknowledgement, timeout/rate limit/poison isolation; business effects unchanged | Physical process/COMMIT-wire fault and real vendor outage matrix unverified |
+| S40 | Real placement exact/different-key replay and concurrent consumer replay retain one Order fact; fake retries reuse the persisted ID | Confirmation browser/vendor twin dedup remains unverified; no purchase export enabled |
+| S41 | Event-time/current revision, denied/missing consent, withdrawal/regrant and concurrent fake dispatch/withdrawal tested | Consent HTTP/UI ownership binding, real-browser and provider remediation open |
+| S42 | Registered HTTP rejects authoritative purchase/payment/refund observation names; client money/text/attribution stripped | Full browser/production canary remains open |
+| S43 | Existing origin/120-per-minute API protection, 16 KiB generic/4 KiB specialized limits, consumer/delivery attempt and batch bounds | Representative ingress/volume and deployed quotas unverified |
+| S46 | Fake payload positive allowlist, no private source payload copying, fixed error categories and logging boundaries | Full traces, cache/referrer, historical logs and human/browser privacy acceptance unverified |
+
+## Phase 07B privacy and reporting evidence (2026-11-10)
+
+See [the independent 36-outcome register](PHASE_07B_IMPLEMENTATION_REPORT.md#independent-acceptance-register) and [Phase 08 handoff](PHASE_08_HANDOFF.md). Overall remains **PARTIAL**, activation **BLOCKED**. Server-derived HTTP preference authority, strict account/browser separation, CAS, withdrawal and observation binding now have real API/PostgreSQL and local browser evidence. 157 distinct focused tests/16 files and 11 actual local browser cases pass. This updates the earlier S41 transport gap without closing provider/human/deployed gates. S40 committed confirmation-browser success, S43 representative ingress/load and S46 full sink canaries remain open. Historical phase statuses and migration-history/3221 fixture/scanner failures are unchanged.
+
+## Phase 08 current scoped evidence (2026-11-10)
+
+Source: dirty `main`, HEAD `038087c288da33787de85b1e81ec880a911e4e78`, schema 3225. Environment: dedicated local PostgreSQL 18/loopback Fastify + Next/Chrome 156; synthetic data only. Exact commands and the independent 40-outcome table are in [the report](PHASE_08_IMPLEMENTATION_REPORT.md). Main regression is 416 tests/38 files plus three new distinct final cases in overlapping reruns (419 total); tooling tests six; actual browser cases 18. No prior phase status is promoted.
+
+| Scenario | Actual assertion and source | Result / remaining dimension |
+| --- | --- | --- |
+| S07 | Placement/quote configuration, price/destination changes and reviewed-source regressions | PASS in scoped PostgreSQL tests; real commercial approvals and browser success open |
+| S09–S13 | Original/different key, modified body, committed/expired replay, lost guest grant and actual COMMIT acknowledgement socket loss; `checkout/placement.test.ts` | PASS for tested authority/effect set; full successful browser purchase remains blocked |
+| S14–S16 | Last stock/coupon and atomic Order/reservation/Cart/redemption/obligation/audit/outbox rollback; placement/cart suites | PASS in stated DB scope; representative mixed traffic open |
+| S17–S18 | Actual shopper A/B/logout, revocation/ownership API fences and stale browser state; API foundation/auth/privacy and Storefront workflow tests | PARTIAL: scoped tests pass; full delayed Admin role/organization browser races open |
+| S23–S34 | Partial/excess/late receipt, cancellation, reversal, unknown refund reconciliation, COD custody/remittance and exact Finance totals; Payments/Finance suites | PARTIAL: scoped domain regressions and eight-way same-account receipt correction pass; real provider/operator browser/remaining races open |
+| S36 | Existing one-hour guest authority and same-key replay; proposed Order-bound challenge design | BLOCKED for cross-device recovery; no OTP/channel or phone-match shortcut invented |
+| S37 | Real plaintext local PG proxy disconnects before COMMIT and after server COMMIT before acknowledgement; original-key recovery; exhausted one-client acquisition and actual draft row-lock timeout | PARTIAL: placement/timeout cases pass; failover and financial-operation physical COMMIT breadth open |
+| S38–S39 | Physical consumer child killed at claimed/uncommitted and committed states; concurrent replay retains one fact and unchanged business rows | PARTIAL: real commerce child PASS; full Worker daemon/jobs/external ack matrix open |
+| S40–S41 | Domain conversion replay, strict current proof, two account browsers, policy mismatch, withdrawal/regrant and active TEST dispatch ordering | PARTIAL: DB/API and consent browser PASS; complete committed confirmation browser and vendor twin dedup unavailable |
+| S42–S43 | Real forged Host/forwarded-host Origin denial; strict request/rate boundaries; 120-job DB sample; no job error after receipt lock fix | PARTIAL: local protection PASS; representative HTTP/ingress/volume capacity not established |
+| S44–S45 | Actual storage SecurityError, 429/502/503/broken JSON, lost committed withdrawal response, keyboard/focus, 200/400% CSS reflow and forced colors | PARTIAL: 18 browser cases PASS; native zoom, human AT, physical devices, wider financial failures open |
+| S46 | Unique synthetic private path/query/header canaries absent from actual captured API logger; structured Set-Cookie redaction; existing wire/projection/TEST payload allowlists | PARTIAL: tested sinks PASS; full historical/tracing/cache/backup/vendor corpus unverified |
+| S47–S49 | Anchored canonical source hashes with tamper tests; generic 23 upgrades through 3225/no-op; Phase 09 compatibility/restore/revocation/kill-switch plan | PARTIAL: local source/upgrade PASS; Linux CI, deployed old images, backup restoration and public kill-switch procedure open |
+| S50 | Exact money/zero/null/large amounts, allocation/liability and Finance/COD conservation tests; local received total BDT 1,200.0000 | PASS in scoped tests; real tax/rounding/provider policy is a separate blocker |
+
+The before mixed sample's 18 receipt deadlocks are retained in PHASE_08_LOAD_BEFORE.json; the corrected sample and zero errors are in PHASE_08_LOAD.json. No production capacity or live-money result is inferred. No commit, push, persistent migration, VPS operation or deployment occurred.

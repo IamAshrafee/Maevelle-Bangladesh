@@ -1,0 +1,137 @@
+{
+  "environment": "Dedicated local PostgreSQL 18; DB application calls, concurrency 6, 120 mixed jobs; not HTTP latency or production capacity",
+  "elapsedMs": 600.7801999999992,
+  "cpuMicroseconds": {
+    "user": 250000,
+    "system": 172000
+  },
+  "rssBytes": 98934784,
+  "errors": {},
+  "latencies": {
+    "claim-and-partial-verification": {
+      "n": 30,
+      "p50": 48.15520000000015,
+      "p95": 135.47419999999966,
+      "p99": 186.70989999999983
+    },
+    "consumer-batch": {
+      "n": 30,
+      "p50": 6.184499999999389,
+      "p95": 48.33479999999963,
+      "p99": 109.10850000000028
+    },
+    "aggregate-report": {
+      "n": 30,
+      "p50": 2.5722999999998137,
+      "p95": 14.198199999999815,
+      "p99": 67.65189999999984
+    },
+    "preference-and-observation": {
+      "n": 30,
+      "p50": 15.438500000000204,
+      "p95": 76.59400000000005,
+      "p99": 107.55060000000049
+    }
+  },
+  "databaseSamples": [
+    {
+      "connections": 6,
+      "lock_waits": 1
+    },
+    {
+      "connections": 6,
+      "lock_waits": 1
+    },
+    {
+      "connections": 6,
+      "lock_waits": 1
+    },
+    {
+      "connections": 6,
+      "lock_waits": 0
+    },
+    {
+      "connections": 6,
+      "lock_waits": 3
+    },
+    {
+      "connections": 6,
+      "lock_waits": 3
+    },
+    {
+      "connections": 6,
+      "lock_waits": 3
+    },
+    {
+      "connections": 6,
+      "lock_waits": 2
+    },
+    {
+      "connections": 6,
+      "lock_waits": 2
+    },
+    {
+      "connections": 6,
+      "lock_waits": 2
+    },
+    {
+      "connections": 6,
+      "lock_waits": 0
+    },
+    {
+      "connections": 6,
+      "lock_waits": 2
+    },
+    {
+      "connections": 6,
+      "lock_waits": 2
+    },
+    {
+      "connections": 6,
+      "lock_waits": 2
+    },
+    {
+      "connections": 6,
+      "lock_waits": 2
+    },
+    {
+      "connections": 6,
+      "lock_waits": 2
+    },
+    {
+      "connections": 6,
+      "lock_waits": 1
+    },
+    {
+      "connections": 6,
+      "lock_waits": 0
+    },
+    {
+      "connections": 6,
+      "lock_waits": 0
+    },
+    {
+      "connections": 6,
+      "lock_waits": 0
+    }
+  ],
+  "aggregatePlan": {
+    "node": "Aggregate",
+    "planningMs": 0.071,
+    "executionMs": 0.062
+  },
+  "final": {
+    "orders": "30",
+    "receipts": "30",
+    "verified": "1200.0000",
+    "observations": "30",
+    "pending": "0"
+  },
+  "limitations": [
+    "No representative hardware/network",
+    "No full PDP/maximum Cart/placement mixed HTTP workload",
+    "Preference/observation sample includes 10ms post-confirmation interaction delay",
+    "No driver pool utilization instrumentation",
+    "No production throughput inference"
+  ]
+}
