@@ -288,7 +288,10 @@ export async function verifyManualPayment(
         'IDEMPOTENCY_CONFLICT',
         'The key was reused with different receipt evidence.',
       );
-    if ((error as { code?: string }).code === '23505')
+    if (
+      (error as { code?: string }).code === '23505' &&
+      (error as { constraint?: string }).constraint === 'receipt_reference_fences_pkey'
+    )
       throw new PaymentDomainError(
         'DUPLICATE_EXTERNAL_TRANSACTION',
         'The external receipt already has financial history.',

@@ -428,8 +428,9 @@ export function createWorker(options: WorkerOptions): WorkerRuntime {
         },
         'Worker recovery tick.',
       );
-    } catch (error: unknown) {
-      logger?.info({ error }, 'Worker recovery tick failed.');
+    } catch {
+      // Driver detail can include failed row values, contact data and credentials.
+      logger?.info({ code: 'WORKER_TICK_FAILED' }, 'Worker recovery tick failed.');
     } finally {
       tickRunning = false;
     }

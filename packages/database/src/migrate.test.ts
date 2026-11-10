@@ -23,7 +23,10 @@ async function expectSchemaTables(
   const tables = await sql<{ table_name: string }>`
     select table_name from information_schema.tables where table_schema = ${schema} order by table_name
   `.execute(db);
-  expect(tables.rows.map((row) => row.table_name), `Relations in schema ${schema}`).toEqual(expected);
+  expect(
+    tables.rows.map((row) => row.table_name),
+    `Relations in schema ${schema}`,
+  ).toEqual(expected);
 }
 
 describe('clean PostgreSQL migration path', () => {
@@ -127,6 +130,12 @@ describe('clean PostgreSQL migration path', () => {
         'analytics_refresh_runs',
         'cart_mutations',
         'cash_facts',
+        'commerce_consent',
+        'commerce_deliveries',
+        'commerce_events',
+        'commerce_observation_authority',
+        'commerce_operations',
+        'commerce_reporting_scopes',
         'cost_facts',
         'customer_facts',
         'data_quality_results',
@@ -135,6 +144,7 @@ describe('clean PostgreSQL migration path', () => {
         'metric_definitions',
         'order_facts',
         'payment_facts',
+        'privacy_browser_sessions',
         'projection_event_receipts',
         'projection_state',
         'report_exports',

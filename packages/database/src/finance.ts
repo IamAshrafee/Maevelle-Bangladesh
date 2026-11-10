@@ -1,6 +1,7 @@
 import { sql, type Kysely } from 'kysely';
 import type { DatabaseSchema } from './index.js';
 import { appendAuditEvent, claimIdempotencyRecord, IdempotencyKeyReuseError } from './platform.js';
+import { nextFinanceNumber as nextNumber } from './finance/document-numbers.js';
 
 export class FinanceDomainError extends Error {
   public constructor(
@@ -82,20 +83,6 @@ async function outbox(
   await sql`insert into platform.outbox_events (organization_id,event_type,event_version,aggregate_type,aggregate_id,aggregate_version,payload,occurred_at) values (${organizationId},${event},1,'finance.finance_transaction',${id}::uuid,1,${JSON.stringify({ financeTransactionId: id })}::jsonb,now())`.execute(
     db,
   );
-}
-async function nextNumber(
-  db: Kysely<DatabaseSchema>,
-  org: string,
-  prefix: string,
-  table?: 'finance_transactions' | 'expenses' | 'expense_settlements' | 'cod_settlements',
-): Promise<string> {
-  const target = table ?? (prefix === 'EXP' ? 'expenses' : 'finance_transactions');
-  const r = await sql<{
-    n: string;
-  }>`select lpad((count(*) + 1)::text,6,'0') as n from finance.${sql.table(target)} where organization_id=${org}`.execute(
-    db,
-  );
-  return `${prefix}-${r.rows[0]?.n ?? '000001'}`;
 }
 async function account(db: Kysely<DatabaseSchema>, org: string, id: string, lock = false) {
   // Serialize balance/status decisions without conflicting with FK KEY SHARE

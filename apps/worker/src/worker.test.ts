@@ -1,4 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
+import { Writable } from 'node:stream';
+import { createLogger } from '@maevelle/observability';
 
 import type { DatabaseClient } from '@maevelle/database';
 import { createDatabase, sql } from '@maevelle/database';
@@ -8,6 +10,36 @@ import { createOrganization } from '@maevelle/database/platform';
 import { createWorker } from './worker.js';
 
 describe('worker lifecycle', () => {
+  it('keeps private driver failure details out of Worker diagnostics', async () => {
+    const canary = 'SYNTHETIC-PRIVATE-WORKER-' + crypto.randomUUID();
+    const database: DatabaseClient = {
+      db: {
+        getExecutor() {
+          throw Object.assign(new Error('Synthetic driver failure'), { detail: canary });
+        },
+      } as unknown as DatabaseClient['db'],
+      ping: vi.fn().mockResolvedValue(undefined),
+      close: vi.fn().mockResolvedValue(undefined),
+    };
+    let logs = '';
+    const logger = createLogger(
+      { component: 'worker', level: 'info' },
+      new Writable({
+        write(chunk, _encoding, done) {
+          logs += chunk.toString();
+          done();
+        },
+      }),
+    );
+    const worker = createWorker({ database, heartbeatIntervalMs: 60000, logger });
+    try {
+      await worker.start();
+      expect(logs).not.toContain(canary);
+      expect(logs).toContain('WORKER_TICK_FAILED');
+    } finally {
+      await worker.close();
+    }
+  });
   it('checks PostgreSQL on startup and closes its shared database resource', async () => {
     const database: DatabaseClient = {
       db: {} as DatabaseClient['db'],
@@ -37,45 +69,64 @@ describe('worker lifecycle', () => {
 
 const testUrl = process.env.TEST_DATABASE_URL;
 describe('wishlist retention worker integration', () => {
-  it.skipIf(!testUrl)('purges an expired share during the startup tick in an isolated database', async () => {
-    if (!testUrl || new URL(testUrl).pathname !== '/maevelle_test')
-      throw new Error('Use the isolated maevelle_test database URL.');
-    const name = `maevelle_worker_wishlist_${crypto.randomUUID().replaceAll('-', '')}`;
-    const adminUrl = new URL(testUrl);
-    adminUrl.pathname = '/postgres';
-    const admin = createDatabase({ connectionString: adminUrl.toString(), maxConnections: 1 });
-    const url = new URL(testUrl);
-    url.pathname = `/${name}`;
-    let database: DatabaseClient | undefined;
-    try {
-      await sql.raw(`create database "${name}"`).execute(admin.db);
-      database = createDatabase({ connectionString: url.toString(), maxConnections: 4 });
-      await runMigrations(database.db);
-      const organization = await createOrganization(database.db, {
-        code: `worker-${crypto.randomUUID().slice(0, 8)}`, displayName: 'Worker test',
-        timezone: 'Asia/Dhaka', defaultLocale: 'en', defaultCurrency: 'BDT',
-      });
-      const share = await sql<{ id: string }>`insert into wishlist.shares
+  it.skipIf(!testUrl)(
+    'purges an expired share during the startup tick in an isolated database',
+    async () => {
+      if (!testUrl || new URL(testUrl).pathname !== '/maevelle_test')
+        throw new Error('Use the isolated maevelle_test database URL.');
+      const name = `maevelle_worker_wishlist_${crypto.randomUUID().replaceAll('-', '')}`;
+      const adminUrl = new URL(testUrl);
+      adminUrl.pathname = '/postgres';
+      const admin = createDatabase({ connectionString: adminUrl.toString(), maxConnections: 1 });
+      const url = new URL(testUrl);
+      url.pathname = `/${name}`;
+      let database: DatabaseClient | undefined;
+      try {
+        await sql.raw(`create database "${name}"`).execute(admin.db);
+        database = createDatabase({ connectionString: url.toString(), maxConnections: 4 });
+        await runMigrations(database.db);
+        const organization = await createOrganization(database.db, {
+          code: `worker-${crypto.randomUUID().slice(0, 8)}`,
+          displayName: 'Worker test',
+          timezone: 'Asia/Dhaka',
+          defaultLocale: 'en',
+          defaultCurrency: 'BDT',
+        });
+        const share = await sql<{ id: string }>`insert into wishlist.shares
         (organization_id,view_token_digest,manage_token_digest,created_at,expires_at)
         values (${organization.id},${Buffer.from(crypto.randomUUID())},${Buffer.from(crypto.randomUUID())},
-          now()-interval '100 days',now()-interval '31 days') returning id::text`.execute(database.db);
-      await sql`insert into platform.outbox_events(organization_id,event_type,event_version,aggregate_type,aggregate_id,aggregate_version,payload,occurred_at)
-        values (${organization.id},'wishlist.merge.completed',1,'wishlist.analytics',${crypto.randomUUID()}::uuid,1,'{}',now())`.execute(database.db);
-      const worker = createWorker({ database, heartbeatIntervalMs: 60_000 });
-      await worker.start();
-      const remaining = await sql<{ count: number }>`select count(*)::int as count from wishlist.shares
-        where organization_id=${organization.id} and id=${share.rows[0]!.id}::uuid`.execute(database.db);
-      expect(remaining.rows[0]!.count).toBe(0);
-      const outcomes = await sql<{ count: number }>`select count(*)::int count from analytics.wishlist_outcomes
-        where organization_id=${organization.id} and event_name='wishlist.merge.completed'`.execute(database.db);
-      expect(outcomes.rows[0]!.count).toBe(1);
+          now()-interval '100 days',now()-interval '31 days') returning id::text`.execute(
+          database.db,
+        );
+        await sql`insert into platform.outbox_events(organization_id,event_type,event_version,aggregate_type,aggregate_id,aggregate_version,payload,occurred_at)
+        values (${organization.id},'wishlist.merge.completed',1,'wishlist.analytics',${crypto.randomUUID()}::uuid,1,'{}',now())`.execute(
+          database.db,
+        );
+        const worker = createWorker({ database, heartbeatIntervalMs: 60_000 });
+        await worker.start();
+        const remaining = await sql<{
+          count: number;
+        }>`select count(*)::int as count from wishlist.shares
+        where organization_id=${organization.id} and id=${share.rows[0]!.id}::uuid`.execute(
+          database.db,
+        );
+        expect(remaining.rows[0]!.count).toBe(0);
+        const outcomes = await sql<{
+          count: number;
+        }>`select count(*)::int count from analytics.wishlist_outcomes
+        where organization_id=${organization.id} and event_name='wishlist.merge.completed'`.execute(
+          database.db,
+        );
+        expect(outcomes.rows[0]!.count).toBe(1);
 
-      await worker.close();
-      database = undefined;
-    } finally {
-      await database?.close();
-      await sql.raw(`drop database if exists "${name}"`).execute(admin.db);
-      await admin.close();
-    }
-  }, 30_000);
+        await worker.close();
+        database = undefined;
+      } finally {
+        await database?.close();
+        await sql.raw(`drop database if exists "${name}"`).execute(admin.db);
+        await admin.close();
+      }
+    },
+    30_000,
+  );
 });
