@@ -275,6 +275,10 @@ export async function verifyManualPayment(
         paymentId: payment.id,
         orderId: link.order_id,
         disposition,
+        intentId: link.intent_id,
+        obligationSatisfied: !late && amounts.outstanding === '0.0000',
+        obligationAmount: intent.expected_amount,
+        obligationCurrency: intent.currency_code,
       });
       return getPayment(tx, input.organizationId, payment.id);
     });

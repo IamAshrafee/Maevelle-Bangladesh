@@ -255,7 +255,7 @@ async function operationalReport(
       break;
     case 'STOREFRONT':
       result = await sql`with eligible as (
-        select session_id,event_name from analytics.storefront_events where organization_id=${organizationId} and analytics_consent='GRANTED' and occurred_at>=${query.from}::date and occurred_at<${query.toExclusive}::date
+        select session_id,event_name from analytics.storefront_events where organization_id=${organizationId} and analytics_consent='GRANTED' and occurred_at>=(${query.from}::date::timestamp at time zone (select timezone from platform.organizations where id=${organizationId})) and occurred_at<(${query.toExclusive}::date::timestamp at time zone (select timezone from platform.organizations where id=${organizationId}))
       ), funnel as (
         select count(distinct session_id)::numeric eligible_sessions,
           count(distinct session_id) filter(where event_name='PRODUCT_VIEWED')::numeric product_view_sessions,
@@ -265,12 +265,12 @@ async function operationalReport(
       ) select eligible_sessions::text,product_view_sessions::text,cart_sessions::text,checkout_sessions::text,observed_order_sessions::text,
         case when product_view_sessions=0 then null else round(cart_sessions/product_view_sessions,4)::text end product_view_to_cart_rate,
         case when cart_sessions=0 then null else round(checkout_sessions/cart_sessions,4)::text end cart_to_checkout_rate,
-        case when checkout_sessions=0 then null else round(observed_order_sessions/checkout_sessions,4)::text end checkout_completion_rate,
-        case when eligible_sessions=0 then null else round(observed_order_sessions/eligible_sessions,4)::text end observed_session_conversion_rate
+        null::text checkout_completion_rate,
+        null::text observed_session_conversion_rate, 'AUTHORITATIVE_ORDER_JOIN_AND_AVAILABILITY_UNVERIFIED'::text conversion_rate_unavailable_reason
       from funnel`.execute(db);
       break;
     case 'MARKETING':
-      result = await sql`select coalesce(source,'DIRECT_OR_UNKNOWN') source,coalesce(medium,'UNKNOWN') medium,coalesce(campaign,'UNATTRIBUTED') campaign,count(distinct session_id)::text sessions,count(*) filter(where event_name='ORDER_PLACED')::text observed_orders from analytics.storefront_events where organization_id=${organizationId} and analytics_consent='GRANTED' and event_name not in ('CART_VIEWED','CART_COMMAND_INITIATED','CART_COMMAND_REJECTED','CART_RECOVERY_VIEWED') and occurred_at>=${query.from}::date and occurred_at<${query.toExclusive}::date group by source,medium,campaign order by count(distinct session_id) desc`.execute(db);
+      result = await sql`select coalesce(source,'DIRECT_OR_UNKNOWN') source,coalesce(medium,'UNKNOWN') medium,coalesce(campaign,'UNATTRIBUTED') campaign,count(distinct session_id)::text sessions,count(*) filter(where event_name='ORDER_PLACED')::text observed_orders from analytics.storefront_events where organization_id=${organizationId} and analytics_consent='GRANTED' and event_name not in ('CART_VIEWED','CART_COMMAND_INITIATED','CART_COMMAND_REJECTED','CART_RECOVERY_VIEWED') and occurred_at>=(${query.from}::date::timestamp at time zone (select timezone from platform.organizations where id=${organizationId})) and occurred_at<(${query.toExclusive}::date::timestamp at time zone (select timezone from platform.organizations where id=${organizationId})) group by source,medium,campaign order by count(distinct session_id) desc`.execute(db);
       break;
     case 'ASSETS':
       result = await sql`select status,condition,currency_code,count(*)::text assets,case when count(acquisition_cost)=count(*) then sum(acquisition_cost)::text else null end acquisition_cost,case when count(acquisition_cost)=count(*) then 'AVAILABLE' else 'PARTIAL' end valuation_status from assets.assets where organization_id=${organizationId} and acquisition_date>=${query.from}::date and acquisition_date<${query.toExclusive}::date group by status,condition,currency_code order by status,condition,currency_code`.execute(db);

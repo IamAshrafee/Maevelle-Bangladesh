@@ -1,3 +1,4 @@
+import { registerCommerceObservability } from './commerce-observability.js';
 import { registerWishlistObservability } from './wishlist-observability.js';
 import Fastify, { LogController } from 'fastify';
 import { createHmac } from 'node:crypto';
@@ -22,25 +23,23 @@ export interface BuildApiOptions {
   readonly shopperAuthEmailSender?: ShopperAuthEmailSender;
 }
 
-function matchesExpectedOrigin(
-  origin: string,
-  trustedOrigins: readonly string[],
-  requestHost?: string,
-  forwardedHost?: string | string[],
-): boolean {
+function matchesExpectedOrigin(origin: string, trustedOrigins: readonly string[]): boolean {
   try {
     const originUrl = new URL(origin);
-    if (trustedOrigins.some((candidate) => candidate === originUrl.origin)) return true;
-    if (originUrl.host === requestHost) return true;
-    const fHost = Array.isArray(forwardedHost) ? forwardedHost[0] : forwardedHost;
-    if (fHost && originUrl.host === fHost.split(',')[0]?.trim()) return true;
-    return false;
+    // Host and forwarded headers are routing metadata, never CSRF trust authority.
+    return origin === originUrl.origin && trustedOrigins.includes(originUrl.origin);
   } catch {
     return false;
   }
 }
 
 const shopperAuthPrefix = '/shopper-auth/';
+// Include bare namespaces and query variants, not only registered slash routes.
+// Authentication callbacks/reset links and invitations may contain bearer tokens.
+const sensitiveRequestPath = (url: string) =>
+  /^\/(?:auth|shopper-auth|invitations|storefront\/v1\/(?:analytics|checkout|checkouts|orders))(?:[/?]|$)/.test(
+    url,
+  );
 
 export function buildApi(options: BuildApiOptions) {
   const rateAttempts = new Map<string, { count: number; resetAt: number }>();
@@ -55,7 +54,9 @@ export function buildApi(options: BuildApiOptions) {
     // Cart and Shopper Auth URLs can contain coupon codes and bearer secrets.
     logController: new LogController({
       disableRequestLogging: (request) =>
-        request.url.startsWith(shopperAuthPrefix) ||
+        sensitiveRequestPath(request.url) ||
+        request.url.startsWith('/storefront/v1/analytics/') ||
+        request.url.startsWith('/admin/analytics/commerce') ||
         /^\/admin\/(?:payments|refunds)(?:[/?]|$)/.test(request.url) ||
         /^\/storefront\/v1\/(?:carts|checkout|checkouts|orders)(?:[/?]|$)/.test(request.url),
     }),
@@ -64,6 +65,11 @@ export function buildApi(options: BuildApiOptions) {
     genReqId: (request) => resolveCorrelationId(request.headers['x-correlation-id']),
   }).withTypeProvider<TypeBoxTypeProvider>();
 
+  registerCommerceObservability(
+    app,
+    options.database,
+    options.config?.storefrontOrganizationCode ?? 'maevelle',
+  );
   registerWishlistObservability(
     app,
     options.database,
@@ -102,6 +108,17 @@ export function buildApi(options: BuildApiOptions) {
     const method = request.method.toUpperCase();
     const origin = request.headers.origin;
     const path = request.url.split('?', 1)[0] ?? '';
+    if (options.config && path === '/storefront/v1/analytics/events') {
+      reply.header('cache-control', 'private, no-store');
+      if (
+        origin !== new URL(options.config.storefrontBaseUrl).origin ||
+        (request.headers['sec-fetch-site'] &&
+          !['same-origin', 'same-site', 'none'].includes(request.headers['sec-fetch-site']))
+      )
+        return reply
+          .code(403)
+          .send({ error: { code: 'ORIGIN_REJECTED', message: 'Request origin is not trusted.' } });
+    }
     const shopperAuth = path.startsWith(shopperAuthPrefix);
     if (shopperAuth) reply.header('cache-control', 'private, no-store');
     const shopperPrivate =
@@ -196,14 +213,7 @@ export function buildApi(options: BuildApiOptions) {
         new URL(options.config.authBaseUrl).origin,
         ...(options.config.authTrustedOrigins ?? []),
       ];
-      if (
-        !matchesExpectedOrigin(
-          origin,
-          trustedOrigins,
-          request.headers.host,
-          request.headers['x-forwarded-host'],
-        )
-      )
+      if (!matchesExpectedOrigin(origin, trustedOrigins))
         return reply.code(403).send({
           error: { code: 'ORIGIN_REJECTED', message: 'Request origin is not trusted.' },
         });
@@ -218,14 +228,7 @@ export function buildApi(options: BuildApiOptions) {
         new URL(options.config.storefrontBaseUrl).origin,
         ...(options.config.authTrustedOrigins ?? []),
       ];
-      if (
-        !matchesExpectedOrigin(
-          origin,
-          trustedOrigins,
-          request.headers.host,
-          request.headers['x-forwarded-host'],
-        )
-      )
+      if (!matchesExpectedOrigin(origin, trustedOrigins))
         return reply.code(403).send({
           error: { code: 'ORIGIN_REJECTED', message: 'Request origin is not trusted.' },
         });
@@ -291,7 +294,9 @@ export function buildApi(options: BuildApiOptions) {
         },
       });
     const diagnostics =
-      request.url.startsWith(shopperAuthPrefix) ||
+      sensitiveRequestPath(request.url) ||
+      request.url.startsWith('/storefront/v1/analytics/') ||
+      request.url.startsWith('/admin/analytics/commerce') ||
       /^\/admin\/(?:payments|refunds)(?:[/?]|$)/.test(request.url) ||
       /^\/storefront\/v1\/(?:checkout|checkouts|orders)(?:[/?]|$)/.test(request.url)
         ? { requestId: request.id, route: request.routeOptions.url }

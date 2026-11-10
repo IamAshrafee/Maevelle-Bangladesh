@@ -1,8 +1,14 @@
+import { syntheticPrivacySnapshot } from './testing/privacy-fixture';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { buildWishlistObservation, emitWishlistObservation } from './wishlist-telemetry';
 import { wishlistObservationNames } from '@maevelle/contracts';
 import { emitCartObservation } from './cart-telemetry';
-import { currentCommerceConsent, saveCommerceConsent } from './consent';
+import {
+  currentCommerceConsent,
+  saveCommerceConsent,
+  acceptPrivacySnapshot,
+  invalidatePrivacyPreferences,
+} from './consent';
 
 class MemoryStorage implements Storage {
   private rows = new Map<string, string>();
@@ -51,7 +57,7 @@ describe('Storefront Wishlist Behavioral Telemetry', () => {
     );
 
     // Default to consent GRANTED for testing
-    saveCommerceConsent('GRANTED');
+    acceptPrivacySnapshot(syntheticPrivacySnapshot(), true);
   });
 
   afterEach(() => {
@@ -151,7 +157,7 @@ describe('Storefront Wishlist Behavioral Telemetry', () => {
 
   describe('Consent Gating & Transmission', () => {
     it('transmits event to /api/storefront/v1/analytics/events when analytics consent is GRANTED', async () => {
-      saveCommerceConsent('GRANTED');
+      acceptPrivacySnapshot(syntheticPrivacySnapshot(), true);
       const mockFetch = vi.fn().mockResolvedValue({ ok: true, status: 202 });
       globalThis.fetch = mockFetch;
 
@@ -165,7 +171,11 @@ describe('Storefront Wishlist Behavioral Telemetry', () => {
       const [url, init] = mockFetch.mock.calls[0] as [string, RequestInit];
       expect(url).toBe('/api/storefront/v1/analytics/events');
       expect(init.method).toBe('POST');
-      expect(init.headers).toEqual({ 'content-type': 'application/json' });
+      expect(init.headers).toEqual({
+        'content-type': 'application/json',
+        'x-privacy-context': 'c'.repeat(43),
+        'x-privacy-observation': 'o'.repeat(43),
+      });
       expect(init.credentials).toBe('include');
 
       const parsedBody = JSON.parse(init.body as string);
@@ -188,7 +198,7 @@ describe('Storefront Wishlist Behavioral Telemetry', () => {
     });
 
     it('uses stable eventId when provided for retries and preserves failure-isolation', async () => {
-      saveCommerceConsent('GRANTED');
+      acceptPrivacySnapshot(syntheticPrivacySnapshot(), true);
       const fixedEventId = '11111111-2222-4333-8444-555555555555';
 
       let attempt = 0;
@@ -217,7 +227,7 @@ describe('Storefront Wishlist Behavioral Telemetry', () => {
     });
 
     it('never throws when fetch fails permanently (deliberately failure-isolated)', async () => {
-      saveCommerceConsent('GRANTED');
+      acceptPrivacySnapshot(syntheticPrivacySnapshot(), true);
       globalThis.fetch = vi.fn().mockRejectedValue(new Error('Fatal connection drop'));
 
       // Must resolve cleanly without throwing
@@ -258,12 +268,13 @@ describe('Storefront Wishlist Behavioral Telemetry', () => {
   });
 });
 
-it('Cart telemetry renews legacy grants and sends only anonymous first-party observations', async () => {
+it('Cart telemetry requires a server snapshot and sends a minimal first-party payload', async () => {
   const target = Object.assign(new EventTarget(), { localStorage: new MemoryStorage() });
   const fetch = vi.fn().mockResolvedValue(new Response(null, { status: 202 }));
   vi.stubGlobal('window', target);
   vi.stubGlobal('fetch', fetch);
   try {
+    invalidatePrivacyPreferences();
     const observation = {
       name: 'CART_COMMAND_INITIATED',
       data: { mode: 'ACCOUNT', command: 'WISHLIST_MOVE', privateId: 'secret' },
@@ -277,11 +288,11 @@ it('Cart telemetry renews legacy grants and sends only anonymous first-party obs
     );
     expect(await emitCartObservation(observation)).toBe(false);
     expect(fetch).not.toHaveBeenCalled();
-    saveCommerceConsent('GRANTED');
+    acceptPrivacySnapshot(syntheticPrivacySnapshot(), true);
     expect(await emitCartObservation(observation)).toBe(true);
     const [url, options] = fetch.mock.calls[0]!;
     expect(url).toBe('/api/storefront/v1/analytics/events');
-    expect(options).toMatchObject({ credentials: 'omit', referrerPolicy: 'no-referrer' });
+    expect(options).toMatchObject({ credentials: 'include', referrerPolicy: 'no-referrer' });
     expect(JSON.parse(options.body)).toEqual({
       name: 'CART_COMMAND_INITIATED',
       data: { mode: 'ACCOUNT', command: 'WISHLIST_MOVE' },

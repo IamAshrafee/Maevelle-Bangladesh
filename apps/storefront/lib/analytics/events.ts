@@ -1,4 +1,7 @@
 'use client';
+import { currentCommerceConsent, permitsAnalytics } from './consent';
+import { sendStorefrontObservation } from './observation-transport';
+import { minimalBrowserData } from './observation-allowlist';
 
 import type {
   CommerceAttributionDto,
@@ -39,29 +42,32 @@ export function createBrowserCommerceEvent<Name extends CommerceEventNameDto>(
   } as CommerceEventDto<Name>;
 }
 
-/**
- * Vendor-neutral, failure-isolated browser hand-off. Adapters subscribe to this
- * channel after consent and never become a dependency of the commerce action.
- */
+/** Failure-isolated first-party capture; no public vendor-event handoff. */
 export function publishCommerceEvent(event: CommerceEventDto): void {
   try {
-    window.dispatchEvent(new CustomEvent(COMMERCE_EVENT_CHANNEL, { detail: event }));
-    if (event.origin === 'BROWSER' && event.consent.analytics === 'GRANTED') {
-      void fetch('/api/storefront/v1/analytics/events', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        credentials: 'include',
-        keepalive: true,
-        body: JSON.stringify(event),
-      }).catch(() => undefined);
-    }
+    const consent = currentCommerceConsent();
+    if (event.origin !== 'BROWSER' || !permitsAnalytics(consent)) return;
+    const data = minimalBrowserData(event.name, event.data as unknown as Record<string, unknown>);
+    if (!data) return;
+    const minimal = {
+      schemaVersion: 1,
+      eventId: event.eventId,
+      name: event.name,
+      origin: 'BROWSER',
+      occurredAt: event.occurredAt,
+      sessionId: event.sessionId,
+      consent,
+      data,
+    };
+    void sendStorefrontObservation(minimal);
   } catch {
-    // Measurement is deliberately best-effort; commerce has already succeeded.
+    /* Optional measurement never changes a commerce result. */
   }
 }
 
 /** Creates the pseudonymous per-tab key used for funnel denominators. */
 export function storefrontAnalyticsSessionId(): string {
+  if (!permitsAnalytics(currentCommerceConsent())) return crypto.randomUUID();
   const key = 'maevelle_analytics_session';
   try {
     const existing = window.sessionStorage.getItem(key);

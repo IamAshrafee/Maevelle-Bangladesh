@@ -19,6 +19,8 @@ import {
   processAnalyticsExports,
   processAnalyticsOutbox,
   processCartAnalyticsOutbox,
+  processCommerceAnalyticsOutbox,
+  cleanupCommerceMeasurement,
 } from '@maevelle/database/analytics';
 import { processCatalogImports } from '@maevelle/database/admin-operations';
 import { processIntegrityRuns, scheduleDueIntegrityRuns } from '@maevelle/database/integrity';
@@ -185,6 +187,7 @@ export function createWorker(options: WorkerOptions): WorkerRuntime {
         webhookEvents,
         analytics,
         cartAnalytics,
+        commerceAnalytics,
         analyticsExports,
         imports,
         search,
@@ -271,6 +274,19 @@ export function createWorker(options: WorkerOptions): WorkerRuntime {
           return result.processed;
         }).catch(() => {
           logger?.info({}, 'Cart analytics batch failed and will retry.');
+          return 0;
+        }),
+        runJob(async () => {
+          const result = await processCommerceAnalyticsOutbox(options.database.db);
+          await cleanupCommerceMeasurement(options.database.db);
+          if (result.rejected || result.retried)
+            logger?.info(
+              { rejected: result.rejected, retried: result.retried },
+              'Commerce analytics processing outcomes.',
+            );
+          return result.processed;
+        }).catch(() => {
+          logger?.info({}, 'Commerce analytics batch will retry.');
           return 0;
         }),
         runJob(() => processAnalyticsExports(options.database.db, `worker:${process.pid}`, 1)),
@@ -376,6 +392,7 @@ export function createWorker(options: WorkerOptions): WorkerRuntime {
           webhookEvents,
           analytics,
           cartAnalytics,
+          commerceAnalytics,
           analyticsExports,
           imports,
           search,

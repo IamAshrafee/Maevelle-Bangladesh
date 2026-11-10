@@ -1,3 +1,4 @@
+import { registerPrivacyPreferencesRoutes } from './privacy-preferences.js';
 import { registerCheckoutRoutes } from './checkout.js';
 import { assertShareRecoveryKeysAvailable } from '@maevelle/database/wishlist-share-lifecycle';
 import { shareKeyRing } from '@maevelle/database/wishlist-share-crypto';
@@ -246,7 +247,19 @@ export function registerAuthRoutes(
   registerPathaoRoutes(app, database, auth, config);
   registerSteadfastRoutes(app, database, auth, config);
   registerCourierWebhookRoutes(app, database);
-  registerAnalyticsRoutes(app, database, auth, config.storefrontOrganizationCode);
+  const authorizeObservation = registerPrivacyPreferencesRoutes(
+    app,
+    database,
+    config,
+    resolveShopper,
+  );
+  registerAnalyticsRoutes(
+    app,
+    database,
+    auth,
+    config.storefrontOrganizationCode,
+    authorizeObservation,
+  );
   registerAdminOperationsRoutes(app, database, auth);
   registerTeamAccessRoutes(app, database, auth, config);
   registerAssetRoutes(app, database, auth);

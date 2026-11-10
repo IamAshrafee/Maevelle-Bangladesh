@@ -35,7 +35,7 @@ export async function emitCartObservation(interaction: CartInteraction): Promise
       origin: 'BROWSER',
       consent: { ...consent, marketing: 'DENIED', preferences: 'DENIED' },
     };
-    return await sendStorefrontObservation(event, 'omit');
+    return await sendStorefrontObservation(event);
   } catch {
     return false;
   }

@@ -3,7 +3,7 @@
 import type { WishlistObservationDto, WishlistObservationName } from '@maevelle/contracts';
 import { currentCommerceConsent, permitsAnalytics } from './consent';
 import { sendStorefrontObservation } from './observation-transport';
-import { storefrontAnalyticsSessionId, COMMERCE_EVENT_CHANNEL } from './events';
+import { storefrontAnalyticsSessionId } from './events';
 
 export interface EmitWishlistObservationOptions {
   readonly name: WishlistObservationName;
@@ -76,8 +76,7 @@ export async function emitWishlistObservation(
       return false;
     const observation = buildWishlistObservation(options);
     if (mountObservations.has(options.name)) recentlyEmittedEvents.set(dedupKey, now);
-    window.dispatchEvent(new CustomEvent(COMMERCE_EVENT_CHANNEL, { detail: observation }));
-    return await sendStorefrontObservation(observation, 'include');
+    return await sendStorefrontObservation(observation);
   } catch {
     return false;
   }

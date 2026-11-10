@@ -115,6 +115,7 @@ export async function audit(
   owner: CheckoutAuthority,
   id: string,
   action: string,
+  sourceKind?: 'CART' | 'BUY_NOW',
 ) {
   await appendAuditEvent(tx, {
     organizationId: owner.organizationId,
@@ -123,7 +124,7 @@ export async function audit(
     action: `checkout.draft.${action}`,
     targetType: 'checkout.draft',
     targetId: id,
-    metadata: { implementationVersion: 2 },
+    metadata: { implementationVersion: 2, ...(sourceKind ? { sourceKind } : {}) },
   });
 }
 function contextMatches(context: CheckoutContext, owner: CheckoutAuthority) {
@@ -165,7 +166,7 @@ export async function createCheckoutDraft(
     const id = row.rows[0]!.id;
     await lines(tx, context, id, intent);
     await finish(tx, record.id, id);
-    await audit(tx, owner, id, 'created');
+    await audit(tx, owner, id, 'created', source.kind);
     return draftView(tx, await ownedDraft(tx, owner, id));
   });
 }

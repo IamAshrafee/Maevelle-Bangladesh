@@ -1,3 +1,6 @@
+import { parseConfig } from '@maevelle/config';
+import { registerPrivacyPreferencesRoutes } from './routes/privacy-preferences.js';
+import { registerCommerceObservability } from './commerce-observability.js';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import Fastify, { type FastifyInstance } from 'fastify';
 import { createDatabase, sql, type DatabaseClient } from '@maevelle/database';
@@ -15,6 +18,7 @@ let org: string;
 let other: string;
 let userId: string;
 let membershipId: string;
+let observationHeaders: Record<string, string>;
 const endpoints = ['summary', 'activity', 'products', 'categories', 'sharing', 'operations'];
 const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Dhaka' }).format(new Date());
 const period = `from=${today}&to=${today}`;
@@ -85,8 +89,48 @@ beforeAll(async () => {
         headers.get('authorization') === 'test-admin' ? { user: { id: userId } } : null,
     },
   } as unknown as Parameters<typeof registerAnalyticsRoutes>[2];
-  registerAnalyticsRoutes(app, database, auth, 'maevelle');
+  const config = parseConfig({
+    NODE_ENV: 'test',
+    DATABASE_URL: url,
+    TEST_DATABASE_URL: url,
+    BETTER_AUTH_SECRET: 'synthetic-analytics-api-privacy-fixture-long-enough',
+    AUTH_ENCRYPTION_KEY: Buffer.alloc(32, 22).toString('base64'),
+    STOREFRONT_ORGANIZATION_CODE: 'maevelle',
+    STOREFRONT_BASE_URL: 'http://localhost:3000',
+  });
+  const gate = registerPrivacyPreferencesRoutes(app, database, config, async () => null);
+  registerAnalyticsRoutes(app, database, auth, 'maevelle', gate);
   await app.ready();
+  const pref = await app.inject({
+    url: '/storefront/v1/analytics/consent',
+    headers: { origin: 'http://localhost:3000', 'x-privacy-request': '1' },
+  });
+  const cookie = String(pref.headers['set-cookie']).split(';')[0]!;
+  const snapshot = pref.json().data;
+  const saved = await app.inject({
+    method: 'PUT',
+    url: '/storefront/v1/analytics/consent',
+    headers: {
+      cookie,
+      origin: 'http://localhost:3000',
+      'x-privacy-request': '1',
+      'x-privacy-context': snapshot.context,
+    },
+    payload: {
+      policyVersion: snapshot.policyVersion,
+      choices: {
+        ANALYTICS: { decision: 'GRANTED', expectedRevision: '0', expectedBrowserRevision: '0' },
+        ADVERTISING: { decision: 'DENIED', expectedRevision: '0', expectedBrowserRevision: '0' },
+      },
+    },
+  });
+  expect(saved.statusCode, saved.body).toBe(200);
+  observationHeaders = {
+    cookie,
+    origin: 'http://localhost:3000',
+    'x-privacy-context': saved.json().data.context,
+    'x-privacy-observation': saved.json().data.observationToken,
+  };
 }, 30000);
 afterAll(async () => {
   await app?.close();
@@ -108,7 +152,9 @@ describe('registered Wishlist analytics routes', () => {
     }
     const cartPath = `/admin/analytics/cart?${period}`;
     expect((await app.inject({ url: cartPath })).statusCode).toBe(403);
-    expect((await app.inject({ url: cartPath, headers: { authorization: 'test-admin' } })).statusCode).toBe(403);
+    expect(
+      (await app.inject({ url: cartPath, headers: { authorization: 'test-admin' } })).statusCode,
+    ).toBe(403);
     await sql`insert into iam.membership_capability_grants(membership_id,capability_code) values (${membershipId}::uuid,'analytics.view')`.execute(
       database.db,
     );
@@ -155,6 +201,7 @@ describe('registered Wishlist analytics routes', () => {
     const response = await app.inject({
       method: 'POST',
       url: '/storefront/v1/analytics/events',
+      headers: observationHeaders,
       payload: input,
     });
     expect(response.statusCode, response.body).toBe(202);
@@ -162,6 +209,7 @@ describe('registered Wishlist analytics routes', () => {
     const replay = await app.inject({
       method: 'POST',
       url: '/storefront/v1/analytics/events',
+      headers: observationHeaders,
       payload: input,
     });
     expect(replay.json().data.duplicate).toBe(true);
@@ -172,6 +220,7 @@ describe('registered Wishlist analytics routes', () => {
         await app.inject({
           method: 'POST',
           url: '/storefront/v1/analytics/events',
+          headers: observationHeaders,
           payload: denied,
         })
       ).json().data.accepted,
@@ -179,7 +228,7 @@ describe('registered Wishlist analytics routes', () => {
     const otherHeader = await app.inject({
       method: 'POST',
       url: '/storefront/v1/analytics/events',
-      headers: { 'x-organization-id': other },
+      headers: { ...observationHeaders, 'x-organization-id': other },
       payload: event(),
     });
     expect(otherHeader.statusCode).toBe(202);
@@ -208,6 +257,7 @@ describe('registered Wishlist analytics routes', () => {
       const response = await app.inject({
         method: 'POST',
         url: '/storefront/v1/analytics/events',
+        headers: observationHeaders,
         payload,
       });
       expect([400, 413, 422], response.body).toContain(response.statusCode);
@@ -223,18 +273,19 @@ describe('registered Wishlist analytics routes', () => {
   });
 });
 
-it('records consented Cart observations without credentials, session linkage or commerce outcomes', async () => {
+it('records consented Cart observations with private consent binding and no identity in the payload', async () => {
   const { sessionId, ...envelope } = event();
   const payload = {
     ...envelope,
     name: 'CART_COMMAND_INITIATED',
     consent: { ...envelope.consent, preferences: 'DENIED' },
-    data: { mode: 'ACCOUNT', command: 'WISHLIST_MOVE' },
+    data: { mode: 'GUEST', command: 'CLEAR' },
   };
   const post = (body: object) =>
     app.inject({
       method: 'POST',
       url: '/storefront/v1/analytics/events',
+      headers: observationHeaders,
       payload: body,
     });
   const recorded = await post(payload);
@@ -255,7 +306,7 @@ it('records consented Cart observations without credentials, session linkage or 
     { ...payload, attribution: { touch: 'FIRST' } },
     { ...payload, origin: 'SERVER' },
     { ...payload, data: { ...payload.data, couponCode: 'private' } },
-    { ...payload, data: { ...payload.data, mode: 'GUEST' } },
+    { ...payload, data: { ...payload.data, mode: 'ACCOUNT' } },
     { ...payload, name: 'CART_COMMAND_SUCCEEDED' },
   ]) {
     expect([400, 422]).toContain((await post(invalid)).statusCode);
@@ -330,17 +381,22 @@ it('reports separate tenant-scoped Cart aggregates with Dhaka date and committed
   `.execute(db);
 
   const query = 'from=2026-08-21&to=2026-08-21';
-  const get = (params: string, organizationId = org) => app.inject({
-    url: `/admin/analytics/cart?${params}`,
-    headers: { authorization: 'test-admin', 'x-organization-id': organizationId },
-  });
+  const get = (params: string, organizationId = org) =>
+    app.inject({
+      url: `/admin/analytics/cart?${params}`,
+      headers: { authorization: 'test-admin', 'x-organization-id': organizationId },
+    });
   const full = await get(query);
   expect(full.statusCode, full.body).toBe(200);
   expect(full.headers['cache-control']).toBe('private, no-store');
   expect(full.body).not.toContain(cartId);
   expect(full.body).not.toContain(pendingId);
   expect(full.json().data.committed).toMatchObject({
-    mutations: '3', distinctCarts: '1', netUnitChange: '3', pending: '1', failed: '0',
+    mutations: '3',
+    distinctCarts: '1',
+    netUnitChange: '3',
+    pending: '1',
+    failed: '0',
     trend: [{ day: '2026-08-21', count: '3' }],
     currencies: ['BDT', 'USD'],
     firstRecordedAt: '2026-08-20T18:00:00.000Z',
@@ -348,7 +404,9 @@ it('reports separate tenant-scoped Cart aggregates with Dhaka date and committed
   const filtered = await get(`${query}&currency=BDT`);
   expect(filtered.statusCode, filtered.body).toBe(200);
   expect(filtered.json().data.committed).toMatchObject({
-    mutations: '2', distinctCarts: '1', netUnitChange: '1',
+    mutations: '2',
+    distinctCarts: '1',
+    netUnitChange: '1',
     values: [{ currency: 'BDT', averageGross: '15.0000', averageNet: '12.0000' }],
   });
   const observations = full.json().data.observations;
@@ -361,10 +419,98 @@ it('reports separate tenant-scoped Cart aggregates with Dhaka date and committed
     'from=2025-08-19&to=2026-08-21',
     `${query}&currency=bad!`,
     `${query}&cartId=${cartId}`,
-  ]) expect((await get(invalid)).statusCode).toBe(422);
+  ])
+    expect((await get(invalid)).statusCode).toBe(422);
 
   const empty = await get('from=2026-08-19&to=2026-08-19');
   expect(empty.statusCode, empty.body).toBe(200);
-  expect(empty.json().data.committed).toMatchObject({ mutations: '0', trend: [], firstRecordedAt: null });
+  expect(empty.json().data.committed).toMatchObject({
+    mutations: '0',
+    trend: [],
+    firstRecordedAt: null,
+  });
   expect(empty.json().data.observations).toMatchObject({ viewsTrend: [], firstRecordedAt: null });
+});
+
+it('protects aggregate commerce money with both analytics capabilities and tenant membership', async () => {
+  const path = `/admin/analytics/commerce?${period}`;
+  expect((await app.inject({ url: path })).statusCode).toBe(403);
+  expect(
+    (await app.inject({ url: path, headers: { authorization: 'test-admin' } })).statusCode,
+  ).toBe(403);
+  await sql`insert into iam.membership_capability_grants(membership_id,capability_code) values (${membershipId},'analytics.financial.view') on conflict do nothing`.execute(
+    database.db,
+  );
+  const response = await app.inject({ url: path, headers: { authorization: 'test-admin' } });
+  expect(response.statusCode, response.body).toBe(200);
+  expect(response.headers['cache-control']).toBe('private, no-store');
+  expect(response.json().data).toMatchObject({
+    facts: [],
+    conversionRate: null,
+    conversionPolicy: { ga4: false, meta: false },
+  });
+  expect(
+    (
+      await app.inject({
+        url: path,
+        headers: { authorization: 'test-admin', 'x-organization-id': other },
+      })
+    ).statusCode,
+  ).toBe(403);
+  expect(
+    (
+      await app.inject({
+        url: path + '&customerId=' + userId,
+        headers: { authorization: 'test-admin' },
+      })
+    ).statusCode,
+  ).toBe(400);
+  expect(response.body).not.toContain(userId);
+});
+
+it('rejects forged authoritative browser events through the registered HTTP endpoint', async () => {
+  for (const name of ['ORDER_PLACED', 'PAYMENT_CONFIRMED', 'REFUND_COMPLETED']) {
+    const response = await app.inject({
+      method: 'POST',
+      url: '/storefront/v1/analytics/events',
+      payload: { ...event(), name, data: { orderId: crypto.randomUUID(), value: '999999' } },
+    });
+    expect(response.statusCode, response.body).toBe(422);
+  }
+});
+
+it('records policy-blocked diagnostics without retaining raw errors, IDs or request bodies', async () => {
+  const diagnostic = Fastify({ logger: false });
+  registerCommerceObservability(diagnostic, database, 'maevelle');
+  diagnostic.post('/storefront/v1/checkouts/:id/quotes', async (_request, reply) =>
+    reply.code(409).send({ error: { code: 'POLICY_BLOCKED', message: 'PII-CANARY' } }),
+  );
+  await diagnostic.ready();
+  try {
+    await diagnostic.inject({
+      method: 'POST',
+      url: '/storefront/v1/checkouts/' + crypto.randomUUID() + '/quotes',
+      payload: { phone: 'PII-CANARY' },
+    });
+    // onResponse runs after the response and cannot alter its commercial result.
+    for (let i = 0; i < 50; i++) {
+      const result =
+        await sql`select operation,outcome,count::text,duration_ms::text from analytics.commerce_operations where organization_id=${org}`.execute(
+          database.db,
+        );
+      if (result.rows.length) {
+        expect(result.rows[0]).toMatchObject({
+          operation: 'QUOTE',
+          outcome: 'POLICY_BLOCKED',
+          count: '1',
+        });
+        expect(JSON.stringify(result.rows)).not.toContain('PII-CANARY');
+        return;
+      }
+      await new Promise((r) => setTimeout(r, 10));
+    }
+    throw new Error('Counter did not finish');
+  } finally {
+    await diagnostic.close();
+  }
 });

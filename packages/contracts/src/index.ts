@@ -6262,3 +6262,6 @@ export * from './cart-analytics.js';
 export * from './checkout-quote.js';
 export type * from './checkout-payment.js';
 export type * from './checkout-placement.js';
+export * from './commerce-analytics.js';
+
+export type * from './privacy-preferences.js';

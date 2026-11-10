@@ -34,6 +34,12 @@ const redactedPaths = [
   '*.refreshToken',
   'req.headers.authorization',
   'req.headers.cookie',
+  'res.headers["set-cookie"]',
+  'headers["set-cookie"]',
+  'req.headers["x-privacy-context"]',
+  'req.headers["x-privacy-observation"]',
+  'headers["x-privacy-context"]',
+  'headers["x-privacy-observation"]',
 ];
 
 export function createLogger(options: LoggerOptions, destination?: DestinationStream): Logger {

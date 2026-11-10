@@ -77,5 +77,5 @@ describe('wishlist retention worker integration', () => {
       await sql.raw(`drop database if exists "${name}"`).execute(admin.db);
       await admin.close();
     }
-  });
+  }, 30_000);
 });

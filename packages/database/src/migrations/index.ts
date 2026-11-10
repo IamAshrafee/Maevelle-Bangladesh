@@ -1,3 +1,5 @@
+import * as privacyPreferences from './3225_privacy_preferences.js';
+import * as commerceMeasurement from './3224_commerce_measurement.js';
 import * as checkoutQuotes from './3221_checkout_quotes.js';
 import * as checkoutDelivery from './3220_checkout_delivery.js';
 import * as checkoutFoundation from './3219_checkout_foundation.js';
@@ -148,6 +150,8 @@ export const migrations = {
   '3221_checkout_quotes': checkoutQuotes,
   '3222_manual_payment_integrity': manualPaymentIntegrity,
   '3223_checkout_placement': checkoutPlacement,
+  '3224_commerce_measurement': commerceMeasurement,
+  '3225_privacy_preferences': privacyPreferences,
 } satisfies Record<string, Migration>;
 
 export const migrationProvider: MigrationProvider = {

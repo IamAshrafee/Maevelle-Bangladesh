@@ -22,6 +22,13 @@ describe('observability foundation', () => {
         password: 'never-log-this',
         authorization: 'Bearer never-log-this',
         nested: { apiKey: 'never-log-this' },
+        res: { headers: { 'set-cookie': 'never-log-this' } },
+        req: {
+          headers: {
+            'x-privacy-context': 'never-log-this',
+            'x-privacy-observation': 'never-log-this',
+          },
+        },
       },
       'safe event',
     );

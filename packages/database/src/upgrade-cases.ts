@@ -1,3 +1,8 @@
+import { commerceMeasurementUpgradeCase } from './analytics/commerce/upgrade-case.js';
+import { privacyPreferencesUpgradeCase } from './analytics/commerce/privacy-upgrade-case.js';
+import { checkoutQuoteUpgradeCase } from './checkout/quote-upgrade-case.js';
+import { checkoutPlacementUpgradeCase } from './checkout/placement-upgrade-case.js';
+import { manualPaymentUpgradeCase } from './payments/manual-payment-upgrade-case.js';
 import { checkoutDeliveryUpgradeCase } from './checkout/delivery-upgrade-case.js';
 import { checkoutUpgradeCases } from './checkout/upgrade-cases.js';
 import { cartUpgradeCases } from './cart/upgrade-cases.js';
@@ -24,6 +29,11 @@ let archivedObjectId = '';
 let repairAssetId = '';
 
 export const upgradeCases: Record<string, UpgradeCase> = {
+  '3221_checkout_quotes': checkoutQuoteUpgradeCase,
+  '3222_manual_payment_integrity': manualPaymentUpgradeCase,
+  '3223_checkout_placement': checkoutPlacementUpgradeCase,
+  '3225_privacy_preferences': privacyPreferencesUpgradeCase,
+  '3224_commerce_measurement': commerceMeasurementUpgradeCase,
   ...wishlistUpgradeCases,
   ...cartUpgradeCases,
   ...checkoutUpgradeCases,

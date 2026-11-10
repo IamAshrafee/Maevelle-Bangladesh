@@ -1,11 +1,6 @@
 'use client';
 
-import {
-  type ComponentPropsWithRef,
-  forwardRef,
-  type ReactNode,
-  useId,
-} from 'react';
+import { type ComponentPropsWithRef, forwardRef, type ReactNode, useId } from 'react';
 
 import { cx } from '@/components/ui/classnames';
 import { CheckIcon } from '@/components/ui/icons';
@@ -70,7 +65,7 @@ export const Checkbox = forwardRef<HTMLInputElement, CheckboxProps>(function Che
           )}
         >
           <CheckIcon
-            className="opacity-0 transition-opacity duration-150 peer-checked:opacity-100"
+            className="opacity-0 transition-opacity duration-150 group-has-checked:opacity-100"
             size={13}
           />
         </div>
@@ -236,17 +231,11 @@ export const RadioCard = forwardRef<HTMLInputElement, RadioCardProps>(function R
           </div>
         </div>
 
-        {icon ? (
-          <span className="text-primary pt-0.5">
-            {icon}
-          </span>
-        ) : null}
+        {icon ? <span className="text-primary pt-0.5">{icon}</span> : null}
 
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2 flex-wrap">
-            <span className="font-label-md text-sm font-semibold text-on-surface">
-              {label}
-            </span>
+            <span className="font-label-md text-sm font-semibold text-on-surface">{label}</span>
             {badge ? (
               <span className="rounded-full bg-primary/10 px-2 py-0.5 font-label-sm text-[10px] font-bold text-primary uppercase tracking-wider">
                 {badge}
@@ -254,9 +243,7 @@ export const RadioCard = forwardRef<HTMLInputElement, RadioCardProps>(function R
             ) : null}
           </div>
           {description && (
-            <p className="mt-1 text-xs text-on-surface-variant/80 leading-relaxed">
-              {description}
-            </p>
+            <p className="mt-1 text-xs text-on-surface-variant/80 leading-relaxed">{description}</p>
           )}
         </div>
       </div>

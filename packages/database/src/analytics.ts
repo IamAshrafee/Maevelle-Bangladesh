@@ -1,4 +1,7 @@
-import { processWishlistAnalyticsOutbox, cleanupWishlistAnalytics } from './analytics/wishlist/processing.js';
+import {
+  processWishlistAnalyticsOutbox,
+  cleanupWishlistAnalytics,
+} from './analytics/wishlist/processing.js';
 import { sql, type Kysely } from 'kysely';
 
 import type { DatabaseSchema } from './index.js';
@@ -242,12 +245,18 @@ export async function consumeAnalyticsOutbox(db: Kysely<DatabaseSchema>, outboxE
   const organizationId = claimed.rows[0]?.organization_id;
   if (!organizationId) return { processed: false };
   try {
-    await sql`insert into analytics.projection_state(organization_id,projection_name,projection_version,status,last_processed_at) values(${organizationId},'business_facts',2,'REBUILDING',now()) on conflict(organization_id,projection_name) do update set status='REBUILDING',last_processed_at=now(),last_error_code=null,last_error_detail=null`.execute(db);
+    await sql`insert into analytics.projection_state(organization_id,projection_name,projection_version,status,last_processed_at) values(${organizationId},'business_facts',2,'REBUILDING',now()) on conflict(organization_id,projection_name) do update set status='REBUILDING',last_processed_at=now(),last_error_code=null,last_error_detail=null`.execute(
+      db,
+    );
     await rebuildAnalyticsProjections(db, organizationId);
-    await sql`update analytics.projection_state state set status='CURRENT',source_high_watermark=${outboxEventId},last_event_occurred_at=event.occurred_at,last_processed_at=now(),last_success_at=now(),last_failure_at=null,last_error_code=null,last_error_detail=null from platform.outbox_events event where state.organization_id=${organizationId} and state.projection_name='business_facts' and event.id=${outboxEventId}`.execute(db);
+    await sql`update analytics.projection_state state set status='CURRENT',source_high_watermark=${outboxEventId},last_event_occurred_at=event.occurred_at,last_processed_at=now(),last_success_at=now(),last_failure_at=null,last_error_code=null,last_error_detail=null from platform.outbox_events event where state.organization_id=${organizationId} and state.projection_name='business_facts' and event.id=${outboxEventId}`.execute(
+      db,
+    );
     return { processed: true };
   } catch (error) {
-    await sql`update analytics.projection_state set status='FAILED',last_failure_at=now(),last_error_code='PROJECTION_REBUILD_FAILED',last_error_detail=${error instanceof Error ? error.message.slice(0, 1000) : 'Unknown projection failure'} where organization_id=${organizationId} and projection_name='business_facts'`.execute(db);
+    await sql`update analytics.projection_state set status='FAILED',last_failure_at=now(),last_error_code='PROJECTION_REBUILD_FAILED',last_error_detail=${error instanceof Error ? error.message.slice(0, 1000) : 'Unknown projection failure'} where organization_id=${organizationId} and projection_name='business_facts'`.execute(
+      db,
+    );
     await sql`delete from analytics.projection_event_receipts where outbox_event_id=${outboxEventId} and projection_name='all_facts_v1'`.execute(
       db,
     );
@@ -384,3 +393,14 @@ export { getCartActivity } from './analytics/cart/reporting.js';
 
 export * from './analytics/cart/observations.js';
 export { getAdminCartAnalytics } from './analytics/cart/admin-report.js';
+
+export * from './analytics/commerce/processing.js';
+export * from './analytics/commerce/consent.js';
+export * from './analytics/commerce/delivery.js';
+export * from './analytics/commerce/reporting.js';
+export * from './analytics/commerce/operations.js';
+
+export * from './analytics/commerce/privacy-session.js';
+export * from './analytics/commerce/privacy-preferences.js';
+export * from './analytics/commerce/privacy-observations.js';
+export { isAuthoritativeCommerceName } from './analytics/commerce/browser-boundary.js';

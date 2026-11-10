@@ -1,8 +1,9 @@
+import { registerCommerceAnalyticsRoutes } from './commerce-analytics.js';
 import { analyticsAdmin } from './analytics-admin.js';
 import { registerWishlistAnalyticsRoutes } from './wishlist-analytics.js';
 import { registerCartAnalyticsRoutes } from './cart-analytics.js';
 
-import type { FastifyInstance } from 'fastify';
+import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { Type } from 'typebox';
 
 import type { DatabaseClient } from '@maevelle/database';
@@ -21,7 +22,9 @@ import {
   getAnalyticsExport,
   getAnalyticsOverview,
   getAnalyticsReport,
-  ingestStorefrontEvent,
+  unconsentedObservation,
+  isAuthoritativeCommerceName,
+  type StorefrontEventReceipt,
   listAnalyticsExports,
   listInventorySnapshots,
   listMetricCatalog,
@@ -55,7 +58,10 @@ const consentDecision = Type.Union([
   Type.Literal('UNKNOWN'),
 ]);
 
-function reportError(reply: { code(status: number): { send(value: unknown): unknown } }, error: unknown) {
+function reportError(
+  reply: { code(status: number): { send(value: unknown): unknown } },
+  error: unknown,
+) {
   if (error instanceof AnalyticsQueryError)
     return reply.code(422).send({ error: { code: error.code, message: error.message } });
   throw error;
@@ -67,24 +73,82 @@ export function registerAnalyticsRoutes(
   database: DatabaseClient,
   auth: Auth,
   storefrontOrganizationCode = 'maevelle',
+  authorizeObservation?: (
+    request: FastifyRequest,
+    input: StorefrontEventInput,
+  ) => Promise<StorefrontEventReceipt>,
 ): void {
+  registerCommerceAnalyticsRoutes(app, database, auth);
   app.post(
     '/storefront/v1/analytics/events',
     {
+      bodyLimit: 16_384,
       preValidation: async (request, reply) => {
         const body = request.body as { name?: unknown; sessionId?: unknown } | null;
+        if (typeof body?.name === 'string' && isAuthoritativeCommerceName(body.name))
+          return reply
+            .code(422)
+            .send({
+              error: {
+                code: 'INVALID_ANALYTICS_EVENT',
+                message: 'Authoritative commerce facts are not browser observations.',
+              },
+            });
         if (isCartObservationName(body?.name)) {
           if (Buffer.byteLength(JSON.stringify(body)) > 4096)
-            return reply.code(413).send({ error: { code: 'PAYLOAD_TOO_LARGE', message: 'Cart observations are limited to 4 KiB.' } });
-          try { validateCartObservation(body); }
-          catch { return reply.code(422).send({ error: { code: 'INVALID_ANALYTICS_EVENT', message: 'Invalid Cart observation.' } }); }
-        } else if (body?.sessionId === undefined && typeof body?.name === 'string' && !body.name.startsWith('WISHLIST_')) {
-          return reply.code(400).send({ error: { code: 'INVALID_ANALYTICS_EVENT', message: 'A browser analytics event requires a sessionId.' } });
+            return reply
+              .code(413)
+              .send({
+                error: {
+                  code: 'PAYLOAD_TOO_LARGE',
+                  message: 'Cart observations are limited to 4 KiB.',
+                },
+              });
+          try {
+            validateCartObservation(body);
+          } catch {
+            return reply
+              .code(422)
+              .send({
+                error: { code: 'INVALID_ANALYTICS_EVENT', message: 'Invalid Cart observation.' },
+              });
+          }
+        } else if (
+          body?.sessionId === undefined &&
+          typeof body?.name === 'string' &&
+          !body.name.startsWith('WISHLIST_')
+        ) {
+          return reply
+            .code(400)
+            .send({
+              error: {
+                code: 'INVALID_ANALYTICS_EVENT',
+                message: 'A browser analytics event requires a sessionId.',
+              },
+            });
         }
         if (typeof body?.name === 'string' && body.name.startsWith('WISHLIST_')) {
-          if (Buffer.byteLength(JSON.stringify(body))>4096) return reply.code(413).send({ error: { code: 'PAYLOAD_TOO_LARGE', message: 'Wishlist observations are limited to 4 KiB.' } });
-          try { validateWishlistObservation(body); }
-          catch { return reply.code(422).send({ error: { code: 'INVALID_ANALYTICS_EVENT', message: 'Invalid Wishlist observation.' } }); }
+          if (Buffer.byteLength(JSON.stringify(body)) > 4096)
+            return reply
+              .code(413)
+              .send({
+                error: {
+                  code: 'PAYLOAD_TOO_LARGE',
+                  message: 'Wishlist observations are limited to 4 KiB.',
+                },
+              });
+          try {
+            validateWishlistObservation(body);
+          } catch {
+            return reply
+              .code(422)
+              .send({
+                error: {
+                  code: 'INVALID_ANALYTICS_EVENT',
+                  message: 'Invalid Wishlist observation.',
+                },
+              });
+          }
         }
       },
       schema: {
@@ -128,14 +192,16 @@ export function registerAnalyticsRoutes(
           error: { code: 'STOREFRONT_UNAVAILABLE', message: 'Storefront is unavailable.' },
         });
       try {
-        const receipt = await ingestStorefrontEvent(
-          database.db,
-          storefront.organizationId,
-          request.body as StorefrontEventInput,
-        );
+        const receipt = authorizeObservation
+          ? await authorizeObservation(request, request.body as StorefrontEventInput)
+          : unconsentedObservation();
         return reply.code(202).send({ data: receipt });
       } catch (error) {
-        if (error instanceof AnalyticsIngestionError || error instanceof WishlistObservationError || error instanceof CartObservationError)
+        if (
+          error instanceof AnalyticsIngestionError ||
+          error instanceof WishlistObservationError ||
+          error instanceof CartObservationError
+        )
           return reply.code(422).send({
             error: { code: error.code, message: error.message },
           });
@@ -147,15 +213,24 @@ export function registerAnalyticsRoutes(
   registerWishlistAnalyticsRoutes(app, database, auth);
   registerCartAnalyticsRoutes(app, database, auth);
 
-
   app.get('/admin/analytics/overview', async (request, reply) => {
-    const active = await analyticsAdmin(database, auth, request.headers, 'analytics.financial.view');
+    const active = await analyticsAdmin(
+      database,
+      auth,
+      request.headers,
+      'analytics.financial.view',
+    );
     if (!active)
       return reply.code(403).send({ error: { code: 'FORBIDDEN', message: 'Access denied.' } });
     return { data: await getAnalyticsOverview(database.db, active.organizationId) };
   });
   app.get('/admin/analytics/dashboards', async (request, reply) => {
-    const active = await analyticsAdmin(database, auth, request.headers, 'analytics.financial.view');
+    const active = await analyticsAdmin(
+      database,
+      auth,
+      request.headers,
+      'analytics.financial.view',
+    );
     if (!active)
       return reply.code(403).send({ error: { code: 'FORBIDDEN', message: 'Access denied.' } });
     return { data: await getAnalyticsDashboards(database.db, active.organizationId) };
@@ -175,8 +250,7 @@ export function registerAnalyticsRoutes(
         return reply.code(404).send({
           error: { code: 'REPORT_NOT_FOUND', message: 'Analytics report was not found.' },
         });
-      const capability =
-        report === 'FINANCE' ? 'analytics.financial.view' : 'analytics.view';
+      const capability = report === 'FINANCE' ? 'analytics.financial.view' : 'analytics.view';
       const active = await analyticsAdmin(database, auth, request.headers, capability);
       if (!active)
         return reply.code(403).send({ error: { code: 'FORBIDDEN', message: 'Access denied.' } });
@@ -197,14 +271,14 @@ export function registerAnalyticsRoutes(
         );
         const hasFinancial = active.capabilities.includes('analytics.financial.view');
         if (report === 'PRODUCTS' && !hasFinancial) {
-          const sanitizedBreakdown = (reportData.breakdown as readonly Record<string, unknown>[]).map(
-            (item) => ({
-              ...item,
-              recognized_cost: null,
-              gross_margin: null,
-              profitability_status: 'RESTRICTED',
-            }),
-          );
+          const sanitizedBreakdown = (
+            reportData.breakdown as readonly Record<string, unknown>[]
+          ).map((item) => ({
+            ...item,
+            recognized_cost: null,
+            gross_margin: null,
+            profitability_status: 'RESTRICTED',
+          }));
           return { data: { ...reportData, breakdown: sanitizedBreakdown } };
         }
         return { data: reportData };
@@ -215,7 +289,9 @@ export function registerAnalyticsRoutes(
   );
   app.get('/admin/analytics/drilldown/:metric', async (request, reply) => {
     const metric = (request.params as { metric: string }).metric;
-    if (!['GROSS_SALES', 'NET_SALES', 'REFUNDS', 'GROSS_MARGIN', 'CASH', 'INVENTORY'].includes(metric))
+    if (
+      !['GROSS_SALES', 'NET_SALES', 'REFUNDS', 'GROSS_MARGIN', 'CASH', 'INVENTORY'].includes(metric)
+    )
       return reply.code(422).send({
         error: { code: 'INVALID_METRIC', message: 'Unsupported drill-down metric.' },
       });
@@ -400,7 +476,10 @@ export function registerAnalyticsRoutes(
       });
     return reply
       .type(exported.content_type ?? 'text/csv; charset=utf-8')
-      .header('content-disposition', `attachment; filename="${exported.file_name ?? 'analytics.csv'}"`)
+      .header(
+        'content-disposition',
+        `attachment; filename="${exported.file_name ?? 'analytics.csv'}"`,
+      )
       .send(exported.payload);
   });
 }

@@ -1,3 +1,7 @@
+import {
+  isAuthoritativeCommerceName,
+  minimizeGenericObservation,
+} from './commerce/browser-boundary.js';
 import { cartInteractionNames, wishlistObservationNames } from '@maevelle/contracts';
 import { isCartObservationName, validateCartObservation } from './cart/observations.js';
 import { validateWishlistObservation } from './wishlist/observations.js';
@@ -101,8 +105,7 @@ function validateEventData(name: StorefrontEventName, data: Record<string, unkno
     'ADD_TO_CART',
     'REMOVE_FROM_CART',
   ].includes(name);
-  if (requiresItem && !item)
-    throw new AnalyticsIngestionError(`${name} requires an item.`);
+  if (requiresItem && !item) throw new AnalyticsIngestionError(`${name} requires an item.`);
   if (item) {
     if (!uuid(item.productId, 'data.item.productId') || !uuid(item.skuId, 'data.item.skuId'))
       throw new AnalyticsIngestionError('Commerce items require productId and skuId.');
@@ -117,7 +120,15 @@ function validateEventData(name: StorefrontEventName, data: Record<string, unkno
     if (!trimmed(data.cartId, 200) && name !== 'ADD_TO_CART')
       throw new AnalyticsIngestionError(`${name} requires cartId.`);
   }
-  if (['ORDER_PLACED', 'PAYMENT_CONFIRMED', 'ORDER_DELIVERED', 'ORDER_CANCELLED', 'REFUND_COMPLETED'].includes(name))
+  if (
+    [
+      'ORDER_PLACED',
+      'PAYMENT_CONFIRMED',
+      'ORDER_DELIVERED',
+      'ORDER_CANCELLED',
+      'REFUND_COMPLETED',
+    ].includes(name)
+  )
     if (!uuid(data.orderId, 'data.orderId'))
       throw new AnalyticsIngestionError(`${name} requires orderId.`);
   const suppliedValue = data.value;
@@ -138,6 +149,12 @@ export async function ingestStorefrontEvent(
   organizationId: string,
   input: StorefrontEventInput,
 ): Promise<StorefrontEventReceipt> {
+  if (isAuthoritativeCommerceName(input.name) || input.origin !== 'BROWSER')
+    throw new AnalyticsIngestionError(
+      'Authoritative commerce facts cannot be submitted as observations.',
+    );
+  if (Buffer.byteLength(JSON.stringify(input)) > 16_384)
+    throw new AnalyticsIngestionError('Observation exceeds the size limit.');
   const cartObservation = isCartObservationName(input.name);
   if (cartObservation) validateCartObservation(input);
   if (wishlistObservationNames.includes(input.name as never)) validateWishlistObservation(input);
@@ -154,7 +171,18 @@ export async function ingestStorefrontEvent(
     throw new AnalyticsIngestionError('A browser analytics event requires a sessionId.');
   const occurredAt = new Date(input.occurredAt);
   if (Number.isNaN(occurredAt.valueOf()) || occurredAt.valueOf() > Date.now() + 300_000)
-    throw new AnalyticsIngestionError('occurredAt must be a valid time and cannot be in the future.');
+    throw new AnalyticsIngestionError(
+      'occurredAt must be a valid time and cannot be in the future.',
+    );
+  if (!cartObservation && !wishlistObservationNames.includes(input.name as never)) {
+    try {
+      const observation = { ...input };
+      delete observation.attribution;
+      input = { ...observation, data: minimizeGenericObservation(input.name, input.data) };
+    } catch {
+      throw new AnalyticsIngestionError('Invalid browser observation.');
+    }
+  }
   validateEventData(input.name, input.data);
 
   const item = eventItem(input.data);
@@ -179,7 +207,7 @@ export async function ingestStorefrontEvent(
       : undefined;
   const attribution = input.attribution;
 
-  return db.transaction().execute(async (tx) => {
+  const persist = async (tx: Kysely<DatabaseSchema>): Promise<StorefrontEventReceipt> => {
     if (input.sessionId) {
       await sql`
         insert into analytics.storefront_sessions(
@@ -191,10 +219,10 @@ export async function ingestStorefrontEvent(
           ${organizationId},${input.sessionId}::uuid,${input.anonymousId ?? null}::uuid,
           ${input.consent.analytics},${input.consent.marketing},
           ${attribution?.source ?? null},${attribution?.medium ?? null},${attribution?.campaign ?? null},${attribution?.content ?? null},${attribution?.referrerOrigin ?? null},
-          ${attribution?.touch === 'LAST_NON_DIRECT' ? attribution.source ?? null : null},
-          ${attribution?.touch === 'LAST_NON_DIRECT' ? attribution.medium ?? null : null},
-          ${attribution?.touch === 'LAST_NON_DIRECT' ? attribution.campaign ?? null : null},
-          ${attribution?.touch === 'LAST_NON_DIRECT' ? attribution.content ?? null : null},
+          ${attribution?.touch === 'LAST_NON_DIRECT' ? (attribution.source ?? null) : null},
+          ${attribution?.touch === 'LAST_NON_DIRECT' ? (attribution.medium ?? null) : null},
+          ${attribution?.touch === 'LAST_NON_DIRECT' ? (attribution.campaign ?? null) : null},
+          ${attribution?.touch === 'LAST_NON_DIRECT' ? (attribution.content ?? null) : null},
           ${input.occurredAt}::timestamptz,${input.occurredAt}::timestamptz,${orderId ?? null}::uuid
         )
         on conflict(organization_id,session_id) do update set
@@ -232,5 +260,6 @@ export async function ingestStorefrontEvent(
     return inserted.rows.length
       ? { accepted: true, duplicate: false, reason: 'RECORDED' }
       : { accepted: true, duplicate: true, reason: 'DUPLICATE' };
-  });
+  };
+  return db.isTransaction ? persist(db) : db.transaction().execute(persist);
 }

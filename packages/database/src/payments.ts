@@ -1189,7 +1189,7 @@ export async function recordCodCollection(
       ) values (
         ${input.organizationId}, 'payments.cod_collection.recorded', 1,
         'payments.payment', ${paymentId}, 1,
-        ${JSON.stringify({ paymentId, deliveryId: input.deliveryId, orderId: row.order_id })}::jsonb,
+        ${JSON.stringify({ paymentId, deliveryId: input.deliveryId, orderId: row.order_id, intentId: row.intent_id, obligationSatisfied: remaining.rows[0]!.amount === '0.0000', obligationAmount: row.intent_expected_amount, obligationCurrency: row.currency_code })}::jsonb,
         now()
       )
     `.execute(transaction);

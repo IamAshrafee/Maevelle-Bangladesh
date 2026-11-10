@@ -44,6 +44,11 @@ import {
 } from '@/lib/analytics/types';
 import { cn } from '@/lib/utils';
 
+const CommerceView = dynamic(
+  () => import('./views/commerce-view').then((module) => module.CommerceView),
+  { loading: () => <LoadingState message="Loading commerce reporting…" /> },
+);
+
 const CartView = dynamic(() => import('./views/cart-view').then((module) => module.CartView), {
   loading: () => <LoadingState message="Loading Cart Analytics…" />,
 });
@@ -68,6 +73,12 @@ const VIEW_NAVIGATION: readonly {
   { id: 'supply', label: 'Supply & Procurement', icon: Building2 },
   { id: 'delivery', label: 'Delivery & Logistics', icon: Truck },
   { id: 'storefront', label: 'Storefront Funnel', icon: Eye },
+  {
+    id: 'commerce',
+    label: 'Commerce integrity',
+    icon: CreditCard,
+    capability: 'analytics.financial.view',
+  },
   { id: 'cart', label: 'Cart Analytics', icon: ShoppingBag, capability: 'analytics.view' },
   { id: 'wishlist', label: 'Wishlist & Demand', icon: Heart, capability: 'analytics.view' },
   { id: 'marketing', label: 'Marketing & UTM', icon: Megaphone },
@@ -100,6 +111,7 @@ export function AnalyticsWorkspace() {
     return (valid?.id as AnalyticsViewKey) ?? 'overview';
   }, [searchParams]);
 
+  const calendarTimezone = activeView === 'commerce' ? 'UTC' : timezone;
   const selection: DateRangeSelection = React.useMemo(() => {
     const presetParam = searchParams.get('preset') as DateRangePreset | null;
     const fromParam = searchParams.get('from');
@@ -108,7 +120,7 @@ export function AnalyticsWorkspace() {
     const currParam = searchParams.get('currency');
 
     if (presetParam && presetParam !== 'CUSTOM') {
-      const { from, to } = getDateRangeFromPreset(presetParam, timezone);
+      const { from, to } = getDateRangeFromPreset(presetParam, calendarTimezone);
       return {
         preset: presetParam,
         from: fromParam ?? from,
@@ -128,7 +140,7 @@ export function AnalyticsWorkspace() {
       };
     }
 
-    const { from, to } = getDateRangeFromPreset('LAST_30_DAYS', timezone);
+    const { from, to } = getDateRangeFromPreset('LAST_30_DAYS', calendarTimezone);
     return {
       preset: 'LAST_30_DAYS',
       from,
@@ -136,13 +148,15 @@ export function AnalyticsWorkspace() {
       granularity: granParam ?? 'DAY',
       currency: currParam ?? 'BDT',
     };
-  }, [searchParams, timezone]);
+  }, [searchParams, calendarTimezone]);
 
   // 2. URL State Updater
   const updateUrl = React.useCallback(
     (newView: AnalyticsViewKey, newSelection: DateRangeSelection) => {
       const params = new URLSearchParams();
       params.set('view', newView);
+      if (newView === 'commerce' && searchParams.get('trafficClass'))
+        params.set('trafficClass', searchParams.get('trafficClass')!);
       params.set('preset', newSelection.preset);
       params.set('from', newSelection.from);
       params.set('to', newSelection.to);
@@ -152,7 +166,7 @@ export function AnalyticsWorkspace() {
       }
       router.push(`${pathname}?${params.toString()}`, { scroll: false });
     },
-    [pathname, router],
+    [pathname, router, searchParams],
   );
 
   const handleViewChange = (view: AnalyticsViewKey) => {
@@ -174,7 +188,8 @@ export function AnalyticsWorkspace() {
           <RefreshButton
             tooltip="Refresh analytics data"
             onRefresh={() => {
-              if (activeView === 'wishlist' || activeView === 'cart') setReportRefreshVersion((value) => value + 1);
+              if (activeView === 'wishlist' || activeView === 'cart' || activeView === 'commerce')
+                setReportRefreshVersion((value) => value + 1);
               else router.refresh();
             }}
           />
@@ -210,7 +225,10 @@ export function AnalyticsWorkspace() {
 
       {/* Global Filter Toolbar */}
       <AnalyticsFilterToolbar
-        timezone={activeView === 'wishlist' ? timezone : 'Asia/Dhaka'}
+        timezone={
+          activeView === 'commerce' ? 'UTC' : activeView === 'wishlist' ? timezone : 'Asia/Dhaka'
+        }
+        exportDisabled={activeView === 'commerce'}
         selection={selection}
         onChange={handleSelectionChange}
         showGranularity={activeView === 'overview' || activeView === 'sales'}
@@ -255,6 +273,14 @@ export function AnalyticsWorkspace() {
                 ...getDateRangeFromPreset(preset, timezone),
               })
             }
+          />
+        )}
+        {activeView === 'commerce' && (
+          <CommerceView
+            from={selection.from}
+            to={selection.to}
+            currency={selection.currency}
+            refreshVersion={reportRefreshVersion}
           />
         )}
         {activeView === 'marketing' && <MarketingView selection={selection} />}

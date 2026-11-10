@@ -618,6 +618,7 @@ describe('shopper realm and private Wishlist', () => {
     const payload = { schemaVersion: 1, eventId: crypto.randomUUID(), name: 'WISHLIST_PAGE_VIEWED', origin: 'BROWSER',
       sessionId: crypto.randomUUID(), occurredAt: new Date().toISOString(),
       consent: { necessary: 'GRANTED', analytics: 'GRANTED', marketing: 'DENIED', preferences: 'UNKNOWN', recordedAt: new Date().toISOString() }, data: { mode: 'GUEST' } };
+    expect((await post('/storefront/v1/analytics/events', payload, undefined, 'https://untrusted.example.test')).statusCode).toBe(403);
     for (let index=0; index<120; index++) expect((await post('/storefront/v1/analytics/events', payload)).statusCode).toBe(202);
     const blocked = await post('/storefront/v1/analytics/events', payload);
     expect(blocked.statusCode).toBe(429); expect(blocked.headers['retry-after']).toBeDefined();

@@ -1,14 +1,19 @@
 import type { CommerceConsentStateDto } from '@maevelle/contracts';
-import { currentCommerceConsent, permitsAnalytics } from './consent';
+import { currentCommerceConsent, permitsAnalytics, currentObservationAuthority } from './consent';
 
 /** One in-memory retry reuses the serialized observation and its event ID. */
-export async function sendStorefrontObservation(
-  event: { readonly consent: CommerceConsentStateDto },
-  credentials: 'include' | 'omit',
-): Promise<boolean> {
+export async function sendStorefrontObservation(event: {
+  readonly consent: CommerceConsentStateDto;
+}): Promise<boolean> {
+  const authority = currentObservationAuthority();
+  if (!authority) return false;
   function stillConsented() {
     const current = currentCommerceConsent();
-    return permitsAnalytics(current) && current.recordedAt === event.consent.recordedAt;
+    return (
+      permitsAnalytics(current) &&
+      current.recordedAt === event.consent.recordedAt &&
+      currentObservationAuthority()?.token === authority?.token
+    );
   }
   const payload = JSON.stringify(event);
   for (let attempt = 0; attempt < 2; attempt++) {
@@ -23,9 +28,13 @@ export async function sendStorefrontObservation(
     try {
       const response = await fetch('/api/storefront/v1/analytics/events', {
         method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        credentials,
-        ...(credentials === 'omit' ? { referrerPolicy: 'no-referrer' as const } : {}),
+        headers: {
+          'content-type': 'application/json',
+          'x-privacy-context': authority.context,
+          'x-privacy-observation': authority.token,
+        },
+        credentials: 'include',
+        referrerPolicy: 'no-referrer',
         keepalive: true,
         signal: controller.signal,
         body: payload,
