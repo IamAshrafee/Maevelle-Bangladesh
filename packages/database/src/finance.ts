@@ -98,11 +98,14 @@ async function nextNumber(
   return `${prefix}-${r.rows[0]?.n ?? '000001'}`;
 }
 async function account(db: Kysely<DatabaseSchema>, org: string, id: string, lock = false) {
+  // Serialize balance/status decisions without conflicting with FK KEY SHARE
+  // locks already held by concurrent receipt evidence. FOR UPDATE upgrades
+  // deadlock when two different receipts reference the same financial account.
   const r = await sql<{
     id: string;
     currency_code: string;
     status: string;
-  }>`select id,currency_code,status from finance.financial_accounts where organization_id=${org} and id=${id}${lock ? sql` for update` : sql``}`.execute(
+  }>`select id,currency_code,status from finance.financial_accounts where organization_id=${org} and id=${id}${lock ? sql` for no key update` : sql``}`.execute(
     db,
   );
   if (!r.rows[0]) throw new FinanceDomainError('NOT_FOUND', 'Financial account was not found.');

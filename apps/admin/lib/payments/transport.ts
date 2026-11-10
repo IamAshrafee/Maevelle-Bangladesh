@@ -53,7 +53,7 @@ export const uncertainPaymentResult = (error: unknown) =>
   !(error instanceof ApiRequestError) || error.status >= 500 || error.code === 'INVALID_RESPONSE';
 /** Display every stored decimal digit; no float conversion, rounding or payable calculation. */
 export function paymentMoney(value: string, currency = 'BDT'): string {
-  if (!/^-?\d{1,16}(?:\.\d{1,4})?$/.test(value)) return 'Amount unavailable';
+  if (!/^-?\d{1,38}(?:\.\d{1,4})?$/.test(value)) return 'Amount unavailable';
   const [whole, fraction = ''] = value.split('.');
   return `${currency} ${whole!.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}.${fraction.padEnd(2, '0')}`;
 }

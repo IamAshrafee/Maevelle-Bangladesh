@@ -1,5 +1,8 @@
+import { processCommerceAnalyticsOutbox } from '../analytics/commerce/processing.js';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { sql } from 'kysely';
+import { createDatabase } from '../index.js';
+import { postgresCommitFault } from '../testing/postgres-wire-fault.js';
 import { setTimeout as delay } from 'node:timers/promises';
 import { runMigrations } from '../migrate.js';
 import { isolatedCartDatabase, cartFixture } from '../testing/cart-fixture.js';
@@ -459,6 +462,17 @@ describe('Checkout atomic placement on disposable PostgreSQL', () => {
       place({ ...r, input: { ...r.input, finalTermsFingerprint: 'x'.repeat(43) } }),
     ).rejects.toMatchObject({ code: 'IDEMPOTENCY_CONFLICT' });
     expect((await effects()).orders).toBe(1);
+    const beforeAnalytics = await effects();
+    await Promise.all([processCommerceAnalyticsOutbox(db()), processCommerceAnalyticsOutbox(db())]);
+    await processCommerceAnalyticsOutbox(db());
+    expect(await effects()).toEqual(beforeAnalytics);
+    const measured =
+      await sql`select event_name,amount::text,currency from analytics.commerce_events where organization_id=${fixture.organizationId}`.execute(
+        db(),
+      );
+    expect(measured.rows).toEqual([
+      { event_name: 'ORDER_COMMITTED', amount: '100.0000', currency: 'BDT' },
+    ]);
     if (owner.kind !== 'GUEST') throw new Error('Expected guest');
     await revokeCheckoutGuestSession(db(), owner);
     await expect(place(r)).rejects.toMatchObject({ code: 'SESSION_EXPIRED' });
@@ -512,6 +526,14 @@ describe('Checkout atomic placement on disposable PostgreSQL', () => {
     expect(await place(forged)).toEqual(result);
     expect(await place(forged)).toEqual(result);
     expect(await effects()).toEqual(before);
+    await processCommerceAnalyticsOutbox(db());
+    expect(
+      (
+        await sql`select 1 from analytics.commerce_events where organization_id=${fixture.organizationId}`.execute(
+          db(),
+        )
+      ).rows,
+    ).toEqual([]);
   });
 
   it('rejects a modified Cart and never converts it', async () => {
@@ -748,6 +770,14 @@ describe('Checkout atomic placement on disposable PostgreSQL', () => {
       kind: 'COMMITTED',
       receipt: { terms: { payable: '0.0000', shipping: '0.0000' } },
     });
+    await processCommerceAnalyticsOutbox(db());
+    expect(
+      (
+        await sql`select event_name,amount::text from analytics.commerce_events where organization_id=${fixture.organizationId}`.execute(
+          db(),
+        )
+      ).rows,
+    ).toEqual([{ event_name: 'ORDER_COMMITTED', amount: '0.0000' }]);
     const payment = await sql`select expected_amount::text,status from payments.payment_intents
       where organization_id=${fixture.organizationId}`.execute(db());
     expect(payment.rows).toEqual([{ expected_amount: '0.0000', status: 'READY' }]);
@@ -1346,4 +1376,71 @@ describe('Checkout atomic placement on disposable PostgreSQL', () => {
       outbox: 1,
     });
   });
+  it.each(['BEFORE_COMMIT', 'AFTER_COMMIT'] as const)(
+    'recovers the same placement identity after physical %s socket loss',
+    async (mode) => {
+      const r = await ready(await guest());
+      const fault = await postgresCommitFault(isolated.url, mode);
+      const broken = createDatabase({ connectionString: fault.url, maxConnections: 1 });
+      try {
+        await expect(engine.place(broken.db, r.cmd, r.input, r.key)).rejects.toThrow();
+        expect(fault.evidence).toEqual({
+          intercepted: true,
+          serverCommitSeen: mode === 'AFTER_COMMIT',
+        });
+        expect(await effects()).toMatchObject({
+          orders: mode === 'AFTER_COMMIT' ? 1 : 0,
+          payments: 0,
+          finance: 0,
+        });
+        const result = await place(r);
+        expect(result.kind).toBe('COMMITTED');
+        expect(await place(r)).toEqual(result);
+        expect(await effects()).toMatchObject({
+          orders: 1,
+          placements: 1,
+          reservations: 1,
+          allocations: 1,
+          obligations: 1,
+          payments: 0,
+          finance: 0,
+          audit: 1,
+          outbox: 1,
+        });
+      } finally {
+        await broken.close();
+        await fault.close();
+      }
+    },
+    15000,
+  );
+  it('bounds a real placement row-lock timeout and permits an exact-key retry after release', async () => {
+    const r = await ready(await guest());
+    const held = gate(),
+      acquired = gate();
+    const blocker = db()
+      .transaction()
+      .execute(async (tx) => {
+        await sql`select 1 from orders.checkout_drafts where id=${r.cmd.draftId} for update`.execute(
+          tx,
+        );
+        acquired.open();
+        await held.promise;
+      });
+    try {
+      await acquired.promise;
+      await expect(place(r)).rejects.toMatchObject({ code: '55P03' });
+      expect(await effects()).toMatchObject({
+        orders: 0,
+        reservations: 0,
+        obligations: 0,
+        outbox: 0,
+      });
+    } finally {
+      held.open();
+      await blocker;
+    }
+    expect(await place(r)).toMatchObject({ kind: 'COMMITTED' });
+    expect(await effects()).toMatchObject({ orders: 1, obligations: 1 });
+  }, 15000);
 });

@@ -98,3 +98,29 @@ test('rejects a silently regenerated baseline manifest', () =>
     writeFileSync(path, `${JSON.stringify(baseline, null, 2)}\n`);
     assert.match(validateMigrationHistory(root).errors.join('\n'), /baseline manifest changed/);
   }));
+
+test('accepts LF and CRLF checkouts but rejects changed SQL, lone CR and BOM', () =>
+  fixture(({ root, migrations }) => {
+    for (const file of ['0300_sizing.ts', '0004_iam_and_authentication.ts']) {
+      const path = join(migrations, file);
+      writeFileSync(
+        path,
+        readFileSync(path, 'utf8').replaceAll('\r\n', '\n').replaceAll('\n', '\r\n'),
+      );
+    }
+    const manifest = join(root, 'packages/database/migration-history-baseline.json');
+    writeFileSync(
+      manifest,
+      readFileSync(manifest, 'utf8').replaceAll('\r\n', '\n').replaceAll('\n', '\r\n'),
+    );
+    assert.deepEqual(validateMigrationHistory(root).errors, []);
+    const path = join(migrations, '0300_sizing.ts');
+    const original = readFileSync(path, 'utf8');
+    for (const changed of [original + '\r\nselect 1;\r\n', original + '\r', '\uFEFF' + original]) {
+      writeFileSync(path, changed);
+      assert.match(
+        validateMigrationHistory(root).errors.join('\n'),
+        /Historical migration changed: 0300_sizing/,
+      );
+    }
+  }));

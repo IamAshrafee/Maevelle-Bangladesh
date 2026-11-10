@@ -15,6 +15,8 @@ export type MaevelleTransaction = Transaction<DatabaseSchema>;
 export interface DatabaseOptions {
   readonly connectionString: string;
   readonly maxConnections?: number;
+  /** Bound new connections and pool acquisition; expiry never means a write rolled back. */
+  readonly connectionTimeoutMs?: number;
   /** Safe operational code only; never a raw driver error or connection string. */
   readonly onConnectionError?: (code: 'DATABASE_CONNECTION_LOST') => void;
 }
@@ -38,6 +40,13 @@ export class DatabaseConnectionError extends Error {
  */
 export function createDatabase(options: DatabaseOptions): DatabaseClient {
   if (
+    options.connectionTimeoutMs !== undefined &&
+    (!Number.isInteger(options.connectionTimeoutMs) ||
+      options.connectionTimeoutMs < 10 ||
+      options.connectionTimeoutMs > 30000)
+  )
+    throw new Error('Database connectionTimeoutMs must be an integer between 10 and 30000.');
+  if (
     options.maxConnections !== undefined &&
     (!Number.isInteger(options.maxConnections) || options.maxConnections < 1)
   ) {
@@ -46,13 +55,16 @@ export function createDatabase(options: DatabaseOptions): DatabaseClient {
 
   const pool = new Pool({
     connectionString: options.connectionString,
+    connectionTimeoutMillis: options.connectionTimeoutMs ?? 5000,
     ...(options.maxConnections === undefined ? {} : { max: options.maxConnections }),
   });
   // pg can emit between queries on a checked-out transaction. Consume that
   // event; queries still reject and PostgreSQL rolls the transaction back.
   const connectionLost = () => options.onConnectionError?.('DATABASE_CONNECTION_LOST');
   pool.on('error', connectionLost);
-  pool.on('connect', (client) => { client.on('error', connectionLost); });
+  pool.on('connect', (client) => {
+    client.on('error', connectionLost);
+  });
   const db = new Kysely<DatabaseSchema>({
     dialect: new PostgresDialect({ pool }),
   });

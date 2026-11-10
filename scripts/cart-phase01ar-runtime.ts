@@ -1,3 +1,4 @@
+import { fixtureSigningSecret } from './fixtures/browser-credentials.mjs';
 /** Local synthetic acceptance only. Never composed into buildApi. */
 import { createRequire } from 'node:module';
 import { readFileSync, writeFileSync } from 'node:fs';
@@ -22,7 +23,7 @@ const config = {
     NODE_ENV: 'test',
     DATABASE_URL: isolated.url,
     TEST_DATABASE_URL: isolated.url,
-    BETTER_AUTH_SECRET: 'cart01ar-synthetic-browser-secret-32-characters',
+    BETTER_AUTH_SECRET: fixtureSigningSecret(),
     AUTH_ENCRYPTION_KEY: Buffer.alloc(32, 65).toString('base64'),
     STOREFRONT_BASE_URL: origin,
     STOREFRONT_ORGANIZATION_CODE: fixture.code,

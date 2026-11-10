@@ -1,3 +1,4 @@
+import { fixtureSigningSecret, fixturePassword } from './fixtures/browser-credentials.mjs';
 import { randomUUID } from 'node:crypto';
 /** Isolated synthetic runtime; never uses .env or a persistent database. */
 import { writeFileSync } from 'node:fs';
@@ -80,7 +81,7 @@ const config = parseConfig({
   NODE_ENV: 'test',
   DATABASE_URL: isolated.url,
   TEST_DATABASE_URL: isolated.url,
-  BETTER_AUTH_SECRET: 'synthetic-checkout03b-secret-only-32-characters-long',
+  BETTER_AUTH_SECRET: fixtureSigningSecret(),
   AUTH_ENCRYPTION_KEY: Buffer.alloc(32, 29).toString('base64'),
   STOREFRONT_ORGANIZATION_CODE: fixture.code,
   STOREFRONT_BASE_URL: 'http://localhost:3000',
@@ -219,7 +220,7 @@ api.post('/__checkout03b/stop', async () => {
 });
 for (const letter of ['a', 'b']) {
   const email = `checkout03b-${letter}@example.test`,
-    password = 'Synthetic-browser-password-123';
+    password = fixturePassword;
   const signup = await api.inject({
     method: 'POST',
     url: '/shopper-auth/sign-up/email',

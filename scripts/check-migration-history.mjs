@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { Buffer } from 'node:buffer';
 import { readFileSync, readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
@@ -7,6 +8,10 @@ const defaultRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const namePattern = /^\d{4}_[a-z0-9_]+$/u;
 // Anchors the reviewed baseline file; validation never regenerates either value.
 const baselineDigest = '2fba6929c46eb456a26c279885a3d1a932ed268eb609b733a61635a25036a288';
+// Identity is the repository's LF text bytes, not a Windows checkout's CRLF
+// representation. Only paired CRLF is canonicalized; no whitespace, SQL, BOM,
+// lone CR or JSON reserialization is ignored. Anchored digests stay unchanged.
+const repositoryTextBytes = (bytes) => Buffer.from(bytes.toString('utf8').replaceAll('\r\n', '\n'));
 
 export function validateMigrationHistory(root = defaultRoot) {
   const directory = resolve(root, 'packages/database/src/migrations');
@@ -16,7 +21,9 @@ export function validateMigrationHistory(root = defaultRoot) {
   const baseline = JSON.parse(baselineBytes.toString('utf8'));
   const source = readFileSync(resolve(directory, 'index.ts'), 'utf8');
   const errors = [];
-  if (createHash('sha256').update(baselineBytes).digest('hex') !== baselineDigest)
+  if (
+    createHash('sha256').update(repositoryTextBytes(baselineBytes)).digest('hex') !== baselineDigest
+  )
     errors.push(
       'Historical migration baseline manifest changed; review an explicit cross-environment rebaseline.',
     );
@@ -25,7 +32,7 @@ export function validateMigrationHistory(root = defaultRoot) {
     if (imports.has(match[1])) errors.push(`Duplicate migration import alias: ${match[1]}`);
     imports.set(match[1], match[2]);
   }
-  const entries = [...source.matchAll(/^  '([^']+)': (\w+),$/gmu)].map((match) => ({
+  const entries = [...source.matchAll(/^ {2}'([^']+)': (\w+),$/gmu)].map((match) => ({
     name: match[1],
     alias: match[2],
   }));
@@ -68,7 +75,7 @@ export function validateMigrationHistory(root = defaultRoot) {
       continue;
     }
     const actual = createHash('sha256')
-      .update(readFileSync(resolve(directory, `${name}.ts`)))
+      .update(repositoryTextBytes(readFileSync(resolve(directory, `${name}.ts`))))
       .digest('hex');
     if (actual !== baseline.migrations[name])
       errors.push(`Historical migration changed: ${name}.ts`);

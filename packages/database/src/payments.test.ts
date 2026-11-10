@@ -1,3 +1,4 @@
+import { processCommerceAnalyticsOutbox } from './analytics/commerce/processing.js';
 import { afterAll, describe, expect, it } from 'vitest';
 import { sql } from 'kysely';
 
@@ -441,6 +442,14 @@ describe('payment facts, manual wallet verification, and refunds', () => {
       collected: '0.0000',
       outstanding: '1161.0000',
     });
+    await processCommerceAnalyticsOutbox(database.db, 500);
+    expect(
+      (
+        await sql`select 1 from analytics.commerce_events where organization_id=${input.organizationId} and event_name in ('COD_COLLECTED','PAYMENT_VERIFIED','OBLIGATION_SATISFIED')`.execute(
+          database.db,
+        )
+      ).rows,
+    ).toEqual([]);
   });
 
   it('records delivered COD as an idempotent collection without conflating delivery and payment', async () => {
@@ -518,6 +527,18 @@ describe('payment facts, manual wallet verification, and refunds', () => {
         (select count(*) from platform.outbox_events where organization_id = ${input.organizationId} and event_type = 'payments.cod_collection.recorded')::text as outbox
     `.execute(database.db);
     expect(evidence.rows[0]).toEqual({ audit: '1', outbox: '1' });
+    await Promise.all([
+      processCommerceAnalyticsOutbox(database.db, 500),
+      processCommerceAnalyticsOutbox(database.db, 500),
+    ]);
+    const facts = await sql`select event_name,amount::text from analytics.commerce_events
+      where organization_id=${input.organizationId} and event_name in ('COD_COLLECTED','PAYMENT_VERIFIED','OBLIGATION_SATISFIED') order by event_name`.execute(
+      database.db,
+    );
+    expect(facts.rows).toEqual([
+      { event_name: 'COD_COLLECTED', amount: '1161.0000' },
+      { event_name: 'OBLIGATION_SATISFIED', amount: '1161.0000' },
+    ]);
   });
 
   it('settles courier-held COD through partial remittances with explicit deductions', async () => {
@@ -986,6 +1007,15 @@ describe('payment facts, manual wallet verification, and refunds', () => {
       database.db,
     );
     expect(financialHistory.rows[0]).toEqual({ payments: '1', refunds: '0' });
+    await processCommerceAnalyticsOutbox(database.db, 500);
+    const measured = await sql`select event_name from analytics.commerce_events
+      where organization_id=${input.organizationId} and event_name in ('ORDER_COMMITTED','ORDER_CANCELLED','REFUND_COMPLETED') order by event_name`.execute(
+      database.db,
+    );
+    expect(measured.rows).toEqual([
+      { event_name: 'ORDER_CANCELLED' },
+      { event_name: 'ORDER_COMMITTED' },
+    ]);
     const stock = await sql<{
       reserved: string;
     }>`select sum(level.reserved_quantity)::text as reserved from inventory.inventory_levels level join inventory.inventory_items item on item.id = level.inventory_item_id where item.organization_id = ${input.organizationId} and item.variant_id = ${input.variantId}`.execute(

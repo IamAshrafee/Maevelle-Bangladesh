@@ -1,3 +1,4 @@
+import { fixturePassword } from './fixtures/browser-credentials.mjs';
 /** Synthetic loopback fixture for the Phase 02B browser journey. */
 import { randomBytes } from 'node:crypto';
 import { mkdtemp, rm } from 'node:fs/promises';
@@ -191,7 +192,7 @@ try {
         payload: {
           email,
           name: 'Synthetic cart shopper',
-          password: 'synthetic-cart-browser-password',
+          password: fixturePassword,
           callbackURL: origin + '/account',
         },
       });

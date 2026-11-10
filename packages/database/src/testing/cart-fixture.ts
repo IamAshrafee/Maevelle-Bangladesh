@@ -37,7 +37,7 @@ export async function isolatedCartDatabase() {
     },
   };
 }
-export async function cartFixture(database: DatabaseClient) {
+export async function cartFixture(database: Pick<DatabaseClient, 'db'>) {
   const code = `cart-${crypto.randomUUID()}`;
   const org = await createOrganization(database.db, {
     code,

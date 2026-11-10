@@ -1,3 +1,4 @@
+import { fixtureSigningSecret, fixturePassword } from './fixtures/browser-credentials.mjs';
 /** Standalone synthetic browser runtime. Never reads .env or a persistent target. */
 import { writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
@@ -32,7 +33,7 @@ const config = parseConfig({
   NODE_ENV: 'test',
   DATABASE_URL: isolated.url,
   TEST_DATABASE_URL: isolated.url,
-  BETTER_AUTH_SECRET: 'synthetic-payment04b-secret-only-32-characters-long',
+  BETTER_AUTH_SECRET: fixtureSigningSecret(),
   AUTH_ENCRYPTION_KEY: Buffer.alloc(32, 31).toString('base64'),
   BETTER_AUTH_URL: 'http://localhost:3001',
   AUTH_TRUSTED_ORIGINS: 'http://localhost:3001,http://127.0.0.1:3001',
@@ -42,7 +43,7 @@ const config = parseConfig({
   API_PORT: '3002',
 });
 const auth = createAuth(config, isolated.database, true);
-const password = 'Synthetic-payment04B-only-123!';
+const password = fixturePassword;
 const users = {};
 for (const [role, oldId] of [
   ['owner', f.owner],

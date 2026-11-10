@@ -72,6 +72,31 @@ const approve = (
   });
 
 describe('Phase 04A independent manual receipt integrity', () => {
+  it('verifies distinct concurrent receipts into one account without FK lock-upgrade deadlocks', async () => {
+    const f = await manualPaymentFixture(db());
+    const claims = await Promise.all(Array.from({ length: 8 }, () => f.order()));
+    await Promise.all(claims.map((claim) => approve(f, claim, '40.0000')));
+    expect(
+      (
+        await sql<{
+          n: string;
+          amount: string;
+        }>`select count(*)::text n,sum(amount)::text amount from payments.payments where organization_id=${f.organizationId}`.execute(
+          db(),
+        )
+      ).rows[0],
+    ).toEqual({ n: '8', amount: '320.0000' });
+    expect(
+      (
+        await sql<{
+          n: string;
+          amount: string;
+        }>`select count(*)::text n,sum(e.amount_delta)::text amount from finance.financial_account_entries e join finance.finance_transactions t on t.organization_id=e.organization_id and t.id=e.finance_transaction_id where e.organization_id=${f.organizationId} and t.source_domain='payments.payment'`.execute(
+          db(),
+        )
+      ).rows[0],
+    ).toEqual({ n: '8', amount: '320.0000' });
+  }, 15000);
   it('bounds the review queue and measures a small synthetic verification workload', async () => {
     const f = await manualPaymentFixture(db()),
       durations: number[] = [];
@@ -670,6 +695,8 @@ describe('Phase 04A populated forward migration', () => {
       expect((await runMigrations(d)).executed).toEqual([
         '3222_manual_payment_integrity',
         '3223_checkout_placement',
+        '3224_commerce_measurement',
+        '3225_privacy_preferences',
       ]);
       expect(
         (

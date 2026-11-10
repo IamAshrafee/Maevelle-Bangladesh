@@ -1,3 +1,4 @@
+import { fixturePassword } from './fixtures/browser-credentials.mjs';
 /** Account Bag acceptance using a synthetic loopback fixture and disposable Chrome contexts. */
 import assert from 'node:assert/strict';
 import { browser, wait } from './cart-phase01b-cdp.mjs';
@@ -87,7 +88,7 @@ async function signIn(tab, name = 'a') {
     const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set;
     for (const [selector, value] of [
       ['main form input[type=email]', 'cart-shopper-${name}@example.test'],
-      ['main form input[type=password]', 'synthetic-cart-browser-password'],
+      ['main form input[type=password]', fixturePassword],
     ]) {
       const input = document.querySelector(selector);
       set.call(input, value);
@@ -413,7 +414,7 @@ try {
         });
         await post('sign-out', {});
         const response = await post('sign-in/email', {
-          email:'cart-shopper-${name}@example.test', password:'synthetic-cart-browser-password',
+          email:'cart-shopper-${name}@example.test', password:${JSON.stringify(fixturePassword)},
         });
         window.dispatchEvent(new StorageEvent('storage',{key:'maevelle_shopper_auth_signal'}));
         return response.status;

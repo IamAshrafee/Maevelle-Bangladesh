@@ -1,3 +1,4 @@
+import { fixturePassword } from './fixtures/browser-credentials.mjs';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -91,7 +92,7 @@ async function setup(fixture, account, cart) {
   if (account) {
     await request('/shopper-auth/sign-in/email', 'POST', {
       email: 'checkout03b-a@example.test',
-      password: 'Synthetic-browser-password-123',
+      password: fixturePassword,
     });
     partition = (await request('/storefront/v1/shopper/session')).partition;
     if (!partition) throw new Error('Account partition unavailable');
