@@ -35,6 +35,7 @@ WORKDIR /app
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 # Next's standalone output mirrors the monorepo root. Keep that root intact;
+ENV ADMIN_INTERNAL_API_URL=http://maevelle-staging-api:3000
 # pnpm-linked Next output also needs the workspace dependency tree for helpers
 # omitted by standalone tracing.
 COPY --from=build --chown=maevelle:maevelle /workspace/apps/admin/.next/standalone ./

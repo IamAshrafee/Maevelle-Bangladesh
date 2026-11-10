@@ -78,7 +78,8 @@ const mockSessions: readonly AccountSessionItemDto[] = [
     id: 'sess-mobile',
     isCurrent: false,
     ipAddress: '103.114.98.88',
-    userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 Mobile/15E148 Safari/604.1',
+    userAgent:
+      'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 Mobile/15E148 Safari/604.1',
     deviceLabel: 'Safari on iPhone',
     createdAt: '2026-10-04T14:30:00.000Z',
     expiresAt: '2026-10-11T14:30:00.000Z',
@@ -126,24 +127,15 @@ describe('My Account / Self-Service Account Frontend', () => {
 
     it('translates specific API error codes into user-friendly copy', () => {
       expect(
-        getAccountErrorMessage(
-          { code: 'INVALID_CREDENTIALS', message: 'Raw error' },
-          'Fallback',
-        ),
+        getAccountErrorMessage({ code: 'INVALID_CREDENTIALS', message: 'Raw error' }, 'Fallback'),
       ).toContain('Your current password is incorrect');
 
       expect(
-        getAccountErrorMessage(
-          { code: 'AVATAR_TOO_LARGE', message: 'Raw error' },
-          'Fallback',
-        ),
+        getAccountErrorMessage({ code: 'AVATAR_TOO_LARGE', message: 'Raw error' }, 'Fallback'),
       ).toContain('exceeds the 2MB size limit');
 
       expect(
-        getAccountErrorMessage(
-          { code: 'EMAIL_EXISTS', message: 'Raw error' },
-          'Fallback',
-        ),
+        getAccountErrorMessage({ code: 'EMAIL_EXISTS', message: 'Raw error' }, 'Fallback'),
       ).toContain('already in use');
     });
 
@@ -300,18 +292,16 @@ describe('My Account / Self-Service Account Frontend', () => {
       );
 
       expect(html).toContain('Set up authenticator app');
-      expect(html).toContain('Maevelle organization policy requires you to configure an authenticator app');
+      expect(html).toContain(
+        'Maevelle organization policy requires you to configure an authenticator app',
+      );
     });
   });
 
   describe('SessionsTab', () => {
     it('renders active sessions list with device labels, IP, and current session badge', () => {
       const html = renderToStaticMarkup(
-        <SessionsTab
-          sessions={mockSessions}
-          loading={false}
-          onReload={async () => {}}
-        />,
+        <SessionsTab sessions={mockSessions} loading={false} onReload={async () => {}} />,
       );
 
       expect(html).toContain('Active Login Sessions');
@@ -325,11 +315,7 @@ describe('My Account / Self-Service Account Frontend', () => {
 
     it('renders Sign Out action for other devices while current device shows current session marker', () => {
       const html = renderToStaticMarkup(
-        <SessionsTab
-          sessions={mockSessions}
-          loading={false}
-          onReload={async () => {}}
-        />,
+        <SessionsTab sessions={mockSessions} loading={false} onReload={async () => {}} />,
       );
 
       expect(html).toContain('Current session');
@@ -350,9 +336,7 @@ describe('My Account / Self-Service Account Frontend', () => {
     });
 
     it('renders clean empty state when no activity is recorded', () => {
-      const html = renderToStaticMarkup(
-        <SecurityActivityTab activities={[]} loading={false} />,
-      );
+      const html = renderToStaticMarkup(<SecurityActivityTab activities={[]} loading={false} />);
 
       expect(html).toContain('No recent security events');
     });
@@ -381,9 +365,7 @@ describe('My Account / Self-Service Account Frontend', () => {
         },
       };
 
-      const html = renderToStaticMarkup(
-        <UserMenu context={mockContext} onLogout={() => {}} />,
-      );
+      const html = renderToStaticMarkup(<UserMenu context={mockContext} onLogout={() => {}} />);
 
       expect(html).toContain('Md. Kabir Hasan');
       expect(html).toContain('MH');
@@ -419,9 +401,35 @@ describe('My Account / Self-Service Account Frontend', () => {
   });
 
   describe('Sidebar Navigation & User Profile Integration', () => {
-    it('houses user profile in topbar user menu and removes redundant sidebar footer card', () => {
+    it('withholds the shell and page content without server-validated access', () => {
       const html = renderToStaticMarkup(
         <AdminShell>
+          <div>Protected workspace</div>
+        </AdminShell>,
+      );
+      expect(html).toContain('Checking your session');
+      expect(html).not.toContain('Protected workspace');
+      expect(html).not.toContain('Admin navigation');
+    });
+    it('houses user profile in topbar user menu and removes redundant sidebar footer card', () => {
+      const html = renderToStaticMarkup(
+        <AdminShell
+          initialContext={{
+            actorId: 'actor',
+            organizationId: 'organization',
+            membershipId: 'membership',
+            membershipType: 'STANDARD',
+            capabilities: ['admin.operations.view', 'admin.team.view'],
+            scopes: [],
+            twoFactor: {
+              isEnabled: false,
+              isRequired: false,
+              enrollmentRequired: false,
+              accessRestricted: false,
+              enrollmentDeadline: null,
+            },
+          }}
+        >
           <div data-testid="workspace-content">Workspace Active</div>
         </AdminShell>,
       );
@@ -431,7 +439,7 @@ describe('My Account / Self-Service Account Frontend', () => {
 
       // Verify the topbar user profile menu renders with the operator identity
       expect(html).toContain('Maevelle Operator');
-      expect(html).toContain('Operator · Maevelle BD');
+      expect(html).toContain('Team Member · Maevelle BD');
 
       // Verify the sidebar footer does NOT contain the redundant profile card
       expect(html).not.toContain('Operator · My Account');
@@ -451,4 +459,3 @@ describe('My Account / Self-Service Account Frontend', () => {
     });
   });
 });
-

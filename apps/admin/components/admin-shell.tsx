@@ -59,6 +59,9 @@ import { TwoFactorRequiredGate } from './security/two-factor-required-gate';
 import { UserMenu } from './user-menu';
 import { NotificationBell } from './notifications/notification-bell';
 import { cn } from '@/lib/utils';
+import { publicAdminPaths, safeAdminReturnUrl } from '@/lib/auth/access-policy';
+import { useAdminAccess } from '@/lib/auth/use-admin-access';
+import { AdminAccessFeedback } from './security/admin-access-feedback';
 
 type AdminContext = AdminContextDto;
 
@@ -101,7 +104,12 @@ const navigation: readonly NavGroup[] = [
     label: 'Catalog',
     items: [
       { label: 'Products', href: '/products', icon: PackageSearch, capability: 'catalog.view' },
-      { label: 'Recommendations', href: '/recommendations', icon: ChartNoAxesCombined, capability: 'recommendations.view' },
+      {
+        label: 'Recommendations',
+        href: '/recommendations',
+        icon: ChartNoAxesCombined,
+        capability: 'recommendations.view',
+      },
       {
         label: 'Product organization',
         href: '/categories',
@@ -312,7 +320,8 @@ const navigation: readonly NavGroup[] = [
         href: '/analytics',
         icon: ChartNoAxesCombined,
         capability: 'analytics.view',
-        keywords: 'analytics reports business intelligence wishlist saves demand sharing products cohorts',
+        keywords:
+          'analytics reports business intelligence wishlist saves demand sharing products cohorts',
       },
       {
         label: 'Costing & margins',
@@ -470,7 +479,7 @@ const quickCommands: readonly NavItem[] = [
 
 function hasCapability(context: AdminContext | undefined, capability?: string) {
   if (!capability) return true;
-  if (!context) return true;
+  if (!context) return false;
   if (context.membershipType === 'OWNER') return true;
   return context.capabilities.includes(capability);
 }
@@ -661,43 +670,18 @@ function CommandPalette({
   );
 }
 
-export function AdminShell({ children }: { children: ReactNode }) {
+export function AdminShell({
+  children,
+  initialContext,
+}: {
+  children: ReactNode;
+  initialContext?: AdminContext;
+}) {
   const pathname = usePathname();
-  const router = useRouter();
-  const [context, setContext] = useState<AdminContext>();
+  const { context, failure, refresh, signOut } = useAdminAccess(pathname, initialContext);
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
-
-  useEffect(() => {
-    if (pathname === '/login' || pathname === '/two-factor') return;
-    void fetch('/api/admin/context', { credentials: 'include' }).then(async (response) => {
-      if (response.status === 401) {
-        if (pathname === '/design-system' || pathname.startsWith('/settings/design-system')) {
-          return;
-        }
-        return router.replace('/login');
-      }
-      if (response.ok) {
-        const nextContext = (await response.json()) as AdminContext;
-        setContext(nextContext);
-        if (nextContext.twoFactor.accessRestricted && pathname !== '/account/security')
-          router.replace('/account/security');
-      }
-    });
-  }, [pathname, router]);
-
-  useEffect(() => {
-    const handleAccountUpdated = () => {
-      void fetch('/api/admin/context', { credentials: 'include' }).then(async (response) => {
-        if (response.ok) {
-          setContext((await response.json()) as AdminContext);
-        }
-      });
-    };
-    window.addEventListener('maevelle:account-updated', handleAccountUpdated);
-    return () => window.removeEventListener('maevelle:account-updated', handleAccountUpdated);
-  }, []);
 
   useEffect(() => {
     const handler = (event: KeyboardEvent) => {
@@ -714,28 +698,32 @@ export function AdminShell({ children }: { children: ReactNode }) {
     return () => window.removeEventListener('keydown', handler);
   }, []);
 
-  if (pathname === '/login' || pathname === '/two-factor') return children;
+  if (publicAdminPaths.has(pathname)) return children;
+
+  if (failure)
+    return (
+      <AdminAccessFeedback
+        reason={failure}
+        returnTo={
+          typeof window === 'undefined'
+            ? '/admin'
+            : window.location.pathname + window.location.search
+        }
+      />
+    );
 
   if (context?.twoFactor.accessRestricted) {
     return (
       <TwoFactorRequiredGate
         context={context}
         onEnrolled={() => {
-          void fetch('/api/admin/context', { credentials: 'include' }).then(async (response) => {
-            if (response.ok) {
-              setContext((await response.json()) as AdminContext);
-            }
-          });
+          const destination = new URLSearchParams(window.location.search).get('redirect');
+          if (destination) window.location.assign(safeAdminReturnUrl(destination));
+          else void refresh();
         }}
       />
     );
   }
-
-  const logout = async () => {
-    await fetch('/api/auth/sign-out', { method: 'POST', credentials: 'include' });
-    router.replace('/login');
-    router.refresh();
-  };
 
   return (
     <div className="min-h-screen bg-background text-foreground flex flex-col md:flex-row relative">
@@ -930,7 +918,7 @@ export function AdminShell({ children }: { children: ReactNode }) {
             </div>
 
             {/* User Profile Menu */}
-            <UserMenu context={context} onLogout={logout} />
+            <UserMenu context={context} onLogout={signOut} />
           </div>
         </header>
 

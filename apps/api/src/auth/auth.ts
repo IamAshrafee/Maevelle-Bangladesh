@@ -10,8 +10,21 @@ export interface MaevelleAuth {
   readonly handler: (request: Request) => Promise<Response>;
   readonly api: {
     getSession(input: { headers: Headers }): Promise<{
-      user?: { id?: string; twoFactorEnabled: boolean | null | undefined; name?: string; email?: string; image?: string | null | undefined };
-      session?: { id?: string; createdAt?: Date | string; updatedAt?: Date | string; expiresAt?: Date | string; ipAddress?: string | null | undefined; userAgent?: string | null | undefined };
+      user?: {
+        id?: string;
+        twoFactorEnabled: boolean | null | undefined;
+        name?: string;
+        email?: string;
+        image?: string | null | undefined;
+      };
+      session?: {
+        id?: string;
+        createdAt?: Date | string;
+        updatedAt?: Date | string;
+        expiresAt?: Date | string;
+        ipAddress?: string | null | undefined;
+        userAgent?: string | null | undefined;
+      };
     } | null>;
     signUpEmail(input: {
       body: { email: string; password: string; name: string };
@@ -138,13 +151,8 @@ export function createAuth(
     ...auth,
     api: {
       ...auth.api,
-      getSession: async (input: { headers: Headers }) => {
-        try {
-          return await originalGetSession(input);
-        } catch {
-          return null;
-        }
-      },
+      // Callers must distinguish service failures from an absent or invalid session.
+      getSession: async (input: { headers: Headers }) => originalGetSession(input),
     },
   };
 }

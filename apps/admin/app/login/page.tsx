@@ -5,6 +5,7 @@ import { ArrowRight, CheckCircle2, LockKeyhole, ShieldCheck } from 'lucide-react
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { safeAdminReturnUrl } from '@/lib/auth/access-policy';
 
 export default function LoginPage() {
   const [email, setEmail] = useState('');
@@ -19,16 +20,7 @@ export default function LoginPage() {
     try {
       const searchParams = new URLSearchParams(window.location.search);
       const rawRedirect = searchParams.get('redirect');
-      const safeRedirect =
-        rawRedirect &&
-        rawRedirect.startsWith('/') &&
-        !rawRedirect.startsWith('//') &&
-        !rawRedirect.startsWith('/\\') &&
-        !rawRedirect.includes(':')
-          ? rawRedirect.startsWith('/admin')
-            ? rawRedirect
-            : `/admin${rawRedirect}`
-          : '/admin';
+      const safeRedirect = safeAdminReturnUrl(rawRedirect);
 
       const response = await fetch('/api/auth/sign-in/email', {
         method: 'POST',
@@ -50,7 +42,13 @@ export default function LoginPage() {
       }
       const context = await fetch('/api/admin/context', { credentials: 'include' });
       if (!context.ok) {
-        setMessage('Your identity is authenticated, but it has no active Maevelle membership.');
+        setMessage(
+          context.status === 403
+            ? 'Your account has no active Maevelle Admin membership.'
+            : context.status === 401
+              ? 'Your session could not be established. Please sign in again.'
+              : 'Maevelle could not verify your access. Please try again.',
+        );
         return;
       }
       window.location.assign(safeRedirect);
@@ -81,12 +79,15 @@ export default function LoginPage() {
 
         <div className="relative space-y-6 max-w-lg my-auto py-12">
           <div className="space-y-2">
-            <p className="text-xs font-semibold uppercase tracking-wider text-primary">Internal workspace</p>
+            <p className="text-xs font-semibold uppercase tracking-wider text-primary">
+              Internal workspace
+            </p>
             <h1 className="text-3xl sm:text-4xl font-bold tracking-tight text-foreground leading-tight">
               Run the day with clarity.
             </h1>
             <p className="text-sm text-muted-foreground leading-relaxed">
-              Orders, stock, supply, payments, delivery, finance, and integrity—connected to one authoritative operating system.
+              Orders, stock, supply, payments, delivery, finance, and integrity—connected to one
+              authoritative operating system.
             </p>
           </div>
 
@@ -131,9 +132,15 @@ export default function LoginPage() {
               <div className="size-10 rounded-xl bg-primary/10 text-primary flex items-center justify-center mb-3 border border-primary/20">
                 <LockKeyhole className="size-5" />
               </div>
-              <p className="text-xs font-semibold uppercase tracking-wider text-primary">Welcome back</p>
-              <h2 className="text-2xl font-bold tracking-tight text-foreground">Sign in to Admin</h2>
-              <p className="text-xs text-muted-foreground">Use your invited internal account to continue.</p>
+              <p className="text-xs font-semibold uppercase tracking-wider text-primary">
+                Welcome back
+              </p>
+              <h2 className="text-2xl font-bold tracking-tight text-foreground">
+                Sign in to Admin
+              </h2>
+              <p className="text-xs text-muted-foreground">
+                Use your invited internal account to continue.
+              </p>
             </div>
 
             <form onSubmit={signIn} className="space-y-4">

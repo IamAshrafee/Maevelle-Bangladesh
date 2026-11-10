@@ -135,6 +135,7 @@ services:
     environment:
       HOSTNAME: 0.0.0.0
       PORT: 3000
+      ADMIN_INTERNAL_API_URL: http://api:3000
     healthcheck:
       test:
         [

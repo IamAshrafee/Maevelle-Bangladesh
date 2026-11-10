@@ -12,7 +12,6 @@ import {
   LockKeyhole,
   LogOut,
   RefreshCw,
-  ShieldAlert,
   ShieldCheck,
 } from 'lucide-react';
 
@@ -27,29 +26,14 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { TotpCodeInput } from '@/components/security/totp-code-input';
+import { safeAdminReturnUrl } from '@/lib/auth/access-policy';
 
 type ChallengeMode = 'totp' | 'recovery';
-
-function getSafeRedirect(rawRedirect: string | null): string {
-  if (!rawRedirect) return '/admin';
-  // Prevent protocol-relative URLs (//evil.com) and backslash bypasses (/\evil.com)
-  if (!rawRedirect.startsWith('/') || rawRedirect.startsWith('//') || rawRedirect.startsWith('/\\')) {
-    return '/admin';
-  }
-  // Prevent javascript: or other URL schemes
-  if (rawRedirect.includes(':')) {
-    return '/admin';
-  }
-  if (rawRedirect.startsWith('/admin')) {
-    return rawRedirect;
-  }
-  return `/admin${rawRedirect}`;
-}
 
 function TwoFactorChallengeContent() {
   const searchParams = useSearchParams();
   const rawRedirect = searchParams.get('redirect');
-  const safeRedirect = getSafeRedirect(rawRedirect);
+  const safeRedirect = safeAdminReturnUrl(rawRedirect);
 
   const [mode, setMode] = useState<ChallengeMode>('totp');
   const [totpCode, setTotpCode] = useState('');
@@ -83,8 +67,7 @@ function TwoFactorChallengeContent() {
 
       if (!response.ok) {
         const payload = (await response.json().catch(() => undefined)) as
-          | { message?: string; code?: string }
-          | undefined;
+          { message?: string; code?: string } | undefined;
 
         if (payload?.code === 'ACCOUNT_TEMPORARILY_LOCKED') {
           setIsLocked(true);
@@ -104,8 +87,7 @@ function TwoFactorChallengeContent() {
           );
         } else {
           setMessage(
-            payload?.message ??
-              'The verification code could not be confirmed. Please try again.',
+            payload?.message ?? 'The verification code could not be confirmed. Please try again.',
           );
         }
         return;
@@ -114,7 +96,13 @@ function TwoFactorChallengeContent() {
       // Check admin context
       const context = await fetch('/api/admin/context', { credentials: 'include' });
       if (!context.ok) {
-        setMessage('Your identity is verified, but has no active Maevelle membership.');
+        setMessage(
+          context.status === 403
+            ? 'Your account has no active Maevelle Admin membership.'
+            : context.status === 401
+              ? 'Your session could not be established. Please sign in again.'
+              : 'Maevelle could not verify your access. Please try again.',
+        );
         return;
       }
 
@@ -160,7 +148,8 @@ function TwoFactorChallengeContent() {
               Two-factor protection.
             </h1>
             <p className="text-sm text-muted-foreground leading-relaxed">
-              Every Maevelle administrator account is secured with multi-factor verification to safeguard customer privacy, financial operations, and inventory records.
+              Every Maevelle administrator account is secured with multi-factor verification to
+              safeguard customer privacy, financial operations, and inventory records.
             </p>
           </div>
 
@@ -219,7 +208,11 @@ function TwoFactorChallengeContent() {
           <div className="rounded-2xl border border-border bg-card p-6 sm:p-8 text-card-foreground shadow-sm space-y-6">
             <div className="space-y-1.5">
               <div className="size-10 rounded-xl bg-primary/10 text-primary flex items-center justify-center mb-3 border border-primary/20">
-                {mode === 'totp' ? <ShieldCheck className="size-5" /> : <KeyRound className="size-5" />}
+                {mode === 'totp' ? (
+                  <ShieldCheck className="size-5" />
+                ) : (
+                  <KeyRound className="size-5" />
+                )}
               </div>
               <p className="text-xs font-semibold uppercase tracking-wider text-primary">
                 Step 2 of 2
@@ -252,7 +245,10 @@ function TwoFactorChallengeContent() {
             {mode === 'totp' ? (
               <div className="space-y-5">
                 <div className="space-y-2">
-                  <Label htmlFor="challenge-totp-input" className="text-xs font-medium block text-center">
+                  <Label
+                    htmlFor="challenge-totp-input"
+                    className="text-xs font-medium block text-center"
+                  >
                     Six-digit code
                   </Label>
                   <TotpCodeInput
@@ -296,7 +292,8 @@ function TwoFactorChallengeContent() {
                       Tip for verification codes:
                     </span>
                     <p className="leading-relaxed">
-                      Make sure automatic date and time are enabled on your phone, then try the newest code shown in your authenticator app.
+                      Make sure automatic date and time are enabled on your phone, then try the
+                      newest code shown in your authenticator app.
                     </p>
                   </div>
                 )}
@@ -407,19 +404,25 @@ function TwoFactorChallengeContent() {
             <div className="space-y-1 rounded-lg border border-border/80 bg-muted/30 p-3">
               <strong className="text-foreground block">Option 1: Use a Recovery Code</strong>
               <p>
-                When you set up two-factor authentication, Maevelle provided a set of recovery codes. You can select <strong>&quot;Use a recovery code instead&quot;</strong> and sign in using one of those codes.
+                When you set up two-factor authentication, Maevelle provided a set of recovery
+                codes. You can select <strong>&quot;Use a recovery code instead&quot;</strong> and
+                sign in using one of those codes.
               </p>
             </div>
 
             <div className="space-y-1 rounded-lg border border-border/80 bg-muted/30 p-3">
               <strong className="text-foreground block">Option 2: Contact an Administrator</strong>
               <p>
-                If you no longer have access to both your authenticator app and recovery codes, contact an authorized Maevelle organization administrator with security reset privileges. They can verify your identity and safely reset your two-factor configuration.
+                If you no longer have access to both your authenticator app and recovery codes,
+                contact an authorized Maevelle organization administrator with security reset
+                privileges. They can verify your identity and safely reset your two-factor
+                configuration.
               </p>
             </div>
 
             <p className="text-[11px] text-muted-foreground italic">
-              Note: For security reasons, Maevelle support cannot bypass or disable two-factor authentication over email or chat.
+              Note: For security reasons, Maevelle support cannot bypass or disable two-factor
+              authentication over email or chat.
             </p>
           </div>
         </DialogContent>

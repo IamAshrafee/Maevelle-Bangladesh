@@ -7,10 +7,10 @@ import type { FastifyInstance } from 'fastify';
 import type { RuntimeConfig } from '@maevelle/config';
 import type { DatabaseClient } from '@maevelle/database';
 import { createObjectStorage } from '@maevelle/media';
-import { findActiveAdminContext } from '@maevelle/database/platform';
 
 import { createAuth } from '../auth/auth.js';
-import { recordUserTwoFactorEvent, resolveTwoFactorAccessState } from '@maevelle/database/iam';
+import { registerAdminAccessGuard } from '../auth/admin-access-guard.js';
+import { recordUserTwoFactorEvent } from '@maevelle/database/iam';
 import { registerTwoFactorSecurityRoutes } from './two-factor-security.js';
 import { registerAdminContextRoute } from './admin-context.js';
 import { registerAccountRoutes } from './account.js';
@@ -62,6 +62,7 @@ export function registerAuthRoutes(
   shopperAuthEmailSender?: ShopperAuthEmailSender,
 ): void {
   const auth = createAuth(config, database);
+  registerAdminAccessGuard(app, database, auth);
 
   app.all('/auth/*', async (request, reply) => {
     const authPath = request.raw.url?.split('?', 1)[0] ?? request.url.split('?', 1)[0] ?? '';
@@ -134,49 +135,6 @@ export function registerAuthRoutes(
       }
     }
     return reply.code(response.status).send(responseText);
-  });
-
-  // Each registered Admin route still authorizes through findActiveAdminContext;
-  // this hook is an additional organization-policy gate, not an RBAC substitute.
-  app.addHook('preHandler', async (request, reply) => {
-    const path = request.url.split('?', 1)[0] ?? '';
-    if (!path.startsWith('/admin/')) return;
-    if (
-      path === '/admin/context' ||
-      path.startsWith('/admin/account') ||
-      path === '/admin/security/two-factor/status' ||
-      path === '/admin/security/two-factor/enrollment' ||
-      path === '/admin/security/two-factor/enrollment/verify'
-    )
-      return;
-    const session = await auth.api
-      .getSession({
-        headers: new Headers(
-          Object.entries(request.headers).flatMap(([name, value]) =>
-            typeof value === 'string' ? [[name, value]] : [],
-          ),
-        ),
-      })
-      .catch(() => null);
-    if (!session?.user?.id) return;
-    const selectedOrganization = request.headers['x-organization-id'];
-    const active = await findActiveAdminContext(database.db, session.user.id, {
-      ...(typeof selectedOrganization === 'string' ? { organizationId: selectedOrganization } : {}),
-    });
-    if (!active) return;
-    const state = await resolveTwoFactorAccessState(
-      database.db,
-      session.user.id,
-      active.organizationId,
-    );
-    if (state?.accessRestricted)
-      return reply.code(403).send({
-        error: {
-          code: 'TWO_FACTOR_ENROLLMENT_REQUIRED',
-          message: 'Set up an authenticator app before accessing protected Maevelle operations.',
-          details: { enrollmentDeadline: state.policy.enrollmentDeadline },
-        },
-      });
   });
 
   const objectStorage = createObjectStorage(

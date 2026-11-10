@@ -57,6 +57,7 @@ export function registerAdminContextRoute(
           }),
           401: Type.Object({ error: Type.Literal('UNAUTHENTICATED') }),
           403: Type.Object({ error: Type.Literal('FORBIDDEN') }),
+          503: Type.Object({ error: Type.Literal('AUTH_UNAVAILABLE') }),
         },
         querystring: Type.Object({
           organizationId: Type.Optional(
@@ -70,42 +71,52 @@ export function registerAdminContextRoute(
       },
     },
     async (request, reply) => {
-      const session = await auth.api.getSession({ headers: requestHeaders(request.headers) });
-      if (!session?.user?.id) return reply.code(401).send({ error: 'UNAUTHENTICATED' });
+      reply.header('Cache-Control', 'private, no-store, max-age=0');
+      try {
+        const session = await auth.api.getSession({ headers: requestHeaders(request.headers) });
+        if (!session?.user?.id || !session.session?.id)
+          return reply.code(401).send({ error: 'UNAUTHENTICATED' });
 
-      const contextRequest = request.query as {
-        organizationId?: string;
-        requiredCapability?: string;
-      };
-      const active = await findActiveAdminContext(database.db, session.user.id, contextRequest);
-      if (!active) return reply.code(403).send({ error: 'FORBIDDEN' });
-      const twoFactor = await resolveTwoFactorAccessState(
-        database.db,
-        session.user.id,
-        active.organizationId,
-      );
-      if (!twoFactor) return reply.code(403).send({ error: 'FORBIDDEN' });
+        const contextRequest = request.query as {
+          organizationId?: string;
+          requiredCapability?: string;
+        };
+        const active = await findActiveAdminContext(database.db, session.user.id, contextRequest);
+        if (!active) return reply.code(403).send({ error: 'FORBIDDEN' });
+        const twoFactor = await resolveTwoFactorAccessState(
+          database.db,
+          session.user.id,
+          active.organizationId,
+        );
+        if (!twoFactor) return reply.code(403).send({ error: 'FORBIDDEN' });
 
-      return {
-        actorId: session.user.id,
-        organizationId: active.organizationId,
-        membershipId: active.membershipId,
-        membershipType: active.membershipType,
-        capabilities: [...active.capabilities],
-        scopes: [...active.scopes],
-        twoFactor: {
-          isEnabled: twoFactor.isEnabled,
-          isRequired: twoFactor.isRequired,
-          enrollmentRequired: twoFactor.enrollmentRequired,
-          accessRestricted: twoFactor.accessRestricted,
-          enrollmentDeadline: twoFactor.policy.enrollmentDeadline,
-        },
-        user: {
-          name: session.user.name ?? '',
-          email: session.user.email ?? '',
-          image: session.user.image ?? null,
-        },
-      };
+        return {
+          actorId: session.user.id,
+          organizationId: active.organizationId,
+          membershipId: active.membershipId,
+          membershipType: active.membershipType,
+          capabilities: [...active.capabilities],
+          scopes: [...active.scopes],
+          twoFactor: {
+            isEnabled: twoFactor.isEnabled,
+            isRequired: twoFactor.isRequired,
+            enrollmentRequired: twoFactor.enrollmentRequired,
+            accessRestricted: twoFactor.accessRestricted,
+            enrollmentDeadline: twoFactor.policy.enrollmentDeadline,
+          },
+          user: {
+            name: session.user.name ?? '',
+            email: session.user.email ?? '',
+            image: session.user.image ?? null,
+          },
+        };
+      } catch {
+        request.log.warn(
+          { securityEvent: 'admin_context_unavailable' },
+          'Admin context verification unavailable',
+        );
+        return reply.code(503).send({ error: 'AUTH_UNAVAILABLE' });
+      }
     },
   );
 }

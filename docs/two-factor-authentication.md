@@ -1,10 +1,13 @@
 # Authenticator app two-factor authentication
 
 **Status:** Implemented for internal Admin Portal identities  
-**Authentication engine:** Better Auth 1.6.25 two-factor plugin  
+**Authentication engine:** Better Auth 1.7.12 two-factor plugin
 **Scope:** Maevelle team members only; storefront customer authentication is unchanged
 
 ## What this protects
+
+See [Admin access boundary](admin-access-boundary.md) for server rendering protection,
+session lifecycle checks, enrollment redirects and private-cache behavior.
 
 Two-factor authentication (2FA) adds a second proof to an administrator's password. A person who
 knows only the password cannot enter a protected account. Maevelle implements the standard TOTP
