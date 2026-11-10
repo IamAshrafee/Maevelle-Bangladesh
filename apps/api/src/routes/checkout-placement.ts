@@ -17,6 +17,7 @@ import { guestCookiePrefix, type CartShopperResolver } from './cart-context.js';
 import { checkoutRequestContext } from './checkout-context.js';
 import { CheckoutRequestError } from './checkout-errors.js';
 import { intentKey, strictBody } from './checkout-input.js';
+import { publicFinalTerms } from './checkout-public-money.js';
 
 const uuid = Type.String({ format: 'uuid' });
 const params = Type.Object({ id: uuid }, { additionalProperties: false });
@@ -91,10 +92,12 @@ export function registerCheckoutPlacementRoutes(
     async (request) => {
       const body = request.body as Omit<PlaceCheckoutDto, 'finalTermsFingerprint'>;
       return {
-        data: await reviewCheckoutFinalTerms(database.db, await context(request, true), {
-          ...body,
-          quoteId: body.quoteId.toLowerCase(),
-        }),
+        data: publicFinalTerms(
+          await reviewCheckoutFinalTerms(database.db, await context(request, true), {
+            ...body,
+            quoteId: body.quoteId.toLowerCase(),
+          }),
+        ),
       };
     },
   );
@@ -126,13 +129,23 @@ export function registerCheckoutPlacementRoutes(
           `${name}=${grant}; Path=/; HttpOnly; SameSite=Lax; Max-Age=3600${secure ? '; Secure' : ''}`,
         );
       }
-      return reply.code(result.kind === 'REVIEW_REQUIRED' ? 409 : 200).send({ data: result });
+      const data =
+        result.kind === 'COMMITTED'
+          ? {
+              ...result,
+              receipt: { ...result.receipt, terms: publicFinalTerms(result.receipt.terms) },
+            }
+          : result;
+      return reply.code(result.kind === 'REVIEW_REQUIRED' ? 409 : 200).send({ data });
     },
   );
   app.get('/storefront/v1/checkouts/:id/placement', { schema: { params } }, async (request) => {
     const { owner, draftId } = await context(request, false);
     const grant = readGrant(request, draftId, config.nodeEnv === 'production');
-    return { data: await getCommittedCheckoutOrder(database.db, owner, draftId, grant) };
+    const data = await getCommittedCheckoutOrder(database.db, owner, draftId, grant);
+    return {
+      data: { ...data, receipt: { ...data.receipt, terms: publicFinalTerms(data.receipt.terms) } },
+    };
   });
 
   const paymentAccess = async (request: FastifyRequest) => {

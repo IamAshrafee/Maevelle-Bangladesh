@@ -1,4 +1,16 @@
 export { reverseManualReceipt } from './payments/receipt-corrections.js';
+export { reverseUnpostedCodCollection } from './payments/cash-shortfall/collection-correction.js';
+export {
+  settleCashShortfall,
+  approveCashShortfall,
+  reverseCashShortfall,
+} from './payments/cash-shortfall/engine.js';
+export {
+  proposeCashShortfallPolicy,
+  approveCashShortfallPolicy,
+} from './payments/cash-shortfall/policies.js';
+export { cashSettlement, listCashAdjustments } from './payments/cash-shortfall/queries.js';
+export { listCashPolicies, cashEligibility } from './payments/cash-shortfall/discovery.js';
 export { reviewManualClaim, listManualClaimQueue } from './payments/review-claims.js';
 import {
   allocateReceiptRefundInTransaction,
@@ -6,6 +18,7 @@ import {
 } from './payments/receipt-refunds.js';
 import { postVerifiedRefundInTransaction } from './finance.js';
 import { requirePaymentCapability } from './payments/authorization.js';
+import { parseMoney } from './cart/value.js';
 export { processPaymentReviewAging } from './payments/review-aging.js';
 export { changeRefundProcessingState } from './payments/refund-processing.js';
 export { listReceiptExceptions } from './payments/receipt-exceptions.js';
@@ -54,6 +67,8 @@ export interface PaymentMethodView {
 }
 
 export interface PaymentSummary {
+  readonly authorizedWaiver: string;
+  readonly settlementStatus: 'OPEN' | 'SETTLED_BY_RECEIPTS' | 'SETTLED_WITH_ADJUSTMENT';
   readonly method: PaymentMethodCode;
   readonly status:
     | 'UNPAID'
@@ -568,8 +583,10 @@ export async function getOrderPaymentSummary(
     intent_status: string | null;
     collected: string;
     refunded: string;
+    waived: string;
   }>`
     select
+      payments.cash_waiver_total(${input.organizationId}::uuid,${input.orderId}::uuid)::numeric(20,4)::text waived,
       (select expected_amount::text from payments.payment_intents where organization_id = ${input.organizationId} and order_id = ${input.orderId} ${boundIntent} order by created_at desc limit 1) as expected,
       (select status from payments.payment_intents where organization_id = ${input.organizationId} and order_id = ${input.orderId} ${boundIntent} order by created_at desc limit 1) as intent_status,
       coalesce((select sum(allocation.amount)::text from payments.payment_allocations allocation join payments.payments payment on payment.id = allocation.payment_id
@@ -581,11 +598,13 @@ export async function getOrderPaymentSummary(
     expected: null,
     intent_status: null,
     collected: '0.0000',
+    waived: '0.0000',
     refunded: '0.0000',
   };
   const expected = row.expected ?? input.expectedAmount;
-  const calculated = await sql<{ outstanding: string; net: string }>`
-    select greatest(${expected}::numeric - ${row.collected}::numeric, 0)::text as outstanding,
+  const calculated = await sql<{ outstanding: string; net: string; waived: string }>`
+    select greatest(${expected}::numeric - ${row.collected}::numeric - ${row.waived}::numeric, 0)::numeric(20,4)::text as outstanding,
+      ${row.waived}::numeric(20,4)::text waived,
       greatest(${row.collected}::numeric - ${row.refunded}::numeric, 0)::text as net
   `.execute(db);
   const amounts = calculated.rows[0]!;
@@ -605,6 +624,13 @@ export async function getOrderPaymentSummary(
   `.execute(db);
   return {
     method: input.paymentMethod,
+    authorizedWaiver: amounts.waived,
+    settlementStatus:
+      parseMoney(amounts.outstanding) > 0n
+        ? 'OPEN'
+        : parseMoney(amounts.waived) > 0n
+          ? 'SETTLED_WITH_ADJUSTMENT'
+          : 'SETTLED_BY_RECEIPTS',
     status: status.rows[0]!.status,
     expected,
     collected: row.collected,
@@ -957,8 +983,8 @@ export async function listPendingCodCollections(
   }>`
     select delivery.id as delivery_id, delivery.delivery_number, delivery.order_id,
       order_row.order_number,
-      least(instruction.expected_amount, greatest(intent.expected_amount - coalesce(collected.amount, 0), 0))::numeric(20,4)::text as expected_amount,
-      greatest(intent.expected_amount - coalesce(collected.amount, 0), 0)::numeric(20,4)::text as outstanding_amount,
+      least(instruction.expected_amount, greatest(intent.expected_amount - coalesce(collected.amount, 0) - payments.cash_waiver_total(intent.organization_id,intent.order_id), 0))::numeric(20,4)::text as expected_amount,
+      greatest(intent.expected_amount - coalesce(collected.amount, 0) - payments.cash_waiver_total(intent.organization_id,intent.order_id), 0)::numeric(20,4)::text as outstanding_amount,
       delivery.currency_code, delivery.manual_carrier_name, delivery.tracking_reference,
       delivery.delivered_at
     from delivery.deliveries delivery
@@ -982,7 +1008,7 @@ export async function listPendingCodCollections(
       and delivery.outcome_status = 'DELIVERED'
       and delivery.cod_required
       and delivery.delivered_at is not null
-      and greatest(intent.expected_amount - coalesce(collected.amount, 0), 0) > 0
+      and greatest(intent.expected_amount - coalesce(collected.amount, 0) - payments.cash_waiver_total(intent.organization_id,intent.order_id), 0) > 0
       and not exists (
         select 1 from payments.payments payment
         where payment.organization_id = delivery.organization_id
@@ -1103,7 +1129,7 @@ export async function recordCodCollection(
 
     const totals = await sql<{ collected: string; maximum: string }>`
       select coalesce(sum(allocation.amount), 0)::numeric(20,4)::text as collected,
-        least(${row.expected_amount}::numeric, greatest(${row.intent_expected_amount}::numeric - coalesce(sum(allocation.amount), 0), 0))::numeric(20,4)::text as maximum
+        least(${row.expected_amount}::numeric, greatest(${row.intent_expected_amount}::numeric - coalesce(sum(allocation.amount), 0) - payments.cash_waiver_total(${input.organizationId}::uuid,${row.order_id}::uuid), 0))::numeric(20,4)::text as maximum
       from payments.payment_allocations allocation
       join payments.payments payment on payment.id = allocation.payment_id and payment.status = 'CONFIRMED'
       where allocation.organization_id = ${input.organizationId} and allocation.order_id = ${row.order_id}
@@ -1152,7 +1178,7 @@ export async function recordCodCollection(
       )
     `.execute(transaction);
     const remaining = await sql<{ amount: string }>`
-      select greatest(${row.intent_expected_amount}::numeric - (${available.collected}::numeric + ${amount}::numeric), 0)::numeric(20,4)::text as amount
+      select greatest(${row.intent_expected_amount}::numeric - (${available.collected}::numeric + ${amount}::numeric) - payments.cash_waiver_total(${input.organizationId}::uuid,${row.order_id}::uuid), 0)::numeric(20,4)::text as amount
     `.execute(transaction);
     await sql`
       update payments.payment_intents

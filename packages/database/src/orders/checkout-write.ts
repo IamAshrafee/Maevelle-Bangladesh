@@ -31,10 +31,14 @@ export async function writeCheckoutOrder(
   const orderId = (
     await sql<{ id: string }>`
     insert into orders.orders(organization_id,checkout_draft_id,order_number,customer_id,source,currency_code,order_status,
-      payment_method,subtotal_amount,discount_amount,delivery_amount,tax_amount,total_amount)
+      payment_method,subtotal_amount,discount_amount,delivery_amount,tax_amount,total_amount,
+      payment_fee_amount,rounding_adjustment,commercial_policy_snapshot)
     values(${org},${input.draftId},${orderNumber},${customerId},'STOREFRONT','BDT','PENDING',${terms.method},
       ${terms.merchandiseSubtotal}::numeric,${terms.discountTotal}::numeric,${terms.shipping}::numeric,
-      ${terms.tax}::numeric,${terms.payable}::numeric) returning id`.execute(tx)
+      ${terms.tax}::numeric,${terms.payable}::numeric,${terms.paymentFees}::numeric,
+      ${terms.roundingAdjustment}::numeric,${terms.wholeTakaPolicy ? JSON.stringify(terms.wholeTakaPolicy) : null}::jsonb) returning id`.execute(
+      tx,
+    )
   ).rows[0]!.id;
   await fault?.('order');
   await sql`insert into orders.order_customer_snapshots(order_id,organization_id,customer_id,display_name,phone,normalized_phone)

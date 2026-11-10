@@ -1,4 +1,5 @@
 import type { FastifyInstance } from 'fastify';
+import { registerCashShortfallRoutes } from './cash-shortfall.js';
 import { Type } from 'typebox';
 import type { ReceivingDestinationInputDto } from '@maevelle/contracts';
 import type { DatabaseClient } from '@maevelle/database';
@@ -34,6 +35,7 @@ export function registerPaymentOperationsRoutes(
   database: DatabaseClient,
   auth: ReturnType<typeof createAuth>,
 ) {
+  registerCashShortfallRoutes(app, database, auth);
   app.get(
     '/admin/payments/attempts/:id/workspace',
     { schema: { params: Type.Object({ id: uuid }) } },

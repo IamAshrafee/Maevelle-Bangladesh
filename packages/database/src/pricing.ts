@@ -1,4 +1,5 @@
 import { sql, type Kysely } from 'kysely';
+export { auditFractionalRetailPrices } from './commerce/retail-price-audit.js';
 
 import type { DatabaseSchema } from './index.js';
 import { appendAuditEvent } from './platform.js';

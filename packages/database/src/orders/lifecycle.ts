@@ -140,14 +140,20 @@ export async function cancelOrderLine(
       order_status: OrderView['status'];
       version: string;
       total_amount: string;
+      commercial_policy_snapshot: unknown;
     }>`
-      select order_status, version::text, total_amount::text
+      select order_status, version::text, total_amount::text,commercial_policy_snapshot
       from orders.orders
       where organization_id = ${input.organizationId} and id = ${input.orderId}
       for update
     `.execute(transaction);
     const order = orderResult.rows[0];
     if (!order) throw new OrderDomainError('NOT_FOUND', 'Order was not found.');
+    if (order.commercial_policy_snapshot)
+      throw new OrderDomainError(
+        'INVALID_TRANSITION',
+        'This Order requires an approved invoice/allocation correction; its original commercial terms cannot be rewritten.',
+      );
     if (Number(order.version) !== input.expectedVersion)
       throw new OrderDomainError(
         'STALE_VERSION',

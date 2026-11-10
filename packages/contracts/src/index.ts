@@ -3126,6 +3126,8 @@ export interface OrderDetailDto extends OrderSummaryDto {
   readonly discountTotal: string;
   readonly merchandiseNet: string;
   readonly taxAmount: string;
+  readonly roundingAdjustment?: string;
+  readonly paymentFees?: string;
   readonly customer: {
     readonly displayName: string;
     readonly phone: string;
@@ -3240,6 +3242,8 @@ export interface OrderTimelineEventDto {
 }
 
 export interface OrderPaymentSummaryDto {
+  readonly authorizedWaiver?: string;
+  readonly settlementStatus?: 'OPEN' | 'SETTLED_BY_RECEIPTS' | 'SETTLED_WITH_ADJUSTMENT';
   readonly method: string;
   readonly expected: string;
   readonly collected: string;
@@ -6265,3 +6269,5 @@ export type * from './checkout-placement.js';
 export * from './commerce-analytics.js';
 
 export type * from './privacy-preferences.js';
+export type * from './retail-money.js';
+export * from './money-presentation.js';

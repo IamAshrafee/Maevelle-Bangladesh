@@ -1,4 +1,5 @@
 import { commerceMeasurementUpgradeCase } from './analytics/commerce/upgrade-case.js';
+import { retailMoneyUpgradeCase } from './commerce/retail-money-upgrade-case.js';
 import { privacyPreferencesUpgradeCase } from './analytics/commerce/privacy-upgrade-case.js';
 import { checkoutQuoteUpgradeCase } from './checkout/quote-upgrade-case.js';
 import { checkoutPlacementUpgradeCase } from './checkout/placement-upgrade-case.js';
@@ -29,6 +30,7 @@ let archivedObjectId = '';
 let repairAssetId = '';
 
 export const upgradeCases: Record<string, UpgradeCase> = {
+  '3226_retail_money_settlement': retailMoneyUpgradeCase,
   '3221_checkout_quotes': checkoutQuoteUpgradeCase,
   '3222_manual_payment_integrity': manualPaymentUpgradeCase,
   '3223_checkout_placement': checkoutPlacementUpgradeCase,

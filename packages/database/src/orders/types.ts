@@ -89,6 +89,8 @@ export interface OrderView {
   readonly merchandiseNet: string;
   readonly deliveryAmount: string;
   readonly taxAmount: string;
+  readonly roundingAdjustment?: string;
+  readonly paymentFees?: string;
   readonly customer: { displayName: string; phone: string; email: string | null };
   readonly address: CheckoutAddressInput;
   readonly lines: readonly {
@@ -269,11 +271,7 @@ export type OrderPaymentStatus =
   | 'CANCELLED';
 
 export type OrderFulfillmentStatus =
-  | 'UNFULFILLED'
-  | 'PARTIALLY_FULFILLED'
-  | 'IN_PROGRESS'
-  | 'FULFILLED'
-  | 'CANCELLED';
+  'UNFULFILLED' | 'PARTIALLY_FULFILLED' | 'IN_PROGRESS' | 'FULFILLED' | 'CANCELLED';
 
 export type OrderDeliveryStatus =
   | 'NOT_STARTED'

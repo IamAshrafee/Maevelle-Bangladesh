@@ -697,6 +697,7 @@ describe('Phase 04A populated forward migration', () => {
         '3223_checkout_placement',
         '3224_commerce_measurement',
         '3225_privacy_preferences',
+        '3226_retail_money_settlement',
       ]);
       expect(
         (

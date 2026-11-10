@@ -1,3 +1,4 @@
+import * as retailMoneySettlement from './3226_retail_money_settlement.js';
 import * as privacyPreferences from './3225_privacy_preferences.js';
 import * as commerceMeasurement from './3224_commerce_measurement.js';
 import * as checkoutQuotes from './3221_checkout_quotes.js';
@@ -152,6 +153,7 @@ export const migrations = {
   '3223_checkout_placement': checkoutPlacement,
   '3224_commerce_measurement': commerceMeasurement,
   '3225_privacy_preferences': privacyPreferences,
+  '3226_retail_money_settlement': retailMoneySettlement,
 } satisfies Record<string, Migration>;
 
 export const migrationProvider: MigrationProvider = {

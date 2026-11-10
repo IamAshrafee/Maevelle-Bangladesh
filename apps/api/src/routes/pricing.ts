@@ -3,6 +3,7 @@ import { Type } from 'typebox';
 
 import type { DatabaseClient } from '@maevelle/database';
 import {
+  auditFractionalRetailPrices,
   archivePriceDefinition,
   listVariantPrices,
   createPriceDefinition,
@@ -62,6 +63,33 @@ export function registerPricingRoutes(
   database: DatabaseClient,
   auth: Auth,
 ): void {
+  app.get(
+    '/admin/pricing/fractional-retail-prices',
+    {
+      schema: {
+        querystring: Type.Object(
+          {
+            page: Type.Optional(Type.Integer({ minimum: 1, maximum: 100000 })),
+            pageSize: Type.Optional(Type.Integer({ minimum: 1, maximum: 100 })),
+          },
+          { additionalProperties: false },
+        ),
+      },
+    },
+    async (request, reply) => {
+      reply.header('cache-control', 'private, no-store');
+      const c = await requireCapability(database, auth, request.headers, 'pricing.view');
+      if (!c)
+        return reply.code(403).send({
+          error: { code: 'FORBIDDEN', message: 'Pricing viewing permission is required.' },
+        });
+      const q = request.query as { page?: number; pageSize?: number };
+      return {
+        data: await auditFractionalRetailPrices(database.db, c.organizationId, q.page, q.pageSize),
+      };
+    },
+  );
+
   app.get(
     '/admin/pricing/prices',
     { schema: { querystring: Type.Object({ variantId: Type.Optional(Type.String()) }) } },
@@ -135,10 +163,7 @@ export function registerPricingRoutes(
           currency: Type.String({ pattern: '^[A-Z]{3}$' }),
           amount: Type.String({ pattern: '^\\d+(?:\\.\\d{1,4})?$' }),
           compareAtAmount: Type.Optional(
-            Type.Union([
-              Type.String({ pattern: '^\\d+(?:\\.\\d{1,4})?$' }),
-              Type.Null(),
-            ]),
+            Type.Union([Type.String({ pattern: '^\\d+(?:\\.\\d{1,4})?$' }), Type.Null()]),
           ),
         }),
       },

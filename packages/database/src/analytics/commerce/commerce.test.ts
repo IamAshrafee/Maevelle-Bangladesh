@@ -62,6 +62,7 @@ beforeAll(async () => {
   expect((await runMigrations(db())).executed).toEqual([
     '3224_commerce_measurement',
     '3225_privacy_preferences',
+    '3226_retail_money_settlement',
   ]);
   expect((await runMigrations(db())).executed).toEqual([]);
   expect((await sql`select * from analytics.commerce_events`.execute(db())).rows).toEqual([]);
@@ -116,7 +117,7 @@ it('migrates fresh PostgreSQL 18 and preserves populated upgrade history without
   const fresh = await isolatedCartDatabase();
   try {
     const result = await runMigrations(fresh.database.db);
-    expect(result.executed.at(-1)).toBe('3225_privacy_preferences');
+    expect(result.executed.at(-1)).toBe('3226_retail_money_settlement');
     expect(
       (await sql<{ v: string }>`select version() v`.execute(fresh.database.db)).rows[0]!.v,
     ).toContain('PostgreSQL 18');

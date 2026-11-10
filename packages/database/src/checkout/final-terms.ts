@@ -9,6 +9,8 @@ import {
 import type { evaluateCheckoutInTransaction } from './quote-evaluation.js';
 import type { StoredQuote } from './quote-store.js';
 import { CheckoutError } from './types.js';
+import { roundWholeBdt } from '../commerce/retail-money.js';
+import type { WholeTakaPolicyDto } from '@maevelle/contracts';
 
 export type Evaluation = Awaited<ReturnType<typeof evaluateCheckoutInTransaction>>;
 
@@ -21,7 +23,8 @@ export type PlacementPolicy = (
   taxTreatment: string;
   tax: string;
   paymentFees: string;
-  rounding: 'EXACT_BDT_2' | 'BDT_2_HALF_UP';
+  rounding: 'EXACT_BDT_2' | 'BDT_2_HALF_UP' | 'WHOLE_BDT_V1';
+  wholeTakaPolicy?: WholeTakaPolicyDto;
   payment: CheckoutPaymentSelection;
 }>;
 
@@ -40,15 +43,38 @@ export async function finalCheckoutTerms(
       'Final payable is unsupported by the current Order lifecycle.',
     );
   if (quote.currency_code !== 'BDT' || policy.payment.method !== method) throw blocked();
+  if (
+    typeof policy.tax !== 'string' ||
+    typeof policy.paymentFees !== 'string' ||
+    !policy.taxTreatment?.trim() ||
+    policy.taxTreatment === 'UNRESOLVED'
+  )
+    throw blocked();
 
   const payment = await checkoutPaymentConfiguration(tx, organizationId, policy.payment);
   const tax = parseMoney(policy.tax),
     fees = parseMoney(policy.paymentFees);
+  // Owner direction prohibits a Maevelle surcharge on manual-wallet collection.
+  if (method !== 'COD' && fees !== 0n) throw blocked();
   const amount = parseMoney(evaluation.facts.evaluatedTotal) + tax + fees;
-  const payable = policy.rounding === 'BDT_2_HALF_UP' ? ((amount + 50n) / 100n) * 100n : amount;
-  // Existing Order cancellation and amendment equations support only zero tax/fees/rounding.
-  // Unsupported approved policies need a compatible lifecycle migration, never a fallback.
-  if (tax !== 0n || fees !== 0n || amount !== payable || payable % 100n !== 0n) throw blocked();
+  let whole: ReturnType<typeof roundWholeBdt> | undefined;
+  if (policy.rounding === 'WHOLE_BDT_V1') {
+    if (!policy.wholeTakaPolicy) throw blocked();
+    try {
+      whole = roundWholeBdt(money(amount), policy.wholeTakaPolicy);
+    } catch {
+      throw blocked();
+    }
+  }
+  const payable = whole
+    ? parseMoney(whole.payable)
+    : policy.rounding === 'BDT_2_HALF_UP'
+      ? ((amount + 50n) / 100n) * 100n
+      : amount;
+  // New commitments must be integral even under an exact legacy policy. Historical
+  // snapshots are untouched; fractional calculations require explicit whole-taka approval.
+  if (!whole && (tax !== 0n || fees !== 0n || amount !== payable || payable % 10000n !== 0n))
+    throw blocked();
   const fields = {
     quoteId: quote.id,
     quoteFingerprint: quote.fingerprint,
@@ -65,6 +91,13 @@ export async function finalCheckoutTerms(
     merchantWalletSurcharge: '0.0000',
     roundingAdjustment: money(payable - amount),
     payable: money(payable),
+    payableUnit: 'BDT_1',
+    ...(whole
+      ? {
+          precisePayable: whole.preciseAmount,
+          wholeTakaPolicy: whole.policy,
+        }
+      : {}),
   } as const;
   const evidence = {
     policyRevision: policy.revision,

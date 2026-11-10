@@ -26,6 +26,7 @@ describe('Phase 02A populated 3219 upgrade and referential integrity', () => {
       '3223_checkout_placement',
       '3224_commerce_measurement',
       '3225_privacy_preferences',
+      '3226_retail_money_settlement',
     ]);
     await checkoutDeliveryUpgradeCase.after(isolation.database.db, f.organizationId);
   }, 60000);

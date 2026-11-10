@@ -94,7 +94,14 @@ export async function getCommittedCheckoutOrder(
           terms: row.final_terms.terms,
         },
         status: row.order_status,
-        payment: { status: payment.status, outstanding: payment.outstanding },
+        payment: {
+          status: payment.status,
+          outstanding: payment.outstanding,
+          collected: payment.collected,
+          refunded: payment.refunded,
+          authorizedWaiver: payment.authorizedWaiver,
+          settlementStatus: payment.settlementStatus,
+        },
       };
     },
     'repeatable read',

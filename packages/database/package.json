@@ -20,6 +20,10 @@
       "types": "./src/testing/manual-payment-fixture.ts",
       "default": "./dist/src/testing/manual-payment-fixture.js"
     },
+    "./testing/cash-settlement": {
+      "types": "./src/testing/cash-settlement-fixture.ts",
+      "default": "./dist/src/testing/cash-settlement-fixture.js"
+    },
     ".": {
       "types": "./src/index.ts",
       "default": "./dist/src/index.js"

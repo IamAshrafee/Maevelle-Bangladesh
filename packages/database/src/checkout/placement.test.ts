@@ -1,3 +1,4 @@
+import { orderView } from '../orders/queries.js';
 import { processCommerceAnalyticsOutbox } from '../analytics/commerce/processing.js';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { sql } from 'kysely';
@@ -44,6 +45,8 @@ import { adjustInventory } from '../inventory.js';
 import { processExpiredPaymentOrders } from '../orders/lifecycle.js';
 import { setCurrentVariantPrice } from '../pricing.js';
 import { setOperationalControl } from '../platform.js';
+import { syntheticWholePolicy } from '../testing/whole-taka-policy.js';
+import { rebuildAnalyticsProjections } from '../analytics.js';
 import type { CheckoutAuthority } from './types.js';
 import type { PlacementPolicy } from './final-terms.js';
 import type { CheckoutPlacementMethod } from '@maevelle/contracts';
@@ -153,6 +156,7 @@ async function draft(
   cart?: Awaited<ReturnType<typeof sourceCart>>,
   couponCodes?: string[],
   method: CheckoutPlacementMethod = 'COD',
+  buyNowQuantity = '1',
 ) {
   const root = await createCheckoutDraft(
     db(),
@@ -161,7 +165,7 @@ async function draft(
     {
       source: cart
         ? { kind: 'CART', cartId: cart.id, cartRevision: cart.revision }
-        : { kind: 'BUY_NOW', variantId: fixture.variantId, quantity: '1' },
+        : { kind: 'BUY_NOW', variantId: fixture.variantId, quantity: buyNowQuantity },
     },
     key(),
     cart?.token,
@@ -385,6 +389,129 @@ describe('Checkout atomic placement on disposable PostgreSQL', () => {
         db(),
       )
     ).rows[0]!.id;
+  });
+
+  it.each([
+    ['80.4000', '0', '1', '80.0000', '-0.4000'],
+    ['80.5000', '0', '1', '81.0000', '0.5000'],
+    ['80.6000', '0', '1', '81.0000', '0.4000'],
+    ['79.9900', '0.4100', '1', '80.0000', '-0.4000'],
+    ['33.3333', '0', '3', '100.0000', '0.0001'],
+    ['0.0000', '0', '1', '0.0000', '0.0000'],
+  ])(
+    'persists exact whole-taka terms for price %s tax %s quantity %s',
+    async (price, tax, quantity, payable, rounding) => {
+      await setCurrentVariantPrice(db(), {
+        ...context(),
+        actorId: fixture.actorId,
+        variantId: fixture.variantId,
+        amount: price!,
+      });
+      const r = await draft(await guest(), undefined, undefined, 'COD', quantity);
+      const policy: PlacementPolicy = async (tx, input) => ({
+        ...(await codPolicy(tx, input)),
+        tax: tax!,
+        taxTreatment: 'SYNTHETIC_TAX_COMPONENT',
+        rounding: 'WHOLE_BDT_V1',
+        wholeTakaPolicy: syntheticWholePolicy,
+      });
+      const wholeEngine = checkoutPlacementEngine(policy),
+        terms = await wholeEngine.review(db(), r.cmd, r.review);
+      expect(terms).toMatchObject({ payable, roundingAdjustment: rounding, payableUnit: 'BDT_1' });
+      const placed = await wholeEngine.place(
+        db(),
+        r.cmd,
+        { ...r.review, finalTermsFingerprint: terms.fingerprint },
+        key(),
+      );
+      if (placed.kind !== 'COMMITTED') throw new Error('Expected synthetic commitment');
+      const rows = (
+        await sql`select o.total_amount::text,i.expected_amount::text,o.rounding_adjustment::text,o.tax_amount::text
+      from orders.orders o join payments.payment_intents i on i.order_id=o.id where o.id=${placed.receipt.orderId}`.execute(
+          db(),
+        )
+      ).rows[0];
+      expect(rows).toMatchObject({
+        total_amount: payable,
+        expected_amount: payable,
+        rounding_adjustment: rounding,
+      });
+      expect(await orderView(db(), placed.receipt.orderId)).toMatchObject({
+        roundingAdjustment: rounding,
+        paymentFees: '0.0000',
+      });
+      await rebuildAnalyticsProjections(db(), fixture.organizationId);
+      expect(
+        (
+          await sql`select order_total_amount::text from analytics.order_facts where source_order_id=${placed.receipt.orderId}`.execute(
+            db(),
+          )
+        ).rows[0],
+      ).toMatchObject({ order_total_amount: payable });
+      await expect(
+        sql`update orders.orders set total_amount=total_amount+1,rounding_adjustment=rounding_adjustment+1 where id=${placed.receipt.orderId}`.execute(
+          db(),
+        ),
+      ).rejects.toMatchObject({ code: '23514' });
+    },
+  );
+
+  it('refuses manual-wallet customer fees even under an explicit whole-taka policy', async () => {
+    const w = await wallet();
+    const withFee: PlacementPolicy = async (tx, input) => ({
+      ...(await w.resolver(tx, input)),
+      paymentFees: '1',
+      rounding: 'WHOLE_BDT_V1',
+      wholeTakaPolicy: syntheticWholePolicy,
+    });
+    await expect(
+      checkoutPlacementEngine(withFee).review(db(), w.cmd, w.review),
+    ).rejects.toMatchObject({ code: 'POLICY_BLOCKED' });
+  });
+
+  it('refuses a new fractional payable under the legacy exact policy', async () => {
+    await setCurrentVariantPrice(db(), {
+      ...context(),
+      actorId: fixture.actorId,
+      variantId: fixture.variantId,
+      amount: '80.6000',
+    });
+    const r = await draft(await guest());
+    await expect(
+      checkoutPlacementEngine(codPolicy).review(db(), r.cmd, r.review),
+    ).rejects.toMatchObject({ code: 'POLICY_BLOCKED' });
+  });
+
+  it('keeps fractional discounts exact and refuses unresolved tax in a whole-taka policy', async () => {
+    await createPromotion(db(), {
+      ...context(),
+      actorId: fixture.actorId,
+      name: 'Synthetic fractional discount',
+      promotionType: 'AUTOMATIC',
+      combinability: 'STACKABLE',
+      benefitType: 'FIXED_AMOUNT_DISCOUNT',
+      benefitValue: '0.6000',
+    });
+    const r = await draft(await guest());
+    const policy: PlacementPolicy = async (tx, input) => ({
+      ...(await codPolicy(tx, input)),
+      rounding: 'WHOLE_BDT_V1',
+      wholeTakaPolicy: syntheticWholePolicy,
+    });
+    const terms = await checkoutPlacementEngine(policy).review(db(), r.cmd, r.review);
+    expect(terms).toMatchObject({
+      discountTotal: '0.6000',
+      precisePayable: '99.4000',
+      payable: '99.0000',
+      roundingAdjustment: '-0.4000',
+    });
+    const invalid: PlacementPolicy = async (tx, input) => ({
+      ...(await policy(tx, input)),
+      taxTreatment: 'UNRESOLVED',
+    });
+    await expect(
+      checkoutPlacementEngine(invalid).review(db(), r.cmd, r.review),
+    ).rejects.toMatchObject({ code: 'POLICY_BLOCKED' });
   });
 
   it.each([
@@ -1414,6 +1541,74 @@ describe('Checkout atomic placement on disposable PostgreSQL', () => {
     },
     15000,
   );
+  it.each(['GUEST', 'ACCOUNT'] as const)(
+    'keeps %s committed recovery and payment status available while new purchasing is disabled',
+    async (kind) => {
+      const owner = kind === 'GUEST' ? await guest() : await account();
+      const committed = await ready(owner);
+      const placed = await place(committed);
+      if (placed.kind !== 'COMMITTED') throw new Error('Expected committed fixture');
+      const next = await ready(owner);
+      const grant =
+        owner.kind === 'GUEST'
+          ? checkoutGuestOrderCredential(owner, committed.cmd.draftId, placed.receipt.orderId)
+          : undefined;
+      const before = await effects();
+      await setOperationalControl(db(), {
+        organizationId: fixture.organizationId,
+        key: 'checkout_enabled',
+        type: 'KILL_SWITCH',
+        enabled: false,
+      });
+      await expect(place(next)).rejects.toMatchObject({ code: 'CHECKOUT_DISABLED' });
+      expect(await place(committed)).toEqual(placed);
+      expect(
+        await getCommittedCheckoutOrder(db(), owner, committed.cmd.draftId, grant),
+      ).toMatchObject({ receipt: { orderId: placed.receipt.orderId } });
+      expect(
+        await getCheckoutOrderPayment(db(), {
+          owner,
+          draftId: committed.cmd.draftId,
+          ...(grant ? { guestCredential: grant } : {}),
+        }),
+      ).toMatchObject({ method: 'COD' });
+      expect(await effects()).toEqual(before);
+    },
+  );
+  it('keeps existing manual claim submission and exact recovery available after disabling new purchasing', async () => {
+    const w = await wallet();
+    const placed = await w.engine.place(db(), w.cmd, w.input, w.key);
+    if (placed.kind !== 'COMMITTED' || w.cmd.owner.kind !== 'GUEST')
+      throw new Error('Expected guest fixture');
+    const access = {
+      owner: w.cmd.owner,
+      draftId: w.cmd.draftId,
+      guestCredential: checkoutGuestOrderCredential(
+        w.cmd.owner,
+        w.cmd.draftId,
+        placed.receipt.orderId,
+      ),
+    };
+    await setOperationalControl(db(), {
+      organizationId: fixture.organizationId,
+      key: 'checkout_enabled',
+      type: 'KILL_SWITCH',
+      enabled: false,
+    });
+    const engine = checkoutOrderPaymentEngine(true),
+      intent = key();
+    const claim = await engine.submit(
+      db(),
+      access,
+      { transactionId: 'Synthetic-09A-Claim' },
+      intent,
+    );
+    expect(await engine.recover(db(), access, intent)).toEqual(claim);
+    expect(
+      await engine.submit(db(), access, { transactionId: 'Synthetic-09A-Claim' }, intent),
+    ).toEqual(claim);
+  });
+
   it('bounds a real placement row-lock timeout and permits an exact-key retry after release', async () => {
     const r = await ready(await guest());
     const held = gate(),

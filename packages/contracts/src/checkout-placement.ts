@@ -1,4 +1,5 @@
 import type { OrderPaymentSummaryDto, OrderStatusDto } from './index.js';
+import type { WholeTakaPolicyDto } from './retail-money.js';
 
 export type CheckoutPlacementMethod = 'COD' | 'BKASH_MANUAL' | 'NAGAD_MANUAL';
 
@@ -19,6 +20,9 @@ export interface CheckoutFinalTermsDto {
   readonly roundingAdjustment: string;
   readonly payable: string;
   readonly fingerprint: string;
+  readonly precisePayable?: string;
+  readonly payableUnit?: 'BDT_1';
+  readonly wholeTakaPolicy?: Omit<WholeTakaPolicyDto, 'approval' | 'invoiceTreatmentReference'>;
 }
 
 export interface PlaceCheckoutDto {
@@ -42,7 +46,13 @@ export type CheckoutPlacementResultDto =
 export interface CheckoutCommittedOrderDto {
   readonly receipt: CheckoutPlacementReceiptDto;
   readonly status: OrderStatusDto;
-  readonly payment: Pick<OrderPaymentSummaryDto, 'status' | 'outstanding'>;
+  readonly payment: Pick<OrderPaymentSummaryDto, 'status' | 'outstanding'> &
+    Partial<
+      Pick<
+        OrderPaymentSummaryDto,
+        'collected' | 'refunded' | 'authorizedWaiver' | 'settlementStatus'
+      >
+    >;
 }
 
 export interface SubmitCheckoutPaymentClaimDto {
@@ -87,6 +97,8 @@ export interface CheckoutOrderPaymentDto {
   readonly currency: 'BDT';
   readonly originalPayable: string;
   readonly outstanding: string;
+  readonly authorizedWaiver?: string;
+  readonly settlementStatus?: 'OPEN' | 'SETTLED_BY_RECEIPTS' | 'SETTLED_WITH_ADJUSTMENT';
   readonly allocated: string;
   readonly refundedFromAllocation: string;
   readonly verifiedWalletReceipts: string;

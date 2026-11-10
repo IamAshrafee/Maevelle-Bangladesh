@@ -745,6 +745,7 @@ describe('Phase 03A populated 3220 upgrade', () => {
         '3223_checkout_placement',
         '3224_commerce_measurement',
         '3225_privacy_preferences',
+        '3226_retail_money_settlement',
       ]);
       await checkoutDeliveryUpgradeCase.after(isolated.database.db, fixture.organizationId);
       expect(

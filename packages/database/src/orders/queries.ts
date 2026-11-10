@@ -37,6 +37,8 @@ export async function orderView(db: Kysely<DatabaseSchema>, orderId: string): Pr
     total_amount: string;
     delivery_amount: string;
     tax_amount: string;
+    rounding_adjustment: string;
+    payment_fee_amount: string;
     version: string;
     created_at: Date;
     display_name: string;
@@ -58,7 +60,7 @@ export async function orderView(db: Kysely<DatabaseSchema>, orderId: string): Pr
       order_row.source, order_row.sales_channel, order_row.currency_code, order_row.payment_method, order_row.version::text,
       order_row.subtotal_amount::text, order_row.discount_amount::text, order_row.delivery_amount::text,
       (order_row.subtotal_amount - order_row.discount_amount)::text as merchandise_net,
-      order_row.tax_amount::text, order_row.total_amount::text, order_row.created_at,
+      order_row.tax_amount::text, order_row.rounding_adjustment::text, order_row.payment_fee_amount::text, order_row.total_amount::text, order_row.created_at,
       customer.customer_id::text as customer_id, customer.display_name, customer.phone, customer.email, address.recipient_name, address.phone as delivery_phone, address.address_line_1, address.address_line_2,
       address.geography_node_id, address.area, address.city, address.district, address.postal_code, address.country_code
     from orders.orders order_row
@@ -127,6 +129,8 @@ export async function orderView(db: Kysely<DatabaseSchema>, orderId: string): Pr
     merchandiseNet: row.merchandise_net,
     deliveryAmount: row.delivery_amount,
     taxAmount: row.tax_amount,
+    roundingAdjustment: row.rounding_adjustment,
+    paymentFees: row.payment_fee_amount,
     customer: { displayName: row.display_name, phone: row.phone, email: row.email },
     address: {
       recipientName: row.recipient_name,
@@ -371,7 +375,9 @@ export async function getOrderForAdmin(
   else if (deliveries.every((d) => d.outcome_status === 'DELIVERED')) deliveryStatus = 'DELIVERED';
   else if (deliveries.some((d) => d.outcome_status === 'DELIVERED'))
     deliveryStatus = 'PARTIALLY_DELIVERED';
-  else if (deliveries.some((d) => ['BOOKED', 'HANDED_OVER', 'IN_TRANSIT'].includes(d.operational_status)))
+  else if (
+    deliveries.some((d) => ['BOOKED', 'HANDED_OVER', 'IN_TRANSIT'].includes(d.operational_status))
+  )
     deliveryStatus = 'IN_TRANSIT';
   else if (deliveries.every((d) => d.outcome_status === 'CANCELLED_BEFORE_HANDOVER'))
     deliveryStatus = 'CANCELLED';
@@ -703,7 +709,10 @@ export async function listOrders(
   const totalItems = Number(result.rows[0]?.total_count ?? 0);
 
   const orderIds = result.rows.map((r) => r.id);
-  const tagsByOrderId = new Map<string, { id: string; label: string; color: string | null; createdAt: string }[]>();
+  const tagsByOrderId = new Map<
+    string,
+    { id: string; label: string; color: string | null; createdAt: string }[]
+  >();
   if (orderIds.length > 0) {
     const tagAssignments = await sql<{
       order_id: string;
@@ -800,7 +809,8 @@ export async function getOrderPublicTracking(
       and (snap.normalized_phone = ${normalizedPhone} or addr.phone = ${input.phone.trim()} or snap.phone = ${input.phone.trim()})
   `.execute(db);
   const row = orderResult.rows[0];
-  if (!row) throw new OrderDomainError('NOT_FOUND', 'Order was not found with the provided details.');
+  if (!row)
+    throw new OrderDomainError('NOT_FOUND', 'Order was not found with the provided details.');
 
   const [lines, payment, fulfillmentAndDelivery] = await Promise.all([
     sql<{
@@ -897,14 +907,15 @@ export async function getOrderPublicTracking(
     paymentMethod: row.payment_method,
     fulfillmentStatus: fAndD?.fulfillment_status ?? 'UNFULFILLED',
     deliveryStatus: fAndD?.delivery_status ?? 'NOT_STARTED',
-    delivery: fAndD?.tracking_reference || fAndD?.carrier_name || fAndD?.delivered_at
-      ? {
-          carrierName: fAndD.carrier_name,
-          trackingReference: fAndD.tracking_reference,
-          estimatedDeliveryAt: fAndD.estimated_delivery_at?.toISOString() ?? null,
-          deliveredAt: fAndD.delivered_at?.toISOString() ?? null,
-        }
-      : null,
+    delivery:
+      fAndD?.tracking_reference || fAndD?.carrier_name || fAndD?.delivered_at
+        ? {
+            carrierName: fAndD.carrier_name,
+            trackingReference: fAndD.tracking_reference,
+            estimatedDeliveryAt: fAndD.estimated_delivery_at?.toISOString() ?? null,
+            deliveredAt: fAndD.delivered_at?.toISOString() ?? null,
+          }
+        : null,
     destination: {
       city: row.city,
       area: row.area,

@@ -209,6 +209,8 @@ export async function readCheckoutOrderPayment(
     allocated: summary.collected,
     refundedFromAllocation: summary.refunded,
     outstanding: summary.outstanding,
+    authorizedWaiver: summary.authorizedWaiver,
+    settlementStatus: summary.settlementStatus,
     verifiedWalletReceipts: financial.verified,
     unallocatedAtVerification: financial.unallocated_at_verification,
     hasLateReceipt: financial.has_late_receipt,
