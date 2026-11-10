@@ -1,0 +1,253 @@
+{
+  "scope": "Local real PostgreSQL targeted integrity recheck; overlaps the consolidated 413-test selection",
+  "tests": 49,
+  "passed": 49,
+  "failed": 0,
+  "cases": [
+    {
+      "name": "Checkout atomic placement on disposable PostgreSQL GUEST placement (Cart: false) commits only reviewed source and one unpaid obligation",
+      "status": "passed",
+      "durationMs": 324.7540999999992
+    },
+    {
+      "name": "Checkout atomic placement on disposable PostgreSQL ACCOUNT placement (Cart: false) commits only reviewed source and one unpaid obligation",
+      "status": "passed",
+      "durationMs": 120.55059999999958
+    },
+    {
+      "name": "Checkout atomic placement on disposable PostgreSQL GUEST placement (Cart: true) commits only reviewed source and one unpaid obligation",
+      "status": "passed",
+      "durationMs": 104.98559999999998
+    },
+    {
+      "name": "Checkout atomic placement on disposable PostgreSQL ACCOUNT placement (Cart: true) commits only reviewed source and one unpaid obligation",
+      "status": "passed",
+      "durationMs": 142.90319999999974
+    },
+    {
+      "name": "Checkout atomic placement on disposable PostgreSQL replays a lost response and serializes same-key and different-key submissions",
+      "status": "passed",
+      "durationMs": 1164.4972000000007
+    },
+    {
+      "name": "Checkout atomic placement on disposable PostgreSQL binds each guest grant to one Order and enforces Checkout uniqueness in PostgreSQL",
+      "status": "passed",
+      "durationMs": 224.32359999999971
+    },
+    {
+      "name": "Checkout atomic placement on disposable PostgreSQL fails closed for the HTTP-bound engine and does not accept a component acknowledgement as final acceptance",
+      "status": "passed",
+      "durationMs": 76.64860000000044
+    },
+    {
+      "name": "Checkout atomic placement on disposable PostgreSQL rejects a modified Cart and never converts it",
+      "status": "passed",
+      "durationMs": 119.58789999999954
+    },
+    {
+      "name": "Checkout atomic placement on disposable PostgreSQL rolls back a failure after order",
+      "status": "passed",
+      "durationMs": 149.84259999999995
+    },
+    {
+      "name": "Checkout atomic placement on disposable PostgreSQL rolls back a failure after inventory",
+      "status": "passed",
+      "durationMs": 127.51879999999983
+    },
+    {
+      "name": "Checkout atomic placement on disposable PostgreSQL rolls back a failure after promotion",
+      "status": "passed",
+      "durationMs": 147.07770000000073
+    },
+    {
+      "name": "Checkout atomic placement on disposable PostgreSQL rolls back a failure after payment",
+      "status": "passed",
+      "durationMs": 136.9333999999999
+    },
+    {
+      "name": "Checkout atomic placement on disposable PostgreSQL rolls back a failure after cart",
+      "status": "passed",
+      "durationMs": 123.42469999999958
+    },
+    {
+      "name": "Checkout atomic placement on disposable PostgreSQL rolls back a failure after outbox",
+      "status": "passed",
+      "durationMs": 112.80150000000049
+    },
+    {
+      "name": "Checkout atomic placement on disposable PostgreSQL allows only one winner for the last stock",
+      "status": "passed",
+      "durationMs": 157.95629999999983
+    },
+    {
+      "name": "Checkout atomic placement on disposable PostgreSQL allows only one winner for the last coupon",
+      "status": "passed",
+      "durationMs": 150.46500000000015
+    },
+    {
+      "name": "Checkout atomic placement on disposable PostgreSQL sees a higher-priority tariff inserted by an overlapping writer before placement",
+      "status": "passed",
+      "durationMs": 81.85339999999997
+    },
+    {
+      "name": "Checkout atomic placement on disposable PostgreSQL serializes account logout on either side of placement",
+      "status": "passed",
+      "durationMs": 143.250399999999
+    },
+    {
+      "name": "Checkout atomic placement on disposable PostgreSQL blocks disabled payment methods before any business effects",
+      "status": "passed",
+      "durationMs": 58.27989999999954
+    },
+    {
+      "name": "Checkout atomic placement on disposable PostgreSQL does not commit an account COD order after a restriction is added",
+      "status": "passed",
+      "durationMs": 77.29629999999997
+    },
+    {
+      "name": "Checkout atomic placement on disposable PostgreSQL observes the existing Checkout kill switch for new work",
+      "status": "passed",
+      "durationMs": 68.02069999999912
+    },
+    {
+      "name": "Checkout atomic placement on disposable PostgreSQL preserves a legitimate zero price and zero shipping as an exact zero obligation",
+      "status": "passed",
+      "durationMs": 84.09429999999884
+    },
+    {
+      "name": "Checkout atomic placement on disposable PostgreSQL serializes concurrent different keys for one draft",
+      "status": "passed",
+      "durationMs": 82.32760000000053
+    },
+    {
+      "name": "Checkout atomic placement on disposable PostgreSQL rejects a newer authoritative price while preserving the old review receipt",
+      "status": "passed",
+      "durationMs": 59.50630000000092
+    },
+    {
+      "name": "Checkout atomic placement on disposable PostgreSQL authorizes only the committed guest, gates transfer and claims, and reconciles a lost response",
+      "status": "passed",
+      "durationMs": 155.4387999999999
+    },
+    {
+      "name": "Checkout atomic placement on disposable PostgreSQL shows actual Admin review, partial receipt and excess settlement to the account owner",
+      "status": "passed",
+      "durationMs": 243.97479999999996
+    },
+    {
+      "name": "Checkout atomic placement on disposable PostgreSQL waits for destination suspension and does not expose an obsolete instruction snapshot",
+      "status": "passed",
+      "durationMs": 111.28480000000127
+    },
+    {
+      "name": "Checkout atomic placement on disposable PostgreSQL keeps an expired pending claim for review and rejects a new claim after Worker cancellation",
+      "status": "passed",
+      "durationMs": 195.20410000000084
+    },
+    {
+      "name": "Checkout atomic placement on disposable PostgreSQL serializes distinct claim keys and fails closed after destination suspension and expiry",
+      "status": "passed",
+      "durationMs": 222.15080000000125
+    },
+    {
+      "name": "Checkout atomic placement on disposable PostgreSQL writes a private manual obligation, preserves original provenance and releases unpaid stock via Worker expiry",
+      "status": "passed",
+      "durationMs": 81.8156999999992
+    },
+    {
+      "name": "Checkout atomic placement on disposable PostgreSQL serializes wallet destination suspension (writer-first)",
+      "status": "passed",
+      "durationMs": 62.52769999999873
+    },
+    {
+      "name": "Checkout atomic placement on disposable PostgreSQL serializes wallet destination suspension (placement-first)",
+      "status": "passed",
+      "durationMs": 73.54210000000057
+    },
+    {
+      "name": "Checkout atomic placement on disposable PostgreSQL rejects a destination without provider approval evidence even if marked approved",
+      "status": "passed",
+      "durationMs": 62.554299999999785
+    },
+    {
+      "name": "Checkout atomic placement on disposable PostgreSQL measures a complete Cart with 5 distinct lines",
+      "status": "passed",
+      "durationMs": 96.91909999999916
+    },
+    {
+      "name": "Checkout atomic placement on disposable PostgreSQL measures a complete Cart with 25 distinct lines",
+      "status": "passed",
+      "durationMs": 118.67089999999916
+    },
+    {
+      "name": "Checkout atomic placement on disposable PostgreSQL measures a complete Cart with 100 distinct lines",
+      "status": "passed",
+      "durationMs": 164.3155999999999
+    },
+    {
+      "name": "Checkout atomic placement on disposable PostgreSQL retries the entire intent after a synthetic serialization failure without duplicate effects",
+      "status": "passed",
+      "durationMs": 92.66250000000036
+    },
+    {
+      "name": "Checkout atomic placement on disposable PostgreSQL recovers the same placement identity after physical BEFORE_COMMIT socket loss",
+      "status": "passed",
+      "durationMs": 273.1869000000006
+    },
+    {
+      "name": "Checkout atomic placement on disposable PostgreSQL recovers the same placement identity after physical AFTER_COMMIT socket loss",
+      "status": "passed",
+      "durationMs": 183.48829999999907
+    },
+    {
+      "name": "Checkout atomic placement on disposable PostgreSQL keeps GUEST committed recovery and payment status available while new purchasing is disabled",
+      "status": "passed",
+      "durationMs": 115.53310000000056
+    },
+    {
+      "name": "Checkout atomic placement on disposable PostgreSQL keeps ACCOUNT committed recovery and payment status available while new purchasing is disabled",
+      "status": "passed",
+      "durationMs": 127.12079999999878
+    },
+    {
+      "name": "Checkout atomic placement on disposable PostgreSQL keeps existing manual claim submission and exact recovery available after disabling new purchasing",
+      "status": "passed",
+      "durationMs": 88.16469999999936
+    },
+    {
+      "name": "Checkout atomic placement on disposable PostgreSQL bounds a real placement row-lock timeout and permits an exact-key retry after release",
+      "status": "passed",
+      "durationMs": 2083.7216000000008
+    },
+    {
+      "name": "boots above legacy Finance suffix gaps, retains seven digits and rolls sequence allocation back atomically",
+      "status": "passed",
+      "durationMs": 44.836200000000645
+    },
+    {
+      "name": "conserves eight concurrent independent-account receipts and their shared Finance numbering",
+      "status": "passed",
+      "durationMs": 773.8415999999997
+    },
+    {
+      "name": "recovers claims, verification, refund request and completion after physical BEFORE_COMMIT",
+      "status": "passed",
+      "durationMs": 442.60459999999966
+    },
+    {
+      "name": "recovers claims, verification, refund request and completion after physical AFTER_COMMIT",
+      "status": "passed",
+      "durationMs": 452.9590999999991
+    },
+    {
+      "name": "recovers consent withdrawal from durable revisions after physical BEFORE_COMMIT without regrant",
+      "status": "passed",
+      "durationMs": 57.54539999999997
+    },
+    {
+      "name": "recovers consent withdrawal from durable revisions after physical AFTER_COMMIT without regrant",
+      "status": "passed",
+      "durationMs": 48.471300000000156
+    }
+  ]
+}

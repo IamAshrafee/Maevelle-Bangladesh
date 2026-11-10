@@ -1,0 +1,72 @@
+{
+  "browser": "Chrome/156.0.8078.80; dedicated headless profile; production standalone Next 16.4.2 servers → test-mode Fastify → random disposable PostgreSQL 18",
+  "cases": [
+    {
+      "name": "Anonymous UNKNOWN through actual Next proxy",
+      "status": "PASS",
+      "durationMs": 409
+    },
+    {
+      "name": "Independent analytics grant and advertising refusal via visible controls",
+      "status": "PASS",
+      "durationMs": 823
+    },
+    {
+      "name": "Mobile tablet desktop landscape and text reflow",
+      "status": "PASS",
+      "durationMs": 199
+    },
+    {
+      "name": "Keyboard focus containment and Escape",
+      "status": "PASS",
+      "durationMs": 610
+    },
+    {
+      "name": "Authorized reload and proof-bound browser observation through actual proxy",
+      "status": "PASS",
+      "durationMs": 2049
+    },
+    {
+      "name": "Stale revision cannot overwrite withdrawal in another tab",
+      "status": "PASS",
+      "durationMs": 2001
+    },
+    {
+      "name": "Offline save pauses locally and does not claim a server save",
+      "status": "PASS",
+      "durationMs": 2130
+    },
+    {
+      "name": "Unavailable preference API stays paused and recovers",
+      "status": "PASS",
+      "durationMs": 760
+    },
+    {
+      "name": "Cleared preference cookie cannot submit old context",
+      "status": "PASS",
+      "durationMs": 345
+    },
+    {
+      "name": "Real shopper account A refusal, account B isolation and logout",
+      "status": "PASS",
+      "durationMs": 1702
+    },
+    {
+      "name": "Admin permissions, real aggregate reporting and synthetic exclusion",
+      "status": "PASS",
+      "durationMs": 1371
+    }
+  ],
+  "network": {
+    "requests": 554,
+    "thirdPartyMarketingRequests": 0
+  },
+  "notVerified": [
+    "Human assistive technology",
+    "Physical touch devices",
+    "Native browser zoom",
+    "Successful public Order/payment flow",
+    "Live vendor acceptance"
+  ],
+  "provenance": "Existing 07B/08 harness rerun against 09A builds; 18 distinct cases, earlier next-start smoke overlaps and is not added"
+}

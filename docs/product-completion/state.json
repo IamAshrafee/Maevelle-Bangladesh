@@ -2,13 +2,13 @@
   "program": "Maevelle Product Completion V2",
   "version": 2,
   "active_area": "storefront-checkout",
-  "active_substage": "CHECKOUT_PHASE_08_INTEGRATED_HARDENING_LOCALLY_VERIFIED_PARTIAL",
+  "active_substage": "CHECKOUT_PHASE_09A2_FINANCIAL_PRESENTATION_PARTIAL",
   "active_status": "IN_PROGRESS",
   "baseline_commit": "d2cce2c",
   "last_checkpoint_commit": "c3413e3",
   "last_verified_commit": "16f648a",
-  "last_completed_action": "Phase 08 repaired local migration-history/upgrade/scanner gates, fixed observed Finance receipt deadlocks, bounded pool acquisition, tightened Origin/logging boundaries and corrected enlarged dialog reflow. 419 distinct scoped regressions, 6 tooling tests, 18 browser cases and both production builds pass. Local acceptance PARTIAL; no activation or persistent operations.",
-  "next_action": "Read PHASE_08_IMPLEMENTATION_REPORT.md and PHASE_09_HANDOFF.md. Close successful Checkout browser, approved guest recovery, broader physical/financial/canary/load and human/device gates; execute Linux/deployed compatibility checks only with appropriate authorization. No public activation or deployment is implied.",
+  "last_completed_action": "Phase 09A.2 integrated exact retail presentation, truthful customer/Admin settlement, protected policy discovery and blocked eligibility, fractional-price review, approved-operation correction UI and financial privacy projection. Financial255-case selection and15 browser cases pass; concurrent broader Auth/Wishlist regression remains open. Owner-authorized local split commits record this work; no push, deployment, persistent migration or activation.",
+  "next_action": "Read PHASE_09A2_IMPLEMENTATION_REPORT.md, acceptance register and next-stage handoff. Reconcile concurrent authentication regression, approve rounding/tax/invoice/accounting/courier/authoring policy, complete correction/allocation and human/device acceptance, then seek separately authorized candidate/deployment work. Public financial gates remain closed.",
   "interrupted": false,
   "blocked_by": [
     "SIZING_OWNER_RESPONSIVE_AND_ACCESSIBILITY_ACCEPTANCE_PENDING",
@@ -45,7 +45,15 @@
     "CHECKOUT_PHASE07B_DEPLOYED_COOKIE_STORAGE_EXPIRY_AND_HUMAN_ACCEPTANCE_OPEN",
     "CHECKOUT_PHASE07A_VENDOR_ADAPTER_AND_META_CONTRACT_UNVERIFIED",
     "CHECKOUT_PHASE08_FINANCIAL_UNKNOWN_COMMIT_AND_FULL_WORKER_MATRIX_OPEN",
-    "CHECKOUT_PHASE08_REPRESENTATIVE_HTTP_AND_CROSS_ACCOUNT_FINANCE_LOAD_OPEN"
+    "CHECKOUT_PHASE09A_SUCCESSFUL_HTTP_BROWSER_POLICY_BOUNDARY_OPEN",
+    "CHECKOUT_PHASE09A_FULL_FINANCIAL_LOCK_GRAPH_AND_REPRESENTATIVE_LOAD_OPEN",
+    "CHECKOUT_PHASE09A_ADMIN_REVOCATION_AND_ALL_SINK_CANARIES_OPEN",
+    "CHECKOUT_PHASE09A_LINUX_CI_AND_TARGET_COMPATIBILITY_UNVERIFIED",
+    "CHECKOUT_WHOLE_TAKA_ROUNDING_TAX_INVOICE_APPROVAL_PENDING",
+    "CHECKOUT_CASH_WAIVER_ACCOUNTING_LIMITS_AND_COURIER_APPROVAL_PENDING",
+    "CHECKOUT_PHASE09A2_MONETARY_UI_AND_FINANCIAL_CORRECTION_GATES_OPEN",
+    "CHECKOUT_PHASE09A2_BROADER_AUTH_REGRESSION_OPEN",
+    "CHECKOUT_PHASE09A2_AUTHORING_POLICY_AND_FINANCIAL_UI_HUMAN_ACCEPTANCE_PENDING"
   ],
   "owner_review_status": "PENDING",
   "verified_complete_areas": [

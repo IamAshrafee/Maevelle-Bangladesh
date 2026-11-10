@@ -1,0 +1,75 @@
+{
+  "templateVersion": 1,
+  "status": "PENDING_UNCOMMITTED_NOT_DEPLOYABLE",
+  "baselineCommit": "947c2964979ac7e22135146a123d8ebf32ede6aa",
+  "sourceCommit": "PENDING",
+  "images": {
+    "api": "PENDING_IMMUTABLE_DIGEST",
+    "worker": "PENDING_IMMUTABLE_DIGEST",
+    "storefront": "PENDING_IMMUTABLE_DIGEST",
+    "admin": "PENDING_IMMUTABLE_DIGEST"
+  },
+  "schema": {
+    "targetPredecessor": "PENDING_TARGET_LEDGER",
+    "sourcePredecessor": "3225_privacy_preferences",
+    "tail": "3226_retail_money_settlement",
+    "registeredMigrations": 75,
+    "immutableBaselineMigrations": 51,
+    "phase09aSchemaChanges": false,
+    "phase09a1SchemaChanges": true,
+    "phase09a2SchemaChanges": false
+  },
+  "lastCompatibleRelease": "PENDING_VERIFIED_BACKEND_NUMBERING_AND_REVOCATION_COMPATIBILITY",
+  "selectedServices": "PENDING_TARGET_PLAN_COORDINATE_ALL_FOUR_FOR_BACKEND_CHANGE",
+  "contracts": {
+    "checkoutDraftImplementation": 2,
+    "commerceEventSchema": 1,
+    "privacyPreferencesSchema": 1,
+    "consentPolicy": "privacy-choices-v1",
+    "commercialPolicyRevision": "PENDING",
+    "receivingDestinationRevisions": "PENDING",
+    "wholeTakaRoundingPolicy": "PENDING_APPROVED_REVISION"
+  },
+  "requiredFeatureState": {
+    "checkout_enabled": false,
+    "CHECKOUT_DRAFTS_ENABLED": false,
+    "NEXT_PUBLIC_CHECKOUT_DRAFT_PREVIEW": false,
+    "publicPurchasePolicy": "DISABLED",
+    "approvedProviderMethods": [],
+    "livePaymentCollection": false,
+    "livePayoutExecution": false,
+    "GA4": false,
+    "MetaCommerceExports": false,
+    "externalDispatchEnabled": false,
+    "cashWaiverActivation": false
+  },
+  "configuration": {
+    "targetHost": "PENDING",
+    "httpsOriginsAndCallbacks": "PENDING",
+    "trustedGateway": "PENDING",
+    "secretReferences": "PENDING_REFERENCES_ONLY_NO_VALUES",
+    "mediaPersistenceAndBackup": "PENDING"
+  },
+  "evidence": {
+    "localVerification": "phase09a-evidence/verification.json",
+    "load": "phase09a-evidence/load.json",
+    "restoreAndWorker": "phase09a-evidence/recovery.json",
+    "linuxCI": "PENDING",
+    "targetSmoke": "PENDING",
+    "humanAcceptance": "PENDING",
+    "financialBackend": "phase09a1-evidence/verification.json",
+    "financialPresentation": "phase09a2-evidence/verification.json"
+  },
+  "approvals": {
+    "candidateCommitAndPublication": "PENDING_SEPARATE_AUTHORIZATION",
+    "stagingDeploymentAndPersistentMigration": "NOT_AUTHORIZED",
+    "businessTaxRoundingAndInvoice": "PENDING",
+    "providerAndCourier": "PENDING",
+    "privacyRetentionAndGuestRecovery": "PENDING",
+    "productionActivation": "NOT_AUTHORIZED",
+    "cashShortfallAccountingInvoiceAndCourier": "PENDING",
+    "financialPresentationAndHumanAcceptance": "PARTIAL_PENDING"
+  },
+  "note": "Planning template only; intentionally not accepted by scripts/release/manifest.mjs. Generate the real published manifest from actual push digests only after authorization.",
+  "workingTreeObservedCommit": "e27726583d1abcfe7f9c9dd281ffb5d1f05d04d9"
+}

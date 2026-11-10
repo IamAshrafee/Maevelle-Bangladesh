@@ -1,13 +1,24 @@
 version: 2.1
 
 jobs:
+  validate-checkout:
+    machine:
+      image: ubuntu-2404:current
+    resource_class: medium
+    steps:
+      - checkout
+      - run:
+          name: Validate Checkout candidate without publication
+          no_output_timeout: 30m
+          command: bash scripts/ci-checkout-readiness.sh
+
   publish-staging:
     machine:
       image: ubuntu-2404:current
     resource_class: medium
     environment:
-      MAEVELLE_PIPELINE_NUMBER: "<< pipeline.number >>"
-      MAEVELLE_SOURCE_BRANCH: "<< pipeline.git.branch >>"
+      MAEVELLE_PIPELINE_NUMBER: '<< pipeline.number >>'
+      MAEVELLE_SOURCE_BRANCH: '<< pipeline.git.branch >>'
 
     steps:
       - checkout
@@ -25,7 +36,13 @@ jobs:
 workflows:
   staging-images:
     jobs:
+      - validate-checkout:
+          filters:
+            branches:
+              only: main
       - publish-staging:
+          requires:
+            - validate-checkout
           filters:
             branches:
               only: main

@@ -1,0 +1,183 @@
+{
+  "scope": "168 synthetic jobs, 8 runners, disposable PostgreSQL 18; actual loopback Fastify HTTP PDP/privacy plus domain commands; no Checkout HTTP success or production capacity claim",
+  "elapsedMs": 1234.4966000000004,
+  "cpuMicroseconds": {
+    "user": 750000,
+    "system": 235000
+  },
+  "rssBytes": 325394432,
+  "latencyMs": {
+    "http-pdp": {
+      "n": 24,
+      "p50": 1.6953000000012253,
+      "p95": 12.130100000000311,
+      "p99": 12.21100000000115
+    },
+    "cart-create-and-add": {
+      "n": 24,
+      "p50": 26.38719999999921,
+      "p95": 128.9367999999995,
+      "p99": 220.35269999999946
+    },
+    "different-account-receipt": {
+      "n": 24,
+      "p50": 90.28300000000127,
+      "p95": 162.0607999999993,
+      "p99": 341.7482
+    },
+    "http-privacy-denial": {
+      "n": 24,
+      "p50": 7.187099999999191,
+      "p95": 30.760599999999613,
+      "p99": 122.01990000000114
+    },
+    "consumer-batch": {
+      "n": 24,
+      "p50": 19.11409999999887,
+      "p95": 55.67029999999977,
+      "p99": 57.74239999999918
+    },
+    "aggregate-report": {
+      "n": 24,
+      "p50": 3.8832000000002154,
+      "p95": 13.16150000000016,
+      "p99": 183.5118999999995
+    },
+    "refund-reconciliation": {
+      "n": 24,
+      "p50": 152.53089999999975,
+      "p95": 235.1247000000003,
+      "p99": 324.6764999999996
+    }
+  },
+  "httpHeadersLatencyMs": {
+    "n": 56,
+    "p50": 4.940699999999197,
+    "p95": 30.34310000000005,
+    "p99": 121.80239999999867
+  },
+  "observedDomainQueries": 4468,
+  "databaseSamples": [
+    {
+      "connections": 5,
+      "lockwaits": 1
+    },
+    {
+      "connections": 8,
+      "lockwaits": 3
+    },
+    {
+      "connections": 8,
+      "lockwaits": 3
+    },
+    {
+      "connections": 8,
+      "lockwaits": 3
+    },
+    {
+      "connections": 8,
+      "lockwaits": 4
+    },
+    {
+      "connections": 8,
+      "lockwaits": 4
+    },
+    {
+      "connections": 8,
+      "lockwaits": 4
+    },
+    {
+      "connections": 8,
+      "lockwaits": 4
+    },
+    {
+      "connections": 8,
+      "lockwaits": 3
+    },
+    {
+      "connections": 8,
+      "lockwaits": 3
+    },
+    {
+      "connections": 8,
+      "lockwaits": 2
+    },
+    {
+      "connections": 8,
+      "lockwaits": 2
+    },
+    {
+      "connections": 8,
+      "lockwaits": 2
+    },
+    {
+      "connections": 8,
+      "lockwaits": 3
+    },
+    {
+      "connections": 8,
+      "lockwaits": 3
+    },
+    {
+      "connections": 8,
+      "lockwaits": 3
+    },
+    {
+      "connections": 8,
+      "lockwaits": 4
+    },
+    {
+      "connections": 8,
+      "lockwaits": 3
+    },
+    {
+      "connections": 8,
+      "lockwaits": 3
+    },
+    {
+      "connections": 8,
+      "lockwaits": 2
+    },
+    {
+      "connections": 8,
+      "lockwaits": 2
+    },
+    {
+      "connections": 8,
+      "lockwaits": 1
+    },
+    {
+      "connections": 8,
+      "lockwaits": 0
+    },
+    {
+      "connections": 8,
+      "lockwaits": 0
+    },
+    {
+      "connections": 8,
+      "lockwaits": 0
+    }
+  ],
+  "deadlocksDelta": 0,
+  "databaseGrowthBytes": 2056192,
+  "errors": {
+    "HTTP_400": 24
+  },
+  "final": {
+    "receipts": 48,
+    "received": "1920.0000",
+    "refunds": 24,
+    "balance": "1800.0000",
+    "pending": 0
+  },
+  "limitations": [
+    "PDP/privacy HTTP only; remaining timings are domain-operation elapsed time",
+    "No deployed hardware/network, human/device, or production SLO",
+    "Query counter covers instrumented domain client, not fixture setup or HTTP queries",
+    "Pool pressure sampled via pg_stat_activity; no driver pool queue instrumentation",
+    "5/25/100-line Checkout, stock and coupon contention measured separately in placement regression"
+  ],
+  "result": "FAIL_HARNESS",
+  "reason": "PDP HTTP test omitted the required public organizationId query field; 24 validation rejections. Corrected request and full sample rerun; no production validation relaxed."
+}

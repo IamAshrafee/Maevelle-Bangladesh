@@ -1,0 +1,119 @@
+{
+  "date": "2026-11-10",
+  "timezone": "Asia/Dhaka",
+  "baselineCommit": "947c2964979ac7e22135146a123d8ebf32ede6aa",
+  "candidateCommit": "PENDING_UNCOMMITTED",
+  "overall": "PARTIAL_LOCAL_RELEASE_BLOCKED",
+  "environment": "New disposable PostgreSQL 18 cluster on loopback 5548; random isolated DBs; Windows Node 24.14.1; production standalone Next 16.4.2 servers plus test-mode Fastify; no external providers",
+  "regression": {
+    "selection": "scripts/checkout-release-checks.mjs checkoutRegressionPaths",
+    "distinctCases": 413,
+    "files": 40,
+    "initial": {
+      "passed": 412,
+      "failed": 1,
+      "reason": "Fresh-schema exact inventory omitted seven 3224/3225 tables"
+    },
+    "correction": {
+      "check": "packages/database/src/migrate.test.ts",
+      "result": "PASS_AFTER_CORRECTION"
+    },
+    "consolidatedFinal": "413 distinct cases verified passing across initial and focused correction; complete runner not rerun",
+    "overlappingRechecks": [
+      {
+        "cases": 49,
+        "files": 2,
+        "artifact": "integrity-tests.json"
+      },
+      {
+        "cases": 4,
+        "files": 2,
+        "scope": "fresh migration and Worker including canary"
+      }
+    ]
+  },
+  "tooling": {
+    "migrationAndScannerSelfTests": 6,
+    "releaseRegistryCredentialAndOperatorTests": 22,
+    "totalDistinct": 28,
+    "result": "PASS",
+    "releaseNetwork": "Injected transports only; no GHCR or SSH operation"
+  },
+  "migrations": {
+    "history": "PASS_74_REGISTERED_51_UNCHANGED_BASELINE",
+    "genericPopulatedUpgrade": "PASS_23_POST_BASELINE_PLUS_NOOP",
+    "freshInstall": "PASS_AFTER_TEST_INVENTORY_CORRECTION",
+    "newMigration": false,
+    "persistentDatabaseTouched": false
+  },
+  "builds": {
+    "backend": "PASS",
+    "testInclusiveTypecheck": "PASS",
+    "storefront": "PASS",
+    "admin": "PASS",
+    "standaloneUnavailablePage": "PASS",
+    "productionActivation": false
+  },
+  "browser": {
+    "distinctCases": 18,
+    "artifacts": [
+      "browser.json",
+      "browser-faults.json"
+    ],
+    "result": "PASS",
+    "overlap": "Earlier next-start smoke repeated against supported standalone entrypoints; counted once",
+    "nativeZoom": "NOT_VERIFIED",
+    "humanATAndPhysicalDevices": "NOT_VERIFIED",
+    "successfulCheckout": "BLOCKED_POLICY_BOUNDARY"
+  },
+  "physicalFaults": {
+    "moneyCommands": [
+      "manual claim",
+      "independent receipt verification",
+      "refund request",
+      "refund processing CAS",
+      "refund completion"
+    ],
+    "modes": [
+      "BEFORE_COMMIT",
+      "AFTER_COMMIT"
+    ],
+    "consentWithdrawal": "BOTH_MODES_PASS",
+    "orderPlacement": "BOTH_MODES_EXISTING_REGRESSION_PASS",
+    "realProviderOperation": false
+  },
+  "recovery": {
+    "artifact": "recovery.json",
+    "cases": 4,
+    "result": "PASS_SCOPED_LOCAL",
+    "oldImageCompatibility": "NOT_VERIFIED",
+    "targetMediaAndRestore": "NOT_VERIFIED"
+  },
+  "performance": {
+    "artifact": "load.json",
+    "jobs": 168,
+    "runners": 8,
+    "actualHTTPRequests": 56,
+    "result": "PASS_SCOPED_LOCAL_NOT_CAPACITY",
+    "harnessBefore": "load-harness-before.json"
+  },
+  "quality": {
+    "focusedESLint": "PASS",
+    "focusedPrettier": "PASS",
+    "nodeAndBashSyntax": "PASS",
+    "architecture": "PASS",
+    "hardening": "PASS",
+    "secrets": "PASS",
+    "gitDiffCheck": "PASS"
+  },
+  "notExecuted": [
+    "Linux CI/Docker pipeline",
+    "image publication",
+    "Git commit/push",
+    "staging/VPS access",
+    "persistent database migration",
+    "production activation",
+    "live financial/provider/GA4/Meta operation"
+  ],
+  "cleanup": "Task-owned API/standalone UI/headless browser stopped; random browser database dropped; temporary fixture credentials removed; task PostgreSQL cluster stopped and local diagnostics retained"
+}

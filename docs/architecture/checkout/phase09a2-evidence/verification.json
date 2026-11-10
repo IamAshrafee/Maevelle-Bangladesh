@@ -1,0 +1,1647 @@
+{
+  "phase": "09A.2",
+  "date": "2026-11-10",
+  "status": "PARTIAL",
+  "publicFinancialActivation": "BLOCKED",
+  "entryCommit": "947c2964979ac7e22135146a123d8ebf32ede6aa",
+  "observedCommitAfterConcurrentWork": "e27726583d1abcfe7f9c9dd281ffb5d1f05d04d9",
+  "sourceState": "DIRTY_SHARED_WORKTREE_NOT_A_CANDIDATE",
+  "noCommitByThisAgent": true,
+  "migration": {
+    "tail": "3226_retail_money_settlement",
+    "registered": 75,
+    "immutableBaseline": 51,
+    "new09A2Migration": false,
+    "persistentMigration": false,
+    "freshCheck": "PASS",
+    "populatedUpgradeCases": 24
+  },
+  "financialSelection": {
+    "passed": 255,
+    "failed": 0,
+    "files": [
+      {
+        "file": "apps/admin/src/cash-presentation.test.tsx",
+        "status": "passed",
+        "cases": [
+          {
+            "name": "distinguishes original, collected, waiver, balance and refunds in the management summary",
+            "status": "passed"
+          },
+          {
+            "name": "does not mount financial controls or policy details for unauthorized staff",
+            "status": "passed"
+          }
+        ]
+      },
+      {
+        "file": "apps/api/src/cash-shortfall.test.ts",
+        "status": "passed",
+        "cases": [
+          {
+            "name": "discovers bounded independently reviewed policies without enabling financial eligibility",
+            "status": "passed"
+          },
+          {
+            "name": "returns exact original/cash/residual with an explicit unavailable activation state",
+            "status": "passed"
+          },
+          {
+            "name": "never activates synthetic adjustment approval through HTTP",
+            "status": "passed"
+          },
+          {
+            "name": "denies insufficient capability and a foreign tenant",
+            "status": "passed"
+          },
+          {
+            "name": "rejects caller-supplied approval authority and unsupported cash precision at the boundary",
+            "status": "passed"
+          }
+        ]
+      },
+      {
+        "file": "apps/api/src/checkout-public-money.test.ts",
+        "status": "passed",
+        "cases": [
+          {
+            "name": "removes internal approval and invoice evidence while preserving customer rounding authority",
+            "status": "passed"
+          }
+        ]
+      },
+      {
+        "file": "packages/contracts/src/money-presentation.test.ts",
+        "status": "passed",
+        "cases": [
+          {
+            "name": "preserves 299.0000 as \u09f3299",
+            "status": "passed"
+          },
+          {
+            "name": "preserves 12500.0000 as \u09f312,500",
+            "status": "passed"
+          },
+          {
+            "name": "preserves 0.0000 as \u09f30",
+            "status": "passed"
+          },
+          {
+            "name": "preserves 9999999999999999.0000 as \u09f39,999,999,999,999,999",
+            "status": "passed"
+          },
+          {
+            "name": "preserves 299.2500 as \u09f3299.25",
+            "status": "passed"
+          },
+          {
+            "name": "preserves -0.4000 as \u09f3\u22120.4",
+            "status": "passed"
+          },
+          {
+            "name": "rejects fractions in a whole contract instead of hiding them",
+            "status": "passed"
+          },
+          {
+            "name": "retains exact internal cost, signed corrections and unavailable/nonfinal distinctions",
+            "status": "passed"
+          }
+        ]
+      },
+      {
+        "file": "packages/database/src/commerce-foundation.test.ts",
+        "status": "passed",
+        "cases": [
+          {
+            "name": "commercial foundation invariants imports versioned Geography deterministically, searches aliases, and prevents a hierarchy cycle",
+            "status": "passed"
+          },
+          {
+            "name": "commercial foundation invariants keeps customer identity tenant-scoped, permits shared contacts, and accepts resolved or manual addresses",
+            "status": "passed"
+          },
+          {
+            "name": "commercial foundation invariants resolves tenant-scoped exact prices and evaluates provisional coupons without recording usage",
+            "status": "passed"
+          },
+          {
+            "name": "commercial foundation invariants keeps guest carts opaque, authoritative, and non-reserving across concurrent cart intent",
+            "status": "passed"
+          },
+          {
+            "name": "Customers Domain Extensions (Phase 3) supports full customer detail and status updates",
+            "status": "passed"
+          },
+          {
+            "name": "Customers Domain Extensions (Phase 3) supports notes, tags, and contact deletion",
+            "status": "passed"
+          }
+        ]
+      },
+      {
+        "file": "apps/storefront/features/orders/retail-tracking.test.tsx",
+        "status": "passed",
+        "cases": [
+          {
+            "name": "does not render a simulated consignment, amount or recent customer before an authorized result",
+            "status": "passed"
+          },
+          {
+            "name": "retains exact original total and never invents carrier, rider, estimate or receipt verification",
+            "status": "passed"
+          }
+        ]
+      },
+      {
+        "file": "apps/storefront/features/checkout/availability.test.ts",
+        "status": "passed",
+        "cases": [
+          {
+            "name": "keeps purchase preview gated in production with flag true",
+            "status": "passed"
+          },
+          {
+            "name": "keeps purchase preview gated in production with flag false",
+            "status": "passed"
+          },
+          {
+            "name": "keeps purchase preview gated in development with flag undefined",
+            "status": "passed"
+          },
+          {
+            "name": "keeps purchase preview gated in development with flag true",
+            "status": "passed"
+          }
+        ]
+      },
+      {
+        "file": "apps/storefront/features/checkout/delivery-api.test.tsx",
+        "status": "passed",
+        "cases": [
+          {
+            "name": "Phase 02A delivery adapter and shared field semantics uses cookie credentials, owner headers and no-store without putting private contact in URLs",
+            "status": "passed"
+          },
+          {
+            "name": "Phase 02A delivery adapter and shared field semantics rejects a fabricated purchase/quote success and malformed missing private state",
+            "status": "passed"
+          },
+          {
+            "name": "Phase 02A delivery adapter and shared field semantics refuses guest address-book requests before transport and bounds account pages",
+            "status": "passed"
+          },
+          {
+            "name": "Phase 02A delivery adapter and shared field semantics encodes bounded real reference searches and rejects malformed locations",
+            "status": "passed"
+          },
+          {
+            "name": "Phase 02A delivery adapter and shared field semantics renders one minimal labeled form surface and lets the server validate Bangla mobile syntax",
+            "status": "passed"
+          },
+          {
+            "name": "Phase 02A delivery adapter and shared field semantics validates required fields and Unicode bounds without an ASCII-only name rule",
+            "status": "passed"
+          }
+        ]
+      },
+      {
+        "file": "apps/storefront/features/checkout/delivery-workflow.test.ts",
+        "status": "passed",
+        "cases": [
+          {
+            "name": "private delivery composes into the Checkout authority and shared revision clears the previous destination before a different draft is exposed",
+            "status": "passed"
+          },
+          {
+            "name": "private delivery composes into the Checkout authority and shared revision forgets private delivery state when the guest explicitly revokes the session",
+            "status": "passed"
+          },
+          {
+            "name": "private delivery composes into the Checkout authority and shared revision queues initial private restoration behind foundation acceptance without fetching private data on unrelated entry",
+            "status": "passed"
+          },
+          {
+            "name": "private delivery composes into the Checkout authority and shared revision hides private state on backgrounding while retaining a same-owner exact retry in memory",
+            "status": "passed"
+          },
+          {
+            "name": "private delivery composes into the Checkout authority and shared revision never reveals suspended A data when identity verification discovers B",
+            "status": "passed"
+          },
+          {
+            "name": "private delivery composes into the Checkout authority and shared revision saves through the shared revision and never journals contact PII",
+            "status": "passed"
+          },
+          {
+            "name": "private delivery composes into the Checkout authority and shared revision retains an immutable exact body/key after timeout, ignores later input mutation and blocks fresh intents",
+            "status": "passed"
+          },
+          {
+            "name": "private delivery composes into the Checkout authority and shared revision coalesces no distinct private commands while one write is in flight",
+            "status": "passed"
+          },
+          {
+            "name": "private delivery composes into the Checkout authority and shared revision does not replace an uncertain delivery with a source refresh, new draft or source update",
+            "status": "passed"
+          },
+          {
+            "name": "private delivery composes into the Checkout authority and shared revision reloads server truth after an uncertain commit without reconstructing or persisting a private body",
+            "status": "passed"
+          },
+          {
+            "name": "private delivery composes into the Checkout authority and shared revision requires explicit review after 409 and sends a fresh intent only with the retrieved shared revision",
+            "status": "passed"
+          },
+          {
+            "name": "private delivery composes into the Checkout authority and shared revision cannot acknowledge a conflict when fetching the latest state failed",
+            "status": "passed"
+          },
+          {
+            "name": "private delivery composes into the Checkout authority and shared revision clears private state and discards an account A save response after B takes over, even if abort is ignored",
+            "status": "passed"
+          },
+          {
+            "name": "private delivery composes into the Checkout authority and shared revision ignores delayed address-book results from a previous identity",
+            "status": "passed"
+          },
+          {
+            "name": "private delivery composes into the Checkout authority and shared revision clears all private projections when an expired/revoked session rejects a save",
+            "status": "passed"
+          },
+          {
+            "name": "private delivery composes into the Checkout authority and shared revision selects exact saved-address revisions and forbids implicit revalidation of changed/removed associations",
+            "status": "passed"
+          },
+          {
+            "name": "private delivery composes into the Checkout authority and shared revision saves addresses only through explicit account commands and signals recovery completion separately",
+            "status": "passed"
+          },
+          {
+            "name": "private delivery composes into the Checkout authority and shared revision strips fabricated financial/internal fields from the allowlisted private intent",
+            "status": "passed"
+          },
+          {
+            "name": "private delivery composes into the Checkout authority and shared revision honors rate-limit retry timing without a new key or automatic loop",
+            "status": "passed"
+          }
+        ]
+      },
+      {
+        "file": "apps/storefront/features/checkout/foundation-controller.test.ts",
+        "status": "passed",
+        "cases": [
+          {
+            "name": "Checkout owner partition and exact-intent recovery does not establish a guest or draft during restore, and coalesces rapid initiation",
+            "status": "passed"
+          },
+          {
+            "name": "Checkout owner partition and exact-intent recovery preserves the exact key/body across timeout, reload and explicit retry",
+            "status": "passed"
+          },
+          {
+            "name": "Checkout owner partition and exact-intent recovery never replaces an uncertain source with a new key when another product is clicked",
+            "status": "passed"
+          },
+          {
+            "name": "Checkout owner partition and exact-intent recovery discards delayed A data after an account transition, preserving A recovery privately",
+            "status": "passed"
+          },
+          {
+            "name": "Checkout owner partition and exact-intent recovery rechecks authority before publishing even if an identity hint is missed",
+            "status": "passed"
+          },
+          {
+            "name": "Checkout owner partition and exact-intent recovery adopts explicitly with account plus guest context, with no implicit adoption on sign-in",
+            "status": "passed"
+          },
+          {
+            "name": "Checkout owner partition and exact-intent recovery keeps string revisions and never optimistically marks an inactive draft editable",
+            "status": "passed"
+          },
+          {
+            "name": "Checkout owner partition and exact-intent recovery keeps abandonment uncertain until the canonical response is confirmed",
+            "status": "passed"
+          },
+          {
+            "name": "Checkout owner partition and exact-intent recovery preserves a rejected revision until explicit dismissal then restores canonical state",
+            "status": "passed"
+          },
+          {
+            "name": "Checkout owner partition and exact-intent recovery obeys a rate-limit deadline without replaying or replacing the command",
+            "status": "passed"
+          },
+          {
+            "name": "Checkout owner partition and exact-intent recovery does not downgrade authority lookup failures into guest identity",
+            "status": "passed"
+          },
+          {
+            "name": "Checkout journal and safe failure presentation stores only bounded nonsecret intent references and rejects injected financial/owner data",
+            "status": "passed"
+          },
+          {
+            "name": "Checkout journal and safe failure presentation retains the in-memory key and reports blocked storage truthfully",
+            "status": "passed"
+          },
+          {
+            "name": "Checkout journal and safe failure presentation maps 400 without exposing raw backend text",
+            "status": "passed"
+          },
+          {
+            "name": "Checkout journal and safe failure presentation maps 401 without exposing raw backend text",
+            "status": "passed"
+          },
+          {
+            "name": "Checkout journal and safe failure presentation maps 403 without exposing raw backend text",
+            "status": "passed"
+          },
+          {
+            "name": "Checkout journal and safe failure presentation maps 404 without exposing raw backend text",
+            "status": "passed"
+          },
+          {
+            "name": "Checkout journal and safe failure presentation maps 409 without exposing raw backend text",
+            "status": "passed"
+          },
+          {
+            "name": "Checkout journal and safe failure presentation maps 410 without exposing raw backend text",
+            "status": "passed"
+          },
+          {
+            "name": "Checkout journal and safe failure presentation maps 413 without exposing raw backend text",
+            "status": "passed"
+          },
+          {
+            "name": "Checkout journal and safe failure presentation maps 415 without exposing raw backend text",
+            "status": "passed"
+          },
+          {
+            "name": "Checkout journal and safe failure presentation maps 422 without exposing raw backend text",
+            "status": "passed"
+          },
+          {
+            "name": "Checkout journal and safe failure presentation maps 429 without exposing raw backend text",
+            "status": "passed"
+          },
+          {
+            "name": "Checkout journal and safe failure presentation maps 503 without exposing raw backend text",
+            "status": "passed"
+          },
+          {
+            "name": "Checkout journal and safe failure presentation exposes orderPayment operations and clears orderPayment state on invalidate",
+            "status": "passed"
+          }
+        ]
+      },
+      {
+        "file": "apps/storefront/features/checkout/order-payment-api.test.tsx",
+        "status": "passed",
+        "cases": [
+          {
+            "name": "Phase 06A/B order-payment API transport and contract validation reads authorized order-payment DTO with guest headers and parses valid data",
+            "status": "passed"
+          },
+          {
+            "name": "Phase 06A/B order-payment API transport and contract validation reads authorized order-payment DTO with account headers",
+            "status": "passed"
+          },
+          {
+            "name": "Phase 06A/B order-payment API transport and contract validation rejects malformed response data in order-payment read",
+            "status": "passed"
+          },
+          {
+            "name": "Phase 06A/B order-payment API transport and contract validation handles null instructions and null latestClaim safely",
+            "status": "passed"
+          },
+          {
+            "name": "Phase 06A/B order-payment API transport and contract validation submits a manual payment claim with UUID idempotency key, trimmed Transaction ID, and optional phone",
+            "status": "passed"
+          },
+          {
+            "name": "Phase 06A/B order-payment API transport and contract validation submits claim without optional sendingMobile when omitted",
+            "status": "passed"
+          },
+          {
+            "name": "Phase 06A/B order-payment API transport and contract validation validates client input before sending claim request",
+            "status": "passed"
+          },
+          {
+            "name": "Phase 06A/B order-payment API transport and contract validation recovers claim using GET with idempotency key",
+            "status": "passed"
+          },
+          {
+            "name": "Phase 06A/B order-payment API transport and contract validation propagates API error codes with Retry-After when rate limited",
+            "status": "passed"
+          },
+          {
+            "name": "Phase 06A/B order-payment API transport and contract validation propagates 409 CLAIM_ALREADY_SUBMITTED and IDEMPOTENCY_CONFLICT",
+            "status": "passed"
+          }
+        ]
+      },
+      {
+        "file": "apps/storefront/features/checkout/order-payment-components.test.tsx",
+        "status": "passed",
+        "cases": [
+          {
+            "name": "Phase 06B customer payment presentation components renders exact financial amounts and partial payment breakdown in OrderPaymentSummary",
+            "status": "passed"
+          },
+          {
+            "name": "Phase 06B customer payment presentation components renders refunded amount and unallocated verification context when non-zero",
+            "status": "passed"
+          },
+          {
+            "name": "Phase 06B customer payment presentation components displays late receipt and reversal warnings in OrderPaymentSummary",
+            "status": "passed"
+          },
+          {
+            "name": "Phase 06B customer payment presentation components renders bKash PRA wallet instructions only when available",
+            "status": "passed"
+          },
+          {
+            "name": "Phase 06B customer payment presentation components renders honest notice without receiving number when transferAvailability is CLAIM_UNDER_REVIEW",
+            "status": "passed"
+          },
+          {
+            "name": "Phase 06B customer payment presentation components renders honest notice without receiving number when transferAvailability is PAYMENT_ALREADY_SETTLED",
+            "status": "passed"
+          },
+          {
+            "name": "Phase 06B customer payment presentation components renders honest notice without receiving number when transferAvailability is PAYMENT_WINDOW_EXPIRED",
+            "status": "passed"
+          },
+          {
+            "name": "Phase 06B customer payment presentation components renders honest notice without receiving number when transferAvailability is ORDER_CANCELLED",
+            "status": "passed"
+          },
+          {
+            "name": "Phase 06B customer payment presentation components renders honest notice without receiving number when transferAvailability is DESTINATION_UNAVAILABLE",
+            "status": "passed"
+          },
+          {
+            "name": "Phase 06B customer payment presentation components renders honest notice without receiving number when transferAvailability is PAYMENT_METHOD_UNAVAILABLE",
+            "status": "passed"
+          },
+          {
+            "name": "Phase 06B customer payment presentation components renders honest notice without receiving number when transferAvailability is PAYMENT_SUPPORT_REQUIRED",
+            "status": "passed"
+          },
+          {
+            "name": "Phase 06B customer payment presentation components renders honest notice without receiving number when transferAvailability is POLICY_BLOCKED",
+            "status": "passed"
+          },
+          {
+            "name": "Phase 06B customer payment presentation components renders ManualClaimForm with Transaction ID and optional phone inputs only",
+            "status": "passed"
+          },
+          {
+            "name": "Phase 06B customer payment presentation components renders ClaimReviewTracker with submitted claims, status badges, and review deadline",
+            "status": "passed"
+          },
+          {
+            "name": "Phase 06B customer payment presentation components renders correction requested notice in ClaimReviewTracker when reviewState is CORRECTION_REQUESTED",
+            "status": "passed"
+          },
+          {
+            "name": "Phase 06B customer payment presentation components renders dedicated Cash on Delivery summary without wallet instructions or claim form",
+            "status": "passed"
+          },
+          {
+            "name": "Phase 06B customer payment presentation components renders OrderPaymentPanel coordinating COD vs Wallet payments",
+            "status": "passed"
+          }
+        ]
+      },
+      {
+        "file": "apps/storefront/features/checkout/order-payment-workflow.test.ts",
+        "status": "passed",
+        "cases": [
+          {
+            "name": "Phase 06B order-payment workflow reads order payment and transitions to ready state",
+            "status": "passed"
+          },
+          {
+            "name": "Phase 06B order-payment workflow revokes view on unauthorized 401/403 during read",
+            "status": "passed"
+          },
+          {
+            "name": "Phase 06B order-payment workflow sets non-retryable issue when guest order grant is expired (410)",
+            "status": "passed"
+          },
+          {
+            "name": "Phase 06B order-payment workflow validates Transaction ID and phone before network dispatch in submit",
+            "status": "passed"
+          },
+          {
+            "name": "Phase 06B order-payment workflow submits valid claim and refreshes order payment view on success",
+            "status": "passed"
+          },
+          {
+            "name": "Phase 06B order-payment workflow handles CLAIM_ALREADY_SUBMITTED by clearing intent and refreshing base view",
+            "status": "passed"
+          },
+          {
+            "name": "Phase 06B order-payment workflow handles IDEMPOTENCY_CONFLICT by clearing intent and refreshing view",
+            "status": "passed"
+          },
+          {
+            "name": "Phase 06B order-payment workflow handles CLAIM_LIMIT_REACHED (5 unresolved claims) gracefully",
+            "status": "passed"
+          },
+          {
+            "name": "Phase 06B order-payment workflow retains pendingClaim on ambiguous 503 or network failure so user can retry same key",
+            "status": "passed"
+          },
+          {
+            "name": "Phase 06B order-payment workflow recovers claim with original UUID key via GET",
+            "status": "passed"
+          },
+          {
+            "name": "Phase 06B order-payment workflow handles recovery 404 gracefully by refreshing base view",
+            "status": "passed"
+          },
+          {
+            "name": "Phase 06B order-payment workflow respects rate limit cooldown (Retry-After)",
+            "status": "passed"
+          }
+        ]
+      },
+      {
+        "file": "apps/storefront/features/checkout/payment-foundation.test.tsx",
+        "status": "passed",
+        "cases": [
+          {
+            "name": "shows no selectable methods, amount due, receiving account or public submission in the real review",
+            "status": "passed"
+          },
+          {
+            "name": "labels all synthetic committed-Order presentations and keeps claims disabled",
+            "status": "passed"
+          }
+        ]
+      },
+      {
+        "file": "apps/storefront/features/checkout/placement-api.test.tsx",
+        "status": "passed",
+        "cases": [
+          {
+            "name": "Phase 05A placement protocol and confirmation UI sends exact minimal private JSON and accepts only the specific 409 data result",
+            "status": "passed"
+          },
+          {
+            "name": "Phase 05A placement protocol and confirmation UI rejects mismatched terms and committed receipts, and does not retain extra fields",
+            "status": "passed"
+          },
+          {
+            "name": "Phase 05A placement protocol and confirmation UI shows the blocked review without a place-order button, total due or transfer controls",
+            "status": "passed"
+          },
+          {
+            "name": "Phase 05A placement protocol and confirmation UI renders COD UNPAID separately from the original order total",
+            "status": "passed"
+          },
+          {
+            "name": "Phase 05A placement protocol and confirmation UI renders BKASH_MANUAL PAYMENT_PENDING separately from the original order total",
+            "status": "passed"
+          },
+          {
+            "name": "Phase 05A placement protocol and confirmation UI renders NAGAD_MANUAL PARTIALLY_PAID separately from the original order total",
+            "status": "passed"
+          },
+          {
+            "name": "Phase 05A placement protocol and confirmation UI renders BKASH_MANUAL EXPIRED separately from the original order total",
+            "status": "passed"
+          },
+          {
+            "name": "Phase 05A placement protocol and confirmation UI renders COD CANCELLED separately from the original order total",
+            "status": "passed"
+          },
+          {
+            "name": "Phase 05A placement protocol and confirmation UI formats signed rounding adjustments without discarding the four decimal places",
+            "status": "passed"
+          }
+        ]
+      },
+      {
+        "file": "apps/storefront/features/checkout/placement-workflow.test.ts",
+        "status": "passed",
+        "cases": [
+          {
+            "name": "Checkout placement uses the existing owner, draft, delivery and quote controller handles server commit for account=false cart=false",
+            "status": "passed"
+          },
+          {
+            "name": "Checkout placement uses the existing owner, draft, delivery and quote controller handles server commit for account=true cart=false",
+            "status": "passed"
+          },
+          {
+            "name": "Checkout placement uses the existing owner, draft, delivery and quote controller handles server commit for account=false cart=true",
+            "status": "passed"
+          },
+          {
+            "name": "Checkout placement uses the existing owner, draft, delivery and quote controller handles server commit for account=true cart=true",
+            "status": "passed"
+          },
+          {
+            "name": "Checkout placement uses the existing owner, draft, delivery and quote controller blocks on actual policy error without requesting placement or setting a recovery marker",
+            "status": "passed"
+          },
+          {
+            "name": "Checkout placement uses the existing owner, draft, delivery and quote controller requires acknowledged current quote, matching final fingerprint and unexpired final terms",
+            "status": "passed"
+          },
+          {
+            "name": "Checkout placement uses the existing owner, draft, delivery and quote controller clears approval when delivery edits start and rejects stale quotes",
+            "status": "passed"
+          },
+          {
+            "name": "Checkout placement uses the existing owner, draft, delivery and quote controller deduplicates rapid submit and retries the exact frozen body after transport loss, even after expiry",
+            "status": "passed"
+          },
+          {
+            "name": "Checkout placement uses the existing owner, draft, delivery and quote controller preserves the original key on rate limiting and prevents retry before cooldown",
+            "status": "passed"
+          },
+          {
+            "name": "Checkout placement uses the existing owner, draft, delivery and quote controller requires a fresh explicitly acknowledged quote after durable SOURCE_CHANGED",
+            "status": "passed"
+          },
+          {
+            "name": "Checkout placement uses the existing owner, draft, delivery and quote controller requires a fresh explicitly acknowledged quote after durable DELIVERY_CHANGED",
+            "status": "passed"
+          },
+          {
+            "name": "Checkout placement uses the existing owner, draft, delivery and quote controller requires a fresh explicitly acknowledged quote after durable FINAL_TERMS_CHANGED",
+            "status": "passed"
+          },
+          {
+            "name": "Checkout placement uses the existing owner, draft, delivery and quote controller requires a fresh explicitly acknowledged quote after durable PROMOTION_UNAVAILABLE",
+            "status": "passed"
+          },
+          {
+            "name": "Checkout placement uses the existing owner, draft, delivery and quote controller requires a fresh explicitly acknowledged quote after durable PAYMENT_METHOD_UNAVAILABLE",
+            "status": "passed"
+          },
+          {
+            "name": "Checkout placement uses the existing owner, draft, delivery and quote controller does not infer a receipt from IDEMPOTENCY_CONFLICT or replace the key",
+            "status": "passed"
+          },
+          {
+            "name": "Checkout placement uses the existing owner, draft, delivery and quote controller does not infer a receipt from CHECKOUT_COMMITTED or replace the key",
+            "status": "passed"
+          },
+          {
+            "name": "Checkout placement uses the existing owner, draft, delivery and quote controller restores a committed draft using status only after a lost response and reload",
+            "status": "passed"
+          },
+          {
+            "name": "Checkout placement uses the existing owner, draft, delivery and quote controller keeps an unresolved reloaded draft in recovery, with no reconstructed private intent",
+            "status": "passed"
+          },
+          {
+            "name": "Checkout placement uses the existing owner, draft, delivery and quote controller clears private state and discards a late committed response after an A/B transition",
+            "status": "passed"
+          },
+          {
+            "name": "Checkout placement uses the existing owner, draft, delivery and quote controller clears order details after a revoked session and does not poll",
+            "status": "passed"
+          },
+          {
+            "name": "Checkout placement uses the existing owner, draft, delivery and quote controller treats an owner verification failure after a commit response as uncertain",
+            "status": "passed"
+          },
+          {
+            "name": "Checkout placement uses the existing owner, draft, delivery and quote controller hides a cached receipt when a fresh owner check fails before the status read",
+            "status": "passed"
+          }
+        ]
+      },
+      {
+        "file": "apps/storefront/features/checkout/quote-api.test.tsx",
+        "status": "passed",
+        "cases": [
+          {
+            "name": "exact quote transport and component presentation uses private credentialed no-store reads and exact idempotent write bodies without putting facts in URLs",
+            "status": "passed"
+          },
+          {
+            "name": "exact quote transport and component presentation accepts legitimate zero facts and string revisions beyond Number precision",
+            "status": "passed"
+          },
+          {
+            "name": "exact quote transport and component presentation rejects unsupported final monetary values for payable",
+            "status": "passed"
+          },
+          {
+            "name": "exact quote transport and component presentation rejects unsupported final monetary values for tax",
+            "status": "passed"
+          },
+          {
+            "name": "exact quote transport and component presentation rejects unsupported final monetary values for paymentFees",
+            "status": "passed"
+          },
+          {
+            "name": "exact quote transport and component presentation rejects foreign quotes, fake readiness, wrong amount types, broken allocation equations and fabricated lifecycle",
+            "status": "passed"
+          },
+          {
+            "name": "exact quote transport and component presentation formats exact four-place decimals including large and zero values without Number conversion or rounding",
+            "status": "passed"
+          },
+          {
+            "name": "exact quote transport and component presentation renders unknown amounts honestly, immutable names/SKUs and escaped labels without final-payment controls",
+            "status": "passed"
+          },
+          {
+            "name": "exact quote transport and component presentation compares only authorized predecessor facts and distinguishes equal-total evaluations",
+            "status": "passed"
+          }
+        ]
+      },
+      {
+        "file": "apps/storefront/features/checkout/quote-workflow.test.ts",
+        "status": "passed",
+        "cases": [
+          {
+            "name": "quote workflow uses the existing Checkout controller and private intent protocol synchronizes the root as a string after creation, but acknowledgement does not increment it",
+            "status": "passed"
+          },
+          {
+            "name": "quote workflow uses the existing Checkout controller and private intent protocol keeps a current quote reviewable when delivery restores the same snapshot at the new shared revision",
+            "status": "passed"
+          },
+          {
+            "name": "quote workflow uses the existing Checkout controller and private intent protocol keeps an uncertain accepted command exactly, blocks other writes, and replays without duplicate revision or browser persistence",
+            "status": "passed"
+          },
+          {
+            "name": "quote workflow uses the existing Checkout controller and private intent protocol recovers a superseded accepted quote without moving the root revision backwards",
+            "status": "passed"
+          },
+          {
+            "name": "quote workflow uses the existing Checkout controller and private intent protocol never creates on reads, treats conflicts as explicit review, and keeps historical facts separate",
+            "status": "passed"
+          },
+          {
+            "name": "quote workflow uses the existing Checkout controller and private intent protocol respects Retry-After and refuses expired, invalidated, historically acknowledged or locally edited inputs",
+            "status": "passed"
+          },
+          {
+            "name": "quote workflow uses the existing Checkout controller and private intent protocol rejects delayed ignored-abort old-owner responses and clears pending, coupons and comparison on owner change",
+            "status": "passed"
+          },
+          {
+            "name": "quote workflow uses the existing Checkout controller and private intent protocol suspends unknown writes and requires a live owner check before an exact retry",
+            "status": "passed"
+          }
+        ]
+      },
+      {
+        "file": "apps/storefront/features/checkout/retail-settlement.test.tsx",
+        "status": "passed",
+        "cases": [
+          {
+            "name": "renders original81/cash80/waiver1/due0 without claiming full cash receipt or requesting more cash",
+            "status": "passed"
+          },
+          {
+            "name": "keeps historical fractions exact and flags inconsistent whole authority accessibly",
+            "status": "passed"
+          },
+          {
+            "name": "never requests COD after cancellation or refund and shows reversal balance from server",
+            "status": "passed"
+          }
+        ]
+      },
+      {
+        "file": "packages/database/src/checkout/placement.test.ts",
+        "status": "passed",
+        "cases": [
+          {
+            "name": "Checkout atomic placement on disposable PostgreSQL persists exact whole-taka terms for price 80.4000 tax 0 quantity 1",
+            "status": "passed"
+          },
+          {
+            "name": "Checkout atomic placement on disposable PostgreSQL persists exact whole-taka terms for price 80.5000 tax 0 quantity 1",
+            "status": "passed"
+          },
+          {
+            "name": "Checkout atomic placement on disposable PostgreSQL persists exact whole-taka terms for price 80.6000 tax 0 quantity 1",
+            "status": "passed"
+          },
+          {
+            "name": "Checkout atomic placement on disposable PostgreSQL persists exact whole-taka terms for price 79.9900 tax 0.4100 quantity 1",
+            "status": "passed"
+          },
+          {
+            "name": "Checkout atomic placement on disposable PostgreSQL persists exact whole-taka terms for price 33.3333 tax 0 quantity 3",
+            "status": "passed"
+          },
+          {
+            "name": "Checkout atomic placement on disposable PostgreSQL persists exact whole-taka terms for price 0.0000 tax 0 quantity 1",
+            "status": "passed"
+          },
+          {
+            "name": "Checkout atomic placement on disposable PostgreSQL refuses manual-wallet customer fees even under an explicit whole-taka policy",
+            "status": "passed"
+          },
+          {
+            "name": "Checkout atomic placement on disposable PostgreSQL refuses a new fractional payable under the legacy exact policy",
+            "status": "passed"
+          },
+          {
+            "name": "Checkout atomic placement on disposable PostgreSQL keeps fractional discounts exact and refuses unresolved tax in a whole-taka policy",
+            "status": "passed"
+          },
+          {
+            "name": "Checkout atomic placement on disposable PostgreSQL GUEST placement (Cart: false) commits only reviewed source and one unpaid obligation",
+            "status": "passed"
+          },
+          {
+            "name": "Checkout atomic placement on disposable PostgreSQL ACCOUNT placement (Cart: false) commits only reviewed source and one unpaid obligation",
+            "status": "passed"
+          },
+          {
+            "name": "Checkout atomic placement on disposable PostgreSQL GUEST placement (Cart: true) commits only reviewed source and one unpaid obligation",
+            "status": "passed"
+          },
+          {
+            "name": "Checkout atomic placement on disposable PostgreSQL ACCOUNT placement (Cart: true) commits only reviewed source and one unpaid obligation",
+            "status": "passed"
+          },
+          {
+            "name": "Checkout atomic placement on disposable PostgreSQL replays a lost response and serializes same-key and different-key submissions",
+            "status": "passed"
+          },
+          {
+            "name": "Checkout atomic placement on disposable PostgreSQL binds each guest grant to one Order and enforces Checkout uniqueness in PostgreSQL",
+            "status": "passed"
+          },
+          {
+            "name": "Checkout atomic placement on disposable PostgreSQL fails closed for the HTTP-bound engine and does not accept a component acknowledgement as final acceptance",
+            "status": "passed"
+          },
+          {
+            "name": "Checkout atomic placement on disposable PostgreSQL rejects a modified Cart and never converts it",
+            "status": "passed"
+          },
+          {
+            "name": "Checkout atomic placement on disposable PostgreSQL rolls back a failure after order",
+            "status": "passed"
+          },
+          {
+            "name": "Checkout atomic placement on disposable PostgreSQL rolls back a failure after inventory",
+            "status": "passed"
+          },
+          {
+            "name": "Checkout atomic placement on disposable PostgreSQL rolls back a failure after promotion",
+            "status": "passed"
+          },
+          {
+            "name": "Checkout atomic placement on disposable PostgreSQL rolls back a failure after payment",
+            "status": "passed"
+          },
+          {
+            "name": "Checkout atomic placement on disposable PostgreSQL rolls back a failure after cart",
+            "status": "passed"
+          },
+          {
+            "name": "Checkout atomic placement on disposable PostgreSQL rolls back a failure after outbox",
+            "status": "passed"
+          },
+          {
+            "name": "Checkout atomic placement on disposable PostgreSQL allows only one winner for the last stock",
+            "status": "passed"
+          },
+          {
+            "name": "Checkout atomic placement on disposable PostgreSQL allows only one winner for the last coupon",
+            "status": "passed"
+          },
+          {
+            "name": "Checkout atomic placement on disposable PostgreSQL sees a higher-priority tariff inserted by an overlapping writer before placement",
+            "status": "passed"
+          },
+          {
+            "name": "Checkout atomic placement on disposable PostgreSQL serializes account logout on either side of placement",
+            "status": "passed"
+          },
+          {
+            "name": "Checkout atomic placement on disposable PostgreSQL blocks disabled payment methods before any business effects",
+            "status": "passed"
+          },
+          {
+            "name": "Checkout atomic placement on disposable PostgreSQL does not commit an account COD order after a restriction is added",
+            "status": "passed"
+          },
+          {
+            "name": "Checkout atomic placement on disposable PostgreSQL observes the existing Checkout kill switch for new work",
+            "status": "passed"
+          },
+          {
+            "name": "Checkout atomic placement on disposable PostgreSQL preserves a legitimate zero price and zero shipping as an exact zero obligation",
+            "status": "passed"
+          },
+          {
+            "name": "Checkout atomic placement on disposable PostgreSQL serializes concurrent different keys for one draft",
+            "status": "passed"
+          },
+          {
+            "name": "Checkout atomic placement on disposable PostgreSQL rejects a newer authoritative price while preserving the old review receipt",
+            "status": "passed"
+          },
+          {
+            "name": "Checkout atomic placement on disposable PostgreSQL authorizes only the committed guest, gates transfer and claims, and reconciles a lost response",
+            "status": "passed"
+          },
+          {
+            "name": "Checkout atomic placement on disposable PostgreSQL shows actual Admin review, partial receipt and excess settlement to the account owner",
+            "status": "passed"
+          },
+          {
+            "name": "Checkout atomic placement on disposable PostgreSQL waits for destination suspension and does not expose an obsolete instruction snapshot",
+            "status": "passed"
+          },
+          {
+            "name": "Checkout atomic placement on disposable PostgreSQL keeps an expired pending claim for review and rejects a new claim after Worker cancellation",
+            "status": "passed"
+          },
+          {
+            "name": "Checkout atomic placement on disposable PostgreSQL serializes distinct claim keys and fails closed after destination suspension and expiry",
+            "status": "passed"
+          },
+          {
+            "name": "Checkout atomic placement on disposable PostgreSQL writes a private manual obligation, preserves original provenance and releases unpaid stock via Worker expiry",
+            "status": "passed"
+          },
+          {
+            "name": "Checkout atomic placement on disposable PostgreSQL serializes wallet destination suspension (writer-first)",
+            "status": "passed"
+          },
+          {
+            "name": "Checkout atomic placement on disposable PostgreSQL serializes wallet destination suspension (placement-first)",
+            "status": "passed"
+          },
+          {
+            "name": "Checkout atomic placement on disposable PostgreSQL rejects a destination without provider approval evidence even if marked approved",
+            "status": "passed"
+          },
+          {
+            "name": "Checkout atomic placement on disposable PostgreSQL measures a complete Cart with 5 distinct lines",
+            "status": "passed"
+          },
+          {
+            "name": "Checkout atomic placement on disposable PostgreSQL measures a complete Cart with 25 distinct lines",
+            "status": "passed"
+          },
+          {
+            "name": "Checkout atomic placement on disposable PostgreSQL measures a complete Cart with 100 distinct lines",
+            "status": "passed"
+          },
+          {
+            "name": "Checkout atomic placement on disposable PostgreSQL retries the entire intent after a synthetic serialization failure without duplicate effects",
+            "status": "passed"
+          },
+          {
+            "name": "Checkout atomic placement on disposable PostgreSQL recovers the same placement identity after physical BEFORE_COMMIT socket loss",
+            "status": "passed"
+          },
+          {
+            "name": "Checkout atomic placement on disposable PostgreSQL recovers the same placement identity after physical AFTER_COMMIT socket loss",
+            "status": "passed"
+          },
+          {
+            "name": "Checkout atomic placement on disposable PostgreSQL keeps GUEST committed recovery and payment status available while new purchasing is disabled",
+            "status": "passed"
+          },
+          {
+            "name": "Checkout atomic placement on disposable PostgreSQL keeps ACCOUNT committed recovery and payment status available while new purchasing is disabled",
+            "status": "passed"
+          },
+          {
+            "name": "Checkout atomic placement on disposable PostgreSQL keeps existing manual claim submission and exact recovery available after disabling new purchasing",
+            "status": "passed"
+          },
+          {
+            "name": "Checkout atomic placement on disposable PostgreSQL bounds a real placement row-lock timeout and permits an exact-key retry after release",
+            "status": "passed"
+          }
+        ]
+      },
+      {
+        "file": "packages/database/src/commerce/retail-money.test.ts",
+        "status": "passed",
+        "cases": [
+          {
+            "name": "rounds 80.4000 exactly once to 80.0000 with explicit adjustment -0.4000",
+            "status": "passed"
+          },
+          {
+            "name": "rounds 80.5000 exactly once to 81.0000 with explicit adjustment 0.5000",
+            "status": "passed"
+          },
+          {
+            "name": "rounds 80.6000 exactly once to 81.0000 with explicit adjustment 0.4000",
+            "status": "passed"
+          },
+          {
+            "name": "rounds 99.9900 exactly once to 100.0000 with explicit adjustment 0.0100",
+            "status": "passed"
+          },
+          {
+            "name": "rounds 100.0000 exactly once to 100.0000 with explicit adjustment 0.0000",
+            "status": "passed"
+          },
+          {
+            "name": "rounds 0.0000 exactly once to 0.0000 with explicit adjustment 0.0000",
+            "status": "passed"
+          },
+          {
+            "name": "rounds 0.0001 exactly once to 0.0000 with explicit adjustment -0.0001",
+            "status": "passed"
+          },
+          {
+            "name": "rounds -0.5000 exactly once to -1.0000 with explicit adjustment -0.5000",
+            "status": "passed"
+          },
+          {
+            "name": "rounds -80.6000 exactly once to -81.0000 with explicit adjustment -0.4000",
+            "status": "passed"
+          },
+          {
+            "name": "rounds 999999999999999.6000 exactly once to 1000000000000000.0000 with explicit adjustment 0.4000",
+            "status": "passed"
+          },
+          {
+            "name": "validates whole customer authoring without truncating fractional costs or old prices",
+            "status": "passed"
+          },
+          {
+            "name": "rejects incomplete policy provenance",
+            "status": "passed"
+          }
+        ]
+      },
+      {
+        "file": "packages/database/src/commerce/retail-price-audit.test.ts",
+        "status": "passed",
+        "cases": [
+          {
+            "name": "audits fractional customer prices without normalizing them or reducing cost precision",
+            "status": "passed"
+          }
+        ]
+      },
+      {
+        "file": "packages/database/src/testing/pool-timeout.test.ts",
+        "status": "passed",
+        "cases": [
+          {
+            "name": "bounds exhausted pool acquisition and recovers after release without a hidden queued write",
+            "status": "passed"
+          }
+        ]
+      },
+      {
+        "file": "packages/database/src/payments/cash-shortfall/settlement.test.ts",
+        "status": "passed",
+        "cases": [
+          {
+            "name": "settles 81/80/1 without changing original payable, cash, courier custody or creating a money conversion",
+            "status": "passed"
+          },
+          {
+            "name": "rejects waiver for actual collection 81 when not the approved residual",
+            "status": "passed"
+          },
+          {
+            "name": "rejects waiver for actual collection 79 when not the approved residual",
+            "status": "passed"
+          },
+          {
+            "name": "keeps public activation blocked even with stored synthetic approvals",
+            "status": "passed"
+          },
+          {
+            "name": "requires capability, tenant authority and genuine receipt bound to this Order",
+            "status": "passed"
+          },
+          {
+            "name": "rejects an expired policy and self-approval of its proposal",
+            "status": "passed"
+          },
+          {
+            "name": "supports independent approval without trusting an approver ID in the request",
+            "status": "passed"
+          },
+          {
+            "name": "serializes competing operators and same-key retries, rejects changed intent, and preserves one posting",
+            "status": "passed"
+          },
+          {
+            "name": "enforces staff/day limits across separate Orders, including reversed adjustments",
+            "status": "passed"
+          },
+          {
+            "name": "reverses a mistaken waiver append-only and safely reopens the residual",
+            "status": "passed"
+          },
+          {
+            "name": "retains immutable adjustment evidence after Order closure",
+            "status": "passed"
+          },
+          {
+            "name": "limits refunds to genuine collected cash, never the waived amount",
+            "status": "passed"
+          },
+          {
+            "name": "rolls the request, adjustment, memorandum, audit and outbox back when Finance posting fails",
+            "status": "passed"
+          },
+          {
+            "name": "allows only one different-key winner across two authorized operators",
+            "status": "passed"
+          },
+          {
+            "name": "rejects cancelled Orders, wallet shortfalls and excess COD collection",
+            "status": "passed"
+          },
+          {
+            "name": "reverses unposted collection and its waiver together without touching original payable",
+            "status": "passed"
+          },
+          {
+            "name": "keeps a courier remittance shortage separate from an already fulfilled customer obligation",
+            "status": "passed"
+          },
+          {
+            "name": "recovers one waiver identity after physical BEFORE_COMMIT",
+            "status": "passed"
+          },
+          {
+            "name": "recovers one waiver identity after physical AFTER_COMMIT",
+            "status": "passed"
+          }
+        ]
+      }
+    ]
+  },
+  "orderPresentationFollowup": {
+    "passed": 60,
+    "failed": 0,
+    "files": [
+      {
+        "file": "apps/admin/src/cash-presentation.test.tsx",
+        "status": "passed",
+        "cases": [
+          {
+            "name": "distinguishes original, collected, waiver, balance and refunds in the management summary",
+            "status": "passed"
+          },
+          {
+            "name": "does not mount financial controls or policy details for unauthorized staff",
+            "status": "passed"
+          },
+          {
+            "name": "keeps original Order tax, fees and rounding distinct with exact decimal presentation",
+            "status": "passed"
+          }
+        ]
+      },
+      {
+        "file": "apps/storefront/features/orders/retail-tracking.test.tsx",
+        "status": "passed",
+        "cases": [
+          {
+            "name": "does not render a simulated consignment, amount or recent customer before an authorized result",
+            "status": "passed"
+          },
+          {
+            "name": "retains exact original total and never invents carrier, rider, estimate or receipt verification",
+            "status": "passed"
+          }
+        ]
+      },
+      {
+        "file": "apps/storefront/features/checkout/retail-settlement.test.tsx",
+        "status": "passed",
+        "cases": [
+          {
+            "name": "renders original81/cash80/waiver1/due0 without claiming full cash receipt or requesting more cash",
+            "status": "passed"
+          },
+          {
+            "name": "keeps historical fractions exact and flags inconsistent whole authority accessibly",
+            "status": "passed"
+          },
+          {
+            "name": "never requests COD after cancellation or refund and shows reversal balance from server",
+            "status": "passed"
+          }
+        ]
+      },
+      {
+        "file": "packages/database/src/checkout/placement.test.ts",
+        "status": "passed",
+        "cases": [
+          {
+            "name": "Checkout atomic placement on disposable PostgreSQL persists exact whole-taka terms for price 80.4000 tax 0 quantity 1",
+            "status": "passed"
+          },
+          {
+            "name": "Checkout atomic placement on disposable PostgreSQL persists exact whole-taka terms for price 80.5000 tax 0 quantity 1",
+            "status": "passed"
+          },
+          {
+            "name": "Checkout atomic placement on disposable PostgreSQL persists exact whole-taka terms for price 80.6000 tax 0 quantity 1",
+            "status": "passed"
+          },
+          {
+            "name": "Checkout atomic placement on disposable PostgreSQL persists exact whole-taka terms for price 79.9900 tax 0.4100 quantity 1",
+            "status": "passed"
+          },
+          {
+            "name": "Checkout atomic placement on disposable PostgreSQL persists exact whole-taka terms for price 33.3333 tax 0 quantity 3",
+            "status": "passed"
+          },
+          {
+            "name": "Checkout atomic placement on disposable PostgreSQL persists exact whole-taka terms for price 0.0000 tax 0 quantity 1",
+            "status": "passed"
+          },
+          {
+            "name": "Checkout atomic placement on disposable PostgreSQL refuses manual-wallet customer fees even under an explicit whole-taka policy",
+            "status": "passed"
+          },
+          {
+            "name": "Checkout atomic placement on disposable PostgreSQL refuses a new fractional payable under the legacy exact policy",
+            "status": "passed"
+          },
+          {
+            "name": "Checkout atomic placement on disposable PostgreSQL keeps fractional discounts exact and refuses unresolved tax in a whole-taka policy",
+            "status": "passed"
+          },
+          {
+            "name": "Checkout atomic placement on disposable PostgreSQL GUEST placement (Cart: false) commits only reviewed source and one unpaid obligation",
+            "status": "passed"
+          },
+          {
+            "name": "Checkout atomic placement on disposable PostgreSQL ACCOUNT placement (Cart: false) commits only reviewed source and one unpaid obligation",
+            "status": "passed"
+          },
+          {
+            "name": "Checkout atomic placement on disposable PostgreSQL GUEST placement (Cart: true) commits only reviewed source and one unpaid obligation",
+            "status": "passed"
+          },
+          {
+            "name": "Checkout atomic placement on disposable PostgreSQL ACCOUNT placement (Cart: true) commits only reviewed source and one unpaid obligation",
+            "status": "passed"
+          },
+          {
+            "name": "Checkout atomic placement on disposable PostgreSQL replays a lost response and serializes same-key and different-key submissions",
+            "status": "passed"
+          },
+          {
+            "name": "Checkout atomic placement on disposable PostgreSQL binds each guest grant to one Order and enforces Checkout uniqueness in PostgreSQL",
+            "status": "passed"
+          },
+          {
+            "name": "Checkout atomic placement on disposable PostgreSQL fails closed for the HTTP-bound engine and does not accept a component acknowledgement as final acceptance",
+            "status": "passed"
+          },
+          {
+            "name": "Checkout atomic placement on disposable PostgreSQL rejects a modified Cart and never converts it",
+            "status": "passed"
+          },
+          {
+            "name": "Checkout atomic placement on disposable PostgreSQL rolls back a failure after order",
+            "status": "passed"
+          },
+          {
+            "name": "Checkout atomic placement on disposable PostgreSQL rolls back a failure after inventory",
+            "status": "passed"
+          },
+          {
+            "name": "Checkout atomic placement on disposable PostgreSQL rolls back a failure after promotion",
+            "status": "passed"
+          },
+          {
+            "name": "Checkout atomic placement on disposable PostgreSQL rolls back a failure after payment",
+            "status": "passed"
+          },
+          {
+            "name": "Checkout atomic placement on disposable PostgreSQL rolls back a failure after cart",
+            "status": "passed"
+          },
+          {
+            "name": "Checkout atomic placement on disposable PostgreSQL rolls back a failure after outbox",
+            "status": "passed"
+          },
+          {
+            "name": "Checkout atomic placement on disposable PostgreSQL allows only one winner for the last stock",
+            "status": "passed"
+          },
+          {
+            "name": "Checkout atomic placement on disposable PostgreSQL allows only one winner for the last coupon",
+            "status": "passed"
+          },
+          {
+            "name": "Checkout atomic placement on disposable PostgreSQL sees a higher-priority tariff inserted by an overlapping writer before placement",
+            "status": "passed"
+          },
+          {
+            "name": "Checkout atomic placement on disposable PostgreSQL serializes account logout on either side of placement",
+            "status": "passed"
+          },
+          {
+            "name": "Checkout atomic placement on disposable PostgreSQL blocks disabled payment methods before any business effects",
+            "status": "passed"
+          },
+          {
+            "name": "Checkout atomic placement on disposable PostgreSQL does not commit an account COD order after a restriction is added",
+            "status": "passed"
+          },
+          {
+            "name": "Checkout atomic placement on disposable PostgreSQL observes the existing Checkout kill switch for new work",
+            "status": "passed"
+          },
+          {
+            "name": "Checkout atomic placement on disposable PostgreSQL preserves a legitimate zero price and zero shipping as an exact zero obligation",
+            "status": "passed"
+          },
+          {
+            "name": "Checkout atomic placement on disposable PostgreSQL serializes concurrent different keys for one draft",
+            "status": "passed"
+          },
+          {
+            "name": "Checkout atomic placement on disposable PostgreSQL rejects a newer authoritative price while preserving the old review receipt",
+            "status": "passed"
+          },
+          {
+            "name": "Checkout atomic placement on disposable PostgreSQL authorizes only the committed guest, gates transfer and claims, and reconciles a lost response",
+            "status": "passed"
+          },
+          {
+            "name": "Checkout atomic placement on disposable PostgreSQL shows actual Admin review, partial receipt and excess settlement to the account owner",
+            "status": "passed"
+          },
+          {
+            "name": "Checkout atomic placement on disposable PostgreSQL waits for destination suspension and does not expose an obsolete instruction snapshot",
+            "status": "passed"
+          },
+          {
+            "name": "Checkout atomic placement on disposable PostgreSQL keeps an expired pending claim for review and rejects a new claim after Worker cancellation",
+            "status": "passed"
+          },
+          {
+            "name": "Checkout atomic placement on disposable PostgreSQL serializes distinct claim keys and fails closed after destination suspension and expiry",
+            "status": "passed"
+          },
+          {
+            "name": "Checkout atomic placement on disposable PostgreSQL writes a private manual obligation, preserves original provenance and releases unpaid stock via Worker expiry",
+            "status": "passed"
+          },
+          {
+            "name": "Checkout atomic placement on disposable PostgreSQL serializes wallet destination suspension (writer-first)",
+            "status": "passed"
+          },
+          {
+            "name": "Checkout atomic placement on disposable PostgreSQL serializes wallet destination suspension (placement-first)",
+            "status": "passed"
+          },
+          {
+            "name": "Checkout atomic placement on disposable PostgreSQL rejects a destination without provider approval evidence even if marked approved",
+            "status": "passed"
+          },
+          {
+            "name": "Checkout atomic placement on disposable PostgreSQL measures a complete Cart with 5 distinct lines",
+            "status": "passed"
+          },
+          {
+            "name": "Checkout atomic placement on disposable PostgreSQL measures a complete Cart with 25 distinct lines",
+            "status": "passed"
+          },
+          {
+            "name": "Checkout atomic placement on disposable PostgreSQL measures a complete Cart with 100 distinct lines",
+            "status": "passed"
+          },
+          {
+            "name": "Checkout atomic placement on disposable PostgreSQL retries the entire intent after a synthetic serialization failure without duplicate effects",
+            "status": "passed"
+          },
+          {
+            "name": "Checkout atomic placement on disposable PostgreSQL recovers the same placement identity after physical BEFORE_COMMIT socket loss",
+            "status": "passed"
+          },
+          {
+            "name": "Checkout atomic placement on disposable PostgreSQL recovers the same placement identity after physical AFTER_COMMIT socket loss",
+            "status": "passed"
+          },
+          {
+            "name": "Checkout atomic placement on disposable PostgreSQL keeps GUEST committed recovery and payment status available while new purchasing is disabled",
+            "status": "passed"
+          },
+          {
+            "name": "Checkout atomic placement on disposable PostgreSQL keeps ACCOUNT committed recovery and payment status available while new purchasing is disabled",
+            "status": "passed"
+          },
+          {
+            "name": "Checkout atomic placement on disposable PostgreSQL keeps existing manual claim submission and exact recovery available after disabling new purchasing",
+            "status": "passed"
+          },
+          {
+            "name": "Checkout atomic placement on disposable PostgreSQL bounds a real placement row-lock timeout and permits an exact-key retry after release",
+            "status": "passed"
+          }
+        ]
+      }
+    ]
+  },
+  "overlappingRunsAreNotAdded": true,
+  "broadEarlierGreen": {
+    "passed": 507,
+    "failed": 0,
+    "files": 55,
+    "note": "Before later concurrent Auth integration; both builds passed in that run."
+  },
+  "broadLaterClosure": {
+    "passed": 503,
+    "failed": 5,
+    "files": 56,
+    "failures": [
+      "Four Shopper/Auth/Wishlist cases",
+      "Pool timeout fixture initial connection acquisition"
+    ],
+    "poolIsolatedRecheck": "PASS; also passed in final255 financial selection",
+    "status": "NOT_GREEN"
+  },
+  "shopperAuthLatestRecheck": {
+    "passed": 8,
+    "failed": 4,
+    "files": [
+      {
+        "file": "apps/api/src/shopper-auth.test.ts",
+        "status": "failed",
+        "cases": [
+          {
+            "name": "shopper realm and private Wishlist limits repeated verification-email requests with a durable counter",
+            "status": "passed"
+          },
+          {
+            "name": "shopper realm and private Wishlist requires verification, isolates Admin cookies, ignores CRM matches and protects writes",
+            "status": "failed"
+          },
+          {
+            "name": "shopper realm and private Wishlist documents provider-idempotent concurrent verification without issuing or transferring sessions",
+            "status": "passed"
+          },
+          {
+            "name": "shopper realm and private Wishlist rejects read and mutation after the configured 12-hour session TTL without shortening settings",
+            "status": "failed"
+          },
+          {
+            "name": "shopper realm and private Wishlist resets a password with a single-use capability and invalidates earlier sessions",
+            "status": "passed"
+          },
+          {
+            "name": "shopper realm and private Wishlist rejects expired verification and password-reset capabilities without changing the password",
+            "status": "passed"
+          },
+          {
+            "name": "shopper realm and private Wishlist authorizes guest and account sharing routes through real shopper sessions",
+            "status": "failed"
+          },
+          {
+            "name": "shopper realm and private Wishlist rejects a share capability from another storefront organization",
+            "status": "passed"
+          },
+          {
+            "name": "shopper realm and private Wishlist purges account Wishlist data on authorized CRM anonymization without deleting guest shares",
+            "status": "failed"
+          },
+          {
+            "name": "shopper realm and private Wishlist rate-limits repeated invalid guest management attempts with PostgreSQL counters",
+            "status": "passed"
+          },
+          {
+            "name": "shopper realm and private Wishlist rate limits consented Wishlist observations through the existing API limiter",
+            "status": "passed"
+          },
+          {
+            "name": "shopper realm and private Wishlist fails closed when the guest capability limiter database is unavailable",
+            "status": "passed"
+          }
+        ]
+      }
+    ]
+  },
+  "toolingCases": 28,
+  "builds": {
+    "storefront": "PASS",
+    "admin": "PASS"
+  },
+  "types": {
+    "backendBuild": "PASS",
+    "includingTests": "PASS"
+  },
+  "scopedLint": "PASS_FINANCIAL_FILES_ONLY",
+  "fullRepositoryLint": "NOT_CERTIFIED_CONCURRENT_AUTH_FINDINGS_OBSERVED",
+  "browser": {
+    "date": "2026-11-10",
+    "mode": "Actual local Next Admin/Storefront + Fastify + disposable PostgreSQL18; synthetic financial records only",
+    "cases": [
+      {
+        "name": "Real Admin sign-in through Next proxy",
+        "status": "PASS"
+      },
+      {
+        "name": "Actual authorized COD81/cash80/waiver1/due0 read and disabled new application",
+        "status": "PASS"
+      },
+      {
+        "name": "Cash settlement viewport 320",
+        "status": "PASS"
+      },
+      {
+        "name": "Cash settlement viewport 390",
+        "status": "PASS"
+      },
+      {
+        "name": "Cash settlement viewport 768",
+        "status": "PASS"
+      },
+      {
+        "name": "Cash settlement viewport 1280",
+        "status": "PASS"
+      },
+      {
+        "name": "Dark and forced-color financial view",
+        "status": "PASS"
+      },
+      {
+        "name": "Private history bounded and production command blocked through real API",
+        "status": "PASS"
+      },
+      {
+        "name": "Reviewed policy remains visibly inactive",
+        "status": "PASS"
+      },
+      {
+        "name": "Policy proposal form is accessible without activating applications",
+        "status": "PASS"
+      },
+      {
+        "name": "Real Storefront shared money whole/historical/mismatch/signed/unavailable specimens",
+        "status": "PASS"
+      },
+      {
+        "name": "Actual seeded PDP price is whole without decimal suffix",
+        "status": "PASS"
+      },
+      {
+        "name": "Actual PDP to Cart retains whole price and nonfinal evaluation",
+        "status": "PASS"
+      },
+      {
+        "name": "Public Checkout remains unavailable in actual Next route",
+        "status": "PASS"
+      },
+      {
+        "name": "No live commerce marketing request",
+        "status": "PASS"
+      }
+    ],
+    "marketingRequests": 0,
+    "notVerified": [
+      "Successful public Checkout and collection",
+      "Policy activation",
+      "Native zoom and human screen reader/physical devices",
+      "Full organization-switch UI and browser mutation recovery"
+    ]
+  },
+  "notVerified": [
+    "Approved real financial policy or collection",
+    "Native zoom/human AT/physical devices",
+    "Full organization/account switch/revocation browser acceptance",
+    "Posted/remitted/refund-encumbered corrections",
+    "Actual Catalog normalization/authoring policy activation",
+    "LinuxCI and immutable target deployment compatibility"
+  ],
+  "externalOperations": {
+    "push": false,
+    "deployment": false,
+    "publication": false,
+    "liveProvider": false,
+    "VPS": false
+  },
+  "localRuntimeShutdown": "Task-owned browser, Next processes, fixture API and disposable PostgreSQL stopped; temporary diagnostics retained.",
+  "finalGuards": {
+    "migrationHistory": "PASS_75_51",
+    "secrets": "PASS",
+    "architecture": "PASS_13_PACKAGES",
+    "hardening": "PASS",
+    "scopedFinancialLint": "PASS",
+    "scopedFormatting": "PASS",
+    "gitDiffCheck": "PASS",
+    "finalPopulatedUpgrades": "PASS_24"
+  }
+}

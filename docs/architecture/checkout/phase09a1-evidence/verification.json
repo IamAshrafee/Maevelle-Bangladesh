@@ -1,0 +1,546 @@
+{
+  "phase": "09A.1",
+  "date": "2026-11-10",
+  "baselineCommit": "947c2964979ac7e22135146a123d8ebf32ede6aa",
+  "sourceState": "UNCOMMITTED_09A_AND_09A1",
+  "overall": "PARTIAL",
+  "activation": "BLOCKED",
+  "database": {
+    "engine": "PostgreSQL18",
+    "target": "task-owned disposable loopback cluster; per-file isolated synthetic databases",
+    "persistentMigration": false,
+    "migrationTail": "3226_retail_money_settlement"
+  },
+  "finalFocused": {
+    "passed": 89,
+    "failed": 0,
+    "files": [
+      {
+        "file": "apps/api/src/cash-shortfall.test.ts",
+        "status": "passed",
+        "cases": [
+          {
+            "name": "returns exact original/cash/residual with an explicit unavailable activation state",
+            "status": "passed",
+            "durationMs": 64.43
+          },
+          {
+            "name": "never activates synthetic adjustment approval through HTTP",
+            "status": "passed",
+            "durationMs": 9.84
+          },
+          {
+            "name": "denies insufficient capability and a foreign tenant",
+            "status": "passed",
+            "durationMs": 2.04
+          },
+          {
+            "name": "rejects caller-supplied approval authority and unsupported cash precision at the boundary",
+            "status": "passed",
+            "durationMs": 1.25
+          }
+        ]
+      },
+      {
+        "file": "packages/database/src/migrate.test.ts",
+        "status": "passed",
+        "cases": [
+          {
+            "name": "clean PostgreSQL migration path migrates a disposable empty database to the current schema and is safe to rerun",
+            "status": "passed",
+            "durationMs": 4556.23
+          }
+        ]
+      },
+      {
+        "file": "packages/database/src/checkout/placement.test.ts",
+        "status": "passed",
+        "cases": [
+          {
+            "name": "Checkout atomic placement on disposable PostgreSQL persists exact whole-taka terms for price 80.4000 tax 0 quantity 1",
+            "status": "passed",
+            "durationMs": 256.98
+          },
+          {
+            "name": "Checkout atomic placement on disposable PostgreSQL persists exact whole-taka terms for price 80.5000 tax 0 quantity 1",
+            "status": "passed",
+            "durationMs": 121.39
+          },
+          {
+            "name": "Checkout atomic placement on disposable PostgreSQL persists exact whole-taka terms for price 80.6000 tax 0 quantity 1",
+            "status": "passed",
+            "durationMs": 132.55
+          },
+          {
+            "name": "Checkout atomic placement on disposable PostgreSQL persists exact whole-taka terms for price 79.9900 tax 0.4100 quantity 1",
+            "status": "passed",
+            "durationMs": 123.08
+          },
+          {
+            "name": "Checkout atomic placement on disposable PostgreSQL persists exact whole-taka terms for price 33.3333 tax 0 quantity 3",
+            "status": "passed",
+            "durationMs": 96.34
+          },
+          {
+            "name": "Checkout atomic placement on disposable PostgreSQL persists exact whole-taka terms for price 0.0000 tax 0 quantity 1",
+            "status": "passed",
+            "durationMs": 96.16
+          },
+          {
+            "name": "Checkout atomic placement on disposable PostgreSQL refuses manual-wallet customer fees even under an explicit whole-taka policy",
+            "status": "passed",
+            "durationMs": 74.78
+          },
+          {
+            "name": "Checkout atomic placement on disposable PostgreSQL refuses a new fractional payable under the legacy exact policy",
+            "status": "passed",
+            "durationMs": 72.84
+          },
+          {
+            "name": "Checkout atomic placement on disposable PostgreSQL keeps fractional discounts exact and refuses unresolved tax in a whole-taka policy",
+            "status": "passed",
+            "durationMs": 85.13
+          },
+          {
+            "name": "Checkout atomic placement on disposable PostgreSQL GUEST placement (Cart: false) commits only reviewed source and one unpaid obligation",
+            "status": "passed",
+            "durationMs": 152.83
+          },
+          {
+            "name": "Checkout atomic placement on disposable PostgreSQL ACCOUNT placement (Cart: false) commits only reviewed source and one unpaid obligation",
+            "status": "passed",
+            "durationMs": 134.62
+          },
+          {
+            "name": "Checkout atomic placement on disposable PostgreSQL GUEST placement (Cart: true) commits only reviewed source and one unpaid obligation",
+            "status": "passed",
+            "durationMs": 122.36
+          },
+          {
+            "name": "Checkout atomic placement on disposable PostgreSQL ACCOUNT placement (Cart: true) commits only reviewed source and one unpaid obligation",
+            "status": "passed",
+            "durationMs": 126.68
+          },
+          {
+            "name": "Checkout atomic placement on disposable PostgreSQL replays a lost response and serializes same-key and different-key submissions",
+            "status": "passed",
+            "durationMs": 1142.27
+          },
+          {
+            "name": "Checkout atomic placement on disposable PostgreSQL binds each guest grant to one Order and enforces Checkout uniqueness in PostgreSQL",
+            "status": "passed",
+            "durationMs": 193.13
+          },
+          {
+            "name": "Checkout atomic placement on disposable PostgreSQL fails closed for the HTTP-bound engine and does not accept a component acknowledgement as final acceptance",
+            "status": "passed",
+            "durationMs": 68.98
+          },
+          {
+            "name": "Checkout atomic placement on disposable PostgreSQL rejects a modified Cart and never converts it",
+            "status": "passed",
+            "durationMs": 88.36
+          },
+          {
+            "name": "Checkout atomic placement on disposable PostgreSQL rolls back a failure after order",
+            "status": "passed",
+            "durationMs": 125.56
+          },
+          {
+            "name": "Checkout atomic placement on disposable PostgreSQL rolls back a failure after inventory",
+            "status": "passed",
+            "durationMs": 118.2
+          },
+          {
+            "name": "Checkout atomic placement on disposable PostgreSQL rolls back a failure after promotion",
+            "status": "passed",
+            "durationMs": 108.1
+          },
+          {
+            "name": "Checkout atomic placement on disposable PostgreSQL rolls back a failure after payment",
+            "status": "passed",
+            "durationMs": 130.57
+          },
+          {
+            "name": "Checkout atomic placement on disposable PostgreSQL rolls back a failure after cart",
+            "status": "passed",
+            "durationMs": 112.52
+          },
+          {
+            "name": "Checkout atomic placement on disposable PostgreSQL rolls back a failure after outbox",
+            "status": "passed",
+            "durationMs": 141.66
+          },
+          {
+            "name": "Checkout atomic placement on disposable PostgreSQL allows only one winner for the last stock",
+            "status": "passed",
+            "durationMs": 147.86
+          },
+          {
+            "name": "Checkout atomic placement on disposable PostgreSQL allows only one winner for the last coupon",
+            "status": "passed",
+            "durationMs": 134.94
+          },
+          {
+            "name": "Checkout atomic placement on disposable PostgreSQL sees a higher-priority tariff inserted by an overlapping writer before placement",
+            "status": "passed",
+            "durationMs": 83.51
+          },
+          {
+            "name": "Checkout atomic placement on disposable PostgreSQL serializes account logout on either side of placement",
+            "status": "passed",
+            "durationMs": 121.39
+          },
+          {
+            "name": "Checkout atomic placement on disposable PostgreSQL blocks disabled payment methods before any business effects",
+            "status": "passed",
+            "durationMs": 56.22
+          },
+          {
+            "name": "Checkout atomic placement on disposable PostgreSQL does not commit an account COD order after a restriction is added",
+            "status": "passed",
+            "durationMs": 68.49
+          },
+          {
+            "name": "Checkout atomic placement on disposable PostgreSQL observes the existing Checkout kill switch for new work",
+            "status": "passed",
+            "durationMs": 48.55
+          },
+          {
+            "name": "Checkout atomic placement on disposable PostgreSQL preserves a legitimate zero price and zero shipping as an exact zero obligation",
+            "status": "passed",
+            "durationMs": 87.05
+          },
+          {
+            "name": "Checkout atomic placement on disposable PostgreSQL serializes concurrent different keys for one draft",
+            "status": "passed",
+            "durationMs": 69.59
+          },
+          {
+            "name": "Checkout atomic placement on disposable PostgreSQL rejects a newer authoritative price while preserving the old review receipt",
+            "status": "passed",
+            "durationMs": 62.17
+          },
+          {
+            "name": "Checkout atomic placement on disposable PostgreSQL authorizes only the committed guest, gates transfer and claims, and reconciles a lost response",
+            "status": "passed",
+            "durationMs": 140.16
+          },
+          {
+            "name": "Checkout atomic placement on disposable PostgreSQL shows actual Admin review, partial receipt and excess settlement to the account owner",
+            "status": "passed",
+            "durationMs": 235.23
+          },
+          {
+            "name": "Checkout atomic placement on disposable PostgreSQL waits for destination suspension and does not expose an obsolete instruction snapshot",
+            "status": "passed",
+            "durationMs": 90.78
+          },
+          {
+            "name": "Checkout atomic placement on disposable PostgreSQL keeps an expired pending claim for review and rejects a new claim after Worker cancellation",
+            "status": "passed",
+            "durationMs": 162.26
+          },
+          {
+            "name": "Checkout atomic placement on disposable PostgreSQL serializes distinct claim keys and fails closed after destination suspension and expiry",
+            "status": "passed",
+            "durationMs": 179.65
+          },
+          {
+            "name": "Checkout atomic placement on disposable PostgreSQL writes a private manual obligation, preserves original provenance and releases unpaid stock via Worker expiry",
+            "status": "passed",
+            "durationMs": 89.72
+          },
+          {
+            "name": "Checkout atomic placement on disposable PostgreSQL serializes wallet destination suspension (writer-first)",
+            "status": "passed",
+            "durationMs": 109.07
+          },
+          {
+            "name": "Checkout atomic placement on disposable PostgreSQL serializes wallet destination suspension (placement-first)",
+            "status": "passed",
+            "durationMs": 89.37
+          },
+          {
+            "name": "Checkout atomic placement on disposable PostgreSQL rejects a destination without provider approval evidence even if marked approved",
+            "status": "passed",
+            "durationMs": 60.16
+          },
+          {
+            "name": "Checkout atomic placement on disposable PostgreSQL measures a complete Cart with 5 distinct lines",
+            "status": "passed",
+            "durationMs": 106.33
+          },
+          {
+            "name": "Checkout atomic placement on disposable PostgreSQL measures a complete Cart with 25 distinct lines",
+            "status": "passed",
+            "durationMs": 117.28
+          },
+          {
+            "name": "Checkout atomic placement on disposable PostgreSQL measures a complete Cart with 100 distinct lines",
+            "status": "passed",
+            "durationMs": 266.62
+          },
+          {
+            "name": "Checkout atomic placement on disposable PostgreSQL retries the entire intent after a synthetic serialization failure without duplicate effects",
+            "status": "passed",
+            "durationMs": 82.33
+          },
+          {
+            "name": "Checkout atomic placement on disposable PostgreSQL recovers the same placement identity after physical BEFORE_COMMIT socket loss",
+            "status": "passed",
+            "durationMs": 181.78
+          },
+          {
+            "name": "Checkout atomic placement on disposable PostgreSQL recovers the same placement identity after physical AFTER_COMMIT socket loss",
+            "status": "passed",
+            "durationMs": 149.53
+          },
+          {
+            "name": "Checkout atomic placement on disposable PostgreSQL keeps GUEST committed recovery and payment status available while new purchasing is disabled",
+            "status": "passed",
+            "durationMs": 113.81
+          },
+          {
+            "name": "Checkout atomic placement on disposable PostgreSQL keeps ACCOUNT committed recovery and payment status available while new purchasing is disabled",
+            "status": "passed",
+            "durationMs": 140.56
+          },
+          {
+            "name": "Checkout atomic placement on disposable PostgreSQL keeps existing manual claim submission and exact recovery available after disabling new purchasing",
+            "status": "passed",
+            "durationMs": 78.99
+          },
+          {
+            "name": "Checkout atomic placement on disposable PostgreSQL bounds a real placement row-lock timeout and permits an exact-key retry after release",
+            "status": "passed",
+            "durationMs": 2097.71
+          }
+        ]
+      },
+      {
+        "file": "packages/database/src/commerce/retail-money.test.ts",
+        "status": "passed",
+        "cases": [
+          {
+            "name": "rounds 80.4000 exactly once to 80.0000 with explicit adjustment -0.4000",
+            "status": "passed",
+            "durationMs": 1.9
+          },
+          {
+            "name": "rounds 80.5000 exactly once to 81.0000 with explicit adjustment 0.5000",
+            "status": "passed",
+            "durationMs": 0.21
+          },
+          {
+            "name": "rounds 80.6000 exactly once to 81.0000 with explicit adjustment 0.4000",
+            "status": "passed",
+            "durationMs": 0.14
+          },
+          {
+            "name": "rounds 99.9900 exactly once to 100.0000 with explicit adjustment 0.0100",
+            "status": "passed",
+            "durationMs": 0.15
+          },
+          {
+            "name": "rounds 100.0000 exactly once to 100.0000 with explicit adjustment 0.0000",
+            "status": "passed",
+            "durationMs": 0.17
+          },
+          {
+            "name": "rounds 0.0000 exactly once to 0.0000 with explicit adjustment 0.0000",
+            "status": "passed",
+            "durationMs": 0.12
+          },
+          {
+            "name": "rounds 0.0001 exactly once to 0.0000 with explicit adjustment -0.0001",
+            "status": "passed",
+            "durationMs": 0.12
+          },
+          {
+            "name": "rounds -0.5000 exactly once to -1.0000 with explicit adjustment -0.5000",
+            "status": "passed",
+            "durationMs": 0.09
+          },
+          {
+            "name": "rounds -80.6000 exactly once to -81.0000 with explicit adjustment -0.4000",
+            "status": "passed",
+            "durationMs": 0.16
+          },
+          {
+            "name": "rounds 999999999999999.6000 exactly once to 1000000000000000.0000 with explicit adjustment 0.4000",
+            "status": "passed",
+            "durationMs": 0.25
+          },
+          {
+            "name": "validates whole customer authoring without truncating fractional costs or old prices",
+            "status": "passed",
+            "durationMs": 0.81
+          },
+          {
+            "name": "rejects incomplete policy provenance",
+            "status": "passed",
+            "durationMs": 0.12
+          }
+        ]
+      },
+      {
+        "file": "packages/database/src/commerce/retail-price-audit.test.ts",
+        "status": "passed",
+        "cases": [
+          {
+            "name": "audits fractional customer prices without normalizing them or reducing cost precision",
+            "status": "passed",
+            "durationMs": 5197.03
+          }
+        ]
+      },
+      {
+        "file": "packages/database/src/payments/cash-shortfall/settlement.test.ts",
+        "status": "passed",
+        "cases": [
+          {
+            "name": "settles 81/80/1 without changing original payable, cash, courier custody or creating a money conversion",
+            "status": "passed",
+            "durationMs": 148.9
+          },
+          {
+            "name": "rejects waiver for actual collection 81 when not the approved residual",
+            "status": "passed",
+            "durationMs": 38.07
+          },
+          {
+            "name": "rejects waiver for actual collection 79 when not the approved residual",
+            "status": "passed",
+            "durationMs": 34.86
+          },
+          {
+            "name": "keeps public activation blocked even with stored synthetic approvals",
+            "status": "passed",
+            "durationMs": 39.8
+          },
+          {
+            "name": "requires capability, tenant authority and genuine receipt bound to this Order",
+            "status": "passed",
+            "durationMs": 58.83
+          },
+          {
+            "name": "rejects an expired policy and self-approval of its proposal",
+            "status": "passed",
+            "durationMs": 29.92
+          },
+          {
+            "name": "supports independent approval without trusting an approver ID in the request",
+            "status": "passed",
+            "durationMs": 60.49
+          },
+          {
+            "name": "serializes competing operators and same-key retries, rejects changed intent, and preserves one posting",
+            "status": "passed",
+            "durationMs": 184.82
+          },
+          {
+            "name": "enforces staff/day limits across separate Orders, including reversed adjustments",
+            "status": "passed",
+            "durationMs": 138.03
+          },
+          {
+            "name": "reverses a mistaken waiver append-only and safely reopens the residual",
+            "status": "passed",
+            "durationMs": 73.14
+          },
+          {
+            "name": "retains immutable adjustment evidence after Order closure",
+            "status": "passed",
+            "durationMs": 64.51
+          },
+          {
+            "name": "limits refunds to genuine collected cash, never the waived amount",
+            "status": "passed",
+            "durationMs": 84.22
+          },
+          {
+            "name": "rolls the request, adjustment, memorandum, audit and outbox back when Finance posting fails",
+            "status": "passed",
+            "durationMs": 50.39
+          },
+          {
+            "name": "allows only one different-key winner across two authorized operators",
+            "status": "passed",
+            "durationMs": 53.16
+          },
+          {
+            "name": "rejects cancelled Orders, wallet shortfalls and excess COD collection",
+            "status": "passed",
+            "durationMs": 82.75
+          },
+          {
+            "name": "reverses unposted collection and its waiver together without touching original payable",
+            "status": "passed",
+            "durationMs": 66.89
+          },
+          {
+            "name": "keeps a courier remittance shortage separate from an already fulfilled customer obligation",
+            "status": "passed",
+            "durationMs": 53.17
+          },
+          {
+            "name": "recovers one waiver identity after physical BEFORE_COMMIT",
+            "status": "passed",
+            "durationMs": 135.56
+          },
+          {
+            "name": "recovers one waiver identity after physical AFTER_COMMIT",
+            "status": "passed",
+            "durationMs": 125.43
+          }
+        ]
+      }
+    ]
+  },
+  "broadInitial": {
+    "passed": 459,
+    "failed": 1,
+    "files": 44,
+    "failure": "Extra authority field was silently stripped before policy gate; strict prevalidation added and API cases rechecked. Broad suite not rerun wholesale.",
+    "overlapsFinalFocused": true
+  },
+  "otherChecks": {
+    "toolingTests": {
+      "passed": 28
+    },
+    "populatedUpgradeCases": {
+      "passed": 24,
+      "noOpReruns": 2
+    },
+    "typecheckBuild": "PASS",
+    "typecheckIncludingTests": "PASS",
+    "adminProductionBuild": "PASS",
+    "storefrontProductionBuild": "PASS",
+    "migrationHistory": "PASS_75_REGISTERED_51_IMMUTABLE",
+    "secrets": "PASS",
+    "architecture": "PASS_13_PACKAGES",
+    "hardening": "PASS",
+    "focusedLint": "PASS",
+    "focusedFormatting": "PASS",
+    "trackedWhitespace": "PASS"
+  },
+  "browser": "NOT_RUN_FOR_09A1_BACKEND_ASSIGNMENT",
+  "limitations": [
+    "Business/tax/invoice/accounting/courier/role/limit approvals outstanding",
+    "No approved line/refund rounding allocation",
+    "Multiple partial COD receipts composition not specifically verified",
+    "Posted/remitted COD collection correction blocked",
+    "Catalog audit tested only on synthetic records; existing authoring validation prepared, not activated",
+    "Financial frontend implementation and human/operator acceptance pending",
+    "LinuxCI and immutable old/new target compatibility unverified"
+  ],
+  "operations": {
+    "commit": false,
+    "push": false,
+    "imagePublication": false,
+    "deployment": false,
+    "liveCollectionOrRefund": false,
+    "marketingActivation": false
+  }
+}

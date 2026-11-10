@@ -1,0 +1,163 @@
+{
+  "scope": "168 synthetic jobs, 8 runners, disposable PostgreSQL 18; actual loopback Fastify HTTP PDP/privacy plus domain commands; no Checkout HTTP success or production capacity claim",
+  "elapsedMs": 1200.2659000000003,
+  "cpuMicroseconds": {
+    "user": 672000,
+    "system": 297000
+  },
+  "rssBytes": 326115328,
+  "latencyMs": {
+    "http-pdp": {
+      "n": 24,
+      "p50": 7.819799999999304,
+      "p95": 160.29390000000058,
+      "p99": 180.7985000000008
+    },
+    "cart-create-and-add": {
+      "n": 24,
+      "p50": 22.958300000000236,
+      "p95": 103.71649999999863,
+      "p99": 123.30279999999948
+    },
+    "different-account-receipt": {
+      "n": 24,
+      "p50": 82.5560000000005,
+      "p95": 162.37129999999888,
+      "p99": 180.19750000000022
+    },
+    "http-privacy-denial": {
+      "n": 24,
+      "p50": 6.684499999999389,
+      "p95": 15.510600000001432,
+      "p99": 131.02139999999963
+    },
+    "consumer-batch": {
+      "n": 24,
+      "p50": 16.89300000000003,
+      "p95": 42.42569999999978,
+      "p99": 75.72040000000015
+    },
+    "aggregate-report": {
+      "n": 24,
+      "p50": 3.5218000000004395,
+      "p95": 21.485500000000684,
+      "p99": 83.47610000000168
+    },
+    "refund-reconciliation": {
+      "n": 24,
+      "p50": 121.27520000000004,
+      "p95": 254.77050000000054,
+      "p99": 292.72060000000056
+    }
+  },
+  "httpHeadersLatencyMs": {
+    "n": 56,
+    "p50": 7.088599999999133,
+    "p95": 130.65589999999975,
+    "p99": 180.6954999999998
+  },
+  "observedDomainQueries": 4468,
+  "databaseSamples": [
+    {
+      "connections": 8,
+      "lockwaits": 1
+    },
+    {
+      "connections": 8,
+      "lockwaits": 2
+    },
+    {
+      "connections": 9,
+      "lockwaits": 3
+    },
+    {
+      "connections": 9,
+      "lockwaits": 0
+    },
+    {
+      "connections": 9,
+      "lockwaits": 5
+    },
+    {
+      "connections": 9,
+      "lockwaits": 4
+    },
+    {
+      "connections": 9,
+      "lockwaits": 3
+    },
+    {
+      "connections": 9,
+      "lockwaits": 2
+    },
+    {
+      "connections": 9,
+      "lockwaits": 4
+    },
+    {
+      "connections": 9,
+      "lockwaits": 3
+    },
+    {
+      "connections": 9,
+      "lockwaits": 1
+    },
+    {
+      "connections": 8,
+      "lockwaits": 3
+    },
+    {
+      "connections": 8,
+      "lockwaits": 2
+    },
+    {
+      "connections": 8,
+      "lockwaits": 3
+    },
+    {
+      "connections": 8,
+      "lockwaits": 3
+    },
+    {
+      "connections": 8,
+      "lockwaits": 3
+    },
+    {
+      "connections": 8,
+      "lockwaits": 2
+    },
+    {
+      "connections": 8,
+      "lockwaits": 1
+    },
+    {
+      "connections": 8,
+      "lockwaits": 0
+    },
+    {
+      "connections": 8,
+      "lockwaits": 0
+    },
+    {
+      "connections": 8,
+      "lockwaits": 0
+    }
+  ],
+  "deadlocksDelta": 0,
+  "databaseGrowthBytes": 2116432,
+  "errors": {},
+  "final": {
+    "receipts": 48,
+    "received": "1920.0000",
+    "refunds": 24,
+    "balance": "1800.0000",
+    "pending": 0
+  },
+  "limitations": [
+    "PDP/privacy HTTP only; remaining timings are domain-operation elapsed time",
+    "No deployed hardware/network, human/device, or production SLO",
+    "Query counter covers instrumented domain client, not fixture setup or HTTP queries",
+    "Pool pressure sampled via pg_stat_activity; no driver pool queue instrumentation",
+    "5/25/100-line Checkout, stock and coupon contention measured separately in placement regression"
+  ]
+}

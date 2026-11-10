@@ -1,0 +1,41 @@
+{
+  "browser": "Chrome/156.0.8078.80; dedicated headless profile; production standalone Next 16.4.2 servers → test-mode Fastify → random disposable PostgreSQL 18",
+  "cases": [
+    {
+      "name": "Actual storage denial still permits server-confirmed refusal",
+      "status": "PASS"
+    },
+    {
+      "name": "Preference 429 never displays a grant and recovers",
+      "status": "PASS"
+    },
+    {
+      "name": "Preference 502 never displays a grant and recovers",
+      "status": "PASS"
+    },
+    {
+      "name": "Preference 503 never displays a grant and recovers",
+      "status": "PASS"
+    },
+    {
+      "name": "Preference BROKEN_JSON never displays a grant and recovers",
+      "status": "PASS"
+    },
+    {
+      "name": "Committed withdrawal with lost HTTP response is not reported saved and reloads durable refusal",
+      "status": "PASS"
+    },
+    {
+      "name": "400 percent CSS reflow and forced colors retain scrollable privacy controls",
+      "status": "PASS"
+    }
+  ],
+  "marketingRequests": 0,
+  "limitations": [
+    "Local standalone production Next proxies and test-mode API over HTTP; no deployed HTTPS evidence",
+    "Response-stage CDP injection represents actual lost browser HTTP response, not an unknown PostgreSQL commit",
+    "CSS 400 percent is not native zoom or human AT",
+    "No public purchase or collection enabled"
+  ],
+  "provenance": "Existing 07B/08 harness rerun against 09A builds; 18 distinct cases, earlier next-start smoke overlaps and is not added"
+}

@@ -1,0 +1,21 @@
+{
+  "scope": "Local PostgreSQL 18 actual pg_dump/pg_restore; current source only, no deployed or old-image compatibility claim",
+  "cases": [
+    {
+      "name": "dump/restore preserves receipt identity and financial/outbox conservation",
+      "status": "PASS"
+    },
+    {
+      "name": "old snapshot demonstrably predates withdrawal/revocation; reopening blocked until reconciliation",
+      "status": "PASS"
+    },
+    {
+      "name": "scoped semantic revocation/withdrawal reconciliation preserves financial history",
+      "status": "PASS"
+    },
+    {
+      "name": "actual Worker SIGKILL/restart then graceful IPC shutdown; unique commerce facts retained",
+      "status": "PASS"
+    }
+  ]
+}

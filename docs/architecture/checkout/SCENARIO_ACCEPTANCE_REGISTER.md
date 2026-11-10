@@ -1,5 +1,30 @@
 # Scenario and acceptance register
 
+## Phase 09A.2 addendum
+
+**PARTIAL locally; release BLOCKED.** The [40 outcomes](PHASE_09A2_ACCEPTANCE_REGISTER.md) and [report](PHASE_09A2_IMPLEMENTATION_REPORT.md) record exact monetary UI, protected read models, truthful cash settlement and15 actual browser checks. Financial255 selection passes. Later broad508 rerun remains open on current-source auth and initial pool acquisition timing; isolated pool retry passed. Earlier green507 run is separately qualified. No phase/policy approval or public activation is inferred.
+
+## Phase 09A.1 financial addendum — 2026-11-10
+
+**PARTIAL locally; release BLOCKED.** The [financial report](PHASE_09A1_FINANCIAL_POLICY_REPORT.md) records all 34 outcomes and 40 requested monetary/cash cases, distinguishing actual PostgreSQL, unit-only and missing evidence. Final focused 89 tests pass; broad 459/1 failure exposed API field stripping, fixed and rechecked narrowly. Counts overlap. Both UI builds pass; no 09A.1 browser acceptance claimed. Tax/invoice/rounding, cash policy/accounting/courier, allocation, posted correction and 09A.2 UI gates remain open. No earlier phase promoted and no public/persistent operation occurred.
+
+## Phase 09A execution addendum — 2026-11-10
+
+Overall **PARTIAL locally**, release **BLOCKED**; no earlier phase promoted.
+[Report/40 outcomes](PHASE_09A_IMPLEMENTATION_REPORT.md) and
+[release register](PHASE_09_RELEASE_READINESS_REGISTER.md) reconcile current scope.
+S09–16/S19–34 have expanded real PostgreSQL Finance/physical-COMMIT and kill-switch
+evidence; S38/39 have actual Worker process restart; S41/S42 have physical consent
+and current standalone-browser rechecks; S46 has a reproduced/fixed Worker logger
+leak. 413 distinct scoped regression cases/40 files verified across the initial
+run and corrected fresh-migration check; 28 separate tooling cases; 18 browser
+cases; 168 mixed jobs; scoped actual local dump/restore/revocation reconciliation.
+These do not establish S01–03 successful HTTP/browser purchasing, approved guest
+recovery, all-sink canaries, complete Admin revocation timing, native zoom/human
+devices, Linux CI, deployed HTTPS, target rollback or external provider acceptance.
+Public purchasing/collection/marketing stay disabled. No commit/push/image
+publication/deployment/persistent migration occurred.
+
 ## Phase 02B execution addendum — 2026-11-04
 
 Overall **PARTIAL**; Phase 01B remains PARTIAL. See the [02B report](PHASE_02B_IMPLEMENTATION_REPORT.md) and [machine-readable evidence](PHASE_02B_VERIFICATION.json). The Phase 00 scenarios below remain a specification, not blanket passing evidence.

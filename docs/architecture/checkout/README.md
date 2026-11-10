@@ -1,5 +1,25 @@
 # Complete Checkout — Phase 00
 
+## Current local checkpoint — Phase 09A.2
+
+Financial presentation is **PARTIAL; release/activation BLOCKED**. See [implementation report](PHASE_09A2_IMPLEMENTATION_REPORT.md), [40-outcome register](PHASE_09A2_ACCEPTANCE_REGISTER.md), [evidence](phase09a2-evidence/verification.json) and [next-stage handoff](PHASE_09A2_NEXT_STAGE_HANDOFF.md). Exact retail display, truthful settlement, protected policy/eligibility reads and read-only price review are integrated. Policy approvals, authoring activation, broader current-source auth and human/deployed gates remain open. No commit or live operation by this agent.
+
+## Previous local checkpoint — Phase 09A.1
+
+Financial backend is **PARTIAL; activation BLOCKED**. Read [financial report](PHASE_09A1_FINANCIAL_POLICY_REPORT.md), [decisions](PHASE_09A1_FINANCIAL_DECISIONS.md) and [09A.2 frontend handoff](PHASE_09A2_FRONTEND_HANDOFF.md). Migration 3226, explicit whole-BDT commitment and auditable synthetic cash settlement are implemented. No real policy approval or UI completion is implied. Existing 09A work and earlier verdicts are preserved.
+
+## Previous checkpoint — Phase 09A
+
+Phase 09A is **PARTIAL locally; release/activation BLOCKED**. See the
+[implementation report](PHASE_09A_IMPLEMENTATION_REPORT.md),
+[release-readiness register](PHASE_09_RELEASE_READINESS_REGISTER.md),
+[operational runbook](PHASE_09_OPERATIONAL_RUNBOOK.md) and
+[Phase 09B handoff](PHASE_09B_HANDOFF.md). Cross-account Finance numbering and
+Worker log leakage were fixed with current evidence; physical money/consent
+COMMIT, local restore/revocation and whole Worker restart coverage expanded.
+Earlier phase verdicts remain unchanged. No commit, publication, persistent
+migration, deployment or public purchase/payment/marketing activation occurred.
+
 Planning baseline: 2026-11-04 (Asia/Dhaka), branch `main`, HEAD `7ca66d1d56aa42d194fa0e2a92cad86d42b4c75f`. Initial tracked/untracked working tree: clean. This package specifies recommended behavior; it does not enable Checkout or establish runtime acceptance.
 
 Phase 01A backend foundation is now implemented and locally verified, with purchases still disabled. See the [implementation report](PHASE_01A_IMPLEMENTATION_REPORT.md) and [actual backend / transaction contract](PHASE_01A_BACKEND_CONTRACT.md). Phase 00 documents below remain the planning baseline.

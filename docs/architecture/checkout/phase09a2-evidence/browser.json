@@ -1,0 +1,73 @@
+{
+  "date": "2026-11-10",
+  "mode": "Actual local Next Admin/Storefront + Fastify + disposable PostgreSQL18; synthetic financial records only",
+  "cases": [
+    {
+      "name": "Real Admin sign-in through Next proxy",
+      "status": "PASS"
+    },
+    {
+      "name": "Actual authorized COD81/cash80/waiver1/due0 read and disabled new application",
+      "status": "PASS"
+    },
+    {
+      "name": "Cash settlement viewport 320",
+      "status": "PASS"
+    },
+    {
+      "name": "Cash settlement viewport 390",
+      "status": "PASS"
+    },
+    {
+      "name": "Cash settlement viewport 768",
+      "status": "PASS"
+    },
+    {
+      "name": "Cash settlement viewport 1280",
+      "status": "PASS"
+    },
+    {
+      "name": "Dark and forced-color financial view",
+      "status": "PASS"
+    },
+    {
+      "name": "Private history bounded and production command blocked through real API",
+      "status": "PASS"
+    },
+    {
+      "name": "Reviewed policy remains visibly inactive",
+      "status": "PASS"
+    },
+    {
+      "name": "Policy proposal form is accessible without activating applications",
+      "status": "PASS"
+    },
+    {
+      "name": "Real Storefront shared money whole/historical/mismatch/signed/unavailable specimens",
+      "status": "PASS"
+    },
+    {
+      "name": "Actual seeded PDP price is whole without decimal suffix",
+      "status": "PASS"
+    },
+    {
+      "name": "Actual PDP to Cart retains whole price and nonfinal evaluation",
+      "status": "PASS"
+    },
+    {
+      "name": "Public Checkout remains unavailable in actual Next route",
+      "status": "PASS"
+    },
+    {
+      "name": "No live commerce marketing request",
+      "status": "PASS"
+    }
+  ],
+  "marketingRequests": 0,
+  "notVerified": [
+    "Successful public Checkout and collection",
+    "Policy activation",
+    "Native zoom and human screen reader/physical devices",
+    "Full organization-switch UI and browser mutation recovery"
+  ]
+}
