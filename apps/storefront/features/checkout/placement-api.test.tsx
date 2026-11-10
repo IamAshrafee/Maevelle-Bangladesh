@@ -199,8 +199,8 @@ describe('Phase 05A placement protocol and confirmation UI', () => {
       );
       expect(markup).toContain('ORD-2026-001');
       expect(markup).toContain('Original order total');
-      expect(markup).toContain('100.0000');
-      expect(markup).toContain('60.0000');
+      expect(markup).toContain('৳100');
+      expect(markup).toContain('৳60');
       expect(markup).toContain(label);
       expect(markup).toContain(display);
       expect(markup).not.toMatch(/Transaction ID|Send money|receiving number/);
@@ -208,7 +208,7 @@ describe('Phase 05A placement protocol and confirmation UI', () => {
   );
 
   it('formats signed rounding adjustments without discarding the four decimal places', () => {
-    expect(formatExactMoney('-0.0001')).toMatch(/^−.*0\.0001$/);
+    expect(formatExactMoney('-0.0001')).toBe('৳−0.0001');
     expect(formatExactMoney('9999999999999999.1234')).toMatch(/\.1234$/);
   });
 });

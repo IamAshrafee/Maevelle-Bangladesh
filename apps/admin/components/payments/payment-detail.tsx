@@ -7,6 +7,7 @@ import { PaymentMoney, PaymentNotice, PaymentQueryState } from './payment-ui';
 import { ReceiptWorkspace } from './receipt-workspace';
 import { CreateRefundAction, RefundOperations } from './refund-operations';
 import { LegacyPosting } from './record-panels';
+import { CashSettlementPanel } from './cash-settlement-panel';
 export function PaymentDetail({ paymentId }: { readonly paymentId: string }) {
   const allowed = usePaymentPermission('payments.view');
   const q = usePaymentQuery<PaymentDetailDto>(
@@ -31,9 +32,13 @@ export function PaymentDetail({ paymentId }: { readonly paymentId: string }) {
       <PaymentQueryState query={q}>
         {p ? (
           <>
+            <CashSettlementPanel orderId={p.orderId} />
             <PagePanel>
-              <h2 className="font-mono tabular-nums">{p.paymentNumber}</h2>
-              <Link href={`/orders/${p.orderId}`} className="text-primary font-mono tabular-nums">
+              <h2 className="break-all font-mono tabular-nums">{p.paymentNumber}</h2>
+              <Link
+                href={`/orders/${p.orderId}`}
+                className="break-all text-primary font-mono tabular-nums"
+              >
                 {p.orderNumber}
               </Link>
               <div className="my-4 grid gap-4 sm:grid-cols-3">

@@ -1,4 +1,5 @@
 import type { CheckoutFinalTermsDto, CheckoutPlacementMethod } from '@maevelle/contracts';
+import { presentMoney } from '@maevelle/contracts';
 import type { ReviewSnapshot } from './foundation-types';
 import type { FinalTermsInput } from './placement-api';
 
@@ -47,6 +48,10 @@ export function usableTerms(state: ReviewSnapshot, terms: CheckoutFinalTermsDto,
   const input = reviewedTermsInput(state, terms.method, now);
   return (
     !!input &&
+    presentMoney(terms.payable, {
+      currency: terms.currency,
+      mode: terms.payableUnit === 'BDT_1' ? 'WHOLE_BDT' : 'RETAIL',
+    }).kind !== 'INVALID' &&
     terms.quoteId === input.quoteId &&
     terms.quoteFingerprint === input.quoteFingerprint &&
     terms.revision === input.revision &&

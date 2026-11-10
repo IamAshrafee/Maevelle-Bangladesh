@@ -236,6 +236,9 @@ export function ProductList() {
           <Button render={<Link href="/products/new" />}>
             <PackagePlus aria-hidden="true" /> Create Product
           </Button>
+          <Button variant="outline" render={<Link href="/products/price-review" />}>
+            Review fractional prices
+          </Button>
         </div>
       </header>
 
@@ -491,7 +494,9 @@ export function ProductList() {
                             className="size-full object-cover"
                             height={44}
                             loading="lazy"
-                            src={getAdminMediaUrl(product.primaryMediaId, { rendition: 'thumbnail' })}
+                            src={getAdminMediaUrl(product.primaryMediaId, {
+                              rendition: 'thumbnail',
+                            })}
                             width={44}
                           />
                         ) : (
@@ -622,7 +627,8 @@ export function ProductList() {
                       <span className="text-foreground font-medium">
                         {formatQuantity(product.availableQuantity)}
                       </span>{' '}
-                      available · {product.variantCount ?? 0} {product.variantCount === 1 ? 'variant' : 'variants'}
+                      available · {product.variantCount ?? 0}{' '}
+                      {product.variantCount === 1 ? 'variant' : 'variants'}
                     </span>
                   </div>
 

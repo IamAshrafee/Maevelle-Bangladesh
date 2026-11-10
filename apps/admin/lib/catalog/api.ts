@@ -1,3 +1,4 @@
+import { presentMoney } from '@maevelle/contracts';
 import type { ApiEnvelope, ApiErrorDto } from '@maevelle/contracts';
 
 export class CatalogRequestError extends Error {
@@ -54,9 +55,5 @@ export function productMediaUrl(assetId: string, visibility: 'PUBLIC' | 'PRIVATE
 }
 
 export function formatCatalogMoney(amount: string, currency: string): string {
-  return new Intl.NumberFormat('en-BD', {
-    style: 'currency',
-    currency,
-    maximumFractionDigits: 2,
-  }).format(Number(amount));
+  return presentMoney(amount, { currency }).text;
 }

@@ -1,23 +1,20 @@
 'use client';
 
-import { CircleDollarSign, ExternalLink, HelpCircle, Receipt } from 'lucide-react';
+import { CircleDollarSign, ExternalLink } from 'lucide-react';
 import Link from 'next/link';
 
 import type { OrderDetailDto } from '@maevelle/contracts';
 import { StatusBadge } from '@/components/status-badge';
 import { Button } from '@/components/ui/button';
+import { CashSettlementPanel } from '@/components/payments/cash-settlement-panel';
+import { presentMoney } from '@maevelle/contracts';
 
 interface OrderPaymentCardProps {
   readonly order: OrderDetailDto;
 }
 
 function formatMoney(amount: number | string | undefined | null, currency = 'BDT'): string {
-  const num = Number(amount ?? 0);
-  return new Intl.NumberFormat('en-BD', {
-    style: 'currency',
-    currency: currency || 'BDT',
-    maximumFractionDigits: 2,
-  }).format(Number.isNaN(num) ? 0 : num);
+  return presentMoney(amount == null ? null : String(amount), { currency }).text;
 }
 
 export function OrderPaymentCard({ order }: OrderPaymentCardProps) {
@@ -89,14 +86,14 @@ export function OrderPaymentCard({ order }: OrderPaymentCardProps) {
         </div>
       )}
 
+      <CashSettlementPanel orderId={order.id} />
       {/* Cancellation Refund Obligations Alert */}
       {order.cancellation?.refundSettlement &&
       order.cancellation.refundSettlement !== 'NOT_REQUIRED' ? (
         <div className="flex flex-wrap items-center justify-between gap-3 border-t bg-amber-50/70 px-6 py-4 text-xs text-amber-950 dark:bg-amber-950/40 dark:text-amber-200">
           <div>
             <p className="font-semibold">
-              Cancellation Refund:{' '}
-              {order.cancellation.refundSettlement.replaceAll('_', ' ')}
+              Cancellation Refund: {order.cancellation.refundSettlement.replaceAll('_', ' ')}
             </p>
             <p className="mt-0.5 opacity-90">
               {order.cancellation.refundObligations.length} linked refund request(s) must be settled
@@ -104,7 +101,9 @@ export function OrderPaymentCard({ order }: OrderPaymentCardProps) {
             </p>
           </div>
           <Button
-            render={<Link href={`/payments?tab=refunds&q=${encodeURIComponent(order.orderNumber)}`} />}
+            render={
+              <Link href={`/payments?tab=refunds&q=${encodeURIComponent(order.orderNumber)}`} />
+            }
             nativeButton={false}
             size="sm"
             variant="outline"

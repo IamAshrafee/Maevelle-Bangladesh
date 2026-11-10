@@ -29,7 +29,14 @@ export function FinalTermsSummary({
           <div className="contents" key={label}>
             <dt>{label}</dt>
             <dd className="min-w-0 break-all text-right">
-              <Money amount={amount} currency={terms.currency} precision="exact" />
+              {label === 'Rounding adjustment' && amount !== '0.0000' && !amount.startsWith('-')
+                ? '+'
+                : ''}
+              <Money
+                amount={amount}
+                currency={terms.currency}
+                mode={label === 'Rounding adjustment' && amount !== '0.0000' ? 'EXACT' : 'RETAIL'}
+              />
             </dd>
           </div>
         ))}
@@ -44,7 +51,7 @@ export function FinalTermsSummary({
           className="block break-all text-xl font-semibold"
           amount={terms.payable}
           currency={terms.currency}
-          precision="exact"
+          mode={terms.payableUnit === 'BDT_1' ? 'WHOLE_BDT' : 'RETAIL'}
         />
       </div>
     </div>

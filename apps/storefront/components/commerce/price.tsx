@@ -1,14 +1,14 @@
 import type { ComponentProps } from 'react';
 
 import { cx } from '@/components/ui/classnames';
-import { formatMoney } from '@/lib/format/money';
-import { formatExactMoney } from '@/lib/format/exact-money';
+import { presentMoney, type MoneyPresentationMode } from '@maevelle/contracts';
 
 type MoneyProps = Omit<ComponentProps<'span'>, 'children'> & {
-  amount: number | string;
+  amount: number | string | null | undefined;
   currency?: string;
   locale?: string;
   precision?: 'exact';
+  mode?: MoneyPresentationMode;
 };
 
 export function Money({
@@ -17,13 +17,28 @@ export function Money({
   currency = 'BDT',
   locale = 'en-BD',
   precision,
+  mode,
   ...props
 }: MoneyProps) {
+  const display = presentMoney(amount == null ? null : String(amount), {
+    currency,
+    mode: mode ?? (precision === 'exact' ? 'EXACT' : 'RETAIL'),
+  });
   return (
-    <span className={cx('tabular-nums', className)} translate="no" {...props}>
-      {precision === 'exact'
-        ? formatExactMoney(String(amount), currency, locale)
-        : formatMoney(String(amount), currency, locale)}
+    <span
+      className={cx('tabular-nums', className)}
+      translate="no"
+      aria-label={display.label}
+      data-money-kind={display.kind}
+      title={
+        display.kind === 'EXACT' && !precision
+          ? 'Exact amount; fractional value preserved'
+          : undefined
+      }
+      lang={locale.startsWith('bn') ? 'bn' : undefined}
+      {...props}
+    >
+      {display.text}
     </span>
   );
 }

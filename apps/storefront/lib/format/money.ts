@@ -1,11 +1,7 @@
-export function formatMoney(amount: string | number, currency = 'BDT', locale = 'en-BD'): string {
-  const value = Number(amount);
-  return new Intl.NumberFormat(locale, {
-    style: 'currency',
-    currency,
-    maximumFractionDigits: 2,
-    minimumFractionDigits: 0,
-  }).format(Number.isFinite(value) ? value : 0);
+import { presentMoney } from '@maevelle/contracts';
+export function formatMoney(amount: string | number, currency = 'BDT', _locale = 'en-BD'): string {
+  void _locale; // Compatibility argument; exact retail labels use the shared English BDT convention.
+  return presentMoney(String(amount), { currency }).text;
 }
 
 export function wholeQuantity(value: string | number, minimum = 1, maximum = 99): number {

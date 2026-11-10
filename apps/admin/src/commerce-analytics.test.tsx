@@ -37,12 +37,12 @@ const data: CommerceMeasurementReportDto = {
 };
 it('preserves exact zero and large decimal amounts while distinguishing Order, claim and receipt', () => {
   const html = renderToStaticMarkup(<CommerceTables data={data} />);
-  expect(html).toContain('BDT 0.0000');
-  expect(html).toContain('BDT 9,007,199,254,740,993.0001');
+  expect(html).toContain('৳0');
+  expect(html).toContain('৳9,007,199,254,740,993.0001');
   expect(html).toContain('Not recorded');
   expect(html).toContain('Unverified claims');
   expect(html).toContain('Do not add these amounts together as revenue');
-  expect(paymentMoney('99999999999999999999.9999')).toBe('BDT 99,999,999,999,999,999,999.9999');
+  expect(paymentMoney('99999999999999999999.9999')).toBe('৳99,999,999,999,999,999,999.9999');
 });
 it('renders honest empty reporting without fabricating a zero conversion rate', () => {
   const html = renderToStaticMarkup(<CommerceTables data={{ ...data, facts: [] }} />);

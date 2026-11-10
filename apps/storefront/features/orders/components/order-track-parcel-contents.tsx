@@ -8,9 +8,7 @@ export interface OrderTrackParcelContentsProps {
   readonly consignment: ConsignmentData;
 }
 
-export function OrderTrackParcelContents({
-  consignment,
-}: OrderTrackParcelContentsProps) {
+export function OrderTrackParcelContents({ consignment }: OrderTrackParcelContentsProps) {
   const itemCountLabel =
     consignment.items.length === 1 ? '1 Piece' : `${consignment.items.length} Pieces`;
 
@@ -41,7 +39,6 @@ export function OrderTrackParcelContents({
             {/* Image Thumbnail */}
             <div className="size-14 sm:size-16 rounded-lg overflow-hidden bg-surface-container shrink-0 border border-border-subtle/60 flex items-center justify-center">
               {item.imageUrl ? (
-                // eslint-disable-next-line @next/next/no-img-element
                 <img
                   alt={item.title}
                   className="size-full object-cover"
@@ -95,10 +92,10 @@ export function OrderTrackParcelContents({
 
         <div className="text-right">
           <span className="font-sans text-[11px] text-on-surface-variant block">
-            Total Settled
+            Original Order total
           </span>
           <span className="font-mono text-base sm:text-lg text-on-surface font-bold tabular-nums">
-            {formatMoney(consignment.totalSettled)}
+            {formatMoney(consignment.originalPayable)}
           </span>
         </div>
       </div>

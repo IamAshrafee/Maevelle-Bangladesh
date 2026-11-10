@@ -111,7 +111,7 @@ function SharedWishlistCollection({ token }: { readonly token: string }) {
         subtitle: product.description ?? '',
         category: 'all',
         categoryLabel: 'Saved product',
-        price: Number(product.price ?? 0),
+        price: product.price ?? '0',
         imageUrl: product.primaryMediaAssetId
           ? publicMediaPath(product.primaryMediaAssetId, 'card')
           : '',
@@ -155,7 +155,7 @@ function SharedWishlistCollection({ token }: { readonly token: string }) {
           subtitle: product.description ?? '',
           category: 'all',
           categoryLabel: 'Saved product',
-          price: Number(product.price ?? 0),
+          price: product.price ?? '0',
           imageUrl: product.primaryMediaAssetId
             ? publicMediaPath(product.primaryMediaAssetId, 'card')
             : '',

@@ -6,13 +6,16 @@ import { Notice } from '@/components/ui/notice';
 import { paymentMethodLabel, paymentStatusLabel } from '../placement-labels';
 
 export function OrderPaymentSummary({ payment }: { payment: CheckoutOrderPaymentDto }) {
-  const isSettled =
-    payment.obligationStatus === 'SATISFIED' ||
-    payment.paymentStatus === 'PAID' ||
-    payment.outstanding === '0.0000';
+  const adjusted = payment.settlementStatus === 'SETTLED_WITH_ADJUSTMENT';
+  const cancelled = payment.orderStatus === 'CANCELLED' || payment.obligationStatus === 'CANCELLED';
+  const isSettled = adjusted || payment.settlementStatus === 'SETTLED_BY_RECEIPTS';
 
   const isPartial =
-    payment.allocated !== '0.0000' && payment.outstanding !== '0.0000' && !isSettled;
+    payment.allocated !== '0.0000' &&
+    payment.outstanding !== '0.0000' &&
+    !isSettled &&
+    !cancelled &&
+    payment.refundStates.length === 0;
 
   return (
     <div className="space-y-4 rounded-xl border border-border bg-surface-container-low p-4 sm:p-5">
@@ -36,23 +39,41 @@ export function OrderPaymentSummary({ payment }: { payment: CheckoutOrderPayment
       <dl className="grid min-w-0 grid-cols-2 gap-x-4 gap-y-2.5 text-sm">
         <dt className="text-on-surface-variant">Original payable</dt>
         <dd className="min-w-0 break-all text-right font-medium">
-          <Money amount={payment.originalPayable} currency={payment.currency} precision="exact" />
+          <Money amount={payment.originalPayable} currency={payment.currency} />
         </dd>
 
-        <dt className="text-on-surface-variant">Confirmed payment</dt>
+        <dt className="text-on-surface-variant">Actual funds received</dt>
         <dd className="min-w-0 break-all text-right font-medium text-success">
-          <Money amount={payment.allocated} currency={payment.currency} precision="exact" />
+          <Money amount={payment.allocated} currency={payment.currency} />
         </dd>
+        {payment.authorizedWaiver !== undefined && (
+          <>
+            <dt className="text-on-surface-variant">Small cash adjustment</dt>
+            <dd className="min-w-0 break-all text-right">
+              <Money amount={payment.authorizedWaiver} currency={payment.currency} />
+            </dd>
+          </>
+        )}
+        {payment.settlementStatus && (
+          <>
+            <dt>Settlement</dt>
+            <dd className="text-right font-semibold">
+              {cancelled
+                ? 'Order cancelled'
+                : adjusted
+                  ? 'Settled with adjustment'
+                  : isSettled
+                    ? 'Settled by receipts'
+                    : 'Open balance'}
+            </dd>
+          </>
+        )}
 
         {payment.refundedFromAllocation !== '0.0000' && (
           <>
             <dt className="text-on-surface-variant">Refunded from allocation</dt>
             <dd className="min-w-0 break-all text-right font-medium text-warning">
-              <Money
-                amount={payment.refundedFromAllocation}
-                currency={payment.currency}
-                precision="exact"
-              />
+              <Money amount={payment.refundedFromAllocation} currency={payment.currency} />
             </dd>
           </>
         )}
@@ -61,34 +82,32 @@ export function OrderPaymentSummary({ payment }: { payment: CheckoutOrderPayment
           <>
             <dt className="text-on-surface-variant">Unallocated at verification</dt>
             <dd className="min-w-0 break-all text-right font-medium text-on-surface-variant">
-              <Money
-                amount={payment.unallocatedAtVerification}
-                currency={payment.currency}
-                precision="exact"
-              />
+              <Money amount={payment.unallocatedAtVerification} currency={payment.currency} />
             </dd>
           </>
         )}
 
         <dt className="border-t border-border-subtle pt-2 font-semibold text-on-surface">
-          {isSettled ? 'Balance settled' : 'Outstanding balance due'}
+          {cancelled
+            ? 'Historical balance (not a payment request)'
+            : isSettled
+              ? 'Balance settled'
+              : 'Outstanding balance due'}
         </dt>
         <dd
           className={`min-w-0 break-all border-t border-border-subtle pt-2 text-right font-bold ${
             isSettled ? 'text-success' : 'text-primary'
           }`}
         >
-          <Money amount={payment.outstanding} currency={payment.currency} precision="exact" />
+          <Money amount={payment.outstanding} currency={payment.currency} />
         </dd>
       </dl>
 
       {isPartial && (
         <Notice variant="info">
-          A partial payment of{' '}
-          <Money amount={payment.allocated} currency={payment.currency} precision="exact" /> has
+          A partial payment of <Money amount={payment.allocated} currency={payment.currency} /> has
           been verified. An outstanding balance of{' '}
-          <Money amount={payment.outstanding} currency={payment.currency} precision="exact" />{' '}
-          remains due.
+          <Money amount={payment.outstanding} currency={payment.currency} /> remains due.
         </Notice>
       )}
 

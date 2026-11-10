@@ -1,4 +1,5 @@
 'use client';
+import { compareMoneyAmounts } from '@maevelle/contracts';
 
 import { CheckoutEntry } from '@/features/checkout/components/checkout-entry';
 
@@ -110,10 +111,10 @@ export function PdpView({
     }
     if (matchingVariants.length > 0) {
       const prices = matchingVariants
-        .map((v) => (v.price ? parseFloat(v.price.amount) : null))
-        .filter((p): p is number => p !== null && !isNaN(p));
+        .flatMap((v) => (v.price ? [v.price.amount] : []))
+        .sort(compareMoneyAmounts);
       if (prices.length > 0) {
-        const min = Math.min(...prices);
+        const min = prices[0]!;
         const cur = matchingVariants.find((v) => v.price)?.price?.currency ?? currency;
         return { type: 'exact', amount: String(min), compareAtAmount: null, currency: cur };
       }

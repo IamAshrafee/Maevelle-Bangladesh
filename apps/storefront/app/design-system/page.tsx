@@ -37,7 +37,7 @@ import { Spinner } from '@/components/ui/spinner';
 import { Surface } from '@/components/ui/surface';
 import { Textarea } from '@/components/ui/textarea';
 import { Toggle } from '@/components/ui/toggle';
-import { Price } from '@/components/commerce/price';
+import { Money, Price } from '@/components/commerce/price';
 import { DesktopProductCard, MobileProductCard } from '@/components/commerce/product-card';
 import { QuantityStepper } from '@/components/commerce/quantity-stepper';
 import { WishlistButton } from '@/components/commerce/wishlist-button';
@@ -522,13 +522,30 @@ export default function StorefrontDesignSystemPage() {
               </div>
               <p className="text-body-sm text-[13px] text-on-surface-variant leading-relaxed">
                 Never write &quot;Tk.&quot; or &quot;BDT&quot;. Always prepend the official unicode
-                &quot;৳&quot; without trailing decimals (৳2,450 not ৳2,450.00). Use Bangladesh comma
-                grouping (Lakh format when &gt; 99,999).
+                &quot;৳&quot; without trailing decimals (৳2,450 not ৳2,450.00). Use grouped digits
+                without converting exact decimal strings to floating point.
               </p>
 
               {/* Live Specimen */}
               <div className="flex items-baseline justify-between rounded-lg bg-surface-container-lowest p-3 shadow-xs">
                 <Price amount={2450} originalAmount={3200} size="lg" />
+                <div className="grid gap-3 text-body-sm" aria-label="Retail money contracts">
+                  <p>
+                    Whole retail: <Money amount="299.0000" mode="WHOLE_BDT" />
+                  </p>
+                  <p>
+                    Exact historical price: <Money amount="299.2500" />
+                  </p>
+                  <p>
+                    Whole contract mismatch: <Money amount="299.2500" mode="WHOLE_BDT" />
+                  </p>
+                  <p>
+                    Exact correction: <Money amount="-0.4000" precision="exact" />
+                  </p>
+                  <p>
+                    Unavailable: <Money amount={null} />
+                  </p>
+                </div>
               </div>
 
               {/* Bilingual Support */}
@@ -2029,11 +2046,17 @@ export default function StorefrontDesignSystemPage() {
         </section>
 
         <section className="space-y-2 border-t border-border pt-8">
-          <h2 className="font-headline-md text-headline-md text-on-surface">Checkout availability</h2>
+          <h2 className="font-headline-md text-headline-md text-on-surface">
+            Checkout availability
+          </h2>
           <p className="text-body-sm text-on-surface-variant">
-            Online checkout is currently unavailable. Use the shopping bag specimen to review guest Cart behavior.
+            Online checkout is currently unavailable. Use the shopping bag specimen to review guest
+            Cart behavior.
           </p>
-          <Link className="inline-flex min-h-12 items-center text-primary underline" href="/checkout">
+          <Link
+            className="inline-flex min-h-12 items-center text-primary underline"
+            href="/checkout"
+          >
             View the checkout boundary
           </Link>
         </section>

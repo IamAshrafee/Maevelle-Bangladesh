@@ -179,7 +179,7 @@ export function ProductCard({
       subtitle: subtitle ?? '',
       category: 'all',
       categoryLabel: 'Saved product',
-      price: Number(price) || 0,
+      price: price ?? '0',
       imageUrl,
       alt: imageAlt ?? title,
       inStock: !isSoldOut,
@@ -466,8 +466,11 @@ export function ProductCard({
         </div>
 
         {href && selectionLinkLabel && !isSoldOut && (
-          <Link href={href} aria-label={`${selectionLinkLabel} for ${title}`}
-            className="inline-flex min-h-12 items-center font-semibold text-primary underline underline-offset-4">
+          <Link
+            href={href}
+            aria-label={`${selectionLinkLabel} for ${title}`}
+            className="inline-flex min-h-12 items-center font-semibold text-primary underline underline-offset-4"
+          >
             {selectionLinkLabel}
           </Link>
         )}

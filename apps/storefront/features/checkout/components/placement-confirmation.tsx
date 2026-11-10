@@ -92,9 +92,37 @@ export function PlacementConfirmation({
               <dd className="text-right font-semibold">
                 {paymentStatusLabel(status.payment.status)}
               </dd>
+              {status.payment.collected !== undefined && (
+                <>
+                  <dt>Actual funds received</dt>
+                  <dd className="text-right">
+                    <Money amount={status.payment.collected} />
+                  </dd>
+                </>
+              )}
+              {status.payment.authorizedWaiver !== undefined && (
+                <>
+                  <dt>Authorized cash adjustment</dt>
+                  <dd className="text-right">
+                    <Money amount={status.payment.authorizedWaiver} />
+                  </dd>
+                </>
+              )}
+              {status.payment.settlementStatus && (
+                <>
+                  <dt>Settlement</dt>
+                  <dd className="text-right">
+                    {status.payment.settlementStatus === 'SETTLED_WITH_ADJUSTMENT'
+                      ? 'Settled with adjustment'
+                      : status.payment.settlementStatus === 'SETTLED_BY_RECEIPTS'
+                        ? 'Settled by receipts'
+                        : 'Open balance'}
+                  </dd>
+                </>
+              )}
               <dt>{codDue ? 'Due on delivery' : 'Reported outstanding balance'}</dt>
               <dd className="min-w-0 break-all text-right font-semibold">
-                <Money amount={status.payment.outstanding} precision="exact" />
+                <Money amount={status.payment.outstanding} />
               </dd>
             </dl>
           ) : (

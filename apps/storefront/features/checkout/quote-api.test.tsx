@@ -102,7 +102,7 @@ describe('exact quote transport and component presentation', () => {
     expect(() => quoteResult(q, q.draftId, crypto.randomUUID())).toThrow();
   });
   it('formats exact four-place decimals including large and zero values without Number conversion or rounding', () => {
-    expect(formatExactMoney('0.0000')).toMatch(/0\.0000/);
+    expect(formatExactMoney('0.0000')).toBe('৳0');
     expect(formatExactMoney('0.3333')).toMatch(/0\.3333/);
     expect(formatExactMoney('9999999999999999.9999', 'BDT', 'en-US')).toContain(
       '9,999,999,999,999,999.9999',
@@ -125,7 +125,7 @@ describe('exact quote transport and component presentation', () => {
     expect(markup).not.toContain('<script>');
     expect(markup).toContain('Not final payable');
     expect(markup).toContain('Not determined');
-    expect(markup).toContain('0.0000');
+    expect(markup).toContain('৳0');
     expect(markup).not.toMatch(/Place order|Pay now|Transfer|Total Payable|stock reserved/i);
   });
   it('compares only authorized predecessor facts and distinguishes equal-total evaluations', () => {

@@ -10,8 +10,8 @@ describe('storefront numeric presentation', () => {
     expect(wholeQuantity(200, 1, 99)).toBe(99);
   });
 
-  it('never exposes more than two monetary decimal places', () => {
-    expect(formatMoney('749.9999', 'BDT', 'en-US')).toMatch(/750/);
+  it('preserves fractional authority instead of silently rounding it', () => {
+    expect(formatMoney('749.9999', 'BDT', 'en-US')).toBe('৳749.9999');
     expect(formatMoney('749.5000', 'BDT', 'en-US')).toMatch(/749\.5/);
   });
 });

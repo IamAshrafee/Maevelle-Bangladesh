@@ -2,14 +2,10 @@
 
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import type { ApiEnvelope, PublicOrderTrackingDto } from '@maevelle/contracts';
 import { TruckIcon, StorefrontIcon } from '@/components/ui/icons';
-import {
-  type ConsignmentData,
-  DEMO_CONSIGNMENT,
-  transformPublicTrackingToConsignment,
-} from '../types';
+import { type ConsignmentData, transformPublicTrackingToConsignment } from '../types';
 import { OrderTrackHeader } from './order-track-header';
 import { OrderTrackLookupCard } from './order-track-lookup-card';
 import { OrderTrackActiveConsignment } from './order-track-active-consignment';
@@ -18,20 +14,28 @@ import { OrderTrackReassurance } from './order-track-reassurance';
 
 export function OrderTrackView() {
   const searchParams = useSearchParams();
-  const initialOrder =
-    searchParams.get('orderId') || searchParams.get('orderNumber') || '#MB-84291';
-  const initialPhone = searchParams.get('phone') || '01712-345678';
+  const initialOrder = searchParams.get('orderId') || searchParams.get('orderNumber') || '';
+  const initialPhone = searchParams.get('phone') || '';
 
   const [orderId, setOrderId] = useState(initialOrder);
   const [phone, setPhone] = useState(initialPhone);
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
-  const [consignment, setConsignment] = useState<ConsignmentData>(DEMO_CONSIGNMENT);
+  const [consignment, setConsignment] = useState<ConsignmentData | null>(null);
 
+  const generation = useRef(0);
+  useEffect(
+    () => () => {
+      generation.current++;
+    },
+    [],
+  );
   const cleanOrderNumber = (val: string) => val.trim().replace(/^#/, '');
   const cleanPhoneNumber = (val: string) => val.trim().replace(/[^0-9]/g, '');
 
   const performLookup = useCallback(async (num: string, ph: string) => {
+    const currentGeneration = ++generation.current;
+    setConsignment(null);
     const rawNum = num.trim();
     const cleanNum = cleanOrderNumber(rawNum);
     const cleanPh = cleanPhoneNumber(ph);
@@ -44,20 +48,10 @@ export function OrderTrackView() {
     setIsLoading(true);
     setErrorMessage('');
 
-    // Check if matching the Stitch demo consignment
-    if (cleanNum === 'MB-84291' || cleanNum === '84291') {
-      setTimeout(() => {
-        setConsignment(DEMO_CONSIGNMENT);
-        setIsLoading(false);
-        const el = document.getElementById('status-card');
-        el?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      }, 350);
-      return;
-    }
-
     try {
       const response = await fetch('/api/storefront/v1/orders/track', {
         method: 'POST',
+        cache: 'no-store',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
           orderNumber: cleanNum,
@@ -65,11 +59,12 @@ export function OrderTrackView() {
         }),
       });
 
+      if (currentGeneration !== generation.current) return;
       if (!response.ok) {
         const errorData = await response.json().catch(() => null);
         throw new Error(
           errorData?.error?.message ??
-            `Order #${cleanNum} was not found for +880 ${cleanPh}. Please verify your details or tap "Load" to test with our demo order.`,
+            `Order #${cleanNum} was not found for +880 ${cleanPh}. Please verify your details.`,
         );
       }
 
@@ -81,25 +76,19 @@ export function OrderTrackView() {
         throw new Error('Order data could not be parsed.');
       }
     } catch (err) {
-      // Fallback: If simulated checkout order, create an active consignment card with user's order number
-      if (cleanNum.startsWith('ORD-') || cleanNum.length > 5) {
-        setConsignment({
-          ...DEMO_CONSIGNMENT,
-          orderNumber: rawNum,
-          deliveryAddress: 'Dhaka, Bangladesh',
-          statusBadgeText: 'In Transit — Dhaka Express',
-        });
-      } else {
-        setErrorMessage(
-          err instanceof Error
-            ? err.message
-            : 'Unable to track order. Please verify your details.',
-        );
-      }
+      if (currentGeneration !== generation.current) return;
+      setErrorMessage(
+        err instanceof Error
+          ? err.message
+          : 'Unable to track this Order. Check your details or try again.',
+      );
     } finally {
-      setIsLoading(false);
-      const el = document.getElementById('status-card');
-      el?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      if (currentGeneration === generation.current) {
+        setIsLoading(false);
+        document
+          .getElementById('status-card')
+          ?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
     }
   }, []);
 
@@ -133,7 +122,7 @@ export function OrderTrackView() {
           }
         }
       } catch {
-        // Silent fail — default demo order remains active
+        // No authorized response: keep the tracking result unavailable.
       }
     })();
   }, [searchParams, performLookup]);
@@ -141,15 +130,6 @@ export function OrderTrackView() {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     void performLookup(orderId, phone);
-  };
-
-  const handleLoadDemo = () => {
-    setOrderId('#MB-84291');
-    setPhone('01712-345678');
-    setErrorMessage('');
-    setConsignment(DEMO_CONSIGNMENT);
-    const el = document.getElementById('status-card');
-    el?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   };
 
   return (
@@ -176,7 +156,8 @@ export function OrderTrackView() {
             </h2>
 
             <p className="font-sans text-sm sm:text-base text-on-surface-variant mt-2 leading-relaxed max-w-2xl">
-              Follow your handcrafted heirlooms delivered directly to your doorstep across Bangladesh.
+              Follow your handcrafted heirlooms delivered directly to your doorstep across
+              Bangladesh.
             </p>
           </section>
 
@@ -189,7 +170,6 @@ export function OrderTrackView() {
             <OrderTrackLookupCard
               errorMessage={errorMessage}
               isLoading={isLoading}
-              onLoadDemo={handleLoadDemo}
               onOrderIdChange={setOrderId}
               onPhoneChange={setPhone}
               onSubmit={handleSubmit}
@@ -197,9 +177,9 @@ export function OrderTrackView() {
               phone={phone}
             />
 
-            <OrderTrackActiveConsignment consignment={consignment} />
+            {consignment && <OrderTrackActiveConsignment consignment={consignment} />}
 
-            <OrderTrackParcelContents consignment={consignment} />
+            {consignment && <OrderTrackParcelContents consignment={consignment} />}
 
             <OrderTrackReassurance />
 
@@ -222,7 +202,6 @@ export function OrderTrackView() {
               <OrderTrackLookupCard
                 errorMessage={errorMessage}
                 isLoading={isLoading}
-                onLoadDemo={handleLoadDemo}
                 onOrderIdChange={setOrderId}
                 onPhoneChange={setPhone}
                 onSubmit={handleSubmit}
@@ -230,12 +209,12 @@ export function OrderTrackView() {
                 phone={phone}
               />
 
-              <OrderTrackActiveConsignment consignment={consignment} />
+              {consignment && <OrderTrackActiveConsignment consignment={consignment} />}
             </div>
 
             {/* Right Column (5 cols, sticky top-24): Parcel Contents, Reassurance & Help */}
             <div className="col-span-5 flex flex-col gap-6 sticky top-24">
-              <OrderTrackParcelContents consignment={consignment} />
+              {consignment && <OrderTrackParcelContents consignment={consignment} />}
 
               <OrderTrackReassurance />
 

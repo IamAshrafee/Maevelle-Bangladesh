@@ -6,7 +6,12 @@ export interface WishlistItem {
   readonly savedAt?: string;
   readonly alt: string;
   readonly badge?: string;
-  readonly badgeType?: 'scarcity' | 'primary-fixed' | 'secondary-fixed' | 'surface-container-high' | 'primary-fixed-dim';
+  readonly badgeType?:
+    | 'scarcity'
+    | 'primary-fixed'
+    | 'secondary-fixed'
+    | 'surface-container-high'
+    | 'primary-fixed-dim';
   readonly category: WishlistCategory;
   readonly categoryLabel: string;
   readonly deliveryTag?: string;
@@ -15,8 +20,8 @@ export interface WishlistItem {
   readonly id: string;
   readonly imageUrl: string;
   readonly inStock: boolean;
-  readonly originalPrice?: number;
-  readonly price: number;
+  readonly originalPrice?: number | string;
+  readonly price: number | string;
   readonly subtitle: string;
   readonly title: string;
 }

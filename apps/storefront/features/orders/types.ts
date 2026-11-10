@@ -5,8 +5,8 @@ export interface ConsignmentItem {
   readonly title: string;
   readonly variantDescription: string;
   readonly quantity: number;
-  readonly unitPrice: number;
-  readonly netPrice: number;
+  readonly unitPrice: number | string;
+  readonly netPrice: number | string;
   readonly imageUrl?: string | null;
 }
 
@@ -15,10 +15,12 @@ export interface ConsignmentTimelineStep {
   readonly timestamp: string;
   readonly description: string;
   readonly status: 'completed' | 'active' | 'pending';
-  readonly riderInfo?: {
-    readonly name: string;
-    readonly phone: string;
-  } | undefined;
+  readonly riderInfo?:
+    | {
+        readonly name: string;
+        readonly phone: string;
+      }
+    | undefined;
 }
 
 export interface ConsignmentData {
@@ -32,7 +34,7 @@ export interface ConsignmentData {
   readonly timeline: readonly ConsignmentTimelineStep[];
   readonly items: readonly ConsignmentItem[];
   readonly paymentMethodText: string;
-  readonly totalSettled: number;
+  readonly originalPayable: number | string;
   readonly customerName?: string;
   readonly deliveryAddress?: string;
   readonly isRealBackendOrder?: boolean;
@@ -99,15 +101,18 @@ export const DEMO_CONSIGNMENT: ConsignmentData = {
     },
   ],
   paymentMethodText: 'bKash Pre-authorized',
-  totalSettled: 2370,
+  originalPayable: 2370,
   customerName: 'Nusrat Jahan',
   deliveryAddress: 'Banani, Dhaka',
   isRealBackendOrder: false,
 };
 
-export function transformPublicTrackingToConsignment(order: PublicOrderTrackingDto): ConsignmentData {
+export function transformPublicTrackingToConsignment(
+  order: PublicOrderTrackingDto,
+): ConsignmentData {
   const isDelivered = order.deliveryStatus === 'DELIVERED';
-  const isInTransit = order.deliveryStatus === 'IN_TRANSIT' || order.fulfillmentStatus === 'FULFILLED';
+  const isInTransit =
+    order.deliveryStatus === 'IN_TRANSIT' || order.fulfillmentStatus === 'FULFILLED';
   const isPreparing = order.fulfillmentStatus === 'IN_PROGRESS';
   const isCancelled = order.status === 'CANCELLED';
 
@@ -117,33 +122,41 @@ export function transformPublicTrackingToConsignment(order: PublicOrderTrackingD
   } else if (isDelivered) {
     statusBadgeText = 'Delivered — Handover Complete';
   } else if (isInTransit) {
-    statusBadgeText = `In Transit — ${order.delivery?.carrierName || 'Dhaka Express'}`;
+    statusBadgeText = `In Transit — ${order.delivery?.carrierName || 'Courier not assigned'}`;
   } else if (isPreparing) {
     statusBadgeText = 'Packaging & Quality Inspection';
   }
 
-  const carrierName = order.delivery?.carrierName || 'Pathao Logistics';
-  const trackingWaybill = order.delivery?.trackingReference || `MV-${order.orderNumber.replace(/[^a-zA-Z0-9]/g, '')}`;
+  const carrierName = order.delivery?.carrierName || 'Courier not assigned';
+  const trackingWaybill = order.delivery?.trackingReference || 'Tracking unavailable';
 
-  let estimatedArrivalTitle = 'Tomorrow';
-  let estimatedArrivalSubtitle = 'by 6:00 PM';
+  let estimatedArrivalTitle = 'Delivery estimate unavailable';
+  let estimatedArrivalSubtitle = 'Check the latest delivery status';
   if (order.delivery?.estimatedDeliveryAt) {
     const estDate = new Date(order.delivery.estimatedDeliveryAt);
     estimatedArrivalTitle = estDate.toLocaleDateString('en-BD', { month: 'short', day: 'numeric' });
-    estimatedArrivalSubtitle = estDate.toLocaleTimeString('en-BD', { hour: 'numeric', minute: '2-digit' });
+    estimatedArrivalSubtitle = estDate.toLocaleTimeString('en-BD', {
+      hour: 'numeric',
+      minute: '2-digit',
+    });
   } else if (order.delivery?.deliveredAt) {
     const delDate = new Date(order.delivery.deliveredAt);
     estimatedArrivalTitle = 'Delivered On';
-    estimatedArrivalSubtitle = delDate.toLocaleDateString('en-BD', { month: 'short', day: 'numeric' });
+    estimatedArrivalSubtitle = delDate.toLocaleDateString('en-BD', {
+      month: 'short',
+      day: 'numeric',
+    });
   }
 
   const items: ConsignmentItem[] = order.lines.map((line, idx) => ({
     id: `item-${idx}`,
     title: line.productTitle,
-    variantDescription: line.variantTitle ? `${line.variantTitle} • Handcrafted` : 'Signature Edition',
+    variantDescription: line.variantTitle
+      ? `${line.variantTitle} • Handcrafted`
+      : 'Signature Edition',
     quantity: Number(line.quantity) || 1,
-    unitPrice: Number(line.unitPrice) || 0,
-    netPrice: Number(line.net) || 0,
+    unitPrice: line.unitPrice,
+    netPrice: line.net,
     imageUrl: line.imageUrl,
   }));
 
@@ -151,10 +164,10 @@ export function transformPublicTrackingToConsignment(order: PublicOrderTrackingD
     order.paymentMethod === 'COD'
       ? 'Cash on Delivery'
       : order.paymentMethod === 'BKASH_MANUAL'
-      ? 'bKash Manual Verification'
-      : order.paymentMethod === 'NAGAD_MANUAL'
-      ? 'Nagad Manual Verification'
-      : `${order.paymentMethod} Pre-authorized`;
+        ? 'bKash Manual Verification'
+        : order.paymentMethod === 'NAGAD_MANUAL'
+          ? 'Nagad Manual Verification'
+          : `${order.paymentMethod} Pre-authorized`;
 
   const orderDateStr = new Date(order.createdAt).toLocaleDateString('en-BD', {
     month: 'short',
@@ -165,47 +178,34 @@ export function transformPublicTrackingToConsignment(order: PublicOrderTrackingD
 
   const timeline: ConsignmentTimelineStep[] = [
     {
-      title: 'Order Placed & Confirmed',
+      title: 'Order recorded',
       timestamp: orderDateStr,
-      description:
-        order.paymentMethod === 'COD'
-          ? 'Cash on delivery verified for dispatch.'
-          : `Verified payment via ${order.paymentMethod}.`,
+      description: 'Payment and delivery statuses are tracked separately.',
       status: 'completed',
     },
     {
-      title: 'Handcrafted & Wax Sealed',
-      timestamp: isPreparing || isInTransit || isDelivered ? 'Quality Approved' : 'In Preparation',
-      description: 'Quality verified with signature berry ribbon & wax seal.',
-      status: isPreparing ? 'active' : isInTransit || isDelivered ? 'completed' : 'pending',
+      title: 'Order status',
+      timestamp: 'Current status',
+      description: order.status,
+      status: isCancelled ? 'completed' : 'active',
     },
-    {
-      title: `Dispatched via ${carrierName}`,
-      timestamp: isInTransit || isDelivered ? 'Dispatched' : 'Pending Handover',
-      description: isInTransit
-        ? 'Consignment picked up and en route with assigned delivery courier.'
-        : isDelivered
-        ? 'Courier transit completed.'
-        : 'Awaiting courier collection at fulfillment center.',
-      status: isDelivered ? 'completed' : isInTransit ? 'active' : 'pending',
-      riderInfo: isInTransit
-        ? {
-            name: 'Assigned Courier Partner',
-            phone: '01844-399210',
-          }
-        : undefined,
-    },
-    {
-      title: 'Doorstep Inspection & Handover',
-      timestamp: isDelivered ? 'Delivered' : 'Pending',
-      description: isDelivered
-        ? 'Parcel handed over after successful open-box inspection.'
-        : 'Open-box inspection supported before sharing safe OTP code.',
-      status: isDelivered ? 'completed' : 'pending',
-    },
+    ...(order.delivery?.deliveredAt
+      ? [
+          {
+            title: 'Delivered',
+            timestamp: new Date(order.delivery.deliveredAt).toLocaleString('en-BD'),
+            description: 'Recorded delivery completion.',
+            status: 'completed' as const,
+          },
+        ]
+      : []),
   ];
 
-  const destParts = [order.destination.area, order.destination.city, order.destination.district].filter(Boolean);
+  const destParts = [
+    order.destination.area,
+    order.destination.city,
+    order.destination.district,
+  ].filter(Boolean);
   const deliveryAddress = destParts.join(', ') || 'Dhaka, Bangladesh';
 
   return {
@@ -219,7 +219,7 @@ export function transformPublicTrackingToConsignment(order: PublicOrderTrackingD
     timeline,
     items,
     paymentMethodText,
-    totalSettled: Number(order.total) || 0,
+    originalPayable: order.total,
     deliveryAddress,
     isRealBackendOrder: true,
   };

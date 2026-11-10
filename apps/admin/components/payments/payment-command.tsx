@@ -54,7 +54,9 @@ export function PaymentCommand({
   }
   const changed = initialOwner.current !== paymentOwnerKey(owner);
   const canReplay =
-    /\/(?:verify|complete|refunds|reversal|posting|cod-collections|operating-policies)$/.test(path);
+    /\/(?:verify|complete|refunds|reversal|reverse|posting|cod-collections|operating-policies)$/.test(
+      path,
+    );
   async function submit() {
     if (!intent.current || changed || inFlight.current) return;
     inFlight.current = true;

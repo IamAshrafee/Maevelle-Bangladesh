@@ -66,7 +66,7 @@ Ratios are calculated by `apps/storefront/lib/design-system/theme.test.ts` and m
 - Noto Sans Bengali is the explicit Bangla face. `:lang(bn)` raises line-height to 1.72 and prevents Playfair inheritance. Mark Bangla content with `lang="bn"`.
 - The three families remain self-hosted by `next/font` with `display: swap`; no runtime Google Fonts requests or new font family were added.
 - Display and large headings are fluid; functional body, label, caption, and price roles are deliberately few. Use `Heading`/`Text` or `text-display`, `text-heading-*`, `text-body-*`, `text-label`, and `text-caption`.
-- Prices use the shared `Money`/`Price` primitives and `tabular-nums`. Formatting delegates to `Intl.NumberFormat`; pricing truth remains backend-owned.
+- Prices use the shared `Money`/`Price` primitives and `tabular-nums`. Formatting uses shared exact decimal-string presentation with grouped digits; pricing truth remains backend-owned. Whole authority, historical fractions, precise financial values and unavailable amounts are distinct modes.
 - Inputs remain 16 px to avoid unwanted iOS Safari zoom. Use minimum heights, not fixed heights, so Bangla and 200% text zoom can grow safely.
 
 ## Spacing, layout, and responsive behavior

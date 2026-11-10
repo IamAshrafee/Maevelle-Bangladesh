@@ -1,7 +1,7 @@
 'use client';
 
 import { Box, Tag } from 'lucide-react';
-import type { OrderDetailDto, OrderLineDto } from '@maevelle/contracts';
+import type { OrderDetailDto } from '@maevelle/contracts';
 
 import {
   Table,
@@ -12,7 +12,8 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { CancelOrderLineDialog } from './cancel-order-line-dialog';
-import { formatMoney, formatQuantity } from '@/lib/format/numbers';
+import { formatQuantity } from '@/lib/format/numbers';
+import { paymentMoney as formatMoney } from '@/lib/payments/transport';
 
 interface OrderItemsCardProps {
   readonly order: OrderDetailDto;
@@ -171,11 +172,16 @@ export function OrderItemsCard({ order, onUpdated }: OrderItemsCardProps) {
           ) : null}
 
           <div className="flex justify-between">
-            <span className="text-muted-foreground" title="Charge paid by the customer for shipping">
+            <span
+              className="text-muted-foreground"
+              title="Charge paid by the customer for shipping"
+            >
               Customer Shipping Charge
             </span>
             <span>
-              {Number(order.deliveryAmount) === 0 ? 'Free' : formatMoney(order.deliveryAmount, order.currency)}
+              {Number(order.deliveryAmount) === 0
+                ? 'Free'
+                : formatMoney(order.deliveryAmount, order.currency)}
             </span>
           </div>
 
@@ -186,6 +192,23 @@ export function OrderItemsCard({ order, onUpdated }: OrderItemsCardProps) {
             </div>
           ) : null}
 
+          {order.paymentFees !== undefined && (
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">Payment fees</span>
+              <span className="font-mono tabular-nums">
+                {formatMoney(order.paymentFees, order.currency)}
+              </span>
+            </div>
+          )}
+          {order.roundingAdjustment !== undefined && order.roundingAdjustment !== '0.0000' && (
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">Rounding adjustment</span>
+              <span className="font-mono tabular-nums">
+                {order.roundingAdjustment.startsWith('-') ? '' : '+'}
+                {formatMoney(order.roundingAdjustment, order.currency)}
+              </span>
+            </div>
+          )}
           <div className="flex justify-between border-t pt-2 text-base font-bold text-foreground">
             <span>Grand Total</span>
             <span>{formatMoney(order.total, order.currency)}</span>

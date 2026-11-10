@@ -115,7 +115,7 @@ function fromAccount(item: WishlistItemDto): WishlistItem {
     id: item.productId,
     handle: item.product?.handle ?? '',
     title: item.product?.title ?? 'Product unavailable',
-    price: Number(item.product?.minimumPrice ?? 0),
+    price: item.product?.minimumPrice ?? '0',
     imageUrl: item.product?.primaryMediaAssetId
       ? `/api/media/public/${item.product.primaryMediaAssetId}?rendition=card`
       : '',
@@ -164,11 +164,7 @@ function publish(update: Partial<WishlistSnapshot> = {}) {
     loadingMore,
     ownerGeneration,
     listVersion: version,
-    pendingIds: [
-      ...new Set([
-        ...desired.keys(),
-      ]),
-    ],
+    pendingIds: [...new Set([...desired.keys()])],
   };
   for (const listener of listeners) listener();
   if (typeof window !== 'undefined')
@@ -532,7 +528,13 @@ function unavailable(message: string) {
   savedMembership.clear();
   desired.clear();
   recoveredAccountIntent = false;
-  publish({ mode: 'resolving', sync: 'error', message, mergeReviewed: false, mergeConflict: false });
+  publish({
+    mode: 'resolving',
+    sync: 'error',
+    message,
+    mergeReviewed: false,
+    mergeConflict: false,
+  });
 }
 async function drain() {
   if (
@@ -621,7 +623,11 @@ async function drain() {
   }
   draining = false;
   if (epoch === generation && snapshot.mode === 'account' && !desired.size) {
-    try { await loadAccount(epoch); } catch { /* A later focus refresh reconciles the page. */ }
+    try {
+      await loadAccount(epoch);
+    } catch {
+      /* A later focus refresh reconciles the page. */
+    }
   }
   if (desired.size && epoch !== generation && snapshot.mode === 'account') void drain();
   if (!desired.size && epoch === generation && partition && guest.items.length)
@@ -819,7 +825,10 @@ export const wishlistStore = {
       if (epoch !== generation || partition !== owner) return;
       if (page.version !== expectedVersion) {
         await loadAccount(epoch);
-        publish({ sync: 'synced', message: 'Wishlist changed. Showing the newest saved products.' });
+        publish({
+          sync: 'synced',
+          message: 'Wishlist changed. Showing the newest saved products.',
+        });
         return;
       }
       for (const item of page.items) {
@@ -828,15 +837,20 @@ export const wishlistStore = {
         savedMembership.add(item.productId);
       }
       if (confirmed.size > 300) {
-        const recent = [...confirmed.values()].sort((a, b) =>
-          (b.savedAt ?? '').localeCompare(a.savedAt ?? '') || b.id.localeCompare(a.id));
+        const recent = [...confirmed.values()].sort(
+          (a, b) => (b.savedAt ?? '').localeCompare(a.savedAt ?? '') || b.id.localeCompare(a.id),
+        );
         confirmed = new Map(recent.slice(-300).map((item) => [item.id, item]));
       }
       accountCount = page.count;
       nextCursor = page.nextCursor;
     } catch (error) {
       if (epoch === generation)
-        publish({ sync: 'error', message: error instanceof Error ? error.message : 'More products could not load. Try again.' });
+        publish({
+          sync: 'error',
+          message:
+            error instanceof Error ? error.message : 'More products could not load. Try again.',
+        });
     } finally {
       loadingMore = false;
       if (epoch === generation) publish();

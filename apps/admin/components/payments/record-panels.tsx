@@ -173,7 +173,7 @@ export function LegacyPosting({
   return (
     <>
       <Button variant="outline" onClick={() => setOpen(true)}>
-        Record missing legacy / COD Finance posting
+        Record Finance posting
       </Button>
       {open ? (
         <PaymentCommand

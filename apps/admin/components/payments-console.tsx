@@ -9,6 +9,7 @@ import { useAdminContext } from './admin-capabilities';
 import { ClaimReviewQueue } from './payments/claim-review';
 import { DestinationPanel } from './payments/destination-panel';
 import { PolicyPanel } from './payments/policy-panel';
+import { CashPolicyPanel } from './payments/cash-policy-panel';
 import { ReceiptExceptions } from './payments/receipt-workspace';
 import { PaymentRecords, CodOperations } from './payments/record-panels';
 import { PaymentNotice, PaymentQueryState } from './payments/payment-ui';
@@ -21,6 +22,7 @@ const tabs = [
   ['cod', 'COD collections'],
   ['destinations', 'Receiving destinations'],
   ['policies', 'Deadlines'],
+  ['cash-policies', 'Cash difference policies'],
   ['readiness', 'Readiness'],
 ] as const;
 type Tab = (typeof tabs)[number][0];
@@ -78,6 +80,8 @@ export function PaymentsConsole() {
           <DestinationPanel />
         ) : tab === 'policies' ? (
           <PolicyPanel />
+        ) : tab === 'cash-policies' ? (
+          <CashPolicyPanel />
         ) : tab === 'exceptions' ? (
           <ReceiptExceptions />
         ) : tab === 'cod' ? (

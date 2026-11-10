@@ -64,6 +64,7 @@ function paymentFixture(overrides: Partial<CheckoutOrderPaymentDto> = {}): Check
     refundStates: [],
     paymentStatus: 'PARTIALLY_PAID',
     obligationStatus: 'READY',
+    settlementStatus: 'OPEN',
     submissionDeadline: '2026-11-06T15:00:00.000Z',
     reviewDeadline: '2026-11-06T18:00:00.000Z',
     transferAvailability: 'AVAILABLE',
@@ -86,11 +87,11 @@ describe('Phase 06B customer payment presentation components', () => {
     const markup = renderToStaticMarkup(<OrderPaymentSummary payment={payment} />);
 
     expect(markup).toContain('Original payable');
-    expect(markup).toContain('100.0000');
-    expect(markup).toContain('Confirmed payment');
-    expect(markup).toContain('40.0000');
+    expect(markup).toContain('৳100');
+    expect(markup).toContain('Actual funds received');
+    expect(markup).toContain('৳40');
     expect(markup).toContain('Outstanding balance due');
-    expect(markup).toContain('60.0000');
+    expect(markup).toContain('৳60');
     expect(markup).toContain('A partial payment of');
     expect(markup).toContain('remains due');
   });
@@ -104,9 +105,9 @@ describe('Phase 06B customer payment presentation components', () => {
     const markup = renderToStaticMarkup(<OrderPaymentSummary payment={payment} />);
 
     expect(markup).toContain('Refunded from allocation');
-    expect(markup).toContain('15.0000');
+    expect(markup).toContain('৳15');
     expect(markup).toContain('Unallocated at verification');
-    expect(markup).toContain('5.0000');
+    expect(markup).toContain('৳5');
   });
 
   it('displays late receipt and reversal warnings in OrderPaymentSummary', () => {
@@ -136,7 +137,7 @@ describe('Phase 06B customer payment presentation components', () => {
     expect(markup).toContain('Personal Retail Account');
     expect(markup).toContain('Make Payment');
     expect(markup).toContain('01712345678');
-    expect(markup).toContain('60.0000');
+    expect(markup).toContain('৳60');
     expect(markup).toContain('ORD-2026-999');
     expect(markup).toContain('Maevelle Bangladesh');
     expect(markup).toContain('1. Open bKash app');
@@ -254,8 +255,8 @@ describe('Phase 06B customer payment presentation components', () => {
 
     expect(markup).toContain('Cash on Delivery');
     expect(markup).toContain('Amount due on delivery');
-    expect(markup).toContain('60.0000');
-    expect(markup).toContain('Please have the exact cash amount');
+    expect(markup).toContain('৳60');
+    expect(markup).toContain('Please have the exact cash ready');
     expect(markup).not.toContain('bKash');
     expect(markup).not.toContain('Nagad');
     expect(markup).not.toContain('Transaction ID');
