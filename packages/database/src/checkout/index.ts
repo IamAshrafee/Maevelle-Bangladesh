@@ -20,6 +20,7 @@ export { createCheckoutQuote, getCheckoutQuote, acknowledgeCheckoutQuote } from 
 export { evaluateCheckoutInTransaction } from './quote-evaluation.js';
 export { placeReviewedCheckout, reviewCheckoutFinalTerms } from './placement.js';
 export { getCommittedCheckoutOrder } from './placement-status.js';
+export { pauseCheckoutOrders } from './operational-control.js';
 export { checkoutGuestOrderCredential } from './guest-order-credential.js';
 export {
   getCheckoutOrderPayment,

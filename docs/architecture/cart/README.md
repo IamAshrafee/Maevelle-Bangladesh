@@ -1,4 +1,8 @@
-# Shopping Cart — Phase 01-C integrated acceptance
+# Shopping Cart
+
+**Development closed.** The Cart implementation covers guest and account ownership, line and coupon changes, clear and session reset, merge, retry recovery and handoff to Checkout. The owner closed the coding scope without waiting for remaining manual or device checks. Historical acceptance results remain below. Use the [staging release gates](STAGING_RELEASE_GATES.md) for target operations and the [Checkout release register](../checkout/PHASE_09_RELEASE_READINESS_REGISTER.md#phase-09b-gate-0-decision-matrix) for public purchasing and payment activation.
+
+## Phase 01-C integrated acceptance
 
 **Local PARTIAL** with 14 PASS and 2 PARTIAL gates. **Production BLOCKED.** Integrated Chrome, real PostgreSQL, API and Storefront verification closed three defects and recovered the exact original benchmark. Prior checkpoints below retain their historical meaning.
 

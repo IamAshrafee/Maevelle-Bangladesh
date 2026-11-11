@@ -5131,6 +5131,15 @@ export interface MediaModuleSettingsDto {
   readonly 'media.uploadExpirySeconds': number;
 }
 
+export interface CheckoutOrderControlDto {
+  readonly paused: boolean;
+  readonly releaseStatus: 'BLOCKED';
+}
+
+export interface PauseCheckoutOrdersDto {
+  readonly reason: string;
+}
+
 export interface StorefrontSettingsDto {
   readonly publicBaseUrl: string;
   readonly storeName: string;

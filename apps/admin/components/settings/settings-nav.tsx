@@ -11,10 +11,12 @@ import {
   Ruler,
   Server,
   Shield,
+  ShoppingCart,
   SlidersHorizontal,
   Sparkles,
   Store,
 } from 'lucide-react';
+import { useAdminContext } from '@/components/admin-capabilities';
 import { cn } from '@/lib/utils';
 
 export const coreSettingsTabs = [
@@ -75,6 +77,12 @@ export const secondarySettingsTabs = [
     icon: Store,
   },
   {
+    href: '/settings/checkout',
+    label: 'Checkout',
+    icon: ShoppingCart,
+    ownerOnly: true,
+  },
+  {
     href: '/settings/colors',
     label: 'Color Library',
     icon: Palette,
@@ -88,6 +96,7 @@ export const secondarySettingsTabs = [
 
 export function SettingsNav({ className }: { readonly className?: string }) {
   const pathname = usePathname();
+  const { isOwner } = useAdminContext();
 
   return (
     <div className={cn('mb-6 space-y-2 border-b pb-3', className)}>
@@ -124,23 +133,25 @@ export function SettingsNav({ className }: { readonly className?: string }) {
           Module links:
         </span>
         <div className="flex items-center gap-3 overflow-x-auto no-scrollbar">
-          {secondarySettingsTabs.map((tab) => {
-            const Icon = tab.icon;
-            const isActive = pathname === tab.href || pathname.startsWith(tab.href + '/');
-            return (
-              <Link
-                key={tab.href}
-                href={tab.href}
-                className={cn(
-                  'inline-flex items-center gap-1 hover:text-foreground transition-colors',
-                  isActive && 'text-foreground font-medium underline underline-offset-4',
-                )}
-              >
-                <Icon className="size-3" />
-                {tab.label}
-              </Link>
-            );
-          })}
+          {secondarySettingsTabs
+            .filter((tab) => !('ownerOnly' in tab) || isOwner)
+            .map((tab) => {
+              const Icon = tab.icon;
+              const isActive = pathname === tab.href || pathname.startsWith(tab.href + '/');
+              return (
+                <Link
+                  key={tab.href}
+                  href={tab.href}
+                  className={cn(
+                    'inline-flex items-center gap-1 hover:text-foreground transition-colors',
+                    isActive && 'text-foreground font-medium underline underline-offset-4',
+                  )}
+                >
+                  <Icon className="size-3" />
+                  {tab.label}
+                </Link>
+              );
+            })}
         </div>
       </div>
     </div>

@@ -60,6 +60,14 @@ describe('Admin access boundary', () => {
     expect((await lookupAdminAccess('', '/')).kind).toBe('AUTH_REQUIRED');
     expect(fetch).not.toHaveBeenCalled();
   });
+
+  it('requires an Owner for Checkout settings even when a member can manage storefront settings', () => {
+    const manager = { ...context, capabilities: ['settings.view', 'settings.storefront.manage'] };
+    expect(decideAdminAccess(manager, '/settings/checkout').kind).toBe('ACCESS_DENIED');
+    expect(
+      decideAdminAccess({ ...manager, membershipType: 'OWNER' }, '/settings/checkout').kind,
+    ).toBe('AUTHORIZED');
+  });
   it('validates cookie-bearing requests with an uncached authoritative lookup', async () => {
     const fetch = vi.fn().mockResolvedValue(Response.json(context));
     vi.stubGlobal('fetch', fetch);

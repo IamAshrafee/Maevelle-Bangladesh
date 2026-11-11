@@ -22,6 +22,7 @@ import {
 } from '@maevelle/database/settings';
 
 import type { createAuth } from '../auth/auth.js';
+import { registerCheckoutSettingsRoutes } from './checkout-settings.js';
 
 type Auth = ReturnType<typeof createAuth>;
 
@@ -89,6 +90,8 @@ export function registerSettingsRoutes(
   auth: Auth,
   config: RuntimeConfig,
 ): void {
+  registerCheckoutSettingsRoutes(app, database, auth);
+
   const deployment = {
     ...config,
     mediaDefaultMaxUploadBytes: config.mediaMaxUploadBytes,
@@ -101,14 +104,20 @@ export function registerSettingsRoutes(
 
   app.get('/admin/settings/media/runtime', async (request, reply) => {
     const active = await context(database, auth, request.headers, 'settings.view');
-    if (!active) return reply.code(403).send({ error: { code: 'FORBIDDEN', message: 'Forbidden.' } });
-    return { data: {
-      storageProvider: config.mediaStorageProvider,
-      storageLabel: config.mediaStorageProvider === 'local' ? 'Local persistent media volume' : 'S3-compatible object storage',
-      deploymentMaxUploadBytes: config.mediaMaxUploadBytes,
-      acceptedMimeTypes: SUPPORTED_MEDIA_UPLOAD_MIME_TYPES,
-      reviewMaxUploadBytes: Math.min(config.mediaMaxUploadBytes, 5 * 1024 * 1024),
-    } };
+    if (!active)
+      return reply.code(403).send({ error: { code: 'FORBIDDEN', message: 'Forbidden.' } });
+    return {
+      data: {
+        storageProvider: config.mediaStorageProvider,
+        storageLabel:
+          config.mediaStorageProvider === 'local'
+            ? 'Local persistent media volume'
+            : 'S3-compatible object storage',
+        deploymentMaxUploadBytes: config.mediaMaxUploadBytes,
+        acceptedMimeTypes: SUPPORTED_MEDIA_UPLOAD_MIME_TYPES,
+        reviewMaxUploadBytes: Math.min(config.mediaMaxUploadBytes, 5 * 1024 * 1024),
+      },
+    };
   });
 
   // GET /admin/settings - List all modules and settings metadata + effective values
@@ -174,10 +183,18 @@ export function registerSettingsRoutes(
 
       const { provider } = request.params as { provider: string };
       try {
-        const integrations = await listIntegrationSummaries(database.db, active.organizationId, deployment);
-        const item = integrations.find((i) => i.providerCode.toLowerCase() === provider.toLowerCase());
+        const integrations = await listIntegrationSummaries(
+          database.db,
+          active.organizationId,
+          deployment,
+        );
+        const item = integrations.find(
+          (i) => i.providerCode.toLowerCase() === provider.toLowerCase(),
+        );
         if (!item) {
-          return reply.code(404).send({ error: { code: 'NOT_FOUND', message: `Integration provider not found: ${provider}` } });
+          return reply.code(404).send({
+            error: { code: 'NOT_FOUND', message: `Integration provider not found: ${provider}` },
+          });
         }
         return { data: item };
       } catch (error) {
@@ -280,7 +297,12 @@ export function registerSettingsRoutes(
       const { module } = request.params as { module: string };
 
       try {
-        const data = await getModuleSettings(database.db, active.organizationId, module, deployment);
+        const data = await getModuleSettings(
+          database.db,
+          active.organizationId,
+          module,
+          deployment,
+        );
         return { data };
       } catch (error) {
         return failure(reply, error);

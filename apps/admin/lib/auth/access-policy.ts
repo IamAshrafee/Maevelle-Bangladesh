@@ -112,6 +112,8 @@ export function pageCapability(pathname: string): string | undefined {
 export function decideAdminAccess(context: AdminContextDto, pathname: string): AdminAccessDecision {
   if (context.twoFactor.accessRestricted)
     return { kind: 'TWO_FACTOR_ENROLLMENT_REQUIRED', context };
+  if (internalAdminPath(pathname) === '/settings/checkout' && context.membershipType !== 'OWNER')
+    return { kind: 'ACCESS_DENIED' };
   const capability = pageCapability(pathname);
   if (
     capability &&

@@ -26,7 +26,7 @@ approved support channels; no message is sent by this runbook.
 
 | Control | Exact owning operation / effect | Retained access / qualification |
 | --- | --- | --- |
-| New purchasing | `setOperationalControl(db,{organizationId,key:'checkout_enabled',type:'KILL_SWITCH',enabled:false,actorId,reason})` from `@maevelle/database/platform` | Placement checks it under the commercial fence. Exact committed receipt replay bypasses new commercial eligibility after live authority validation. Does not erase Orders or cash. No public Admin command for this key was found; use the reviewed internal command below with explicit operator authorization. |
+| New purchasing | **Admin Settings → Checkout → Pause new orders** for the active organization Owner. Requires a reason. The API calls `pauseCheckoutOrders`, which writes the existing `checkout_enabled` kill switch and audit event in one transaction. | Placement checks it under the commercial fence. Exact committed receipt replay bypasses new commercial eligibility after live authority validation. Cart, Order and cash history are preserved. The Settings page shows release blocked independently of the pause and exposes no resume command while release authority is unavailable. |
 | Affected payment method | `configurePaymentMethod` through existing Payments method administration | Stops current method eligibility. Preserve original immutable destination/amount provenance and receipt/support operations; verify the exact candidate's current claim behavior. |
 | Compromised destination | Payments destination `SUSPEND` with expected revision and reason, through `changeReceivingDestination` / authorized Admin workspace | Stops obsolete instruction/claim eligibility; existing real money still needs independent verification/liability handling. Do not rewrite destination snapshots or send customers to a personal wallet. |
 | Payout execution | Stop issuing affected refund processing/completion commands; restrict the authorized operational capability under incident procedure | No external payout adapter/one-click global payout switch is qualified here. UNKNOWN_EXTERNAL_OUTCOME requires independent reconciliation, never automatic second payout. Keep status/evidence reads. |
@@ -41,7 +41,7 @@ unavailable; do not remove that protection incidentally. Future activation must
 qualify separate post-order HTTP access while preserving new-purchase controls.
 09A proves operational-control semantics in the DB engine, not deployed HTTP.
 
-### Reviewed internal kill command template
+### Reviewed internal kill command template for releases without the Admin control
 
 After explicit environment/operator authorization, run inside the selected API
 image on the existing private network with protected environment injection.
