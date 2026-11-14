@@ -41,6 +41,7 @@ import { Money, Price } from '@/components/commerce/price';
 import { DesktopProductCard, MobileProductCard } from '@/components/commerce/product-card';
 import { QuantityStepper } from '@/components/commerce/quantity-stepper';
 import { WishlistButton } from '@/components/commerce/wishlist-button';
+import { BottomSheet } from '@/components/ui/bottom-sheet';
 import { CartDrawer } from '@/components/commerce/cart-drawer';
 import { SortDrawer, type SortOption } from '@/components/commerce/sort-drawer';
 import {
@@ -88,6 +89,7 @@ export default function StorefrontDesignSystemPage() {
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [isSortOpen, setIsSortOpen] = useState(false);
   const [isFilterOpen, setIsFilterOpen] = useState(false);
+  const [isMotionSpecOpen, setIsMotionSpecOpen] = useState(false);
   const [isSizeGuideOpen, setIsSizeGuideOpen] = useState(false);
   const [drawerFilters, setDrawerFilters] = useState<FilterValues>(DEFAULT_FILTER_VALUES);
   const [cartCount, setCartCount] = useState(2);
@@ -1856,6 +1858,32 @@ export default function StorefrontDesignSystemPage() {
                 </div>
               </div>
             </div>
+
+            <div className="rounded-xl border border-primary/20 bg-primary-fixed-dim/10 p-4 shadow-xs space-y-2 sm:col-span-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <span className="h-2 w-2 rounded-full bg-primary animate-pulse" />
+                  <h3 className="font-headline-sm text-sm font-semibold text-primary">
+                    Universal Mobile Bottom Sheet — Motion Specification Specimen
+                  </h3>
+                </div>
+                <span className="rounded-full bg-primary/10 px-2 py-0.5 font-label-sm text-[10px] font-bold text-primary">
+                  380ms In · 280ms Out · Single Rigid Surface
+                </span>
+              </div>
+              <p className="text-body-sm text-xs text-on-surface-variant">
+                Full reference implementation of the high-velocity opening deceleration curve
+                (cubic-bezier(0.22, 1, 0.36, 1)), accelerating exit (cubic-bezier(0.4, 0, 1, 1)),
+                subtle backdrop opacity fade, safe-area insets, touch drag-to-dismiss, and keyboard
+                stability.
+              </p>
+              <div className="flex flex-wrap gap-2 pt-1">
+                <Button onClick={() => setIsMotionSpecOpen(true)} variant="primary">
+                  <SparklesIcon size={18} />
+                  <span>Launch Motion Spec Bottom Sheet</span>
+                </Button>
+              </div>
+            </div>
           </div>
         </section>
 
@@ -2091,6 +2119,89 @@ export default function StorefrontDesignSystemPage() {
         onClose={() => setIsFilterOpen(false)}
         resultCount={24}
       />
+
+      <BottomSheet
+        footer={
+          <div className="flex items-center gap-2">
+            <Button className="flex-1" onClick={() => setIsMotionSpecOpen(false)} variant="outline">
+              Dismiss
+            </Button>
+            <Button
+              className="flex-1"
+              onClick={() => {
+                showToast('Confirmed motion action');
+                setIsMotionSpecOpen(false);
+              }}
+              variant="primary"
+            >
+              Confirm Selection
+            </Button>
+          </div>
+        }
+        isOpen={isMotionSpecOpen}
+        onClose={() => setIsMotionSpecOpen(false)}
+        subtitle="Verification surface for unified vertical transform and decoupled backdrop"
+        title="Premium Motion Specimen"
+      >
+        <div className="space-y-4 px-4 py-4 sm:px-6">
+          <div className="rounded-xl bg-surface-container-low p-4">
+            <h4 className="font-headline-sm text-sm font-semibold text-on-surface">
+              Kinetic Specifications
+            </h4>
+            <ul className="mt-2 space-y-1 font-body-sm text-xs text-on-surface-variant">
+              <li>
+                • Entrance: 380ms decelerate (cubic-bezier(0.22, 1, 0.36, 1)) from translateY(100%)
+              </li>
+              <li>• Exit: 280ms accelerate (cubic-bezier(0.4, 0, 1, 1)) to translateY(100%)</li>
+              <li>• Backdrop: 250ms fade-in, 200ms fade-out (opacity only, no transform)</li>
+              <li>• Content synchronization: 100% rigid surface without staggered child motion</li>
+              <li>
+                • Touch keyboard immunity: Initial focus anchored to sheet, never auto-focusing
+                inputs
+              </li>
+            </ul>
+          </div>
+
+          <div>
+            <label className="block font-label-md text-xs font-semibold text-on-surface">
+              Sample Form Field (Touch Keyboard Test)
+            </label>
+            <p className="font-body-sm text-[11px] text-on-surface-variant">
+              Notice this input does NOT receive auto-focus upon opening, preventing unwanted mobile
+              keyboard jumps.
+            </p>
+            <input
+              className="mt-1.5 h-10 w-full rounded-lg border border-border bg-surface px-3 font-body-sm text-sm text-on-surface outline-none focus:border-primary"
+              placeholder="Type notes here (optional)…"
+              type="text"
+            />
+          </div>
+
+          <div className="space-y-2">
+            <span className="block font-label-md text-xs font-semibold text-on-surface">
+              Scrollable Rigid Content Elements
+            </span>
+            {[1, 2, 3, 4, 5, 6].map((i) => (
+              <div
+                className="flex items-center justify-between rounded-lg border border-border/60 bg-surface-container-lowest p-3"
+                key={i}
+              >
+                <div>
+                  <span className="font-headline-sm text-xs font-semibold text-on-surface">
+                    Curated Piece #{i}
+                  </span>
+                  <p className="font-body-sm text-[11px] text-on-surface-variant">
+                    Internal rigid child item synchronized with sheet transform
+                  </p>
+                </div>
+                <span className="font-mono text-xs font-bold text-primary">
+                  ৳{(i * 1250).toLocaleString()}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </BottomSheet>
 
       <SizeGuideDialog
         isOpen={isSizeGuideOpen}

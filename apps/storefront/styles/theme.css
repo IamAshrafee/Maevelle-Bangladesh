@@ -186,6 +186,12 @@
 
   /* Motion */
   --ease-maevelle: cubic-bezier(0.2, 0, 0, 1);
+  --ease-sheet-in: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-sheet-out: cubic-bezier(0.4, 0, 1, 1);
+  --duration-sheet-in: 380ms;
+  --duration-sheet-out: 280ms;
+  --duration-sheet-backdrop-in: 250ms;
+  --duration-sheet-backdrop-out: 200ms;
 }
 
 /* Next/font variables live on <body>; inline mapping resolves them at use-site. */
@@ -237,4 +243,65 @@
 
 @utility pt-safe {
   padding-top: env(safe-area-inset-top, 0px);
+}
+
+/*
+ * Mobile Bottom Sheet Premium Motion System
+ *
+ * Implements GPU-accelerated vertical transform transitions with decoupled backdrop opacity.
+ * Decelerates smoothly on entrance (380ms ease-out) and accelerates cleanly on exit (280ms ease-in).
+ * Content moves as a rigid unified surface with zero child transform or opacity disparity.
+ */
+.bottom-sheet-backdrop {
+  background-color: var(--color-scrim, rgb(30 27 25 / 50%));
+  opacity: 0;
+  transition: opacity var(--duration-sheet-backdrop-out, 200ms)
+    var(--ease-sheet-out, cubic-bezier(0.4, 0, 1, 1));
+  will-change: opacity;
+}
+
+.bottom-sheet-backdrop[data-state='open'] {
+  opacity: 1;
+  transition: opacity var(--duration-sheet-backdrop-in, 250ms)
+    var(--ease-sheet-in, cubic-bezier(0.22, 1, 0.36, 1));
+}
+
+.bottom-sheet-surface {
+  transform: translateY(100%);
+  transition: transform var(--duration-sheet-out, 280ms)
+    var(--ease-sheet-out, cubic-bezier(0.4, 0, 1, 1));
+  will-change: transform;
+}
+
+.bottom-sheet-surface[data-state='open'] {
+  transform: translateY(0%);
+  transition: transform var(--duration-sheet-in, 380ms)
+    var(--ease-sheet-in, cubic-bezier(0.22, 1, 0.36, 1));
+}
+
+@starting-style {
+  .bottom-sheet-backdrop[data-state='open'] {
+    opacity: 0;
+  }
+  .bottom-sheet-surface[data-state='open'] {
+    transform: translateY(100%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bottom-sheet-surface {
+    transform: none !important;
+    transition: opacity 150ms ease-out !important;
+  }
+  .bottom-sheet-surface[data-state='closed'] {
+    opacity: 0 !important;
+    transform: none !important;
+  }
+  .bottom-sheet-surface[data-state='open'] {
+    opacity: 1 !important;
+    transform: none !important;
+  }
+  .bottom-sheet-backdrop {
+    transition: opacity 150ms ease-out !important;
+  }
 }

@@ -48,6 +48,12 @@ describe('storefront design tokens', () => {
     expect(theme).toContain('--motion-normal: 180ms');
     expect(theme).toContain('--radius-md: 0.5rem');
     expect(theme).toContain('--container-storefront: 77.5rem');
+    expect(theme).toContain('--ease-sheet-in: cubic-bezier(0.22, 1, 0.36, 1)');
+    expect(theme).toContain('--ease-sheet-out: cubic-bezier(0.4, 0, 1, 1)');
+    expect(theme).toContain('--duration-sheet-in: 380ms');
+    expect(theme).toContain('--duration-sheet-out: 280ms');
+    expect(theme).toContain('--duration-sheet-backdrop-in: 250ms');
+    expect(theme).toContain('--duration-sheet-backdrop-out: 200ms');
   });
 
   it('resolves Next font variables at the component use site', () => {
