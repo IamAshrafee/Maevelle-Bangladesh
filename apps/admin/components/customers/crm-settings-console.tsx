@@ -14,11 +14,11 @@ import {
   AdminPage,
   EmptyState,
   ErrorState,
-  LoadingState,
   PageHeader,
   PagePanel,
   PageSection,
 } from '@/components/ui/page-shell';
+import { Skeleton } from '@/components/ui/skeleton';
 import { useAdminCapability } from '@/components/admin-capabilities';
 
 export function CrmSettingsConsole() {
@@ -223,7 +223,17 @@ export function CrmSettingsConsole() {
         </PagePanel>
       </PageSection>
       {!fields ? (
-        <LoadingState />
+        <PagePanel className="divide-y divide-border p-0" aria-busy="true">
+          {[1, 2, 3].map((i) => (
+            <div key={i} className="flex items-center justify-between p-4">
+              <div className="space-y-1.5 flex-1">
+                <Skeleton className="h-4 w-36" />
+                <Skeleton className="h-3 w-56" />
+              </div>
+              <Skeleton className="h-8 w-20" />
+            </div>
+          ))}
+        </PagePanel>
       ) : fields.length === 0 ? (
         <EmptyState
           icon={SlidersHorizontal}

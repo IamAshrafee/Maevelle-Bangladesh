@@ -4,7 +4,8 @@ import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import type { CommerceMeasurementReportDto } from '@maevelle/contracts';
 import { useAdminContext } from '@/components/admin-capabilities';
 import { NativeSelect } from '@/components/ui/native-select';
-import { ErrorState, LoadingState, PagePanel } from '@/components/ui/page-shell';
+import { ErrorState, PagePanel } from '@/components/ui/page-shell';
+import { Skeleton } from '@/components/ui/skeleton';
 import { fetchApiData, ApiRequestError } from '@/lib/api';
 import { CommerceTables } from './commerce-tables';
 
@@ -134,7 +135,20 @@ function AuthorizedCommerceView({
       {!valid ? (
         <ErrorState title="Unsupported traffic class" message="Choose a supported traffic class." />
       ) : !current ? (
-        <LoadingState message="Loading commerce aggregates…" />
+        <div className="space-y-4">
+          <Skeleton className="h-4 w-48" />
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            {[1, 2, 3, 4].map((i) => (
+              <div key={i} className="h-24 rounded-xl border border-border bg-card p-4 space-y-2">
+                <Skeleton className="h-4 w-28" />
+                <Skeleton className="h-6 w-20" />
+              </div>
+            ))}
+          </div>
+          <div className="h-64 rounded-xl border border-border bg-card p-4">
+            <Skeleton className="h-full w-full" />
+          </div>
+        </div>
       ) : current.error ? (
         <ErrorState
           title="Commerce report unavailable"

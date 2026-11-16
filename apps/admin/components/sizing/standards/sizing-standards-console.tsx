@@ -48,10 +48,12 @@ import {
   AdminPage,
   EmptyState,
   ErrorState,
-  LoadingState,
   PageHeader,
   PagePanel,
 } from '@/components/ui/page-shell';
+import { Skeleton } from '@/components/ui/skeleton';
+import { TableSkeletonRows } from '@/components/ui/table-skeleton';
+import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { RefreshButton } from '@/components/ui/refresh-button';
 import { Badge } from '@/components/ui/badge';
@@ -487,16 +489,15 @@ export function SizingStandardsConsole() {
         </div>
       ) : null}
 
-      {loading ? (
-        <LoadingState message="Loading sizing standards and hierarchies…" />
-      ) : error ? (
+      {error ? (
         <ErrorState
           title="Could not load sizing standards"
           message={error}
           onRetry={() => void load()}
         />
-      ) : (
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
+      ) : null}
+
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-border pb-3">
             <TabsList className="h-10 p-1 bg-muted/60">
               <TabsTrigger value="domains" className="gap-1.5 text-xs touch-manipulation">
@@ -549,7 +550,25 @@ export function SizingStandardsConsole() {
               </div>
             </div>
 
-            {visibleDomains.length === 0 ? (
+            {loading && domains.length === 0 ? (
+              <div className="space-y-4" aria-busy="true">
+                {[1, 2].map((i) => (
+                  <PagePanel key={i} className="p-5 border-border space-y-4">
+                    <div className="flex items-center justify-between">
+                      <div className="space-y-2">
+                        <Skeleton className="h-5 w-40" />
+                        <Skeleton className="h-3.5 w-60" />
+                      </div>
+                      <Skeleton className="h-8 w-24" />
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-border/50">
+                      <Skeleton className="h-16 w-full" />
+                      <Skeleton className="h-16 w-full" />
+                    </div>
+                  </PagePanel>
+                ))}
+              </div>
+            ) : visibleDomains.length === 0 ? (
               <EmptyState
                 icon={FolderTree}
                 title="No sizing domains found"
@@ -567,7 +586,7 @@ export function SizingStandardsConsole() {
                 }
               />
             ) : (
-              <div className="space-y-4">
+              <div className={cn('space-y-4', loading && 'opacity-60 transition-opacity')}>
                 {visibleDomains.map((domain) => {
                   const domainSystems = systems.filter(
                     (s) =>
@@ -780,7 +799,31 @@ export function SizingStandardsConsole() {
               </div>
             </div>
 
-            {visibleSizes.length === 0 ? (
+            {loading && sizeDefinitions.length === 0 ? (
+              <PagePanel className="p-0 border-border overflow-hidden" aria-busy="true">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-xs">
+                    <thead className="bg-muted/40 font-semibold text-muted-foreground border-b border-border">
+                      <tr>
+                        <th className="px-4 py-3">Label</th>
+                        <th className="px-4 py-3">Code</th>
+                        <th className="px-4 py-3">Size System</th>
+                        <th className="px-4 py-3">Deterministic Sort Order</th>
+                        <th className="px-4 py-3">Status</th>
+                        <th className="px-4 py-3 text-right">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-border/40">
+                      <TableSkeletonRows
+                        columns={6}
+                        rows={6}
+                        columnWidths={['w-20', 'w-16', 'w-32', 'w-16', 'w-20', 'w-12 ml-auto']}
+                      />
+                    </tbody>
+                  </table>
+                </div>
+              </PagePanel>
+            ) : visibleSizes.length === 0 ? (
               <EmptyState
                 icon={Layers}
                 title="No size definitions found"
@@ -817,7 +860,7 @@ export function SizingStandardsConsole() {
                         <th className="px-4 py-3 text-right">Actions</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-border/40">
+                    <tbody className={cn('divide-y divide-border/40', loading && 'opacity-60 transition-opacity')}>
                       {visibleSizes.map((size) => {
                         const system = systems.find((s) => s.id === size.sizeSystemId);
                         const isBusy = busyId === size.id;
@@ -921,7 +964,22 @@ export function SizingStandardsConsole() {
               </div>
             </div>
 
-            {visibleMeasurements.length === 0 ? (
+            {loading && measurements.length === 0 ? (
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3" aria-busy="true">
+                {[1, 2, 3, 4, 5, 6].map((i) => (
+                  <PagePanel key={i} className="p-4 flex flex-col justify-between gap-3 border-border">
+                    <div className="space-y-2">
+                      <div className="flex items-start justify-between gap-2">
+                        <Skeleton className="h-4 w-28" />
+                        <Skeleton className="h-5 w-16" />
+                      </div>
+                      <Skeleton className="h-3 w-40" />
+                      <Skeleton className="h-8 w-full" />
+                    </div>
+                  </PagePanel>
+                ))}
+              </div>
+            ) : visibleMeasurements.length === 0 ? (
               <EmptyState
                 icon={Ruler}
                 title="No measurement dimensions found"
@@ -945,7 +1003,7 @@ export function SizingStandardsConsole() {
                 }
               />
             ) : (
-              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              <div className={cn('grid gap-3 sm:grid-cols-2 lg:grid-cols-3', loading && 'opacity-60 transition-opacity')}>
                 {visibleMeasurements.map((m) => {
                   const domain = domains.find((d) => d.id === m.sizingDomainId);
                   const isBusy = busyId === m.id;
@@ -1040,7 +1098,6 @@ export function SizingStandardsConsole() {
             )}
           </TabsContent>
         </Tabs>
-      )}
 
       <StandardsDialogs
         activeDomains={activeDomains}

@@ -15,6 +15,8 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { EmptyState } from '@/components/ui/page-shell';
+import { TableSkeletonRows } from '@/components/ui/table-skeleton';
+import { cn } from '@/lib/utils';
 import { formatMoney } from '@/lib/format/numbers';
 import {
   calculateDiscountPercent,
@@ -31,6 +33,7 @@ interface PricingTableProps {
   readonly onArchivePrice: (item: VariantPriceItem) => void;
   readonly onClearFilters?: () => void;
   readonly hasFilters?: boolean;
+  readonly loading?: boolean;
 }
 
 export function PricingTable({
@@ -41,7 +44,32 @@ export function PricingTable({
   onArchivePrice,
   onClearFilters,
   hasFilters,
+  loading = false,
 }: PricingTableProps) {
+  if (loading && items.length === 0) {
+    return (
+      <Table density={density} stickyHeader aria-busy="true">
+        <TableHeader>
+          <TableRow>
+            <TableHead className="w-[30%]">Product & Variant</TableHead>
+            <TableHead className="w-[10%]">Currency</TableHead>
+            <TableHead className="w-[20%] text-right">Selling Price</TableHead>
+            <TableHead className="w-[15%]">Operational Status</TableHead>
+            <TableHead className="w-[15%]">Schedule Window</TableHead>
+            <TableHead className="w-[10%] text-right">Actions</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody className={loading ? 'opacity-60 transition-opacity' : undefined}>
+          <TableSkeletonRows
+            columns={6}
+            rows={6}
+            columnWidths={['w-48', 'w-16', 'w-24 ml-auto', 'w-24', 'w-32', 'w-12 ml-auto']}
+          />
+        </TableBody>
+      </Table>
+    );
+  }
+
   if (items.length === 0) {
     return (
       <EmptyState
@@ -77,7 +105,7 @@ export function PricingTable({
           <TableHead className="w-[10%] text-right">Actions</TableHead>
         </TableRow>
       </TableHeader>
-      <TableBody>
+      <TableBody className={loading ? 'opacity-60 transition-opacity' : undefined}>
         {items.map((item) => {
           const category = getScheduleCategory(item, now);
           const discount = calculateDiscountPercent(item.amount, item.compareAtAmount);

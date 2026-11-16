@@ -15,11 +15,11 @@ import {
   AdminPage,
   EmptyState,
   ErrorState,
-  LoadingState,
   PageHeader,
   PagePanel,
   PageSection,
 } from '@/components/ui/page-shell';
+import { Skeleton } from '@/components/ui/skeleton';
 
 export function SegmentsConsole() {
   const [segments, setSegments] = useState<readonly CustomerSegmentDto[]>();
@@ -138,7 +138,23 @@ export function SegmentsConsole() {
         </PagePanel>
       </PageSection>
       {!segments ? (
-        <LoadingState />
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3" aria-busy="true">
+          {[1, 2, 3].map((i) => (
+            <PagePanel key={i} className="space-y-3">
+              <div className="flex items-start justify-between gap-3">
+                <div className="space-y-1.5 flex-1">
+                  <Skeleton className="h-5 w-36" />
+                  <Skeleton className="h-3.5 w-52" />
+                </div>
+                <Skeleton className="h-5 w-16" />
+              </div>
+              <div className="space-y-2 pt-2 border-t border-border/50">
+                <Skeleton className="h-4 w-28" />
+                <Skeleton className="h-8 w-full" />
+              </div>
+            </PagePanel>
+          ))}
+        </div>
       ) : segments.length === 0 ? (
         <EmptyState
           icon={UsersRound}

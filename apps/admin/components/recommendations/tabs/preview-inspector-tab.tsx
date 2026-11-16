@@ -12,7 +12,8 @@ import { Input } from '@/components/ui/input';
 import { NativeSelect } from '@/components/ui/native-select';
 import { Badge } from '@/components/ui/badge';
 
-import { EmptyState, LoadingState } from '@/components/ui/page-shell';
+import { EmptyState } from '@/components/ui/page-shell';
+import { Skeleton } from '@/components/ui/skeleton';
 import { fetchApiData } from '@/lib/api';
 import type { ProductPickerItem } from '../recommendations-types';
 import { PLACEMENT_LABELS } from '../recommendations-types';
@@ -193,8 +194,30 @@ export function PreviewInspectorTab({
       )}
 
       {/* Main Preview Area */}
-      {evaluating ? (
-        <LoadingState message="Running contextual recommendation evaluation engine…" />
+      {evaluating && !previewData ? (
+        <div className="space-y-6">
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <Skeleton className="h-4 w-48" />
+              <Skeleton className="h-4 w-20" />
+            </div>
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              {[1, 2, 3, 4].map((i) => (
+                <div key={i} className="rounded-xl border border-border bg-card p-3 space-y-3">
+                  <Skeleton className="aspect-square w-full rounded-lg" />
+                  <div className="space-y-1.5">
+                    <Skeleton className="h-4 w-3/4" />
+                    <Skeleton className="h-3.5 w-1/2" />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+          <div className="rounded-xl border border-border bg-card p-4 space-y-3">
+            <Skeleton className="h-5 w-40" />
+            <Skeleton className="h-16 w-full" />
+          </div>
+        </div>
       ) : !productId ? (
         <EmptyState
           icon={Package}
@@ -202,7 +225,7 @@ export function PreviewInspectorTab({
           description="Pick any published or draft product above to simulate how our recommendation algorithms populate its storefront carousels."
         />
       ) : (
-        <div className="space-y-6">
+        <div className={`space-y-6 ${evaluating ? 'opacity-60 transition-opacity' : ''}`}>
           {/* 1. Storefront Visual Mockup */}
           <div className="space-y-3">
             <div className="flex items-center justify-between">

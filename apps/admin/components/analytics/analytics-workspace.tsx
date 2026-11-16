@@ -7,7 +7,8 @@ import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useAdminContext } from '@/components/admin-capabilities';
 import { type NavIconKey } from '@/lib/navigation/route-registry';
 import { RefreshButton } from '@/components/ui/refresh-button';
-import { AdminPage, ErrorState, LoadingState, PageHeader } from '@/components/ui/page-shell';
+import { AdminPage, ErrorState, PageHeader } from '@/components/ui/page-shell';
+import { Skeleton } from '@/components/ui/skeleton';
 import { WorkspaceTabs, type WorkspaceTabItem } from '@/components/ui/workspace-tabs';
 import { AnalyticsFilterToolbar } from './analytics-filter-toolbar';
 import { CustomersView } from './views/customers-view';
@@ -32,11 +33,41 @@ import {
 
 const CommerceView = dynamic(
   () => import('./views/commerce-view').then((module) => module.CommerceView),
-  { loading: () => <LoadingState message="Loading commerce reporting…" /> },
+  {
+    loading: () => (
+      <div className="space-y-6">
+        <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+          {[1, 2, 3, 4].map((i) => (
+            <div key={i} className="h-24 rounded-xl border border-border bg-card p-4 space-y-2">
+              <Skeleton className="h-4 w-28" />
+              <Skeleton className="h-6 w-20" />
+            </div>
+          ))}
+        </div>
+        <div className="h-64 rounded-xl border border-border bg-card p-4">
+          <Skeleton className="h-full w-full" />
+        </div>
+      </div>
+    ),
+  },
 );
 
 const CartView = dynamic(() => import('./views/cart-view').then((module) => module.CartView), {
-  loading: () => <LoadingState message="Loading Cart Analytics…" />,
+  loading: () => (
+    <div className="space-y-6">
+      <div className="grid gap-3 sm:grid-cols-3">
+        {[1, 2, 3].map((i) => (
+          <div key={i} className="h-28 rounded-xl border border-border bg-card p-4 space-y-2">
+            <Skeleton className="h-4 w-28" />
+            <Skeleton className="h-7 w-20" />
+          </div>
+        ))}
+      </div>
+      <div className="h-64 rounded-xl border border-border bg-card p-4">
+        <Skeleton className="h-full w-full" />
+      </div>
+    </div>
+  ),
 });
 
 const VIEW_NAVIGATION: readonly {

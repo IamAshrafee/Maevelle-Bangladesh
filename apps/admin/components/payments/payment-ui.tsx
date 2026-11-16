@@ -7,7 +7,8 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { NativeSelect } from '@/components/ui/native-select';
-import { ErrorState, LoadingState } from '@/components/ui/page-shell';
+import { ErrorState } from '@/components/ui/page-shell';
+import { Skeleton } from '@/components/ui/skeleton';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { paymentLabel, paymentMoney } from '@/lib/payments/transport';
 import { cn } from '@/lib/utils';
@@ -193,11 +194,23 @@ export function PaymentQueryState({
   query: { data: unknown; error: string | undefined; loading: boolean; refresh: () => void };
   children: ReactNode;
 }) {
-  if (query.error)
+  if (query.error && !query.data)
     return (
       <ErrorState title="Payment data unavailable" message={query.error} onRetry={query.refresh} />
     );
-  if (query.loading) return <LoadingState message="Loading payment records…" />;
+  if (query.loading && !query.data) {
+    return (
+      <div className="space-y-4">
+        <div className="rounded-xl border border-border bg-card p-6 space-y-4">
+          <Skeleton className="h-6 w-48" />
+          <div className="space-y-2">
+            <Skeleton className="h-4 w-full" />
+            <Skeleton className="h-4 w-3/4" />
+          </div>
+        </div>
+      </div>
+    );
+  }
   if (!query.data)
     return (
       <ErrorState
@@ -206,7 +219,7 @@ export function PaymentQueryState({
         onRetry={query.refresh}
       />
     );
-  return <>{children}</>;
+  return <div className={query.loading ? 'opacity-60 transition-opacity' : undefined}>{children}</div>;
 }
 
 export function PaymentPager({

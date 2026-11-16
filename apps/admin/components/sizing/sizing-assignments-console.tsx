@@ -27,11 +27,12 @@ import {
   AdminPage,
   EmptyState,
   ErrorState,
-  LoadingState,
   PageHeader,
   PagePanel,
   PageSection,
 } from '@/components/ui/page-shell';
+import { TableSkeletonRows } from '@/components/ui/table-skeleton';
+import { cn } from '@/lib/utils';
 import {
   applyCategoryDefaultSizeGuide,
   fetchCategorySizeGuideDefaults,
@@ -142,8 +143,7 @@ export function SizingAssignmentsConsole() {
           {feedback}
         </p>
       ) : null}
-      {loading ? <LoadingState message="Loading effective guide assignments…" /> : null}
-      {!loading && error ? (
+      {error ? (
         <ErrorState
           title="Could not load assignments"
           message={error}
@@ -151,28 +151,40 @@ export function SizingAssignmentsConsole() {
         />
       ) : null}
 
-      {!loading && !error ? (
-        <>
-          <PageSection
-            title="Primary Category defaults"
-            description="Every Product in a Category inherits its published guide unless the Product has a direct override."
-            actions={
-              <Input
-                aria-label="Search Categories"
-                placeholder="Search Categories…"
-                value={search}
-                onChange={(event) => setSearch(event.target.value)}
-                className="w-full sm:w-64"
-              />
-            }
-          >
-            {filteredCategories.length === 0 ? (
-              <EmptyState
-                title="No Categories found"
-                description="Try another search or create a Category before assigning a guide."
-              />
-            ) : (
-              <div className="grid gap-3">
+      <PageSection
+        title="Primary Category defaults"
+        description="Every Product in a Category inherits its published guide unless the Product has a direct override."
+        actions={
+          <Input
+            aria-label="Search Categories"
+            placeholder="Search Categories…"
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            className="w-full sm:w-64"
+          />
+        }
+      >
+        {loading && categories.length === 0 ? (
+          <div className="grid gap-3" aria-busy="true">
+            {[1, 2, 3].map((i) => (
+              <PagePanel key={i} className="p-4 shadow-none space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="space-y-1.5">
+                    <div className="h-5 w-40 rounded bg-muted animate-pulse" />
+                    <div className="h-3 w-56 rounded bg-muted animate-pulse" />
+                  </div>
+                  <div className="h-8 w-24 rounded bg-muted animate-pulse" />
+                </div>
+              </PagePanel>
+            ))}
+          </div>
+        ) : filteredCategories.length === 0 ? (
+          <EmptyState
+            title="No Categories found"
+            description="Try another search or create a Category before assigning a guide."
+          />
+        ) : (
+          <div className={cn('grid gap-3', loading && 'opacity-60 transition-opacity')}>
                 {filteredCategories.map((category) => (
                   <PagePanel key={category.categoryId} className="p-4 shadow-none">
                     <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(18rem,26rem)] lg:items-center">
@@ -258,8 +270,6 @@ export function SizingAssignmentsConsole() {
               </div>
             )}
           </PageSection>
-        </>
-      ) : null}
 
       <Dialog
         open={Boolean(assignmentPreview)}

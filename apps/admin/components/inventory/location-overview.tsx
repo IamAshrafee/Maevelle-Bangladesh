@@ -16,11 +16,11 @@ import {
   AdminPage,
   EmptyState,
   ErrorState,
-  LoadingState,
   PageHeader,
   PagePanel,
   PageSection,
 } from '@/components/ui/page-shell';
+import { Skeleton } from '@/components/ui/skeleton';
 import {
   Table,
   TableBody,
@@ -217,8 +217,62 @@ export function LocationOverview() {
         title="Facility operations"
         description={`${filtered.length} of ${locations.length} authorized location${locations.length === 1 ? '' : 's'} shown.`}
       >
-        {loading ? (
-          <LoadingState message="Loading locations…" />
+        {loading && locations.length === 0 ? (
+          <>
+            <div className="grid gap-3 md:hidden">
+              {Array.from({ length: 3 }).map((_, i) => (
+                <div key={i} className="rounded-xl border border-border bg-card p-4 shadow-2xs space-y-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="space-y-1.5">
+                      <Skeleton className="h-4 w-32" />
+                      <Skeleton className="h-3 w-24" />
+                    </div>
+                    <Skeleton className="h-5 w-16 rounded-full" />
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <Skeleton className="h-10 rounded-md" />
+                    <Skeleton className="h-10 rounded-md" />
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div className="hidden md:block">
+              <Table density="compact" stickyHeader>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Location</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead>Capabilities</TableHead>
+                    <TableHead className="text-right">On hand</TableHead>
+                    <TableHead className="text-right">Open work</TableHead>
+                    <TableHead>
+                      <span className="sr-only">Open</span>
+                    </TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {Array.from({ length: 4 }).map((_, i) => (
+                    <TableRow key={i}>
+                      <TableCell>
+                        <div className="flex items-center gap-2.5">
+                          <Skeleton className="size-8 rounded-lg" />
+                          <div className="space-y-1.5">
+                            <Skeleton className="h-4 w-36" />
+                            <Skeleton className="h-3 w-24" />
+                          </div>
+                        </div>
+                      </TableCell>
+                      <TableCell><Skeleton className="h-5 w-16 rounded-full" /></TableCell>
+                      <TableCell><Skeleton className="h-5 w-32 rounded-md" /></TableCell>
+                      <TableCell className="text-right"><Skeleton className="h-4 w-12 ml-auto" /></TableCell>
+                      <TableCell className="text-right"><Skeleton className="h-4 w-8 ml-auto" /></TableCell>
+                      <TableCell><Skeleton className="size-4 ml-auto" /></TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          </>
         ) : filtered.length === 0 ? (
           <EmptyState
             icon={MapPin}
@@ -238,7 +292,7 @@ export function LocationOverview() {
           />
         ) : (
           <>
-            <div className="grid gap-3 md:hidden">
+            <div className={`grid gap-3 md:hidden ${loading ? 'opacity-60 transition-opacity' : ''}`}>
               {filtered.map((location) => (
                 <Link
                   key={location.id}
@@ -286,7 +340,7 @@ export function LocationOverview() {
                     </TableHead>
                   </TableRow>
                 </TableHeader>
-                <TableBody>
+                <TableBody className={loading ? 'opacity-60 transition-opacity' : undefined}>
                   {filtered.map((location) => (
                     <TableRow key={location.id}>
                       <TableCell>

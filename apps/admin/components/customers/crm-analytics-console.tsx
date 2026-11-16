@@ -12,11 +12,12 @@ import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select'
 import {
   AdminPage,
   ErrorState,
-  LoadingState,
   PageHeader,
   PagePanel,
   PageSection,
 } from '@/components/ui/page-shell';
+import { Skeleton } from '@/components/ui/skeleton';
+import { TableSkeletonRows } from '@/components/ui/table-skeleton';
 import {
   Table,
   TableBody,
@@ -141,7 +142,27 @@ export function CrmAnalyticsConsole() {
       {error ? (
         <ErrorState message={error} onRetry={() => void load()} />
       ) : !data ? (
-        <LoadingState message="Loading CRM analytics…" />
+        <div className="space-y-6" aria-busy="true">
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            {[1, 2, 3, 4].map((i) => (
+              <PagePanel key={i} className="shadow-2xs space-y-3">
+                <div className="flex items-center justify-between">
+                  <Skeleton className="h-4 w-28" />
+                  <Skeleton className="size-4 rounded" />
+                </div>
+                <Skeleton className="h-8 w-20" />
+              </PagePanel>
+            ))}
+          </div>
+          <PagePanel className="p-5 shadow-2xs space-y-4">
+            <Skeleton className="h-5 w-40" />
+            <div className="space-y-2">
+              <Skeleton className="h-10 w-full" />
+              <Skeleton className="h-10 w-full" />
+              <Skeleton className="h-10 w-full" />
+            </div>
+          </PagePanel>
+        </div>
       ) : (
         <>
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">

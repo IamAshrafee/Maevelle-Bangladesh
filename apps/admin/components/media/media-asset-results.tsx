@@ -5,7 +5,8 @@ import { FileIcon, FileImage } from 'lucide-react';
 
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
-import { EmptyState, LoadingState } from '@/components/ui/page-shell';
+import { EmptyState } from '@/components/ui/page-shell';
+import { Skeleton } from '@/components/ui/skeleton';
 import {
   Table,
   TableBody,
@@ -72,8 +73,66 @@ export function MediaAssetResults({
   onInspect,
   onToggleBulk,
 }: MediaAssetResultsProps) {
-  if (loading) {
-    return <LoadingState message="Loading media assets…" className="min-h-72" />;
+  if (loading && assets.length === 0) {
+    if (viewMode === 'grid') {
+      return (
+        <div
+          className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-4"
+          aria-label="Loading media assets"
+        >
+          {Array.from({ length: 8 }).map((_, i) => (
+            <article key={i} className="overflow-hidden rounded-xl border border-border bg-card p-3 space-y-3">
+              <Skeleton className="aspect-square w-full rounded-lg" />
+              <div className="space-y-1.5">
+                <Skeleton className="h-4 w-3/4" />
+                <Skeleton className="h-3 w-1/2" />
+              </div>
+            </article>
+          ))}
+        </div>
+      );
+    }
+
+    return (
+      <div
+        className="overflow-x-auto rounded-lg border border-border"
+        role="region"
+        aria-label="Loading media asset list"
+        tabIndex={0}
+      >
+        <Table density="compact" stickyHeader>
+          <TableHeader>
+            <TableRow>
+              <TableHead className="w-10"><span className="sr-only">Select</span></TableHead>
+              <TableHead className="w-14">Preview</TableHead>
+              <TableHead>Asset Title & ID</TableHead>
+              <TableHead>Resolution & Size</TableHead>
+              <TableHead>Status</TableHead>
+              <TableHead>Visibility</TableHead>
+              <TableHead className="text-right">Usages</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {Array.from({ length: 6 }).map((_, i) => (
+              <TableRow key={i}>
+                <TableCell><Skeleton className="size-4 rounded" /></TableCell>
+                <TableCell><Skeleton className="size-10 rounded-md" /></TableCell>
+                <TableCell>
+                  <div className="space-y-1">
+                    <Skeleton className="h-4 w-36" />
+                    <Skeleton className="h-3 w-24" />
+                  </div>
+                </TableCell>
+                <TableCell><Skeleton className="h-3.5 w-24" /></TableCell>
+                <TableCell><Skeleton className="h-5 w-16 rounded-full" /></TableCell>
+                <TableCell><Skeleton className="h-5 w-14 rounded-full" /></TableCell>
+                <TableCell className="text-right"><Skeleton className="h-4 w-6 ml-auto" /></TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </div>
+    );
   }
 
   if (assets.length === 0) {
@@ -91,7 +150,7 @@ export function MediaAssetResults({
     return (
       <TooltipProvider delay={200}>
         <div
-          className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-4"
+          className={`grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-4 ${loading ? 'opacity-60 transition-opacity' : ''}`}
           aria-label="Media assets"
         >
           {assets.map((asset) => {
@@ -233,7 +292,7 @@ export function MediaAssetResults({
             <TableHead className="text-right">Usages</TableHead>
           </TableRow>
         </TableHeader>
-        <TableBody>
+        <TableBody className={loading ? 'opacity-60 transition-opacity' : undefined}>
           {assets.map((asset) => {
             const isSelected = selectedAssetId === asset.id;
             const isChecked = selectedForBulk.has(asset.id);

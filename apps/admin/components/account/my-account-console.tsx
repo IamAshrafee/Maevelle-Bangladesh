@@ -14,8 +14,8 @@ import { apiRequest } from '@/lib/api';
 import {
   AdminPage,
   ErrorState,
-  LoadingState,
 } from '@/components/ui/page-shell';
+import { Skeleton } from '@/components/ui/skeleton';
 import { NotificationPreferencesTab } from '@/components/notifications/notification-preferences-tab';
 import { AccountIdentityHeader } from './account-identity-header';
 import { ProfileTab } from './profile-tab';
@@ -124,27 +124,41 @@ export function MyAccountConsole() {
     void loadAll();
   }, [loadAll]);
 
-  if (initialLoading) {
-    return <LoadingState message="Loading your account profile and credentials…" />;
-  }
-
-  if (pageError || !overview) {
+  if (pageError && !overview) {
     return (
-      <ErrorState
-        title="Could not load My Account"
-        message={pageError ?? 'Your personal profile information is currently unavailable.'}
-        onRetry={() => {
-          setInitialLoading(true);
-          void loadAll();
-        }}
-      />
+      <AdminPage>
+        <ErrorState
+          title="Could not load My Account"
+          message={pageError ?? 'Your personal profile information is currently unavailable.'}
+          onRetry={() => {
+            setInitialLoading(true);
+            void loadAll();
+          }}
+        />
+      </AdminPage>
     );
   }
 
   return (
     <AdminPage>
       {/* Visual Identity Header */}
-      <AccountIdentityHeader overview={overview} sessionsCount={sessions.length} />
+      {overview ? (
+        <AccountIdentityHeader overview={overview} sessionsCount={sessions.length} />
+      ) : (
+        <div className="relative overflow-hidden rounded-xl border border-border bg-card p-6 shadow-2xs">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-5">
+            <Skeleton className="size-18 sm:size-20 rounded-full shrink-0" />
+            <div className="space-y-2 min-w-0 flex-1">
+              <Skeleton className="h-6 w-48" />
+              <Skeleton className="h-4 w-64" />
+              <div className="flex gap-2 pt-1">
+                <Skeleton className="h-5 w-24 rounded-full" />
+                <Skeleton className="h-5 w-32 rounded-full" />
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Navigation Tabs */}
       <div className="flex border-b border-border my-6 gap-1 overflow-x-auto scrollbar-none" role="tablist">
@@ -230,22 +244,49 @@ export function MyAccountConsole() {
       {/* Tab Panels */}
       <div role="tabpanel">
         {activeTab === 'profile' ? (
-          <ProfileTab
-            overview={overview}
-            onOverviewChange={setOverview}
-            onReload={async () => {
-              await loadOverview();
-            }}
-          />
+          overview ? (
+            <ProfileTab
+              overview={overview}
+              onOverviewChange={setOverview}
+              onReload={async () => {
+                await loadOverview();
+              }}
+            />
+          ) : (
+            <div className="space-y-6">
+              <div className="rounded-xl border border-border bg-card p-6 space-y-4">
+                <Skeleton className="h-5 w-40" />
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div className="space-y-2">
+                    <Skeleton className="h-3.5 w-24" />
+                    <Skeleton className="h-9 w-full" />
+                  </div>
+                  <div className="space-y-2">
+                    <Skeleton className="h-3.5 w-24" />
+                    <Skeleton className="h-9 w-full" />
+                  </div>
+                </div>
+              </div>
+            </div>
+          )
         ) : null}
 
         {activeTab === 'security' ? (
-          <SecurityTab
-            overview={overview}
-            onReload={async () => {
-              await Promise.all([loadOverview(), loadSessions(), loadActivities()]);
-            }}
-          />
+          overview ? (
+            <SecurityTab
+              overview={overview}
+              onReload={async () => {
+                await Promise.all([loadOverview(), loadSessions(), loadActivities()]);
+              }}
+            />
+          ) : (
+            <div className="space-y-6">
+              <div className="rounded-xl border border-border bg-card p-6 space-y-4">
+                <Skeleton className="h-5 w-40" />
+                <Skeleton className="h-9 w-64" />
+              </div>
+            </div>
+          )
         ) : null}
 
         {activeTab === 'sessions' ? (

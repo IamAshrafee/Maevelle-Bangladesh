@@ -16,6 +16,8 @@ import { Badge } from '@/components/ui/badge';
 import { StatusBadge } from '@/components/status-badge';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { EmptyState } from '@/components/ui/page-shell';
+import { TableSkeletonRows } from '@/components/ui/table-skeleton';
+import { cn } from '@/lib/utils';
 
 import { type DeliveryPricingRule, formatMoney } from './types';
 
@@ -27,6 +29,7 @@ interface DeliveryPricingTableProps {
   readonly onToggleStatus: (rule: DeliveryPricingRule) => void;
   readonly onTestInSimulator: (rule: DeliveryPricingRule) => void;
   readonly onResetFilters?: () => void;
+  readonly loading?: boolean;
 }
 
 export function DeliveryPricingTable({
@@ -37,7 +40,34 @@ export function DeliveryPricingTable({
   onToggleStatus,
   onTestInSimulator,
   onResetFilters,
+  loading = false,
 }: DeliveryPricingTableProps) {
+  if (loading && rules.length === 0) {
+    return (
+      <div className="w-full" aria-busy="true">
+        <Table density={density} stickyHeader>
+          <TableHeader>
+            <TableRow>
+              <TableHead className="w-[80px]">Priority</TableHead>
+              <TableHead>Rule & Scope</TableHead>
+              <TableHead>Threshold</TableHead>
+              <TableHead>Charge Rate</TableHead>
+              <TableHead>Status</TableHead>
+              <TableHead className="text-right">Actions</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody className={loading ? 'opacity-60 transition-opacity' : undefined}>
+            <TableSkeletonRows
+              columns={6}
+              rows={6}
+              columnWidths={['w-16', 'w-48', 'w-28', 'w-24', 'w-20', 'w-20 ml-auto']}
+            />
+          </TableBody>
+        </Table>
+      </div>
+    );
+  }
+
   if (rules.length === 0) {
     return (
       <EmptyState
@@ -95,7 +125,7 @@ export function DeliveryPricingTable({
           </TableRow>
         </TableHeader>
 
-        <TableBody>
+        <TableBody className={loading ? 'opacity-60 transition-opacity' : undefined}>
           {rules.map((rule) => {
             const isNationwide = !rule.geography_node_id;
             const isPriorityHigh = rule.priority >= 10;

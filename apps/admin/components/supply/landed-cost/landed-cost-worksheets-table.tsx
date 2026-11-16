@@ -7,6 +7,7 @@ import { StatusBadge } from '@/components/status-badge';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Skeleton } from '@/components/ui/skeleton';
 import {
   Table,
   TableBody,
@@ -24,7 +25,9 @@ export function LandedCostWorksheetsTable({
   onSearchChange,
   statusFilter,
   onStatusFilterChange,
+  loading,
 }: LandedCostWorksheetsTableProps) {
+  const isInitialLoading = Boolean(loading && worksheets.length === 0);
   const filteredWorksheets = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
     return worksheets.filter((worksheet) => {
@@ -120,51 +123,69 @@ export function LandedCostWorksheetsTable({
         </div>
       </div>
 
-      <div className="grid gap-3 md:hidden">
-        {worksheetRows.length === 0 ? (
+      <div className={`grid gap-3 md:hidden ${loading && !isInitialLoading ? 'opacity-60 transition-opacity' : ''}`}>
+        {isInitialLoading ? (
+          Array.from({ length: 3 }).map((_, i) => (
+            <article key={i} className="rounded-xl border bg-card p-4 shadow-2xs space-y-3">
+              <div className="flex items-start justify-between gap-3">
+                <div className="space-y-1.5">
+                  <Skeleton className="h-4 w-28" />
+                  <Skeleton className="h-3 w-36" />
+                </div>
+                <Skeleton className="h-5 w-16 rounded-full" />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <Skeleton className="h-8 rounded-md" />
+                <Skeleton className="h-8 rounded-md" />
+              </div>
+              <Skeleton className="h-9 w-full rounded-md" />
+            </article>
+          ))
+        ) : worksheetRows.length === 0 ? (
           <div className="rounded-xl border border-dashed bg-muted/20 p-8 text-center text-sm text-muted-foreground">
             <Layers3 aria-hidden="true" className="mx-auto mb-3 size-7" />
             {searchQuery
               ? 'No worksheets match this search.'
               : 'Received shipments ready for costing appear in Awaiting Costing.'}
           </div>
-        ) : null}
-        {worksheetRows.map(({ worksheet, totalAdditionalCost, shipmentHref }) => (
-          <article key={worksheet.id} className="rounded-xl border bg-card p-4 shadow-2xs">
-            <div className="flex items-start justify-between gap-3">
-              <div className="min-w-0">
-                <p className="font-mono text-sm font-semibold">{worksheet.worksheet_number}</p>
-                <Link
-                  href={shipmentHref}
-                  className="mt-1 block truncate font-mono text-xs text-primary hover:underline"
-                >
-                  {worksheet.shipment_number ?? 'Open Shipment'}
-                </Link>
+        ) : (
+          worksheetRows.map(({ worksheet, totalAdditionalCost, shipmentHref }) => (
+            <article key={worksheet.id} className="rounded-xl border bg-card p-4 shadow-2xs">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="font-mono text-sm font-semibold">{worksheet.worksheet_number}</p>
+                  <Link
+                    href={shipmentHref}
+                    className="mt-1 block truncate font-mono text-xs text-primary hover:underline"
+                  >
+                    {worksheet.shipment_number ?? 'Open Shipment'}
+                  </Link>
+                </div>
+                <StatusBadge status={worksheet.status} />
               </div>
-              <StatusBadge status={worksheet.status} />
-            </div>
-            <dl className="mt-3 grid grid-cols-2 gap-3 text-xs">
-              <div>
-                <dt className="text-muted-foreground">Additional Expenses</dt>
-                <dd className="mt-1 font-mono font-semibold tabular-nums">
-                  {formatSupplyMoney(totalAdditionalCost.toString(), worksheet.base_currency_code)}
-                </dd>
-              </div>
-              <div>
-                <dt className="text-muted-foreground">Revisions</dt>
-                <dd className="mt-1 font-mono font-semibold tabular-nums">
-                  {worksheet.revisions.length}
-                </dd>
-              </div>
-            </dl>
-            <Button className="mt-4 w-full justify-between" render={<Link href={shipmentHref} />}>
-              <span>
-                {worksheet.status === 'FINALIZED' ? 'Review Valuation' : 'Continue Costing'}
-              </span>
-              <ArrowRight aria-hidden="true" className="size-4" />
-            </Button>
-          </article>
-        ))}
+              <dl className="mt-3 grid grid-cols-2 gap-3 text-xs">
+                <div>
+                  <dt className="text-muted-foreground">Additional Expenses</dt>
+                  <dd className="mt-1 font-mono font-semibold tabular-nums">
+                    {formatSupplyMoney(totalAdditionalCost.toString(), worksheet.base_currency_code)}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="text-muted-foreground">Revisions</dt>
+                  <dd className="mt-1 font-mono font-semibold tabular-nums">
+                    {worksheet.revisions.length}
+                  </dd>
+                </div>
+              </dl>
+              <Button className="mt-4 w-full justify-between" render={<Link href={shipmentHref} />}>
+                <span>
+                  {worksheet.status === 'FINALIZED' ? 'Review Valuation' : 'Continue Costing'}
+                </span>
+                <ArrowRight aria-hidden="true" className="size-4" />
+              </Button>
+            </article>
+          ))
+        )}
       </div>
 
       <div className="hidden overflow-x-auto rounded-xl border bg-card shadow-2xs md:block">
@@ -180,8 +201,25 @@ export function LandedCostWorksheetsTable({
               <TableHead className="text-right font-semibold">Action</TableHead>
             </TableRow>
           </TableHeader>
-          <TableBody>
-            {filteredWorksheets.length === 0 ? (
+          <TableBody className={loading && !isInitialLoading ? 'opacity-60 transition-opacity' : undefined}>
+            {isInitialLoading ? (
+              Array.from({ length: 5 }).map((_, i) => (
+                <TableRow key={i} className="text-xs">
+                  <TableCell><Skeleton className="h-4 w-28" /></TableCell>
+                  <TableCell>
+                    <div className="space-y-1">
+                      <Skeleton className="h-4 w-32" />
+                      <Skeleton className="h-3 w-24" />
+                    </div>
+                  </TableCell>
+                  <TableCell><Skeleton className="h-5 w-16 rounded-full" /></TableCell>
+                  <TableCell className="text-right"><Skeleton className="h-4 w-20 ml-auto" /></TableCell>
+                  <TableCell><Skeleton className="h-4 w-8" /></TableCell>
+                  <TableCell><Skeleton className="h-4 w-20" /></TableCell>
+                  <TableCell className="text-right"><Skeleton className="h-8 w-24 ml-auto rounded-md" /></TableCell>
+                </TableRow>
+              ))
+            ) : filteredWorksheets.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={7} className="h-32 text-center">
                   <div className="flex flex-col items-center justify-center gap-1.5 text-muted-foreground">

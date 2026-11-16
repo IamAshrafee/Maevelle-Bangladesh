@@ -27,7 +27,8 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
-import { EmptyState, LoadingState } from '@/components/ui/page-shell';
+import { EmptyState } from '@/components/ui/page-shell';
+import { Skeleton } from '@/components/ui/skeleton';
 import type { CoverageResponse } from '../recommendations-types';
 
 interface CoverageTabProps {
@@ -148,7 +149,44 @@ export function CoverageTab({
 
       {/* Table view */}
       {loading && !coverage ? (
-        <LoadingState message="Evaluating catalog recommendation coverage…" />
+        <div className="relative">
+          <Table density="comfortable" stickyHeader>
+            <TableHeader>
+              <TableRow>
+                <TableHead className="w-10">
+                  <span className="sr-only">Select</span>
+                </TableHead>
+                <TableHead>Product</TableHead>
+                <TableHead className="text-center">You May Also Like</TableHead>
+                <TableHead className="text-center">Complete Your Look</TableHead>
+                <TableHead className="text-center">Curated Overrides</TableHead>
+                <TableHead className="text-center">Discovery Health</TableHead>
+                <TableHead className="text-right">Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {Array.from({ length: 5 }).map((_, i) => (
+                <TableRow key={i}>
+                  <TableCell><Skeleton className="size-4 rounded" /></TableCell>
+                  <TableCell>
+                    <div className="flex items-center gap-3">
+                      <Skeleton className="size-9 rounded-md" />
+                      <div className="space-y-1.5 flex-1">
+                        <Skeleton className="h-4 w-40" />
+                        <Skeleton className="h-3 w-28" />
+                      </div>
+                    </div>
+                  </TableCell>
+                  <TableCell className="text-center"><Skeleton className="h-5 w-16 mx-auto rounded-full" /></TableCell>
+                  <TableCell className="text-center"><Skeleton className="h-5 w-16 mx-auto rounded-full" /></TableCell>
+                  <TableCell className="text-center"><Skeleton className="h-5 w-12 mx-auto rounded-full" /></TableCell>
+                  <TableCell className="text-center"><Skeleton className="h-5 w-20 mx-auto rounded-full" /></TableCell>
+                  <TableCell className="text-right"><Skeleton className="h-8 w-20 ml-auto rounded-md" /></TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
       ) : filteredItems.length === 0 ? (
         <EmptyState
           icon={Filter}
@@ -194,7 +232,7 @@ export function CoverageTab({
                 <TableHead className="text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
-            <TableBody>
+            <TableBody className={loading ? 'opacity-60 transition-opacity' : undefined}>
               {filteredItems.map((item) => {
                 const isSelected = selectedIds.includes(item.id);
                 const isHealthy = item.similarCount > 0 && item.complementaryCount > 0;

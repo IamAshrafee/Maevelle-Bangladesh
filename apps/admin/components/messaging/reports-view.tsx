@@ -19,7 +19,8 @@ import type { MessagingReportSummary } from '@maevelle/contracts/messaging';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { ErrorState, LoadingState } from '@/components/ui/page-shell';
+import { ErrorState } from '@/components/ui/page-shell';
+import { Skeleton } from '@/components/ui/skeleton';
 import * as api from './api';
 
 export function ReportsView() {
@@ -62,9 +63,7 @@ export function ReportsView() {
     void load(next);
   }
 
-  if (state === 'loading' && !report)
-    return <LoadingState message="Building messaging report…" className="h-full" />;
-  if (state === 'error' && !report)
+  if (state === 'error' && !report) {
     return (
       <ErrorState
         title="Report unavailable"
@@ -73,9 +72,9 @@ export function ReportsView() {
         className="m-4"
       />
     );
-  if (!report) return null;
+  }
 
-  const totals = report.totals;
+  const totals = report?.totals;
 
   return (
     <div className="h-full overflow-y-auto p-4 sm:p-6">
@@ -115,13 +114,39 @@ export function ReportsView() {
           </div>
         </div>
 
-        {/* Top-Level Operational KPIs */}
-        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-          <Metric
-            icon={MessageSquareText}
-            label="Total conversations"
-            value={String(totals.total ?? 0)}
-          />
+        {!report || !totals ? (
+          <div className="space-y-6">
+            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+              {[1, 2, 3, 4].map((i) => (
+                <div key={i} className="rounded-xl border border-border bg-card p-4 space-y-2">
+                  <Skeleton className="h-4 w-32" />
+                  <Skeleton className="h-7 w-20" />
+                  <Skeleton className="h-3 w-28" />
+                </div>
+              ))}
+            </div>
+            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+              {[1, 2, 3, 4].map((i) => (
+                <div key={i} className="rounded-xl border border-border bg-card p-4 space-y-2">
+                  <Skeleton className="h-4 w-32" />
+                  <Skeleton className="h-7 w-20" />
+                  <Skeleton className="h-3 w-28" />
+                </div>
+              ))}
+            </div>
+            <div className="h-64 rounded-xl border border-border bg-card p-4">
+              <Skeleton className="h-full w-full" />
+            </div>
+          </div>
+        ) : (
+          <div className={state === 'loading' ? 'opacity-60 transition-opacity space-y-6' : 'space-y-6'}>
+            {/* Top-Level Operational KPIs */}
+            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+              <Metric
+                icon={MessageSquareText}
+                label="Total conversations"
+                value={String(totals.total ?? 0)}
+              />
           <Metric
             icon={Clock3}
             label="Avg. first response"
@@ -283,7 +308,9 @@ export function ReportsView() {
           </section>
         </div>
       </div>
+      )}
     </div>
+  </div>
   );
 }
 

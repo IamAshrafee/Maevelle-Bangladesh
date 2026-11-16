@@ -30,11 +30,11 @@ import {
   AdminPage,
   EmptyState,
   ErrorState,
-  LoadingState,
   PageHeader,
   PagePanel,
   PageSection,
 } from '@/components/ui/page-shell';
+import { Skeleton } from '@/components/ui/skeleton';
 import {
   Table,
   TableBody,
@@ -313,8 +313,66 @@ export function ReplenishmentWorkspace() {
               </label>
             }
           >
-            {loading ? (
-              <LoadingState message="Calculating projected availability…" />
+            {loading && recommendations.length === 0 ? (
+              <>
+                <div className="grid gap-3 md:hidden">
+                  {Array.from({ length: 4 }).map((_, i) => (
+                    <PagePanel key={i} className="space-y-4 p-4 shadow-none">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="space-y-2">
+                          <Skeleton className="h-4 w-40" />
+                          <Skeleton className="h-3 w-28" />
+                        </div>
+                        <Skeleton className="h-5 w-20 rounded-full" />
+                      </div>
+                      <div className="grid grid-cols-2 gap-3">
+                        <Skeleton className="h-10 rounded-md" />
+                        <Skeleton className="h-10 rounded-md" />
+                      </div>
+                    </PagePanel>
+                  ))}
+                </div>
+                <div className="hidden md:block">
+                  <Table stickyHeader density="compact">
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Item</TableHead>
+                        <TableHead>Location</TableHead>
+                        <TableHead className="text-right">Available</TableHead>
+                        <TableHead className="text-right">Projected</TableHead>
+                        <TableHead className="text-right">Reorder / target</TableHead>
+                        <TableHead>Policy</TableHead>
+                        <TableHead>Recommendation</TableHead>
+                        <TableHead className="text-right">Actions</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {Array.from({ length: 5 }).map((_, i) => (
+                        <TableRow key={i}>
+                          <TableCell>
+                            <div className="space-y-1.5">
+                              <Skeleton className="h-4 w-36" />
+                              <Skeleton className="h-3 w-24" />
+                            </div>
+                          </TableCell>
+                          <TableCell><Skeleton className="h-4 w-28" /></TableCell>
+                          <TableCell className="text-right"><Skeleton className="h-4 w-12 ml-auto" /></TableCell>
+                          <TableCell className="text-right"><Skeleton className="h-4 w-12 ml-auto" /></TableCell>
+                          <TableCell className="text-right"><Skeleton className="h-4 w-20 ml-auto" /></TableCell>
+                          <TableCell>
+                            <div className="space-y-1">
+                              <Skeleton className="h-3 w-16" />
+                              <Skeleton className="h-5 w-20 rounded-full" />
+                            </div>
+                          </TableCell>
+                          <TableCell><Skeleton className="h-3 w-44" /></TableCell>
+                          <TableCell className="text-right"><Skeleton className="h-8 w-24 ml-auto rounded-md" /></TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              </>
             ) : recommendations.length === 0 ? (
               <EmptyState
                 icon={PackagePlus}
@@ -327,7 +385,7 @@ export function ReplenishmentWorkspace() {
               />
             ) : (
               <>
-                <div className="grid gap-3 md:hidden">
+                <div className={`grid gap-3 md:hidden ${loading ? 'opacity-60 transition-opacity' : ''}`}>
                   {recommendations.map((item) => (
                     <PagePanel
                       key={`${item.inventoryItemId}-${item.locationId}`}
@@ -411,7 +469,7 @@ export function ReplenishmentWorkspace() {
                         <TableHead className="text-right">Actions</TableHead>
                       </TableRow>
                     </TableHeader>
-                    <TableBody>
+                    <TableBody className={loading ? 'opacity-60 transition-opacity' : undefined}>
                       {recommendations.map((item) => (
                         <TableRow key={`${item.inventoryItemId}-${item.locationId}`}>
                           <TableCell>
@@ -482,8 +540,38 @@ export function ReplenishmentWorkspace() {
             title="Explicit policies"
             description="Location overrides win over item policies; unconfigured items fall back to Catalog and organization settings."
           >
-            {loading ? (
-              <LoadingState message="Loading replenishment policies…" />
+            {loading && policies.length === 0 ? (
+              <Table stickyHeader density="compact">
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Item</TableHead>
+                    <TableHead>Scope</TableHead>
+                    <TableHead className="text-right">Reorder</TableHead>
+                    <TableHead className="text-right">Safety</TableHead>
+                    <TableHead className="text-right">Target</TableHead>
+                    <TableHead>Preferred source</TableHead>
+                    <TableHead className="text-right">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {Array.from({ length: 5 }).map((_, i) => (
+                    <TableRow key={i}>
+                      <TableCell>
+                        <div className="space-y-1.5">
+                          <Skeleton className="h-4 w-36" />
+                          <Skeleton className="h-3 w-24" />
+                        </div>
+                      </TableCell>
+                      <TableCell><Skeleton className="h-4 w-28" /></TableCell>
+                      <TableCell className="text-right"><Skeleton className="h-4 w-12 ml-auto" /></TableCell>
+                      <TableCell className="text-right"><Skeleton className="h-4 w-12 ml-auto" /></TableCell>
+                      <TableCell className="text-right"><Skeleton className="h-4 w-12 ml-auto" /></TableCell>
+                      <TableCell><Skeleton className="h-4 w-24" /></TableCell>
+                      <TableCell className="text-right"><Skeleton className="h-8 w-16 ml-auto rounded-md" /></TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
             ) : policies.length === 0 ? (
               <EmptyState
                 title="No explicit policies match"
@@ -510,7 +598,7 @@ export function ReplenishmentWorkspace() {
                     <TableHead className="text-right">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
-                <TableBody>
+                <TableBody className={loading ? 'opacity-60 transition-opacity' : undefined}>
                   {policies.map((policy) => (
                     <TableRow key={policy.id}>
                       <TableCell>

@@ -2,11 +2,13 @@
 
 import { Coins, FileCheck2, PackageCheck, ReceiptText } from 'lucide-react';
 import { Stats, StatsCard, StatsDescription, StatsTitle, StatsValue } from '@/components/ui/stats';
+import { Skeleton } from '@/components/ui/skeleton';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { formatSupplyMoney } from '@/lib/supply/api';
 import type { LandedCostStatsProps } from './types';
 
-export function LandedCostStats({ worksheets, unstartedShipments }: LandedCostStatsProps) {
+export function LandedCostStats({ worksheets, unstartedShipments, loading }: LandedCostStatsProps) {
+  const isInitialLoading = Boolean(loading && worksheets.length === 0);
   const drafts = worksheets.filter((w) => w.status === 'DRAFT' || w.status === 'CALCULATED').length;
   const finalized = worksheets.filter((w) => w.status === 'FINALIZED').length;
 
@@ -31,7 +33,10 @@ export function LandedCostStats({ worksheets, unstartedShipments }: LandedCostSt
     }, 0);
 
   return (
-    <Stats aria-label="Landed cost executive metrics">
+    <Stats
+      aria-label="Landed cost executive metrics"
+      className={loading && !isInitialLoading ? 'opacity-60 transition-opacity' : undefined}
+    >
       {/* KPI 1: Total Worksheets */}
       <Tooltip>
         <TooltipTrigger render={<span className="w-full text-left" />}>
@@ -39,12 +44,18 @@ export function LandedCostStats({ worksheets, unstartedShipments }: LandedCostSt
             <div className="min-w-0 flex-1">
               <StatsTitle>Landed Cost Worksheets</StatsTitle>
               <StatsValue className="mt-1 font-heading text-2xl font-bold tracking-tight">
-                {worksheets.length}
+                {isInitialLoading ? <Skeleton className="h-8 w-14" /> : worksheets.length}
               </StatsValue>
               <StatsDescription className="mt-1 flex items-center gap-1.5 text-xs">
-                <span className="font-semibold text-warning">{drafts} Draft</span>
-                <span>·</span>
-                <span className="font-semibold text-success">{finalized} Finalized</span>
+                {isInitialLoading ? (
+                  <Skeleton className="h-3.5 w-28" />
+                ) : (
+                  <>
+                    <span className="font-semibold text-warning">{drafts} Draft</span>
+                    <span>·</span>
+                    <span className="font-semibold text-success">{finalized} Finalized</span>
+                  </>
+                )}
               </StatsDescription>
             </div>
             <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
@@ -72,12 +83,16 @@ export function LandedCostStats({ worksheets, unstartedShipments }: LandedCostSt
                   unstartedShipments.length > 0 ? 'text-warning' : 'text-foreground'
                 }`}
               >
-                {unstartedShipments.length}
+                {isInitialLoading ? <Skeleton className="h-8 w-14" /> : unstartedShipments.length}
               </StatsValue>
               <StatsDescription className="mt-1 text-xs">
-                {unstartedShipments.length > 0
-                  ? 'Physical receipt verified; needs costing'
-                  : 'All received shipments costed'}
+                {isInitialLoading ? (
+                  <Skeleton className="h-3.5 w-36" />
+                ) : unstartedShipments.length > 0 ? (
+                  'Physical receipt verified; needs costing'
+                ) : (
+                  'All received shipments costed'
+                )}
               </StatsDescription>
             </div>
             <div
@@ -104,10 +119,18 @@ export function LandedCostStats({ worksheets, unstartedShipments }: LandedCostSt
             <div className="min-w-0 flex-1">
               <StatsTitle>Total Allocated Expenses</StatsTitle>
               <StatsValue className="mt-1 font-heading text-2xl font-bold tracking-tight">
-                {formatSupplyMoney(totalAdditionalCost.toString(), 'BDT')}
+                {isInitialLoading ? (
+                  <Skeleton className="h-8 w-28" />
+                ) : (
+                  formatSupplyMoney(totalAdditionalCost.toString(), 'BDT')
+                )}
               </StatsValue>
               <StatsDescription className="mt-1 text-xs text-muted-foreground">
-                Freight, customs, taxes & port charges
+                {isInitialLoading ? (
+                  <Skeleton className="h-3.5 w-32" />
+                ) : (
+                  'Freight, customs, taxes & port charges'
+                )}
               </StatsDescription>
             </div>
             <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
@@ -128,10 +151,18 @@ export function LandedCostStats({ worksheets, unstartedShipments }: LandedCostSt
             <div className="min-w-0 flex-1">
               <StatsTitle>Finalized Valuation</StatsTitle>
               <StatsValue className="mt-1 font-heading text-2xl font-bold tracking-tight text-success">
-                {formatSupplyMoney(totalFinalizedAcquisitionValue.toString(), 'BDT')}
+                {isInitialLoading ? (
+                  <Skeleton className="h-8 w-28" />
+                ) : (
+                  formatSupplyMoney(totalFinalizedAcquisitionValue.toString(), 'BDT')
+                )}
               </StatsValue>
               <StatsDescription className="mt-1 text-xs text-muted-foreground">
-                Permanent FIFO unit cost in warehouse
+                {isInitialLoading ? (
+                  <Skeleton className="h-3.5 w-32" />
+                ) : (
+                  'Permanent FIFO unit cost in warehouse'
+                )}
               </StatsDescription>
             </div>
             <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-success/10 text-success">

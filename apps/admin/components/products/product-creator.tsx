@@ -1,11 +1,12 @@
 'use client';
 
-import { useEffect } from 'react';
+import { Suspense, useEffect } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { AlertCircle, CheckCircle2 } from 'lucide-react';
 
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { AdminPage, PageSkeleton } from '@/components/ui/page-shell';
+import { AdminPage } from '@/components/ui/page-shell';
+import { Skeleton } from '@/components/ui/skeleton';
 import { useUnsavedChangesGuard } from '@/hooks/use-unsaved-changes-guard';
 
 import { BasicInfoCard } from './creator/basic-info-card';
@@ -26,16 +27,17 @@ export interface ProductCreatorProps {
   readonly productId?: string | undefined;
 }
 
-export function ProductCreator({ productId }: ProductCreatorProps = {}) {
+/**
+ * Isolated search-params observer.
+ * Wrapped in Suspense to prevent useSearchParams from causing the entire
+ * ProductCreator form and header to unmount or fallback to a page skeleton.
+ */
+function ProductCreatorSectionObserver({ loading }: { readonly loading: boolean }) {
   const searchParams = useSearchParams();
   const sectionParam = searchParams.get('section');
-  const state = useProductCreatorState({ productId });
-  const { guardDialog } = useUnsavedChangesGuard({
-    when: state.isDirty && !state.saving,
-  });
 
   useEffect(() => {
-    if (!state.loading && sectionParam) {
+    if (!loading && sectionParam) {
       const normalized = sectionParam.toLowerCase();
       const el =
         document.getElementById(`section-${normalized}`) || document.getElementById(normalized);
@@ -47,14 +49,100 @@ export function ProductCreator({ productId }: ProductCreatorProps = {}) {
         return () => clearTimeout(timer);
       }
     }
-  }, [state.loading, sectionParam]);
+  }, [loading, sectionParam]);
+
+  return null;
+}
+
+export function ProductCreator({ productId }: ProductCreatorProps = {}) {
+  const state = useProductCreatorState({ productId });
+  const { guardDialog } = useUnsavedChangesGuard({
+    when: state.isDirty && !state.saving,
+  });
 
   if (state.loading) {
-    return <PageSkeleton variant="form" widthVariant="standard" />;
+    return (
+      <div className="relative min-h-screen bg-muted/10 pb-20">
+        <Suspense fallback={null}>
+          <ProductCreatorSectionObserver loading={true} />
+        </Suspense>
+        <div
+          data-shell-chrome="true"
+          className="sticky top-[var(--shell-topbar-h,3.5rem)] z-20 bg-background/90 backdrop-blur-md print:hidden"
+        >
+          <CreatorHeader
+            sticky={false}
+            isEditMode={true}
+            productId={productId}
+            productTitle="Loading product…"
+            status="DRAFT"
+            saving={false}
+            isDirty={false}
+            onSaveDraft={() => undefined}
+            onPublish={() => undefined}
+          />
+          <SectionNavStrip />
+        </div>
+        <AdminPage
+          variant="standard"
+          className="pb-6"
+          aria-busy="true"
+          aria-label="Loading product workspace"
+        >
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
+            <div className="space-y-6 lg:col-span-8">
+              <div className="rounded-xl border border-border bg-card p-6 space-y-4 shadow-2xs">
+                <div className="space-y-2">
+                  <Skeleton className="h-5 w-48" />
+                  <Skeleton className="h-3.5 w-80" />
+                </div>
+                <div className="space-y-3 pt-2">
+                  <Skeleton className="h-9 w-full" />
+                  <Skeleton className="h-9 w-full" />
+                  <Skeleton className="h-28 w-full" />
+                </div>
+              </div>
+              <div className="rounded-xl border border-border bg-card p-6 space-y-4 shadow-2xs">
+                <Skeleton className="h-5 w-36" />
+                <Skeleton className="h-32 w-full rounded-lg" />
+              </div>
+              <div className="rounded-xl border border-border bg-card p-6 space-y-4 shadow-2xs">
+                <Skeleton className="h-5 w-40" />
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <Skeleton className="h-9 w-full" />
+                  <Skeleton className="h-9 w-full" />
+                  <Skeleton className="h-9 w-full" />
+                </div>
+              </div>
+            </div>
+            <div className="space-y-6 lg:col-span-4">
+              <div className="rounded-xl border border-border bg-card p-5 space-y-4 shadow-2xs">
+                <Skeleton className="h-4 w-32" />
+                <div className="space-y-2.5">
+                  <Skeleton className="h-3.5 w-full" />
+                  <Skeleton className="h-3.5 w-3/4" />
+                  <Skeleton className="h-3.5 w-5/6" />
+                </div>
+              </div>
+              <div className="rounded-xl border border-border bg-card p-5 space-y-4 shadow-2xs">
+                <Skeleton className="h-4 w-28" />
+                <div className="space-y-2">
+                  <Skeleton className="h-8 w-full" />
+                  <Skeleton className="h-8 w-full" />
+                </div>
+              </div>
+            </div>
+          </div>
+        </AdminPage>
+      </div>
+    );
   }
 
   return (
     <div className="relative min-h-screen bg-muted/10 pb-20">
+      <Suspense fallback={null}>
+        <ProductCreatorSectionObserver loading={false} />
+      </Suspense>
       {guardDialog}
       {/* Unified Sticky Editor Dock: Action Bar + Section Jump Strip */}
       <div

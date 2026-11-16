@@ -53,7 +53,8 @@ import {
   updateSizeGuideRow,
 } from '@/lib/sizing/api';
 
-import { AdminPage, ErrorState, LoadingState, PagePanel } from '@/components/ui/page-shell';
+import { AdminPage, ErrorState, PagePanel } from '@/components/ui/page-shell';
+import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { StatusBadge } from '@/components/status-badge';
@@ -942,7 +943,44 @@ export function SizeGuideStudioConsole() {
   }
 
   if (loading && !guide) {
-    return <LoadingState message="Loading fit and size guide…" />;
+    return (
+      <AdminPage>
+        <div>
+          <Link
+            href="/sizing/guides"
+            className="inline-flex items-center gap-1.5 text-xs font-medium text-muted-foreground hover:text-foreground mb-3 transition-colors"
+          >
+            <ArrowLeft className="size-3.5" />
+            <span>Back to Size Guides</span>
+          </Link>
+
+          <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4 border-b border-border pb-5">
+            <div className="min-w-0 space-y-2">
+              <div className="flex items-center gap-2">
+                <Skeleton className="h-8 w-64" />
+                <Skeleton className="h-5 w-20 rounded-full" />
+              </div>
+              <Skeleton className="h-4 w-48" />
+            </div>
+            <div className="flex gap-2">
+              <Skeleton className="h-9 w-24 rounded-md" />
+              <Skeleton className="h-9 w-32 rounded-md" />
+            </div>
+          </div>
+        </div>
+
+        <div className="space-y-4">
+          <div className="flex gap-2 border-b border-border pb-2">
+            <Skeleton className="h-8 w-28 rounded-md" />
+            <Skeleton className="h-8 w-28 rounded-md" />
+            <Skeleton className="h-8 w-28 rounded-md" />
+          </div>
+          <div className="h-72 rounded-xl border border-border bg-card p-6">
+            <Skeleton className="h-full w-full rounded-lg" />
+          </div>
+        </div>
+      </AdminPage>
+    );
   }
 
   if (!guide) {

@@ -7,7 +7,6 @@ import { AlertCircle, Calculator, CheckCircle2, Plus, X } from 'lucide-react';
 import {
   AdminPage,
   ErrorState,
-  LoadingState,
   PageActions,
   PageHeader,
   PageSection,
@@ -342,7 +341,7 @@ export function DeliveryPricingWorkspace() {
       )}
 
       {/* KPI Stats */}
-      <DeliveryPricingStats rules={rules} />
+      <DeliveryPricingStats rules={rules} loading={loading} />
 
       {/* Interactive Delivery Fee Simulator (Expandable) */}
       <AnimatePresence>
@@ -381,24 +380,21 @@ export function DeliveryPricingWorkspace() {
           tabCounts={tabCounts}
         />
 
-        {loading ? (
-          <LoadingState message="Loading delivery pricing rules…" />
-        ) : (
-          <DeliveryPricingTable
-            rules={filteredRules}
-            density={density}
-            busy={busy}
-            onEdit={handleOpenEdit}
-            onToggleStatus={handleToggleStatus}
-            onTestInSimulator={handleTestInSimulator}
-            onResetFilters={() => {
-              setQuery('');
-              setActiveTab('ALL');
-              setScopeFilter('ALL');
-              setSortOption('PRIORITY_DESC');
-            }}
-          />
-        )}
+        <DeliveryPricingTable
+          rules={filteredRules}
+          density={density}
+          busy={busy}
+          loading={loading}
+          onEdit={handleOpenEdit}
+          onToggleStatus={handleToggleStatus}
+          onTestInSimulator={handleTestInSimulator}
+          onResetFilters={() => {
+            setQuery('');
+            setActiveTab('ALL');
+            setScopeFilter('ALL');
+            setSortOption('PRIORITY_DESC');
+          }}
+        />
       </PageSection>
 
       {/* Informational Guidance Card */}

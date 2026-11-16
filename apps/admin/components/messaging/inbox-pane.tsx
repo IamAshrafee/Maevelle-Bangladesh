@@ -20,7 +20,8 @@ import { StatusBadge } from '@/components/status-badge';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
-import { EmptyState, ErrorState, LoadingState } from '@/components/ui/page-shell';
+import { EmptyState, ErrorState } from '@/components/ui/page-shell';
+import { Skeleton } from '@/components/ui/skeleton';
 import { SearchInput } from '@/components/ui/search-input';
 import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select';
 import {
@@ -249,7 +250,24 @@ export function InboxPane() {
 
       <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
         {messaging.inboxState === 'loading' && !messaging.conversations.length ? (
-          <LoadingState message="Loading conversations…" className="h-full" />
+          <div className="divide-y divide-border/60">
+            {Array.from({ length: 5 }).map((_, i) => (
+              <div key={i} className="flex items-start gap-3 p-3.5">
+                <Skeleton className="size-10 rounded-full shrink-0" />
+                <div className="min-w-0 flex-1 space-y-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <Skeleton className="h-4 w-28" />
+                    <Skeleton className="h-3 w-12" />
+                  </div>
+                  <Skeleton className="h-3.5 w-3/4" />
+                  <div className="flex gap-1.5 pt-1">
+                    <Skeleton className="h-4 w-14 rounded-full" />
+                    <Skeleton className="h-4 w-16 rounded-full" />
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
         ) : null}
         {messaging.inboxState === 'error' && !messaging.conversations.length ? (
           <ErrorState
@@ -271,7 +289,11 @@ export function InboxPane() {
             className="m-3 border-0"
           />
         ) : null}
-        <div role="list" aria-label="Conversations">
+        <div
+          role="list"
+          aria-label="Conversations"
+          className={messaging.inboxState === 'loading' ? 'opacity-60 transition-opacity' : undefined}
+        >
           {messaging.conversations.map((item) => {
             const active = item.id === messaging.selectedConversationId;
             const isSelected = selected.has(item.id);

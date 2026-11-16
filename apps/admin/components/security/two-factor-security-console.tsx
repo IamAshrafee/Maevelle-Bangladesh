@@ -19,11 +19,11 @@ import { RefreshButton } from '@/components/ui/refresh-button';
 import {
   AdminPage,
   ErrorState,
-  LoadingState,
   PageHeader,
   PagePanel,
   PageSection,
 } from '@/components/ui/page-shell';
+import { Skeleton } from '@/components/ui/skeleton';
 import { StatusBadge } from '@/components/status-badge';
 import {
   Dialog,
@@ -70,16 +70,47 @@ export function TwoFactorSecurityConsole() {
   }, [loadStatus]);
 
   if (loading && !status) {
-    return <LoadingState message="Loading account security posture…" />;
+    return (
+      <AdminPage>
+        <PageHeader
+          eyebrow="My Account"
+          title="Account Security"
+          description="Manage your authentication credentials, authenticator app protection, and recovery codes."
+        />
+        <div className="grid gap-6 max-w-4xl">
+          <div className="rounded-xl border border-border bg-card p-6 space-y-4">
+            <div className="flex items-start justify-between gap-4">
+              <div className="space-y-2">
+                <Skeleton className="h-6 w-48" />
+                <Skeleton className="h-4 w-72" />
+              </div>
+              <Skeleton className="h-6 w-24 rounded-full" />
+            </div>
+            <Skeleton className="h-9 w-36 rounded-md" />
+          </div>
+          <div className="rounded-xl border border-border bg-card p-6 space-y-4">
+            <Skeleton className="h-5 w-40" />
+            <Skeleton className="h-4 w-64" />
+          </div>
+        </div>
+      </AdminPage>
+    );
   }
 
   if (!status) {
     return (
-      <ErrorState
-        title="Could not load security settings"
-        message={error ?? 'Please check your connection and try again.'}
-        onRetry={() => void loadStatus()}
-      />
+      <AdminPage>
+        <PageHeader
+          eyebrow="My Account"
+          title="Account Security"
+          description="Manage your authentication credentials, authenticator app protection, and recovery codes."
+        />
+        <ErrorState
+          title="Could not load security settings"
+          message={error ?? 'Please check your connection and try again.'}
+          onRetry={() => void loadStatus()}
+        />
+      </AdminPage>
     );
   }
 

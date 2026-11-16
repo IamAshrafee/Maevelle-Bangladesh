@@ -38,10 +38,11 @@ import { SIZING_TEMPLATE_PRESETS } from '@/lib/sizing/presets';
 import {
   AdminPage,
   EmptyState,
-  LoadingState,
   PageHeader,
   PagePanel,
 } from '@/components/ui/page-shell';
+import { CardSkeletonStack, TableSkeletonRows } from '@/components/ui/table-skeleton';
+import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { RefreshButton } from '@/components/ui/refresh-button';
 import { Badge } from '@/components/ui/badge';
@@ -440,9 +441,38 @@ export function SizingGuidesConsole() {
         </div>
       </PagePanel>
 
-      {/* Guide List / Empty / Loading */}
-      {loading ? (
-        <LoadingState message="Loading size guides library…" />
+      {/* Guide List / Empty / Progressive Loading */}
+      {loading && guides.length === 0 ? (
+        <div className="space-y-4" aria-busy="true">
+          <div className="hidden xl:block">
+            <PagePanel className="p-0 border-border overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs">
+                  <thead className="bg-muted/40 font-semibold text-muted-foreground border-b border-border">
+                    <tr>
+                      <th className="px-4 py-3">Guide Name</th>
+                      <th className="px-4 py-3">Domain / System</th>
+                      <th className="px-4 py-3">Publication State</th>
+                      <th className="px-4 py-3">Catalog Usage</th>
+                      <th className="px-4 py-3">Last Updated</th>
+                      <th className="px-4 py-3 text-right">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className={cn('divide-y divide-border/40', loading && 'opacity-60 transition-opacity')}>
+                    <TableSkeletonRows
+                      columns={6}
+                      rows={6}
+                      columnWidths={['w-40', 'w-32', 'w-24', 'w-24', 'w-24', 'w-12 ml-auto']}
+                    />
+                  </tbody>
+                </table>
+              </div>
+            </PagePanel>
+          </div>
+          <div className="xl:hidden">
+            <CardSkeletonStack count={4} />
+          </div>
+        </div>
       ) : guides.length === 0 ? (
         <EmptyState
           icon={TableProperties}
@@ -489,7 +519,7 @@ export function SizingGuidesConsole() {
                       <th className="px-4 py-3 text-right">Actions</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-border/40">
+                  <tbody className={cn('divide-y divide-border/40', loading && 'opacity-60 transition-opacity')}>
                     {guides.map((guide) => {
                       const isBusy = busyId === guide.id;
 
@@ -601,7 +631,7 @@ export function SizingGuidesConsole() {
           </div>
 
           {/* Mobile Card Stack (< sm) */}
-          <div className="space-y-3 xl:hidden">
+          <div className={cn('space-y-3 xl:hidden', loading && 'opacity-60 transition-opacity')}>
             {guides.map((guide) => (
               <PagePanel key={guide.id} className="p-4 border-border flex flex-col gap-3">
                 <div className="flex items-start justify-between gap-2">

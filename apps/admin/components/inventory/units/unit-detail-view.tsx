@@ -29,13 +29,13 @@ import { Button } from '@/components/ui/button';
 import {
   AdminPage,
   ErrorState,
-  LoadingState,
   PageActions,
   PageDescription,
   PageHeader,
   PageSection,
   PageTitle,
 } from '@/components/ui/page-shell';
+import { Skeleton } from '@/components/ui/skeleton';
 import {
   getInventoryUnit,
   getUnitEvents,
@@ -160,10 +160,46 @@ export function UnitDetailView({ unitId }: { readonly unitId: string }) {
     window.setTimeout(() => setCopiedCode(false), 2000);
   };
 
-  if (loading) {
+  if (loading && !unit) {
     return (
       <AdminPage>
-        <LoadingState message="Loading physical unit details…" />
+        <Breadcrumb
+          items={[
+            { label: 'Inventory', href: '/inventory' },
+            { label: 'Quality', href: '/inventory/units' },
+            { label: unitId, current: true },
+          ]}
+        />
+        <QualityWorkspaceTabs />
+
+        <PageHeader>
+          <div className="space-y-2">
+            <div className="flex items-center gap-2">
+              <Skeleton className="h-8 w-44 font-mono" />
+              <Skeleton className="h-5 w-20 rounded-full" />
+              <Skeleton className="h-5 w-20 rounded-full" />
+            </div>
+            <Skeleton className="h-4 w-60" />
+          </div>
+        </PageHeader>
+
+        <PageSection>
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            {[1, 2, 3, 4].map((i) => (
+              <div key={i} className="rounded-xl border border-border bg-card p-4 space-y-2">
+                <Skeleton className="h-3.5 w-24" />
+                <Skeleton className="h-6 w-32" />
+              </div>
+            ))}
+          </div>
+        </PageSection>
+
+        <PageSection>
+          <div className="rounded-xl border border-border bg-card p-6 space-y-4">
+            <Skeleton className="h-5 w-40" />
+            <Skeleton className="h-24 w-full" />
+          </div>
+        </PageSection>
       </AdminPage>
     );
   }

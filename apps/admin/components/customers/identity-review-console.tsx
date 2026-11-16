@@ -20,10 +20,10 @@ import {
   AdminPage,
   EmptyState,
   ErrorState,
-  LoadingState,
   PageHeader,
   PagePanel,
 } from '@/components/ui/page-shell';
+import { TableSkeletonRows } from '@/components/ui/table-skeleton';
 import { IdentityDecisionDialog } from './identity-decision-dialog';
 
 export function IdentityReviewConsole() {
@@ -56,7 +56,27 @@ export function IdentityReviewConsole() {
       {error ? (
         <ErrorState message={error} onRetry={() => void load()} />
       ) : !result ? (
-        <LoadingState />
+        <PagePanel className="overflow-x-auto p-0" aria-busy="true">
+          <Table density="compact" stickyHeader>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Channel identity</TableHead>
+                <TableHead>Assurance</TableHead>
+                <TableHead>Evidence</TableHead>
+                <TableHead>Customer</TableHead>
+                <TableHead>Created</TableHead>
+                <TableHead className="text-right">Decision</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              <TableSkeletonRows
+                columns={6}
+                rows={6}
+                columnWidths={['w-36', 'w-24', 'w-40', 'w-32', 'w-24', 'w-20 ml-auto']}
+              />
+            </TableBody>
+          </Table>
+        </PagePanel>
       ) : result.items.length === 0 ? (
         <EmptyState
           icon={Fingerprint}

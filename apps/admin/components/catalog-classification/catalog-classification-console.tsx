@@ -159,12 +159,14 @@ export function CatalogClassificationConsole() {
     setCategoryOptions([...firstPage.items, ...remainingPages.flatMap((result) => result.items)]);
   }
 
-  useEffect(() => {
-    void refreshCategoryOptions().catch(() => undefined);
-    void fetchSizeGuides()
-      .then((result) => setSizeGuides(result.items))
-      .catch(() => undefined);
-  }, []);
+  function ensureDialogDependencies() {
+    if (categoryOptions.length === 0) void refreshCategoryOptions().catch(() => undefined);
+    if (sizeGuides.length === 0) {
+      void fetchSizeGuides()
+        .then((result) => setSizeGuides(result.items))
+        .catch(() => undefined);
+    }
+  }
 
   function switchTab(next: TabKey) {
     setTab(next);
@@ -177,12 +179,14 @@ export function CatalogClassificationConsole() {
     setEditing(undefined);
     setFormError(undefined);
     setDialogOpen(true);
+    ensureDialogDependencies();
   }
 
   function openEdit(item: EditableItem) {
     setEditing(item);
     setFormError(undefined);
     setDialogOpen(true);
+    ensureDialogDependencies();
   }
 
   async function save(value: ClassificationFormValue) {

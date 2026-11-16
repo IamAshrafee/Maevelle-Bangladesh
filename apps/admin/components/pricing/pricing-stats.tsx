@@ -11,14 +11,17 @@ import {
   StatsTitle,
   StatsValue,
 } from '@/components/ui/stats';
+import { StatsValueSkeleton } from '@/components/ui/table-skeleton';
 import { formatMoney } from '@/lib/format/numbers';
+import { cn } from '@/lib/utils';
 import { getScheduleCategory, type VariantPriceItem } from './types';
 
 interface PricingStatsProps {
   readonly items: readonly VariantPriceItem[];
+  readonly loading?: boolean;
 }
 
-export function PricingStats({ items }: PricingStatsProps) {
+export function PricingStats({ items, loading = false }: PricingStatsProps) {
   const metrics = React.useMemo(() => {
     let liveActiveCount = 0;
     let upcomingCount = 0;
@@ -64,6 +67,9 @@ export function PricingStats({ items }: PricingStatsProps) {
     };
   }, [items]);
 
+  const isInitialLoading = loading && items.length === 0;
+  const isRefreshing = loading && items.length > 0;
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 6 }}
@@ -77,7 +83,9 @@ export function PricingStats({ items }: PricingStatsProps) {
             <StatsTitle>Live Active</StatsTitle>
             <span className="flex size-2 rounded-full bg-emerald-500 animate-pulse" aria-hidden="true" />
           </div>
-          <StatsValue>{metrics.liveActiveCount}</StatsValue>
+          <StatsValue className={cn(isRefreshing && 'opacity-60 transition-opacity')}>
+            {isInitialLoading ? <StatsValueSkeleton /> : metrics.liveActiveCount}
+          </StatsValue>
           <StatsDescription>Authoritative retail prices</StatsDescription>
         </StatsCard>
 
@@ -87,7 +95,9 @@ export function PricingStats({ items }: PricingStatsProps) {
             <StatsTitle>Scheduled Campaigns</StatsTitle>
             <CalendarClock className="size-3.5 text-muted-foreground" aria-hidden="true" />
           </div>
-          <StatsValue>{metrics.upcomingCount}</StatsValue>
+          <StatsValue className={cn(isRefreshing && 'opacity-60 transition-opacity')}>
+            {isInitialLoading ? <StatsValueSkeleton /> : metrics.upcomingCount}
+          </StatsValue>
           <StatsDescription>Upcoming promotional schedules</StatsDescription>
         </StatsCard>
 
@@ -97,10 +107,14 @@ export function PricingStats({ items }: PricingStatsProps) {
             <StatsTitle>Avg Live Price (BDT)</StatsTitle>
             <Tag className="size-3.5 text-primary" aria-hidden="true" />
           </div>
-          <StatsValue>
-            {metrics.averageLiveBdt !== null
-              ? formatMoney(metrics.averageLiveBdt, 'BDT')
-              : '—'}
+          <StatsValue className={cn(isRefreshing && 'opacity-60 transition-opacity')}>
+            {isInitialLoading ? (
+              <StatsValueSkeleton />
+            ) : metrics.averageLiveBdt !== null ? (
+              formatMoney(metrics.averageLiveBdt, 'BDT')
+            ) : (
+              '—'
+            )}
           </StatsValue>
           <StatsDescription>Across live catalog SKUs</StatsDescription>
         </StatsCard>
@@ -111,7 +125,9 @@ export function PricingStats({ items }: PricingStatsProps) {
             <StatsTitle>On-Sale Items</StatsTitle>
             <Percent className="size-3.5 text-amber-500" aria-hidden="true" />
           </div>
-          <StatsValue>{metrics.discountedCount}</StatsValue>
+          <StatsValue className={cn(isRefreshing && 'opacity-60 transition-opacity')}>
+            {isInitialLoading ? <StatsValueSkeleton /> : metrics.discountedCount}
+          </StatsValue>
           <StatsDescription>Active compare-at markdowns</StatsDescription>
         </StatsCard>
 
@@ -121,7 +137,9 @@ export function PricingStats({ items }: PricingStatsProps) {
             <StatsTitle>Drafts & Archive</StatsTitle>
             <Layers className="size-3.5 text-muted-foreground" aria-hidden="true" />
           </div>
-          <StatsValue>{metrics.draftOrArchivedCount}</StatsValue>
+          <StatsValue className={cn(isRefreshing && 'opacity-60 transition-opacity')}>
+            {isInitialLoading ? <StatsValueSkeleton /> : metrics.draftOrArchivedCount}
+          </StatsValue>
           <StatsDescription>Preserved commercial audit history</StatsDescription>
         </StatsCard>
       </Stats>

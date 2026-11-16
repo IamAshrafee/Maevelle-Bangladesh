@@ -6,7 +6,7 @@ import { HelpCircle, Layers3, PackageCheck } from 'lucide-react';
 import type { ApiEnvelope, InboundShipmentDto } from '@maevelle/contracts';
 import { useAdminCapability } from '@/components/admin-capabilities';
 import { OperationalFeedback } from '@/components/operational-worklist';
-import { AdminPage, LoadingState } from '@/components/ui/page-shell';
+import { AdminPage } from '@/components/ui/page-shell';
 import { Breadcrumb } from '@/components/ui/breadcrumb';
 import { Button } from '@/components/ui/button';
 import { RefreshButton } from '@/components/ui/refresh-button';
@@ -140,7 +140,11 @@ export function LandedCostConsole() {
         </OperationalFeedback>
       ) : null}
 
-      <LandedCostStats worksheets={worksheets} unstartedShipments={unstartedShipments} />
+      <LandedCostStats
+        worksheets={worksheets}
+        unstartedShipments={unstartedShipments}
+        loading={loading}
+      />
 
       <Tabs
         value={activeView}
@@ -170,30 +174,24 @@ export function LandedCostConsole() {
         </TabsList>
 
         <TabsContent value="worksheets" className="space-y-4 pt-1">
-          {loading && worksheets.length === 0 ? (
-            <LoadingState message="Loading landed cost worksheets…" />
-          ) : (
-            <LandedCostWorksheetsTable
-              worksheets={worksheets}
-              searchQuery={searchQuery}
-              onSearchChange={(query) => updateQuery({ q: query || undefined })}
-              statusFilter={statusFilter}
-              onStatusFilterChange={(status) =>
-                updateQuery({ status: status === 'ALL' ? undefined : status })
-              }
-            />
-          )}
+          <LandedCostWorksheetsTable
+            worksheets={worksheets}
+            searchQuery={searchQuery}
+            onSearchChange={(query) => updateQuery({ q: query || undefined })}
+            statusFilter={statusFilter}
+            onStatusFilterChange={(status) =>
+              updateQuery({ status: status === 'ALL' ? undefined : status })
+            }
+            loading={loading}
+          />
         </TabsContent>
 
         <TabsContent value="awaiting" className="pt-1">
-          {loading && shipments.length === 0 ? (
-            <LoadingState message="Loading received shipments…" />
-          ) : (
-            <LandedCostUnstartedShipments
-              shipments={unstartedShipments}
-              canManageCost={canManageCost}
-            />
-          )}
+          <LandedCostUnstartedShipments
+            shipments={unstartedShipments}
+            canManageCost={canManageCost}
+            loading={loading}
+          />
         </TabsContent>
       </Tabs>
 

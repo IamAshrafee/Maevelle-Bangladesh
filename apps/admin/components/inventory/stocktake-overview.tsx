@@ -16,11 +16,11 @@ import {
   AdminPage,
   EmptyState,
   ErrorState,
-  LoadingState,
   PageHeader,
   PagePanel,
   PageSection,
 } from '@/components/ui/page-shell';
+import { Skeleton } from '@/components/ui/skeleton';
 import {
   Table,
   TableBody,
@@ -227,8 +227,54 @@ export function StocktakeOverview() {
         title="Count sessions"
         description={`${totalCount} session${totalCount === 1 ? '' : 's'} match the current filters.`}
       >
-        {loading ? (
-          <LoadingState message="Loading count sessions…" />
+        {loading && stocktakes.length === 0 ? (
+          <>
+            <div className="grid gap-3 md:hidden">
+              {Array.from({ length: 3 }).map((_, i) => (
+                <div key={i} className="rounded-xl border border-border bg-card p-4 shadow-2xs space-y-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="space-y-1.5">
+                      <Skeleton className="h-4 w-28" />
+                      <Skeleton className="h-3 w-20" />
+                    </div>
+                    <Skeleton className="h-5 w-16 rounded-full" />
+                  </div>
+                  <Skeleton className="h-2 w-full rounded-full" />
+                  <Skeleton className="h-3 w-32" />
+                </div>
+              ))}
+            </div>
+            <div className="hidden md:block">
+              <Table stickyHeader density="compact">
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Session</TableHead>
+                    <TableHead>Location</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead>Counting progress</TableHead>
+                    <TableHead>Snapshot</TableHead>
+                    <TableHead>Completed</TableHead>
+                    <TableHead>
+                      <span className="sr-only">Open</span>
+                    </TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {Array.from({ length: 4 }).map((_, i) => (
+                    <TableRow key={i}>
+                      <TableCell><Skeleton className="h-4 w-24" /></TableCell>
+                      <TableCell><Skeleton className="h-4 w-28" /></TableCell>
+                      <TableCell><Skeleton className="h-5 w-16 rounded-full" /></TableCell>
+                      <TableCell><Skeleton className="h-3.5 w-36" /></TableCell>
+                      <TableCell><Skeleton className="h-3 w-24" /></TableCell>
+                      <TableCell><Skeleton className="h-3 w-20" /></TableCell>
+                      <TableCell className="text-right"><Skeleton className="size-4 ml-auto" /></TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          </>
         ) : stocktakes.length === 0 ? (
           <EmptyState
             icon={ClipboardList}
@@ -252,7 +298,7 @@ export function StocktakeOverview() {
           />
         ) : (
           <>
-            <div className="grid gap-3 md:hidden">
+            <div className={`grid gap-3 md:hidden ${loading ? 'opacity-60 transition-opacity' : ''}`}>
               {stocktakes.map((session) => (
                 <Link
                   key={session.id}
@@ -292,7 +338,7 @@ export function StocktakeOverview() {
                     </TableHead>
                   </TableRow>
                 </TableHeader>
-                <TableBody>
+                <TableBody className={loading ? 'opacity-60 transition-opacity' : undefined}>
                   {stocktakes.map((session) => (
                     <TableRow key={session.id}>
                       <TableCell>

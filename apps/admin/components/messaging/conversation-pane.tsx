@@ -39,7 +39,8 @@ import {
   DropdownMenuLabel,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { EmptyState, ErrorState, LoadingState } from '@/components/ui/page-shell';
+import { EmptyState, ErrorState } from '@/components/ui/page-shell';
+import { Skeleton } from '@/components/ui/skeleton';
 import { Textarea } from '@/components/ui/textarea';
 import { toast } from '@/components/ui/toast';
 import { cn } from '@/lib/utils';
@@ -97,8 +98,38 @@ export function ConversationPane({ onOpenContext }: { onOpenContext: () => void 
         />
       </section>
     );
-  if (messaging.conversationState === 'loading' && !conversation)
-    return <LoadingState message="Loading conversation…" className="h-full" />;
+  if (messaging.conversationState === 'loading' && !conversation) {
+    return (
+      <section
+        className="flex h-full min-h-0 w-full min-w-0 flex-col overflow-x-hidden bg-background"
+        aria-label="Loading conversation"
+      >
+        <header className="flex min-h-16 shrink-0 items-center gap-3 border-b border-border bg-card px-4 py-2">
+          <Skeleton className="size-9 rounded-full shrink-0" />
+          <div className="space-y-1.5 flex-1">
+            <Skeleton className="h-4 w-36" />
+            <Skeleton className="h-3 w-24" />
+          </div>
+        </header>
+        <div className="flex-1 p-4 space-y-4 overflow-y-auto">
+          <div className="flex items-start gap-2.5 max-w-md">
+            <Skeleton className="size-8 rounded-full shrink-0" />
+            <Skeleton className="h-16 w-64 rounded-2xl" />
+          </div>
+          <div className="flex items-start justify-end gap-2.5 ml-auto max-w-md">
+            <Skeleton className="h-12 w-48 rounded-2xl" />
+          </div>
+          <div className="flex items-start gap-2.5 max-w-md">
+            <Skeleton className="size-8 rounded-full shrink-0" />
+            <Skeleton className="h-20 w-72 rounded-2xl" />
+          </div>
+        </div>
+        <div className="p-3 border-t border-border bg-card">
+          <Skeleton className="h-20 w-full rounded-lg" />
+        </div>
+      </section>
+    );
+  }
   if (messaging.conversationState === 'error' && !conversation)
     return (
       <ErrorState

@@ -15,7 +15,8 @@ import { Input } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
 import { StatusBadge } from '@/components/status-badge';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
-import { EmptyState, LoadingState } from '@/components/ui/page-shell';
+import { EmptyState } from '@/components/ui/page-shell';
+import { Skeleton } from '@/components/ui/skeleton';
 import type { RuleItem } from '../recommendations-types';
 
 interface CompatibilityRulesTabProps {
@@ -106,7 +107,37 @@ export function CompatibilityRulesTab({
 
       {/* Rules Table */}
       {loading && rules.length === 0 ? (
-        <LoadingState message="Loading styling compatibility rules…" />
+        <div className="relative">
+          <Table density="comfortable" stickyHeader>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Source Product Type</TableHead>
+                <TableHead className="w-8"></TableHead>
+                <TableHead>Target Companion Type</TableHead>
+                <TableHead>Styling Affinity Weight</TableHead>
+                <TableHead className="text-center">Status</TableHead>
+                <TableHead className="text-right">Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {Array.from({ length: 5 }).map((_, i) => (
+                <TableRow key={i}>
+                  <TableCell><Skeleton className="h-4 w-32" /></TableCell>
+                  <TableCell><Skeleton className="size-3.5" /></TableCell>
+                  <TableCell><Skeleton className="h-4 w-32" /></TableCell>
+                  <TableCell>
+                    <div className="flex items-center gap-3 max-w-[200px]">
+                      <Skeleton className="h-2 flex-1 rounded-full" />
+                      <Skeleton className="h-4 w-8" />
+                    </div>
+                  </TableCell>
+                  <TableCell className="text-center"><Skeleton className="h-5 w-16 mx-auto rounded-full" /></TableCell>
+                  <TableCell className="text-right"><Skeleton className="h-8 w-16 ml-auto rounded-md" /></TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
       ) : rules.length === 0 ? (
         <EmptyState
           icon={Sparkles}
@@ -142,7 +173,7 @@ export function CompatibilityRulesTab({
                 <TableHead className="text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
-            <TableBody>
+            <TableBody className={loading ? 'opacity-60 transition-opacity' : undefined}>
               {rules.map((rule) => {
                 const isToggling = togglingId === rule.id;
                 return (

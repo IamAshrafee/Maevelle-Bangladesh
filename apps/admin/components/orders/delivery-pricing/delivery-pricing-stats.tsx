@@ -4,13 +4,18 @@ import * as React from 'react';
 import { motion } from 'motion/react';
 import { Truck, CheckCircle2, Globe, MapPin } from 'lucide-react';
 
+import { StatsValueSkeleton } from '@/components/ui/table-skeleton';
+import { cn } from '@/lib/utils';
 import { type DeliveryPricingRule, formatMoney } from './types';
 
 interface DeliveryPricingStatsProps {
   rules: readonly DeliveryPricingRule[];
+  loading?: boolean;
 }
 
-export function DeliveryPricingStats({ rules }: DeliveryPricingStatsProps) {
+export function DeliveryPricingStats({ rules, loading = false }: DeliveryPricingStatsProps) {
+  const isInitial = loading && rules.length === 0;
+  const isRefreshing = loading && rules.length > 0;
   const total = rules.length;
   const activeRules = rules.filter((r) => r.status === 'ACTIVE');
   const activeCount = activeRules.length;
@@ -37,13 +42,19 @@ export function DeliveryPricingStats({ rules }: DeliveryPricingStatsProps) {
             <CheckCircle2 className="size-4" />
           </div>
         </div>
-        <div className="mt-2.5 flex items-baseline gap-2">
-          <span className="text-2xl sm:text-3xl font-bold tracking-tight text-foreground tabular-nums font-mono">
-            {activeCount}
-          </span>
-          <span className="text-xs text-muted-foreground tabular-nums font-mono">
-            / {total} ({activePct}%)
-          </span>
+        <div className={cn("mt-2.5 flex items-baseline gap-2", isRefreshing && "opacity-60 transition-opacity")}>
+          {isInitial ? (
+            <StatsValueSkeleton />
+          ) : (
+            <>
+              <span className="text-2xl sm:text-3xl font-bold tracking-tight text-foreground tabular-nums font-mono">
+                {activeCount}
+              </span>
+              <span className="text-xs text-muted-foreground tabular-nums font-mono">
+                / {total} ({activePct}%)
+              </span>
+            </>
+          )}
         </div>
         <p className="mt-1 text-xs text-muted-foreground">Actively pricing customer checkouts</p>
       </motion.div>
@@ -61,8 +72,10 @@ export function DeliveryPricingStats({ rules }: DeliveryPricingStatsProps) {
             <Globe className="size-4" />
           </div>
         </div>
-        <div className="mt-2.5 flex items-baseline gap-1.5">
-          {nationwideActive ? (
+        <div className={cn("mt-2.5 flex items-baseline gap-1.5", isRefreshing && "opacity-60 transition-opacity")}>
+          {isInitial ? (
+            <StatsValueSkeleton />
+          ) : nationwideActive ? (
             <span className="text-2xl sm:text-3xl font-bold tracking-tight text-foreground tabular-nums font-mono">
               {formatMoney(nationwideActive.flat_amount, nationwideActive.currency_code)}
             </span>
@@ -90,11 +103,17 @@ export function DeliveryPricingStats({ rules }: DeliveryPricingStatsProps) {
             <MapPin className="size-4" />
           </div>
         </div>
-        <div className="mt-2.5 flex items-baseline gap-2">
-          <span className="text-2xl sm:text-3xl font-bold tracking-tight text-foreground tabular-nums font-mono">
-            {geographicActive.length}
-          </span>
-          <span className="text-xs text-muted-foreground">regional rules</span>
+        <div className={cn("mt-2.5 flex items-baseline gap-2", isRefreshing && "opacity-60 transition-opacity")}>
+          {isInitial ? (
+            <StatsValueSkeleton />
+          ) : (
+            <>
+              <span className="text-2xl sm:text-3xl font-bold tracking-tight text-foreground tabular-nums font-mono">
+                {geographicActive.length}
+              </span>
+              <span className="text-xs text-muted-foreground">regional rules</span>
+            </>
+          )}
         </div>
         <p className="mt-1 text-xs text-muted-foreground">Division, District or Thana specific</p>
       </motion.div>
@@ -112,13 +131,19 @@ export function DeliveryPricingStats({ rules }: DeliveryPricingStatsProps) {
             <Truck className="size-4" />
           </div>
         </div>
-        <div className="mt-2.5 flex items-baseline gap-2">
-          <span className="text-2xl sm:text-3xl font-bold tracking-tight text-foreground tabular-nums font-mono">
-            {total}
-          </span>
-          <span className="text-xs text-muted-foreground tabular-nums font-mono">
-            ({total - activeCount} inactive)
-          </span>
+        <div className={cn("mt-2.5 flex items-baseline gap-2", isRefreshing && "opacity-60 transition-opacity")}>
+          {isInitial ? (
+            <StatsValueSkeleton />
+          ) : (
+            <>
+              <span className="text-2xl sm:text-3xl font-bold tracking-tight text-foreground tabular-nums font-mono">
+                {total}
+              </span>
+              <span className="text-xs text-muted-foreground tabular-nums font-mono">
+                ({total - activeCount} inactive)
+              </span>
+            </>
+          )}
         </div>
         <p className="mt-1 text-xs text-muted-foreground">Managed server-side pricing rules</p>
       </motion.div>

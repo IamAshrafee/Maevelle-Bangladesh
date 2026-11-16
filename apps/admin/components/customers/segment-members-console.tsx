@@ -9,10 +9,10 @@ import {
   AdminPage,
   EmptyState,
   ErrorState,
-  LoadingState,
   PageHeader,
   PagePanel,
 } from '@/components/ui/page-shell';
+import { TableSkeletonRows } from '@/components/ui/table-skeleton';
 import {
   Table,
   TableBody,
@@ -63,7 +63,26 @@ export function SegmentMembersConsole({ segmentId }: { segmentId: string }) {
       {error ? (
         <ErrorState message={error} onRetry={() => void load()} />
       ) : !data ? (
-        <LoadingState />
+        <PagePanel className="overflow-x-auto p-0" aria-busy="true">
+          <Table density="compact" stickyHeader>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Customer</TableHead>
+                <TableHead>Orders</TableHead>
+                <TableHead>Purchase value</TableHead>
+                <TableHead>Last ordered</TableHead>
+                <TableHead className="text-right">Action</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              <TableSkeletonRows
+                columns={5}
+                rows={5}
+                columnWidths={['w-40', 'w-20', 'w-28', 'w-28', 'w-16 ml-auto']}
+              />
+            </TableBody>
+          </Table>
+        </PagePanel>
       ) : data.items.length === 0 ? (
         <EmptyState
           icon={UsersRound}

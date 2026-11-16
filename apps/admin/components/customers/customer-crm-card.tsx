@@ -11,7 +11,8 @@ import { fetchApiData } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select';
 import { StatusBadge } from '@/components/status-badge';
-import { ErrorState, LoadingState } from '@/components/ui/page-shell';
+import { ErrorState } from '@/components/ui/page-shell';
+import { Skeleton } from '@/components/ui/skeleton';
 import { IdentityRevokeDialog } from './identity-revoke-dialog';
 import { useAdminCapability } from '@/components/admin-capabilities';
 import { CreatePrivacyRequestDialog } from './create-privacy-request-dialog';
@@ -153,7 +154,29 @@ export function CustomerCrmCard({
         {error ? (
           <ErrorState message={error} onRetry={() => void load()} />
         ) : !profile ? (
-          <LoadingState />
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Skeleton className="h-3 w-28" />
+                <Skeleton className="h-7 w-16" />
+              </div>
+              <div className="space-y-1.5">
+                <Skeleton className="h-3 w-28" />
+                <Skeleton className="h-5 w-24" />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Skeleton className="h-3 w-20" />
+              <div className="flex gap-2">
+                <Skeleton className="h-6 w-16 rounded-full" />
+                <Skeleton className="h-6 w-20 rounded-full" />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Skeleton className="h-3 w-24" />
+              <Skeleton className="h-16 w-full rounded-md" />
+            </div>
+          </div>
         ) : (
           <>
             <div className="grid grid-cols-2 gap-3">

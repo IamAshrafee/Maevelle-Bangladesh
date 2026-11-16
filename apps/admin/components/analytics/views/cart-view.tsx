@@ -12,15 +12,15 @@ import { NativeSelect } from '@/components/ui/native-select';
 import {
   EmptyState,
   ErrorState,
-  LoadingState,
   PagePanel,
   PageSection,
 } from '@/components/ui/page-shell';
+import { Skeleton } from '@/components/ui/skeleton';
 import { ApiRequestError, fetchApiData } from '@/lib/api';
 import { CartActivityTable, CartValueTable, formatCartCount } from './cart-activity-tables';
 
 const CartTrend = dynamic(() => import('./cart-trend').then((module) => module.CartTrend), {
-  loading: () => <LoadingState message="Loading chart…" />,
+  loading: () => <div className="h-64 rounded-xl border border-border bg-card p-4 animate-pulse" />,
 });
 
 const observationLabels: Record<CartInteractionName, { title: string; description: string }> = {
@@ -134,7 +134,23 @@ export function CartView({
         </label>
       </div>
 
-      {!current && <LoadingState message="Loading Cart Analytics…" />}
+      {!current && (
+        <div className="space-y-6">
+          <div className="grid gap-3 sm:grid-cols-3">
+            {[1, 2, 3].map((i) => (
+              <div key={i} className="h-28 rounded-xl border border-border bg-card p-4">
+                <Skeleton className="h-4 w-28" />
+                <Skeleton className="mt-2 h-7 w-20" />
+                <Skeleton className="mt-2 h-3 w-40" />
+              </div>
+            ))}
+          </div>
+          <div className="h-64 rounded-xl border border-border bg-card p-4">
+            <Skeleton className="h-4 w-36 mb-4" />
+            <Skeleton className="h-48 w-full" />
+          </div>
+        </div>
+      )}
       {current && 'error' in current && (
         <ErrorState
           title="Cart Analytics unavailable"

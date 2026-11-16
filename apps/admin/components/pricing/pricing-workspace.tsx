@@ -12,7 +12,6 @@ import {
 import {
   AdminPage,
   ErrorState,
-  LoadingState,
   PageActions,
   PageHeader,
   PageSection,
@@ -237,7 +236,7 @@ export function PricingWorkspace() {
       )}
 
       {/* Executive Metrics Overview */}
-      <PricingStats items={prices} />
+      <PricingStats items={prices} loading={loading} />
 
       {/* Main Worklist Section */}
       <PageSection>
@@ -256,24 +255,21 @@ export function PricingWorkspace() {
           tabCounts={tabCounts}
         />
 
-        {/* Content Area: Table / Loading / Empty */}
-        {loading ? (
-          <LoadingState message="Loading variant prices and schedules…" />
-        ) : (
-          <PricingTable
-            items={filteredPrices}
-            density={density}
-            onQuickUpdatePrice={handleOpenQuickUpdate}
-            onViewHistory={handleOpenHistory}
-            onArchivePrice={handleOpenArchive}
-            hasFilters={query.trim() !== '' || currency !== 'ALL' || activeTab !== 'ALL'}
-            onClearFilters={() => {
-              setQuery('');
-              setCurrency('ALL');
-              setActiveTab('ALL');
-            }}
-          />
-        )}
+        {/* Content Area: Progressive Table / Skeletons / Empty */}
+        <PricingTable
+          items={filteredPrices}
+          density={density}
+          onQuickUpdatePrice={handleOpenQuickUpdate}
+          onViewHistory={handleOpenHistory}
+          onArchivePrice={handleOpenArchive}
+          hasFilters={query.trim() !== '' || currency !== 'ALL' || activeTab !== 'ALL'}
+          loading={loading}
+          onClearFilters={() => {
+            setQuery('');
+            setCurrency('ALL');
+            setActiveTab('ALL');
+          }}
+        />
       </PageSection>
 
       {/* Slide-over Create / Schedule Price Sheet */}

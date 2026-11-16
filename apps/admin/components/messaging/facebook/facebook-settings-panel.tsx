@@ -11,7 +11,8 @@ import type {
 
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
-import { ErrorState, LoadingState } from '@/components/ui/page-shell';
+import { ErrorState } from '@/components/ui/page-shell';
+import { Skeleton } from '@/components/ui/skeleton';
 import { toast } from '@/components/ui/toast';
 import { useAdminCapability } from '@/components/admin-capabilities';
 import * as api from './facebook-api';
@@ -90,7 +91,20 @@ export function FacebookSettingsPanel() {
     connections.find((c) => c.id === selectedConnectionId) ?? connections[0] ?? null;
 
   if (loading && !connections.length) {
-    return <LoadingState message="Loading Facebook Messenger settings…" className="py-12" />;
+    return (
+      <div className="space-y-6">
+        <div className="rounded-2xl border border-border bg-card p-6 sm:p-8 space-y-4 shadow-2xs">
+          <div className="flex items-center gap-3">
+            <Skeleton className="size-12 rounded-xl" />
+            <div className="space-y-1.5 flex-1">
+              <Skeleton className="h-5 w-48" />
+              <Skeleton className="h-3.5 w-72" />
+            </div>
+          </div>
+          <Skeleton className="h-10 w-44 rounded-md" />
+        </div>
+      </div>
+    );
   }
 
   if (errorMsg && !connections.length) {
@@ -105,7 +119,7 @@ export function FacebookSettingsPanel() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className={`space-y-6 ${loading ? 'opacity-60 transition-opacity' : ''}`}>
       {/* If No Connection exists: Show Disconnected State */}
       {!activeConnection ? (
         <div className="rounded-2xl border border-dashed border-border bg-card p-6 sm:p-10 text-center space-y-5 shadow-2xs">

@@ -36,11 +36,12 @@ import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select'
 import {
   AdminPage,
   EmptyState,
-  LoadingState,
   PageHeader,
   PagePanel,
   PageSection,
 } from '@/components/ui/page-shell';
+import { CardSkeletonStack, TableSkeletonRows } from '@/components/ui/table-skeleton';
+import { cn } from '@/lib/utils';
 import { RefreshButton } from '@/components/ui/refresh-button';
 
 type Feedback = {
@@ -421,8 +422,35 @@ export function SizingMappingsConsole() {
       </PagePanel>
 
       <PageSection>
-        {loading ? (
-          <LoadingState message="Loading catalog size option mappings..." />
+        {loading && items.length === 0 ? (
+          <div className="space-y-4" aria-busy="true">
+            <div className="hidden overflow-hidden rounded-xl border border-border bg-card shadow-2xs md:block">
+              <div className="overflow-x-auto">
+                <table className="min-w-full divide-y divide-border text-left text-xs">
+                  <thead className="bg-muted/50 font-medium text-muted-foreground">
+                    <tr>
+                      <th className="px-4 py-3">Product</th>
+                      <th className="px-4 py-3">Axis &amp; Value</th>
+                      <th className="px-4 py-3">Configured System</th>
+                      <th className="px-4 py-3">Canonical Definition</th>
+                      <th className="px-4 py-3">Status</th>
+                      <th className="px-4 py-3 text-right">Quick Save</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border">
+                    <TableSkeletonRows
+                      columns={6}
+                      rows={6}
+                      columnWidths={['w-44', 'w-28', 'w-32', 'w-40', 'w-20', 'w-20 ml-auto']}
+                    />
+                  </tbody>
+                </table>
+              </div>
+            </div>
+            <div className="md:hidden">
+              <CardSkeletonStack count={4} />
+            </div>
+          </div>
         ) : items.length === 0 ? (
           <EmptyState
             title="No Matching Option Values Found"
@@ -443,7 +471,7 @@ export function SizingMappingsConsole() {
                       <th className="px-4 py-3 text-right">Quick Save</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-border">
+                  <tbody className={cn('divide-y divide-border', loading && 'opacity-60 transition-opacity')}>
                     {items.map((item) => {
                       const { candidates, selected, busy, isDirty, mismatch, system } =
                         getRowState(item);
@@ -517,7 +545,7 @@ export function SizingMappingsConsole() {
               </div>
             </div>
 
-            <div className="space-y-3 md:hidden">
+            <div className={cn('space-y-3 md:hidden', loading && 'opacity-60 transition-opacity')}>
               {items.map((item) => {
                 const { candidates, selected, busy, isDirty, mismatch, system } = getRowState(item);
 

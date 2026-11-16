@@ -12,7 +12,8 @@ import type {
 import { useAdminCapability } from '@/components/admin-capabilities';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
-import { ErrorState, LoadingState } from '@/components/ui/page-shell';
+import { ErrorState } from '@/components/ui/page-shell';
+import { Skeleton } from '@/components/ui/skeleton';
 import { toast } from '@/components/ui/toast';
 import * as api from './instagram-api';
 import { InstagramConnectionOverview } from './instagram-connection-overview';
@@ -87,8 +88,22 @@ export function InstagramSettingsPanel() {
 
   const activeConnection = connections.find((connection) => connection.id === selectedId) ?? null;
 
-  if (state === 'loading' && !connections.length)
-    return <LoadingState message="Loading Instagram Direct settings…" className="py-12" />;
+  if (state === 'loading' && !connections.length) {
+    return (
+      <div className="space-y-5">
+        <section className="space-y-5 rounded-2xl border border-border bg-card p-5 text-center shadow-2xs sm:p-9">
+          <div className="flex items-center gap-3">
+            <Skeleton className="size-12 rounded-xl" />
+            <div className="space-y-1.5 flex-1 text-left">
+              <Skeleton className="h-5 w-48" />
+              <Skeleton className="h-3.5 w-72" />
+            </div>
+          </div>
+          <Skeleton className="h-10 w-44 rounded-md" />
+        </section>
+      </div>
+    );
+  }
 
   if (state === 'error' && !connections.length)
     return (
@@ -101,7 +116,7 @@ export function InstagramSettingsPanel() {
     );
 
   return (
-    <div className="space-y-5">
+    <div className={`space-y-5 ${state === 'loading' ? 'opacity-60 transition-opacity' : ''}`}>
       {!activeConnection ? (
         <section className="space-y-5 rounded-2xl border border-dashed border-border bg-card p-5 text-center shadow-2xs sm:p-9">
           <div className="mx-auto flex size-14 items-center justify-center rounded-2xl bg-primary-subtle text-primary">

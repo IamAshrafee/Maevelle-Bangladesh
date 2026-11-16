@@ -16,11 +16,11 @@ import {
   AdminPage,
   EmptyState,
   ErrorState,
-  LoadingState,
   PageHeader,
   PagePanel,
   PageSection,
 } from '@/components/ui/page-shell';
+import { Skeleton } from '@/components/ui/skeleton';
 import {
   Table,
   TableBody,
@@ -237,8 +237,61 @@ export function TransferOverview() {
         title="Transfer queue"
         description={`${totalCount} transfer${totalCount === 1 ? '' : 's'} match the current filters.`}
       >
-        {loading ? (
-          <LoadingState message="Loading transfer queue…" />
+        {loading && transfers.length === 0 ? (
+          <>
+            <div className="grid gap-3 md:hidden">
+              {Array.from({ length: 3 }).map((_, i) => (
+                <div key={i} className="rounded-xl border border-border bg-card p-4 shadow-2xs space-y-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="space-y-1.5">
+                      <Skeleton className="h-4 w-28" />
+                      <Skeleton className="h-3 w-20" />
+                    </div>
+                    <Skeleton className="h-5 w-16 rounded-full" />
+                  </div>
+                  <div className="my-4 flex items-center gap-2">
+                    <Skeleton className="h-4 flex-1" />
+                    <Skeleton className="size-4 shrink-0" />
+                    <Skeleton className="h-4 flex-1" />
+                  </div>
+                  <Skeleton className="h-2 w-full rounded-full" />
+                </div>
+              ))}
+            </div>
+            <div className="hidden md:block">
+              <Table density="compact" stickyHeader>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Transfer</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead>Route</TableHead>
+                    <TableHead className="text-right">Quantity progress</TableHead>
+                    <TableHead>Created</TableHead>
+                    <TableHead>
+                      <span className="sr-only">Open</span>
+                    </TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {Array.from({ length: 4 }).map((_, i) => (
+                    <TableRow key={i}>
+                      <TableCell>
+                        <div className="space-y-1.5">
+                          <Skeleton className="h-4 w-24" />
+                          <Skeleton className="h-3 w-16" />
+                        </div>
+                      </TableCell>
+                      <TableCell><Skeleton className="h-5 w-16 rounded-full" /></TableCell>
+                      <TableCell><Skeleton className="h-4 w-48" /></TableCell>
+                      <TableCell className="text-right"><Skeleton className="h-4 w-20 ml-auto" /></TableCell>
+                      <TableCell><Skeleton className="h-3 w-24" /></TableCell>
+                      <TableCell className="text-right"><Skeleton className="size-4 ml-auto" /></TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          </>
         ) : transfers.length === 0 ? (
           <EmptyState
             icon={Truck}
@@ -258,7 +311,7 @@ export function TransferOverview() {
           />
         ) : (
           <>
-            <div className="grid gap-3 md:hidden">
+            <div className={`grid gap-3 md:hidden ${loading ? 'opacity-60 transition-opacity' : ''}`}>
               {transfers.map((transfer) => (
                 <Link
                   key={transfer.id}
@@ -302,7 +355,7 @@ export function TransferOverview() {
                     </TableHead>
                   </TableRow>
                 </TableHeader>
-                <TableBody>
+                <TableBody className={loading ? 'opacity-60 transition-opacity' : undefined}>
                   {transfers.map((transfer) => (
                     <TableRow key={transfer.id}>
                       <TableCell>

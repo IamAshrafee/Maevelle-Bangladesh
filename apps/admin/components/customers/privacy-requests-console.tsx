@@ -39,10 +39,10 @@ import {
   AdminPage,
   EmptyState,
   ErrorState,
-  LoadingState,
   PageHeader,
   PagePanel,
 } from '@/components/ui/page-shell';
+import { TableSkeletonRows } from '@/components/ui/table-skeleton';
 import { fetchApiData } from '@/lib/api';
 
 type PrivacyRequest = {
@@ -239,7 +239,27 @@ export function PrivacyRequestsConsole() {
       {error ? (
         <ErrorState message={error} onRetry={() => void load()} />
       ) : !data ? (
-        <LoadingState />
+        <PagePanel className="overflow-x-auto p-0" aria-busy="true">
+          <Table density="compact" stickyHeader>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Customer</TableHead>
+                <TableHead>Request</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead>Reason</TableHead>
+                <TableHead>Due</TableHead>
+                <TableHead className="text-right">Action</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              <TableSkeletonRows
+                columns={6}
+                rows={6}
+                columnWidths={['w-36', 'w-28', 'w-24', 'w-48', 'w-24', 'w-20 ml-auto']}
+              />
+            </TableBody>
+          </Table>
+        </PagePanel>
       ) : data.items.length === 0 ? (
         <EmptyState
           icon={ShieldCheck}

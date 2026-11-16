@@ -16,7 +16,8 @@ import {
 } from '@/components/ui/sheet';
 import { Input } from '@/components/ui/input';
 import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select';
-import { EmptyState, ErrorState, LoadingState } from '@/components/ui/page-shell';
+import { EmptyState, ErrorState } from '@/components/ui/page-shell';
+import { Skeleton } from '@/components/ui/skeleton';
 import { Textarea } from '@/components/ui/textarea';
 import { toast } from '@/components/ui/toast';
 import { cn } from '@/lib/utils';
@@ -124,10 +125,23 @@ export function FollowUpsView({ onOpenConversation }: { onOpenConversation: () =
           </div>
         </div>
 
-        {state === 'loading' ? (
-          <LoadingState message="Loading follow-ups…" className="h-64" />
+        {state === 'loading' && !items.length ? (
+          <div className="space-y-3">
+            {Array.from({ length: 4 }).map((_, i) => (
+              <div key={i} className="rounded-xl border border-border bg-card p-4 space-y-3">
+                <div className="flex items-start justify-between">
+                  <div className="space-y-1.5 flex-1">
+                    <Skeleton className="h-4 w-36" />
+                    <Skeleton className="h-3 w-48" />
+                  </div>
+                  <Skeleton className="h-5 w-20 rounded-full" />
+                </div>
+                <Skeleton className="h-3.5 w-64" />
+              </div>
+            ))}
+          </div>
         ) : null}
-        {state === 'error' ? (
+        {state === 'error' && !items.length ? (
           <ErrorState
             title="Follow-ups unavailable"
             message="The follow-up queue could not be loaded."
@@ -154,8 +168,12 @@ export function FollowUpsView({ onOpenConversation }: { onOpenConversation: () =
           />
         ) : null}
 
-        {state === 'ready' && items.length ? (
-          <div className="space-y-3" role="list" aria-label="Follow-up queue">
+        {items.length ? (
+          <div
+            className={cn('space-y-3', state === 'loading' && 'opacity-60 transition-opacity')}
+            role="list"
+            aria-label="Follow-up queue"
+          >
             {items.map((item) => (
               <article
                 key={item.id}
