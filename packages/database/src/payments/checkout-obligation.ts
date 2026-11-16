@@ -1,4 +1,4 @@
-import { sql, type Transaction } from 'kysely';
+import { sql, type Kysely, type Transaction } from 'kysely';
 import type { CheckoutPlacementMethod } from '@maevelle/contracts';
 import type { DatabaseSchema } from '../index.js';
 import { CheckoutError } from '../checkout/types.js';
@@ -9,20 +9,23 @@ export type CheckoutPaymentSelection =
   | {
       method: Exclude<CheckoutPlacementMethod, 'COD'>;
       destinationId: string;
+      destinationRevision?: string;
       operatingPolicyId: string;
     };
 
 export async function checkoutPaymentConfiguration(
-  tx: Tx,
+  tx: Kysely<DatabaseSchema>,
   organizationId: string,
   selection: CheckoutPaymentSelection,
+  options?: { allowDisabled: boolean },
 ) {
   const unavailable = () =>
     new CheckoutError('PAYMENT_METHOD_UNAVAILABLE', 'Review the available payment methods.');
   const method = (
     await sql<{ id: string; revision: string }>`
     select id,version::text revision from payments.payment_methods
-    where organization_id=${organizationId} and code=${selection.method} and status='ACTIVE'
+    where organization_id=${organizationId} and code=${selection.method}
+      and (status='ACTIVE' or ${options?.allowDisabled ?? false})
       and method_type=${selection.method === 'COD' ? 'COD' : 'MOBILE_WALLET'}
   `.execute(tx)
   ).rows[0];
@@ -46,6 +49,8 @@ export async function checkoutPaymentConfiguration(
         'receiving_number',d.receiving_number,'recipient_name',d.recipient_name,'transfer_action',d.transfer_action,
         'instructions',d.instructions,'financial_account_id',d.financial_account_id,'currency_code',d.currency_code)
       and d.state='APPROVED'
+      and (${selection.destinationRevision ?? null}::bigint is null
+        or d.revision=${selection.destinationRevision ?? null}::bigint)
       and d.approved_by is not null and d.approved_by<>d.created_by and d.approved_at is not null
       and length(btrim(d.provider_evidence_reference))>0
       and d.provider=${selection.method === 'BKASH_MANUAL' ? 'BKASH' : 'NAGAD'}

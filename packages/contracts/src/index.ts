@@ -2,6 +2,7 @@ export * from './checkout-delivery.js';
 export * from './checkout.js';
 /** Explicit transport DTOs shared by API clients; domain entities stay private to their owners. */
 import type { CustomerLifecycleStageDto } from './crm.js';
+import type { VerifiedReceiptDto } from './checkout-payment.js';
 
 export * from './messaging/index.js';
 export * from './pricing.js';
@@ -2552,6 +2553,12 @@ export interface PendingCodCollectionDto {
   readonly deliveredAt: string;
 }
 
+export interface PendingCodCollectionPageDto {
+  readonly items: readonly PendingCodCollectionDto[];
+  readonly page: number;
+  readonly hasNext: boolean;
+}
+
 export interface FinancePostingDto {
   readonly transactionId: string;
   readonly transactionNumber: string;
@@ -2577,6 +2584,7 @@ export interface PaymentDto {
 }
 
 export interface PaymentDetailDto extends PaymentDto {
+  readonly verifiedReceipt: VerifiedReceiptDto | null;
   readonly order: {
     readonly status: string;
     readonly total: string;
@@ -5133,10 +5141,10 @@ export interface MediaModuleSettingsDto {
 
 export interface CheckoutOrderControlDto {
   readonly paused: boolean;
-  readonly releaseStatus: 'BLOCKED';
+  readonly releaseStatus: 'BLOCKED' | 'READY';
 }
 
-export interface PauseCheckoutOrdersDto {
+export interface ChangeCheckoutOrderPauseDto {
   readonly reason: string;
 }
 

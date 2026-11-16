@@ -30,9 +30,15 @@ async function paymentClaimWorkspaceInTransaction(
         instructions?: string;
       };
       destination_revision: string | null;
+      receiving_financial_account_id: string | null;
       payment_id: string | null;
-    }>`select i.currency_code,a.review_state,i.instructions_snapshot,i.destination_revision::text,p.id payment_id from payments.payment_attempts a
+    }>`select i.currency_code,a.review_state,i.instructions_snapshot,i.destination_revision::text,p.id payment_id,
+      case when i.destination_id is not null then h.snapshot->>'financial_account_id'
+        else i.instructions_snapshot->>'financialAccountId' end receiving_financial_account_id
+      from payments.payment_attempts a
       join payments.payment_intents i on i.organization_id=a.organization_id and i.id=a.payment_intent_id
+      left join payments.receiving_destination_history h on h.organization_id=i.organization_id
+        and h.destination_id=i.destination_id and h.revision=i.destination_revision
       left join payments.payments p on p.organization_id=a.organization_id and p.source_attempt_id=a.id
       where a.organization_id=${input.organizationId} and a.id=${input.attemptId}`.execute(db),
     getOrderPaymentSummary(db, {
@@ -52,6 +58,7 @@ async function paymentClaimWorkspaceInTransaction(
       row.instructions_snapshot.receivingNumber ?? row.instructions_snapshot.accountNumber ?? null,
     instructions: row.instructions_snapshot.instructions ?? row.instructions_snapshot.text ?? null,
     destinationRevision: row.destination_revision,
+    receivingFinancialAccountId: row.receiving_financial_account_id,
     collected: summary.collected,
     outstanding: summary.outstanding,
     paymentId: row.payment_id,

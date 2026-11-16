@@ -18,6 +18,8 @@ import {
 } from './payments/receipt-refunds.js';
 import { postVerifiedRefundInTransaction } from './finance.js';
 import { requirePaymentCapability } from './payments/authorization.js';
+import { findVerifiedReceipt } from './payments/manual-receipts.js';
+import type { VerifiedReceiptDto } from '@maevelle/contracts';
 import { parseMoney } from './cart/value.js';
 export { processPaymentReviewAging } from './payments/review-aging.js';
 export { changeRefundProcessingState } from './payments/refund-processing.js';
@@ -180,6 +182,7 @@ export interface RefundListFilters {
 }
 
 export interface PaymentDetailView extends PaymentView {
+  readonly verifiedReceipt: VerifiedReceiptDto | null;
   readonly order: {
     readonly status: string;
     readonly total: string;
@@ -968,6 +971,7 @@ export async function listPendingPaymentAttempts(
 export async function listPendingCodCollections(
   db: Kysely<DatabaseSchema>,
   organizationId: string,
+  options: { limit: number; offset: number } = { limit: 100, offset: 0 },
 ): Promise<readonly PendingCodCollectionView[]> {
   const result = await sql<{
     delivery_id: string;
@@ -1015,7 +1019,7 @@ export async function listPendingCodCollections(
           and payment.source_delivery_id = delivery.id
       )
     order by delivery.delivered_at asc, delivery.id asc
-    limit 100
+    limit ${options.limit} offset ${options.offset}
   `.execute(db);
   return result.rows.map((row) => ({
     deliveryId: row.delivery_id,
@@ -1228,7 +1232,6 @@ export {
   createReceivingDestination,
   changeReceivingDestination,
   listReceivingDestinations,
-  checkoutPaymentReadiness,
 } from './payments/destinations.js';
 export {
   approvePaymentOperatingPolicy,
@@ -1357,7 +1360,7 @@ export async function listPayments(
     left join finance.financial_account_entries finance_entry on finance_entry.finance_transaction_id = finance_transaction.id
     left join finance.financial_accounts financial_account on financial_account.id = finance_entry.financial_account_id
     where payment.organization_id = ${organizationId} and payment.status = 'CONFIRMED'
-      and (${query}::text is null or concat_ws(' ', payment.payment_number, allocation.order_number_snapshot, payment.external_reference, method.code) ilike '%' || ${query}::text || '%')
+      and (${query}::text is null or concat_ws(' ', payment.payment_number, coalesce(allocation.order_number_snapshot, receipt_order.order_number), payment.external_reference, method.code) ilike '%' || ${query}::text || '%')
       and (${method}::text is null or method.code = ${method}::text)
       and (${from}::text is null or payment.confirmed_at >= ${from}::timestamptz)
       and (${to}::text is null or payment.confirmed_at <= ${to}::timestamptz)
@@ -1380,7 +1383,7 @@ export async function listPayments(
         and finance_transaction.source_domain = 'payments.payment'
         and finance_transaction.source_id = payment.id
       where payment.organization_id = ${organizationId} and payment.status = 'CONFIRMED'
-        and (${query}::text is null or concat_ws(' ', payment.payment_number, allocation.order_number_snapshot, payment.external_reference, method.code) ilike '%' || ${query}::text || '%')
+        and (${query}::text is null or concat_ws(' ', payment.payment_number, coalesce(allocation.order_number_snapshot, receipt_order.order_number), payment.external_reference, method.code) ilike '%' || ${query}::text || '%')
         and (${method}::text is null or method.code = ${method}::text)
         and (${from}::text is null or payment.confirmed_at >= ${from}::timestamptz)
         and (${to}::text is null or payment.confirmed_at <= ${to}::timestamptz)
@@ -1852,7 +1855,7 @@ export async function listRefunds(
       left join finance.financial_account_entries finance_entry on finance_entry.finance_transaction_id = finance_transaction.id
       left join finance.financial_accounts financial_account on financial_account.id = finance_entry.financial_account_id
       where refund.organization_id = ${organizationId}
-        and (${query}::text is null or concat_ws(' ', refund.refund_number, allocation.order_number_snapshot, payment.payment_number, refund.external_reference, refund.reason_code) ilike '%' || ${query}::text || '%')
+        and (${query}::text is null or concat_ws(' ', refund.refund_number, coalesce(allocation.order_number_snapshot, order_row.order_number), payment.payment_number, refund.external_reference, refund.reason_code) ilike '%' || ${query}::text || '%')
         and (${status}::text = 'ALL' or refund.status = ${status}::text)
         and (${from}::text is null or refund.requested_at >= ${from}::timestamptz)
         and (${to}::text is null or refund.requested_at <= ${to}::timestamptz)
@@ -1872,7 +1875,7 @@ export async function listRefunds(
         and finance_transaction.source_domain = 'payments.refund'
         and finance_transaction.source_id = refund.id
       where refund.organization_id = ${organizationId}
-        and (${query}::text is null or concat_ws(' ', refund.refund_number, allocation.order_number_snapshot, payment.payment_number, refund.external_reference, refund.reason_code) ilike '%' || ${query}::text || '%')
+        and (${query}::text is null or concat_ws(' ', refund.refund_number, coalesce(allocation.order_number_snapshot, order_row.order_number), payment.payment_number, refund.external_reference, refund.reason_code) ilike '%' || ${query}::text || '%')
         and (${status}::text = 'ALL' or refund.status = ${status}::text)
         and (${from}::text is null or refund.requested_at >= ${from}::timestamptz)
         and (${to}::text is null or refund.requested_at <= ${to}::timestamptz)
@@ -1888,7 +1891,18 @@ export async function getPaymentDetail(
   organizationId: string,
   paymentId: string,
 ): Promise<PaymentDetailView> {
-  const [payment, context, refundIds] = await Promise.all([
+  return db
+    .transaction()
+    .setIsolationLevel('repeatable read')
+    .execute((tx) => paymentDetailInTransaction(tx, organizationId, paymentId));
+}
+
+async function paymentDetailInTransaction(
+  db: Transaction<DatabaseSchema>,
+  organizationId: string,
+  paymentId: string,
+): Promise<PaymentDetailView> {
+  const [payment, context, refundIds, verifiedReceipt] = await Promise.all([
     getPayment(db, organizationId, paymentId),
     sql<{
       order_status: string;
@@ -1933,6 +1947,7 @@ export async function getPaymentDetail(
       where organization_id = ${organizationId} and payment_id = ${paymentId}
       order by requested_at desc, id desc
     `.execute(db),
+    findVerifiedReceipt(db, organizationId, paymentId),
   ]);
   const row = context.rows[0];
   if (!row) throw new PaymentDomainError('NOT_FOUND', 'Payment context was not found.');
@@ -1977,6 +1992,7 @@ export async function getPaymentDetail(
     },
     source,
     refunds,
+    verifiedReceipt,
   };
 }
 export { getPaymentClaimWorkspace, listPaymentPolicies } from './payments/workspace.js';

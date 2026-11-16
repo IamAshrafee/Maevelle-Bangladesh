@@ -458,6 +458,12 @@ describe('payment facts, manual wallet verification, and refunds', () => {
     const delivered = await deliverCodOrder(input, flow.order);
 
     const queue = await listPendingCodCollections(database.db, input.organizationId);
+    expect(
+      await listPendingCodCollections(database.db, input.organizationId, { limit: 1, offset: 0 }),
+    ).toEqual(queue);
+    expect(
+      await listPendingCodCollections(database.db, input.organizationId, { limit: 1, offset: 1 }),
+    ).toEqual([]);
     expect(queue).toEqual([
       expect.objectContaining({
         deliveryId: delivered.id,

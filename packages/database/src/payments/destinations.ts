@@ -1,9 +1,5 @@
 import { sql, type Kysely } from 'kysely';
-import type {
-  ReceivingDestinationInputDto,
-  ReceivingDestinationDto,
-  PaymentReadinessDto,
-} from '@maevelle/contracts';
+import type { ReceivingDestinationInputDto, ReceivingDestinationDto } from '@maevelle/contracts';
 import type { DatabaseSchema } from '../index.js';
 import { appendAuditEvent } from '../platform.js';
 import { PaymentDomainError } from '../payments.js';
@@ -193,31 +189,4 @@ export async function listReceivingDestinations(
     }),
     pagination: { page, pageSize, totalItems: Number(totalItems) },
   };
-}
-/** This phase cannot mint final payable, approved delivery compatibility, or a purchase. */
-export function checkoutPaymentReadiness(): readonly PaymentReadinessDto[] {
-  return (['COD', 'BKASH_MANUAL', 'NAGAD_MANUAL'] as const).map((method) => ({
-    method,
-    eligible: false,
-    merchantAddedFee: '0.0000',
-    providerSenderFee: null,
-    merchantOperationalFee: null,
-    tax: null,
-    payable: null,
-    purchaseAvailable: false,
-    blockers: [
-      'CHECKOUT_PLACEMENT_DISABLED',
-      'TAX_POLICY_UNRESOLVED',
-      'FINAL_PAYABLE_POLICY_UNRESOLVED',
-      'DELIVERY_COURIER_COMPATIBILITY_UNVERIFIED',
-      ...(method === 'COD'
-        ? ['COD_OPERATING_POLICY_UNAPPROVED']
-        : [
-            'LIVE_DESTINATION_ACTIVATION_DISABLED',
-            'PAYMENT_REVIEW_DEADLINES_UNAPPROVED',
-            'PROVIDER_FEES_LIMITS_UNVERIFIED',
-            ...(method === 'NAGAD_MANUAL' ? ['NAGAD_ACCOUNT_TYPE_UNVERIFIED'] : []),
-          ]),
-    ],
-  }));
 }

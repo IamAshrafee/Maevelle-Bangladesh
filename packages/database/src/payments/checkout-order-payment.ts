@@ -17,6 +17,16 @@ type Binding = {
   terms: { method: CheckoutOrderPaymentDto['method']; payable: string };
 };
 
+export type CheckoutCollectionAuthorization =
+  | boolean
+  | ((selection: {
+      organizationId: string;
+      method: Exclude<Binding['terms']['method'], 'COD'>;
+      destinationId: string | null;
+      destinationRevision: string | null;
+      operatingPolicyId: string | null;
+    }) => boolean);
+
 type Intent = {
   status: CheckoutOrderPaymentDto['obligationStatus'];
   currency_code: string;
@@ -115,7 +125,7 @@ export async function readCheckoutClaims(tx: Tx, binding: Binding, claimId?: str
 export async function readCheckoutOrderPayment(
   tx: Tx,
   binding: Binding,
-  collectionAuthorized: boolean,
+  collectionAuthorized: CheckoutCollectionAuthorization,
 ): Promise<CheckoutOrderPaymentDto> {
   const { organizationId, orderId, intentId, terms } = binding;
   const order = (
@@ -182,8 +192,18 @@ export async function readCheckoutOrderPayment(
   )
     claimAvailability = 'PAYMENT_SUPPORT_REQUIRED';
   else {
+    const authorized =
+      typeof collectionAuthorized === 'boolean'
+        ? collectionAuthorized
+        : collectionAuthorized({
+            organizationId,
+            method: terms.method,
+            destinationId: intent.destination_id,
+            destinationRevision: intent.destination_revision,
+            operatingPolicyId: intent.operating_policy_id,
+          });
     const wallet: WalletDecision =
-      collectionAuthorized && intent.expires_at && intent.review_expires_at
+      authorized && intent.expires_at && intent.review_expires_at
         ? await usableWallet(tx, organizationId, terms.method, intent)
         : { reason: 'POLICY_BLOCKED' };
     // Evaluate database time after any configuration lock waits.

@@ -1,5 +1,18 @@
 /** A claim is customer testimony. Only independently checked receipts establish money. */
 export type CheckoutPaymentMethod = 'COD' | 'BKASH_MANUAL' | 'NAGAD_MANUAL';
+export interface CheckoutPaymentMethodStatusDto {
+  readonly method: CheckoutPaymentMethod;
+  readonly enabled: boolean;
+  readonly available: boolean;
+  readonly canEnable: boolean;
+  readonly deliveryAreas: readonly ('dhaka' | 'nationwide')[];
+  readonly wallet?: {
+    readonly receivingNumberEnding: string;
+    readonly submissionMinutes: number;
+    readonly reviewMinutes: number;
+  };
+  readonly reason: 'ORDERS_PAUSED' | 'METHOD_DISABLED' | 'SETUP_REQUIRED' | null;
+}
 export interface ManualPaymentClaimDto {
   readonly transactionId: string;
   readonly sendingMobile?: string;
@@ -30,17 +43,6 @@ export interface ReceivingDestinationDto extends ReceivingDestinationInputDto {
   readonly providerEvidenceReference: string | null;
   readonly createdBy: string;
   readonly approvedBy: string | null;
-}
-export interface PaymentReadinessDto {
-  readonly method: CheckoutPaymentMethod;
-  readonly eligible: false;
-  readonly merchantAddedFee: '0.0000';
-  readonly providerSenderFee: null;
-  readonly merchantOperationalFee: null;
-  readonly tax: null;
-  readonly payable: null;
-  readonly purchaseAvailable: false;
-  readonly blockers: readonly string[];
 }
 export interface VerifiedReceiptDto {
   readonly paymentId: string;
@@ -88,6 +90,8 @@ export interface PaymentClaimWorkspaceDto {
   readonly receivingNumber: string | null;
   readonly instructions: string | null;
   readonly destinationRevision: string | null;
+  /** Finance wallet bound to the order's original receiving account, when known. */
+  readonly receivingFinancialAccountId: string | null;
   readonly collected: string;
   readonly outstanding: string;
   readonly paymentId: string | null;

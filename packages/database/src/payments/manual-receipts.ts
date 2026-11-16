@@ -299,11 +299,11 @@ export async function verifyManualPayment(
     throw error;
   }
 }
-export async function getVerifiedReceipt(
+export async function findVerifiedReceipt(
   db: Kysely<DatabaseSchema>,
   organizationId: string,
   paymentId: string,
-): Promise<VerifiedReceiptDto> {
+): Promise<VerifiedReceiptDto | null> {
   const row = (
     await sql<VerifiedReceiptDto>`select p.id as "paymentId",e.order_id as "orderId",p.amount::text received,
     e.allocated_amount::text allocated,e.unallocated_amount::text unallocated,
@@ -314,6 +314,15 @@ export async function getVerifiedReceipt(
     from payments.verified_receipt_evidence e join payments.payments p on p.organization_id=e.organization_id and p.id=e.payment_id
     where e.organization_id=${organizationId} and e.payment_id=${paymentId}`.execute(db)
   ).rows[0];
+  return row ?? null;
+}
+
+export async function getVerifiedReceipt(
+  db: Kysely<DatabaseSchema>,
+  organizationId: string,
+  paymentId: string,
+): Promise<VerifiedReceiptDto> {
+  const row = await findVerifiedReceipt(db, organizationId, paymentId);
   if (!row) throw new PaymentDomainError('NOT_FOUND', 'Verified receipt was not found.');
   return row;
 }

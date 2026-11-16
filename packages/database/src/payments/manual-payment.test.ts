@@ -9,7 +9,6 @@ import {
   createReceivingDestination,
   changeReceivingDestination,
   listReceivingDestinations,
-  checkoutPaymentReadiness,
   verifyManualPayment,
   getVerifiedReceipt,
   getOrderPaymentSummary,
@@ -232,18 +231,7 @@ describe('Phase 04A independent manual receipt integrity', () => {
       }),
     ).rejects.toMatchObject({ code: 'DUPLICATE_EXTERNAL_TRANSACTION' });
   });
-  it('keeps all methods unavailable, with no merchant surcharge and unresolved provider/tax/payable facts', async () => {
-    expect(checkoutPaymentReadiness()).toHaveLength(3);
-    for (const r of checkoutPaymentReadiness())
-      expect(r).toMatchObject({
-        eligible: false,
-        merchantAddedFee: '0.0000',
-        providerSenderFee: null,
-        tax: null,
-        payable: null,
-        purchaseAvailable: false,
-      });
-    expect(checkoutPaymentReadiness()[2]!.blockers).toContain('NAGAD_ACCOUNT_TYPE_UNVERIFIED');
+  it('blocks the retired payment preparation path', async () => {
     await expect(
       prepareCheckoutPaymentObligationInTransaction(db(), {
         organizationId: key(),
@@ -698,6 +686,7 @@ describe('Phase 04A populated forward migration', () => {
         '3224_commerce_measurement',
         '3225_privacy_preferences',
         '3226_retail_money_settlement',
+        '3227_checkout_delivery_areas',
       ]);
       expect(
         (

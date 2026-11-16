@@ -1,5 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { registerCashShortfallRoutes } from './cash-shortfall.js';
+import { registerCheckoutMethodRoutes } from './checkout-methods.js';
+import type { RuntimeConfig } from '@maevelle/config';
 import { Type } from 'typebox';
 import type { ReceivingDestinationInputDto } from '@maevelle/contracts';
 import type { DatabaseClient } from '@maevelle/database';
@@ -7,7 +9,6 @@ import {
   createReceivingDestination,
   changeReceivingDestination,
   listReceivingDestinations,
-  checkoutPaymentReadiness,
   listManualClaimQueue,
   reviewManualClaim,
   getVerifiedReceipt,
@@ -34,8 +35,10 @@ export function registerPaymentOperationsRoutes(
   app: FastifyInstance,
   database: DatabaseClient,
   auth: ReturnType<typeof createAuth>,
+  config?: RuntimeConfig,
 ) {
   registerCashShortfallRoutes(app, database, auth);
+  registerCheckoutMethodRoutes(app, database, auth, config);
   app.get(
     '/admin/payments/attempts/:id/workspace',
     { schema: { params: Type.Object({ id: uuid }) } },
@@ -217,15 +220,6 @@ export function registerPaymentOperationsRoutes(
       }
     },
   );
-  app.get('/admin/payments/readiness', async (request, reply) => {
-    reply.header('Cache-Control', 'no-store');
-    const c = await paymentAdmin(database, auth, request.headers, 'payments.view');
-    if (!c)
-      return reply
-        .code(403)
-        .send({ error: { code: 'FORBIDDEN', message: 'Payment access is required.' } });
-    return { data: checkoutPaymentReadiness() };
-  });
   app.get(
     '/admin/payments/destinations',
     { schema: { querystring: pagination } },

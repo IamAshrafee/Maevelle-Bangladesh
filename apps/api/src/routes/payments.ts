@@ -1,5 +1,9 @@
 import type { FastifyInstance } from 'fastify';
-import type { IndependentReceiptEvidenceDto } from '@maevelle/contracts';
+import type {
+  IndependentReceiptEvidenceDto,
+  PendingCodCollectionPageDto,
+} from '@maevelle/contracts';
+import type { RuntimeConfig } from '@maevelle/config';
 import { registerPaymentOperationsRoutes } from './payment-operations.js';
 import { Type } from 'typebox';
 
@@ -85,12 +89,13 @@ export function registerPaymentRoutes(
   app: FastifyInstance,
   database: DatabaseClient,
   auth: Auth,
+  config?: RuntimeConfig,
 ): void {
   app.addHook('onRequest', async (request, reply) => {
     if (/^\/admin\/(?:payments|refunds)(?:\/|\?|$)/.test(request.url))
       reply.header('Cache-Control', 'no-store');
   });
-  registerPaymentOperationsRoutes(app, database, auth);
+  registerPaymentOperationsRoutes(app, database, auth, config);
   app.get('/admin/payments/methods', async (request, reply) => {
     const active = await paymentAdmin(database, auth, request.headers, 'payments.view');
     if (!active) return reply.code(403).send({ error: 'FORBIDDEN' });
@@ -179,6 +184,36 @@ export function registerPaymentRoutes(
     if (!active) return reply.code(403).send({ error: 'FORBIDDEN' });
     return { data: await listPendingCodCollections(database.db, active.organizationId) };
   });
+
+  app.get(
+    '/admin/payments/cod-collections/queue',
+    {
+      schema: {
+        querystring: Type.Object({
+          page: Type.Optional(Type.Integer({ minimum: 1, maximum: 100000 })),
+        }),
+      },
+    },
+    async (request, reply) => {
+      const actor = await paymentAdmin(database, auth, request.headers, 'payments.verify');
+      if (!actor)
+        return reply
+          .code(403)
+          .send({ error: { code: 'FORBIDDEN', message: 'Collection access is required.' } });
+      const page = (request.query as { page?: number }).page ?? 1;
+      const pageSize = 25;
+      const rows = await listPendingCodCollections(database.db, actor.organizationId, {
+        limit: pageSize + 1,
+        offset: (page - 1) * pageSize,
+      });
+      const data: PendingCodCollectionPageDto = {
+        items: rows.slice(0, pageSize),
+        page,
+        hasNext: rows.length > pageSize,
+      };
+      return { data };
+    },
+  );
 
   app.post(
     '/admin/payments/cod-collections',
