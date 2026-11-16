@@ -5,13 +5,13 @@ import { Archive, Plus, RotateCcw, Tag } from 'lucide-react';
 import type { AssetCategoryDto } from '@maevelle/contracts';
 import { Button } from '@/components/ui/button';
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetFooter,
+  SheetHeader,
+  SheetTitle,
+} from '@/components/ui/sheet';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
@@ -88,18 +88,21 @@ export function AssetCategoriesDialog({
   }
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
+    <Sheet open={open} onOpenChange={onOpenChange}>
+      <SheetContent
+        side="right"
+        className="flex w-full flex-col gap-5 overflow-y-auto p-6 sm:max-w-lg"
+      >
+        <SheetHeader className="border-b border-border/60 p-0 pb-4">
+          <SheetTitle className="flex items-center gap-2">
             <Tag className="size-5 text-primary" />
             <span>Manage Asset Categories</span>
-          </DialogTitle>
-          <DialogDescription>
+          </SheetTitle>
+          <SheetDescription>
             Organize durable property into a focused operational taxonomy. Archived categories
             remain safely preserved on historical assets.
-          </DialogDescription>
-        </DialogHeader>
+          </SheetDescription>
+        </SheetHeader>
 
         {feedback ? (
           <div className="rounded-lg bg-emerald-500/10 border border-emerald-500/20 p-2.5 text-xs text-emerald-700 dark:text-emerald-400 font-medium">
@@ -189,7 +192,7 @@ export function AssetCategoriesDialog({
               placeholder="Scope or guidelines for this category…"
             />
           </Label>
-          <DialogFooter className="gap-2 sm:gap-0 pt-2">
+          <SheetFooter className="gap-2 border-t border-border/60 p-0 pt-4 sm:flex-row sm:justify-end">
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
               Close
             </Button>
@@ -197,9 +200,9 @@ export function AssetCategoriesDialog({
               <Plus className="size-4 mr-1" />
               {busy ? 'Creating…' : 'Create Category'}
             </Button>
-          </DialogFooter>
+          </SheetFooter>
         </form>
-      </DialogContent>
-    </Dialog>
+      </SheetContent>
+    </Sheet>
   );
 }

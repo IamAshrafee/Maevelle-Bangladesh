@@ -1,15 +1,7 @@
 'use client';
 
-import {
-  Activity,
-  AlertCircle,
-  Facebook,
-  History,
-  Lock,
-  Plus,
-  ShieldCheck,
-} from 'lucide-react';
-import { useSearchParams } from 'next/navigation';
+import { Activity, AlertCircle, Facebook, History, Lock, Plus, ShieldCheck } from 'lucide-react';
+import { useQueryParamsSync } from '@/lib/navigation/use-query-params-sync';
 import { useEffect, useState } from 'react';
 
 import type {
@@ -33,7 +25,7 @@ import { FacebookSyncCard } from './facebook-sync-card';
 type SectionTab = 'overview' | 'diagnostics' | 'sync';
 
 export function FacebookSettingsPanel() {
-  const searchParams = useSearchParams();
+  const { searchParams, setParams } = useQueryParamsSync();
 
   const canView = useAdminCapability('messaging.connections.view');
   const canManage = useAdminCapability('messaging.connections.manage');
@@ -59,23 +51,16 @@ export function FacebookSettingsPanel() {
     if (facebookParam === 'authorized' && attemptIdParam) {
       setInitialAttemptId(attemptIdParam);
       setWizardOpen(true);
-      // Clean up URL query params smoothly
-      const url = new URL(window.location.href);
-      url.searchParams.delete('facebook');
-      url.searchParams.delete('attemptId');
-      window.history.replaceState({}, '', url.toString());
+      setParams({ facebook: null, attemptId: null });
     } else if (facebookParam === 'error' || errorParam) {
       toast.add({
         title: 'Facebook authorization cancelled or failed',
         description: errorParam ? `Reason: ${errorParam}` : 'Please try connecting again.',
         type: 'warning',
       });
-      const url = new URL(window.location.href);
-      url.searchParams.delete('facebook');
-      url.searchParams.delete('error');
-      window.history.replaceState({}, '', url.toString());
+      setParams({ facebook: null, error: null });
     }
-  }, [searchParams]);
+  }, [searchParams, setParams]);
 
   async function loadData() {
     setLoading(true);
@@ -101,7 +86,8 @@ export function FacebookSettingsPanel() {
     void loadData();
   }, [canView]);
 
-  const activeConnection = connections.find((c) => c.id === selectedConnectionId) ?? connections[0] ?? null;
+  const activeConnection =
+    connections.find((c) => c.id === selectedConnectionId) ?? connections[0] ?? null;
 
   if (loading && !connections.length) {
     return <LoadingState message="Loading Facebook Messenger settings…" className="py-12" />;
@@ -132,7 +118,8 @@ export function FacebookSettingsPanel() {
               Connect Facebook Messenger
             </h3>
             <p className="text-xs text-muted-foreground leading-relaxed">
-              Integrate your business Facebook Page to receive customer Messenger chats, send replies, and manage conversations in Maevelle&apos;s unified inbox.
+              Integrate your business Facebook Page to receive customer Messenger chats, send
+              replies, and manage conversations in Maevelle&apos;s unified inbox.
             </p>
           </div>
 
@@ -163,7 +150,9 @@ export function FacebookSettingsPanel() {
               <AlertCircle className="size-4 text-warning" />
               <AlertTitle>Server Configuration Required</AlertTitle>
               <AlertDescription className="text-xs">
-                Meta App credentials are not configured yet in environment variables. Please configure <code>META_APP_ID</code> and <code>META_APP_SECRET</code> before connecting.
+                Meta App credentials are not configured yet in environment variables. Please
+                configure <code>META_APP_ID</code> and <code>META_APP_SECRET</code> before
+                connecting.
               </AlertDescription>
             </Alert>
           ) : null}
@@ -192,7 +181,9 @@ export function FacebookSettingsPanel() {
           {/* Multi-Page Selector if more than 1 connected Page */}
           {connections.length > 1 ? (
             <div className="flex items-center gap-2 overflow-x-auto pb-1">
-              <span className="text-xs font-medium text-muted-foreground shrink-0">Connected Pages:</span>
+              <span className="text-xs font-medium text-muted-foreground shrink-0">
+                Connected Pages:
+              </span>
               {connections.map((c) => (
                 <Button
                   key={c.id}

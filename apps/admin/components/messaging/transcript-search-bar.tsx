@@ -50,7 +50,7 @@ export function TranscriptSearchBar({
     <div
       role="search"
       aria-label="Search conversation messages"
-      className="flex shrink-0 items-center gap-2 border-b border-border bg-card/95 px-3 py-2 backdrop-blur-xs transition-opacity duration-150"
+      className="flex shrink-0 items-center gap-2 border-b border-border bg-card px-3 py-2 transition-opacity duration-150"
     >
       <div className="relative flex min-w-0 flex-1 items-center">
         <Search className="pointer-events-none absolute left-2.5 size-3.5 text-muted-foreground" />

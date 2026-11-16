@@ -59,7 +59,8 @@ export function OverviewTab({
         <ShieldAlert className="size-10 text-muted-foreground mx-auto" />
         <h3 className="text-lg font-semibold text-foreground">Integrity overview unavailable</h3>
         <p className="text-sm text-muted-foreground max-w-md mx-auto">
-          Unable to retrieve the system integrity assessment. Please refresh or verify API connectivity.
+          Unable to retrieve the system integrity assessment. Please refresh or verify API
+          connectivity.
         </p>
         <Button variant="outline" onClick={onRefresh}>
           <RefreshCw className="size-4 mr-2" />
@@ -69,7 +70,15 @@ export function OverviewTab({
     );
   }
 
-  const { overallStatus, latestRun, activeRun, checksSummary, findingsCounts, modules, recentFindings } = overview;
+  const {
+    overallStatus,
+    latestRun,
+    activeRun,
+    checksSummary,
+    findingsCounts,
+    modules,
+    recentFindings,
+  } = overview;
 
   // Status configuration mapping
   const statusConfig = {
@@ -78,10 +87,9 @@ export function OverviewTab({
       tone: 'success' as const,
       icon: ShieldCheck,
       headline: 'No discrepancies detected in completed checks',
-      description:
-        latestRun
-          ? `The last scan evaluated ${latestRun.checks_completed} checks across ${latestRun.records_inspected} records with zero findings.`
-          : 'All completed checks have passed without recorded discrepancies.',
+      description: latestRun
+        ? `The last scan evaluated ${latestRun.checks_completed} checks across ${latestRun.records_inspected} records with zero findings.`
+        : 'All completed checks have passed without recorded discrepancies.',
       bgColor: 'bg-emerald-500/10 border-emerald-500/30 text-emerald-700 dark:text-emerald-300',
     },
     CRITICAL_ISSUES_DETECTED: {
@@ -107,10 +115,9 @@ export function OverviewTab({
       tone: 'warning' as const,
       icon: AlertCircle,
       headline: 'Last scan did not fully complete',
-      description:
-        latestRun?.error_summary
-          ? `The scan concluded with partial coverage: ${latestRun.error_summary}`
-          : 'Some integrity checks failed or were interrupted during execution. Full platform health cannot be guaranteed.',
+      description: latestRun?.error_summary
+        ? `The scan concluded with partial coverage: ${latestRun.error_summary}`
+        : 'Some integrity checks failed or were interrupted during execution. Full platform health cannot be guaranteed.',
       bgColor: 'bg-amber-500/10 border-amber-500/30 text-amber-700 dark:text-amber-300',
     },
     SCAN_IN_PROGRESS: {
@@ -129,7 +136,7 @@ export function OverviewTab({
       headline: 'No historical scans recorded',
       description:
         'Integrity checks have not yet completed for this organization. Run an initial scan to assess platform state.',
-      bgColor: 'bg-slate-500/10 border-slate-500/30 text-slate-700 dark:text-slate-300',
+      bgColor: 'bg-muted/50 border-border text-foreground',
     },
   }[overallStatus];
 
@@ -187,7 +194,8 @@ export function OverviewTab({
             <div className="flex items-center gap-2 text-foreground font-medium">
               <RefreshCw className="size-3.5 animate-spin text-primary" />
               <span>
-                Active scan: {activeRun.scope_module ? `Module: ${activeRun.scope_module}` : 'Full organization'}
+                Active scan:{' '}
+                {activeRun.scope_module ? `Module: ${activeRun.scope_module}` : 'Full organization'}
               </span>
               <span className="font-mono text-muted-foreground">({activeRun.status})</span>
             </div>
@@ -216,7 +224,9 @@ export function OverviewTab({
           </p>
           <div className="flex items-center gap-2 text-xs text-muted-foreground">
             {findingsCounts.critical > 0 ? (
-              <span className="text-rose-600 font-semibold">{findingsCounts.critical} critical</span>
+              <span className="text-rose-600 font-semibold">
+                {findingsCounts.critical} critical
+              </span>
             ) : (
               <span>0 critical</span>
             )}
@@ -266,7 +276,9 @@ export function OverviewTab({
           <div className="flex items-center gap-2 text-xs text-muted-foreground">
             <span>{findingsCounts.accepted} accepted</span>
             <span>·</span>
-            <span className="text-primary font-medium">{checksSummary.repairableCount} repairable</span>
+            <span className="text-primary font-medium">
+              {checksSummary.repairableCount} repairable
+            </span>
           </div>
         </PagePanel>
       </div>
@@ -290,9 +302,12 @@ export function OverviewTab({
         {recentFindings.length === 0 ? (
           <PagePanel className="p-8 text-center space-y-2">
             <CheckCircle2 className="size-8 text-emerald-500 mx-auto" />
-            <h4 className="text-sm font-semibold text-foreground">No open findings requiring attention</h4>
+            <h4 className="text-sm font-semibold text-foreground">
+              No open findings requiring attention
+            </h4>
             <p className="text-xs text-muted-foreground max-w-sm mx-auto">
-              All checks in the most recent scan completed without surfacing unresolved discrepancies.
+              All checks in the most recent scan completed without surfacing unresolved
+              discrepancies.
             </p>
           </PagePanel>
         ) : (
@@ -323,7 +338,9 @@ export function OverviewTab({
                       )}
                     </div>
                     <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
-                      <span>Code: <code className="font-mono">{finding.code}</code></span>
+                      <span>
+                        Code: <code className="font-mono">{finding.code}</code>
+                      </span>
                       {finding.occurrence_count > 1 && (
                         <span className="font-mono tabular-nums text-amber-600 dark:text-amber-400">
                           Seen {finding.occurrence_count} times
@@ -388,7 +405,9 @@ export function OverviewTab({
                   <div className="space-y-1 text-xs text-muted-foreground">
                     <div className="flex items-center justify-between">
                       <span>Registered checks:</span>
-                      <span className="font-mono font-medium text-foreground">{mod.checkCount}</span>
+                      <span className="font-mono font-medium text-foreground">
+                        {mod.checkCount}
+                      </span>
                     </div>
                     <div className="flex items-center justify-between">
                       <span>Open findings:</span>

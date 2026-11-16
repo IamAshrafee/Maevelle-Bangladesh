@@ -2,20 +2,11 @@
 
 import { useCallback, useEffect, useState, useTransition } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import {
-  LayoutDashboard,
-  Activity,
-  Layers,
-  Zap,
-  Sliders,
-  Ban,
-  ShieldCheck,
-  AlertTriangle,
-  Settings,
-} from 'lucide-react';
-import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
-
+import { AlertTriangle } from 'lucide-react';
+import { Tabs, TabsContent } from '@/components/ui/tabs';
+import { AdminPage, PageHeader } from '@/components/ui/page-shell';
 import { RefreshButton } from '@/components/ui/refresh-button';
+import { WorkspaceTabs, type WorkspaceTabItem } from '@/components/ui/workspace-tabs';
 import { Badge } from '@/components/ui/badge';
 import { EmailOverviewTab } from './email-overview-tab';
 import { EmailActivityTab } from './email-activity-tab';
@@ -174,19 +165,39 @@ export function EmailOperationsConsole() {
     return () => clearInterval(timer);
   }, [emails, reload]);
 
+  const activeSuppressionCount = suppressions.filter((s) => s.active).length;
+  const emailTabs: WorkspaceTabItem<EmailTabKey>[] = [
+    { value: 'overview', label: 'Overview', icon: 'layout-dashboard' },
+    {
+      value: 'activity',
+      label: 'Activity',
+      icon: 'activity',
+      ...(totalEmails > 0 ? { count: totalEmails } : {}),
+    },
+    { value: 'templates', label: 'Templates', icon: 'boxes' },
+    { value: 'test-lab', label: 'Test Lab', icon: 'sparkles' },
+    { value: 'policies', label: 'Policies', icon: 'settings' },
+    {
+      value: 'suppressions',
+      label: 'Suppressions',
+      icon: 'shield-check',
+      ...(activeSuppressionCount > 0 ? { count: activeSuppressionCount } : {}),
+    },
+    { value: 'diagnostics', label: 'Diagnostics', icon: 'gauge' },
+    { value: 'settings', label: 'Settings', icon: 'settings' },
+  ];
+
   return (
-    <main className="mx-auto flex w-full max-w-[1500px] flex-col gap-6 p-4 sm:p-6 lg:p-8">
-      {/* Header Area */}
-      <header className="flex flex-wrap items-center justify-between gap-4 border-b pb-4">
-        <div>
-          <div className="flex flex-wrap items-center gap-2.5">
-            <h1 className="text-2xl font-bold tracking-tight text-foreground sm:text-3xl">
-              Transactional Email Operations
-            </h1>
+    <AdminPage variant="wide">
+      <PageHeader
+        eyebrow="Communications & Dispatch"
+        title="Transactional Email Operations"
+        badge={
+          <div className="flex flex-wrap items-center gap-2">
             {diagnostic ? (
               <Badge
                 variant={diagnostic.enabled ? 'default' : 'secondary'}
-                className={diagnostic.enabled ? 'bg-emerald-600 text-xs' : 'text-xs'}
+                className={diagnostic.enabled ? 'bg-emerald-600 text-xs text-white' : 'text-xs'}
               >
                 {diagnostic.enabled ? 'Sending Active' : 'Sending Disabled'}
               </Badge>
@@ -197,24 +208,23 @@ export function EmailOperationsConsole() {
               </Badge>
             ) : null}
           </div>
-          <p className="mt-1 text-sm text-muted-foreground max-w-3xl">
-            Authoritative transactional email control center: delivery lifecycles, Resend provider integration,
-            policies, template rendering, safe testing, suppressions, and diagnostics.
-          </p>
-        </div>
-
-        <div className="flex items-center gap-2">
+        }
+        description="Authoritative transactional email control center: delivery lifecycles, Resend provider integration, policies, template rendering, safe testing, suppressions, and diagnostics."
+        actions={
           <RefreshButton
             loading={loading || isPending}
             onRefresh={reload}
             tooltip="Refresh email operations"
           />
-        </div>
-      </header>
+        }
+      />
 
       {/* Global Error Alert */}
       {error ? (
-        <div role="alert" className="flex items-center gap-2 rounded-xl border border-destructive/40 bg-destructive/10 p-4 text-xs text-destructive">
+        <div
+          role="alert"
+          className="flex items-center gap-2 rounded-xl border border-destructive/40 bg-destructive/10 p-4 text-xs text-destructive"
+        >
           <AlertTriangle className="size-4 shrink-0" />
           <span>{error}</span>
         </div>
@@ -222,50 +232,14 @@ export function EmailOperationsConsole() {
 
       {/* Primary Navigation Tabs */}
       <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
-        <TabsList className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 h-auto p-1 bg-muted/60">
-          <TabsTrigger value="overview" className="flex items-center gap-1.5 py-2 text-xs">
-            <LayoutDashboard className="size-3.5" />
-            <span>Overview</span>
-          </TabsTrigger>
-          <TabsTrigger value="activity" className="flex items-center gap-1.5 py-2 text-xs">
-            <Activity className="size-3.5" />
-            <span>Activity</span>
-            {totalEmails > 0 ? (
-              <span className="ml-1 rounded-full bg-background px-1.5 py-0.2 text-[10px] font-mono text-muted-foreground">
-                {totalEmails}
-              </span>
-            ) : null}
-          </TabsTrigger>
-          <TabsTrigger value="templates" className="flex items-center gap-1.5 py-2 text-xs">
-            <Layers className="size-3.5" />
-            <span>Templates</span>
-          </TabsTrigger>
-          <TabsTrigger value="test-lab" className="flex items-center gap-1.5 py-2 text-xs">
-            <Zap className="size-3.5" />
-            <span>Test Lab</span>
-          </TabsTrigger>
-          <TabsTrigger value="policies" className="flex items-center gap-1.5 py-2 text-xs">
-            <Sliders className="size-3.5" />
-            <span>Policies</span>
-          </TabsTrigger>
-          <TabsTrigger value="suppressions" className="flex items-center gap-1.5 py-2 text-xs">
-            <Ban className="size-3.5" />
-            <span>Suppressions</span>
-            {suppressions.filter((s) => s.active).length > 0 ? (
-              <span className="ml-1 rounded-full bg-destructive/10 text-destructive px-1.5 py-0.2 text-[10px] font-mono font-bold">
-                {suppressions.filter((s) => s.active).length}
-              </span>
-            ) : null}
-          </TabsTrigger>
-          <TabsTrigger value="diagnostics" className="flex items-center gap-1.5 py-2 text-xs">
-            <ShieldCheck className="size-3.5" />
-            <span>Diagnostics</span>
-          </TabsTrigger>
-          <TabsTrigger value="settings" className="flex items-center gap-1.5 py-2 text-xs">
-            <Settings className="size-3.5" />
-            <span>Settings</span>
-          </TabsTrigger>
-        </TabsList>
+        <WorkspaceTabs
+          items={emailTabs}
+          value={activeTab}
+          onValueChange={handleTabChange}
+          maxVisible={5}
+          variant="pill"
+          ariaLabel="Email operations tabs"
+        />
 
         {/* Tab 1: Overview Dashboard */}
         <TabsContent value="overview" className="mt-6">
@@ -330,11 +304,7 @@ export function EmailOperationsConsole() {
 
         {/* Tab 5: Policy Controls */}
         <TabsContent value="policies" className="mt-6">
-          <EmailPoliciesTab
-            policies={policies}
-            diagnostic={diagnostic}
-            onRefresh={reload}
-          />
+          <EmailPoliciesTab policies={policies} diagnostic={diagnostic} onRefresh={reload} />
         </TabsContent>
 
         {/* Tab 6: Suppression Registry */}
@@ -370,6 +340,6 @@ export function EmailOperationsConsole() {
         }}
         onActionCompleted={reload}
       />
-    </main>
+    </AdminPage>
   );
 }

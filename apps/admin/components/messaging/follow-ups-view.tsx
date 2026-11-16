@@ -1,25 +1,19 @@
 'use client';
 
-import {
-  CalendarClock,
-  Check,
-  Edit2,
-  MessageCircle,
-  X,
-} from 'lucide-react';
+import { CalendarClock, Check, Edit2, MessageCircle, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
 import type { AgentAvailabilityView, FollowUpView } from '@maevelle/contracts/messaging';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetFooter,
+  SheetHeader,
+  SheetTitle,
+} from '@/components/ui/sheet';
 import { Input } from '@/components/ui/input';
 import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select';
 import { EmptyState, ErrorState, LoadingState } from '@/components/ui/page-shell';
@@ -168,7 +162,9 @@ export function FollowUpsView({ onOpenConversation }: { onOpenConversation: () =
                 role="listitem"
                 className={cn(
                   'rounded-xl border border-border bg-card p-4 transition-colors',
-                  item.isOverdue && item.status === 'PENDING' && 'border-destructive/50 bg-destructive/5',
+                  item.isOverdue &&
+                    item.status === 'PENDING' &&
+                    'border-destructive/50 bg-destructive/5',
                 )}
               >
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
@@ -195,7 +191,9 @@ export function FollowUpsView({ onOpenConversation }: { onOpenConversation: () =
                       Due {formatDateTime(item.dueAt)}
                     </p>
                     {item.note ? (
-                      <p className="mt-2 text-sm text-foreground whitespace-pre-wrap">{item.note}</p>
+                      <p className="mt-2 text-sm text-foreground whitespace-pre-wrap">
+                        {item.note}
+                      </p>
                     ) : null}
                   </div>
                   <div className="flex flex-wrap items-center gap-2">
@@ -219,10 +217,7 @@ export function FollowUpsView({ onOpenConversation }: { onOpenConversation: () =
                         >
                           <Edit2 className="size-4" />
                         </Button>
-                        <Button
-                          size="sm"
-                          onClick={() => void transition(item, 'COMPLETED')}
-                        >
+                        <Button size="sm" onClick={() => void transition(item, 'COMPLETED')}>
                           <Check className="size-4" /> Complete
                         </Button>
                         <Button
@@ -277,9 +272,7 @@ function RescheduleDialog({
   onSaved: () => Promise<void>;
 }) {
   const [responsibleId, setResponsibleId] = useState(item.responsibleMembershipId);
-  const [dueAt, setDueAt] = useState(
-    item.dueAt ? formatLocalDateTime(new Date(item.dueAt)) : '',
-  );
+  const [dueAt, setDueAt] = useState(item.dueAt ? formatLocalDateTime(new Date(item.dueAt)) : '');
   const [note, setNote] = useState(item.note ?? '');
   const [busy, setBusy] = useState(false);
 
@@ -305,15 +298,15 @@ function RescheduleDialog({
   }
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>Edit & Reschedule follow-up</DialogTitle>
-          <DialogDescription>
+    <Sheet open={open} onOpenChange={onOpenChange}>
+      <SheetContent side="right" className="w-full sm:max-w-md overflow-y-auto">
+        <SheetHeader>
+          <SheetTitle>Edit & Reschedule follow-up</SheetTitle>
+          <SheetDescription>
             Update responsible agent, due timestamp or operational notes.
-          </DialogDescription>
-        </DialogHeader>
-        <div className="space-y-4 py-2">
+          </SheetDescription>
+        </SheetHeader>
+        <div className="space-y-4 px-4 py-2">
           {agents.length ? (
             <label className="space-y-1 block text-sm font-medium">
               Responsible agent
@@ -346,13 +339,16 @@ function RescheduleDialog({
             />
           </label>
         </div>
-        <DialogFooter showCloseButton>
+        <SheetFooter className="sm:flex-row sm:justify-end">
+          <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+            Close
+          </Button>
           <Button disabled={!dueAt || busy} onClick={() => void submit()}>
             Save changes
           </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+        </SheetFooter>
+      </SheetContent>
+    </Sheet>
   );
 }
 
@@ -365,4 +361,3 @@ function formatLocalDateTime(date: Date) {
   const minutes = pad(date.getMinutes());
   return `${year}-${month}-${day}T${hours}:${minutes}`;
 }
-

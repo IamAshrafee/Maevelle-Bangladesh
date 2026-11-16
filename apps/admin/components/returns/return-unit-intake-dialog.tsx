@@ -1,24 +1,15 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import {
-  RotateCcw,
-  AlertCircle,
-  Loader2,
-} from 'lucide-react';
+import { RotateCcw, AlertCircle, Loader2 } from 'lucide-react';
 import type { WarehouseLocationDto, UnitConditionDto, InventoryUnitDto } from '@maevelle/contracts';
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
-} from '@/components/ui/dialog';
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetFooter } from '@/components/ui/sheet';
 import { Button } from '@/components/ui/button';
 import { NativeSelect } from '@/components/ui/native-select';
 import { Textarea } from '@/components/ui/textarea';
 import { UnitScannerInput } from '@/components/inventory/units/unit-scanner-input';
 import { UnitConditionBadge } from '@/components/inventory/units/unit-condition-badge';
+import { useFormDialogLifecycle } from '@/hooks/use-form-dialog-lifecycle';
 import { fetchApiData } from '@/lib/api';
 import { lookupUnitByCode, receiveReturnedUnit } from '@/lib/inventory/units';
 
@@ -83,7 +74,7 @@ export function ReturnUnitIntakeDialog({
         notes: notes.trim() || undefined,
       });
 
-      onOpenChange(false);
+      handleOpenChange(false);
       setScannedUnit(null);
       setNotes('');
       if (onSuccess) {
@@ -96,127 +87,145 @@ export function ReturnUnitIntakeDialog({
     }
   };
 
+  const isDirty = Boolean(scannedUnit || notes.trim() !== '');
+
+  const { handleOpenChange, discardConfirmDialog } = useFormDialogLifecycle({
+    open,
+    onOpenChange,
+    isDirty,
+    isSubmitting: submitting,
+    title: 'Discard returned item intake?',
+  });
+
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2 text-base font-semibold">
+    <>
+      <Sheet open={open} onOpenChange={handleOpenChange}>
+      <SheetContent side="right" className="gap-0 p-0 sm:max-w-lg">
+        <SheetHeader className="shrink-0 border-b border-border px-5 py-4 pr-11 text-left">
+          <SheetTitle className="flex items-center gap-2 text-base font-semibold">
             <RotateCcw className="size-4 text-primary" />
-            <span>Receive & Inspect Returned Garment Unit</span>
-          </DialogTitle>
+            <span>Receive &amp; Inspect Returned Item Unit</span>
+          </SheetTitle>
           <p className="text-xs text-muted-foreground">
-            {returnNumber ? `Return Case #${returnNumber} · ` : ''}Scan physical barcode on returned item to verify unit identity and inspect condition.
+            {returnNumber ? `Return Case #${returnNumber} · ` : ''}Scan physical barcode on returned
+            item to verify unit identity and inspect condition.
           </p>
-        </DialogHeader>
+        </SheetHeader>
 
-        <form onSubmit={handleSubmit} className="space-y-4 pt-2">
-          {error ? (
-            <div className="p-3 bg-destructive/10 border border-destructive/20 rounded-lg text-xs text-destructive flex items-center gap-2">
-              <AlertCircle className="size-4 shrink-0" />
-              <span>{error}</span>
+        <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col">
+          <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-5 py-4">
+            {error ? (
+              <div className="p-3 bg-destructive/10 border border-destructive/20 rounded-lg text-xs text-destructive flex items-center gap-2">
+                <AlertCircle className="size-4 shrink-0" />
+                <span>{error}</span>
+              </div>
+            ) : null}
+
+            {/* Scanner Input */}
+            <div className="bg-muted/30 p-3 rounded-xl border space-y-1.5">
+              <span className="text-xs font-semibold text-foreground block">
+                Scan Return Item Tag / Barcode:
+              </span>
+              <UnitScannerInput
+                autoFocus
+                onCodeScanned={handleCodeScanned}
+                size="default"
+                placeholder="Scan Code 128 barcode or enter MVU code…"
+              />
             </div>
-          ) : null}
 
-          {/* Scanner Input */}
-          <div className="bg-muted/30 p-3 rounded-xl border space-y-1.5">
-            <span className="text-xs font-semibold text-foreground block">
-              Scan Return Garment Tag / Barcode:
-            </span>
-            <UnitScannerInput
-              autoFocus
-              onCodeScanned={handleCodeScanned}
-              size="default"
-              placeholder="Scan Code 128 barcode or enter MVU code…"
-            />
-          </div>
+            {/* Scanned Unit Details */}
+            {scannedUnit ? (
+              <div className="rounded-xl border bg-card p-3.5 shadow-2xs space-y-2.5 animate-in fade-in duration-150">
+                <div className="flex items-center justify-between border-b pb-2">
+                  <span className="font-mono text-sm font-bold text-foreground">
+                    {scannedUnit.unitCode}
+                  </span>
+                  <UnitConditionBadge condition={scannedUnit.currentCondition} short />
+                </div>
+                <div>
+                  <p className="text-xs font-semibold text-foreground">
+                    {scannedUnit.productTitle}
+                  </p>
+                  <span className="font-mono text-[10px] text-muted-foreground">
+                    SKU: {scannedUnit.sku}
+                  </span>
+                </div>
+                <div className="text-[11px] text-muted-foreground bg-muted/40 p-2 rounded border">
+                  <span>Previous Outbound Fulfillment: </span>
+                  <strong className="font-mono text-foreground">
+                    {scannedUnit.currentFulfillmentNumber || 'Unrecorded'}
+                  </strong>
+                </div>
+              </div>
+            ) : null}
 
-          {/* Scanned Unit Details */}
-          {scannedUnit ? (
-            <div className="rounded-xl border bg-card p-3.5 shadow-2xs space-y-2.5 animate-in fade-in duration-150">
-              <div className="flex items-center justify-between border-b pb-2">
-                <span className="font-mono text-sm font-bold text-foreground">
-                  {scannedUnit.unitCode}
-                </span>
-                <UnitConditionBadge condition={scannedUnit.currentCondition} short />
-              </div>
-              <div>
-                <p className="text-xs font-semibold text-foreground">{scannedUnit.productTitle}</p>
-                <span className="font-mono text-[10px] text-muted-foreground">
-                  SKU: {scannedUnit.sku}
-                </span>
-              </div>
-              <div className="text-[11px] text-muted-foreground bg-muted/40 p-2 rounded border">
-                <span>Previous Outbound Fulfillment: </span>
-                <strong className="font-mono text-foreground">
-                  {scannedUnit.currentFulfillmentNumber || 'Unrecorded'}
-                </strong>
-              </div>
+            {/* Receiving Location */}
+            <div className="space-y-1.5">
+              <label htmlFor="return-loc" className="text-xs font-medium text-foreground">
+                Receiving Quarantine Location *
+              </label>
+              <NativeSelect
+                id="return-loc"
+                value={receivingLocationId}
+                onChange={(e) => setReceivingLocationId(e.target.value)}
+                disabled={submitting}
+                className="text-xs w-full"
+                required
+              >
+                {locations.map((loc) => (
+                  <option key={loc.id} value={loc.id}>
+                    {loc.name} ({loc.code})
+                  </option>
+                ))}
+              </NativeSelect>
             </div>
-          ) : null}
 
-          {/* Receiving Location */}
-          <div className="space-y-1.5">
-            <label htmlFor="return-loc" className="text-xs font-medium text-foreground">
-              Receiving Quarantine Location *
-            </label>
-            <NativeSelect
-              id="return-loc"
-              value={receivingLocationId}
-              onChange={(e) => setReceivingLocationId(e.target.value)}
-              disabled={submitting}
-              className="text-xs w-full"
-              required
-            >
-              {locations.map((loc) => (
-                <option key={loc.id} value={loc.id}>
-                  {loc.name} ({loc.code})
+            {/* Return Condition Grading */}
+            <div className="space-y-1.5">
+              <label htmlFor="return-cond" className="text-xs font-medium text-foreground">
+                Returned Condition Assessment *
+              </label>
+              <NativeSelect
+                id="return-cond"
+                value={condition}
+                onChange={(e) => setCondition(e.target.value as UnitConditionDto)}
+                disabled={submitting}
+                className="text-xs w-full"
+                required
+              >
+                <option value="GRADE_A">Grade A — Pristine / Unworn / Restockable</option>
+                <option value="GRADE_B">Grade B — Packaging Opened / Minor Smudge</option>
+                <option value="REPAIR_REQUIRED">
+                  Repair Required — Loose Seam / Missing Button
                 </option>
-              ))}
-            </NativeSelect>
+                <option value="DAMAGED_UNSELLABLE">Damaged / Stained / Unsellable</option>
+              </NativeSelect>
+            </div>
+
+            {/* Notes */}
+            <div className="space-y-1.5">
+              <label htmlFor="return-notes" className="text-xs font-medium text-foreground">
+                Return Inspection Notes
+              </label>
+              <Textarea
+                id="return-notes"
+                placeholder="Inspection remarks, customer reason observation, or tailoring instructions…"
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+                disabled={submitting}
+                rows={2}
+                className="text-xs resize-none"
+              />
+            </div>
           </div>
 
-          {/* Return Condition Grading */}
-          <div className="space-y-1.5">
-            <label htmlFor="return-cond" className="text-xs font-medium text-foreground">
-              Returned Condition Assessment *
-            </label>
-            <NativeSelect
-              id="return-cond"
-              value={condition}
-              onChange={(e) => setCondition(e.target.value as UnitConditionDto)}
-              disabled={submitting}
-              className="text-xs w-full"
-              required
-            >
-              <option value="GRADE_A">Grade A — Pristine / Unworn / Restockable</option>
-              <option value="GRADE_B">Grade B — Packaging Opened / Minor Smudge</option>
-              <option value="REPAIR_REQUIRED">Repair Required — Loose Seam / Missing Button</option>
-              <option value="DAMAGED_UNSELLABLE">Damaged / Stained / Unsellable</option>
-            </NativeSelect>
-          </div>
-
-          {/* Notes */}
-          <div className="space-y-1.5">
-            <label htmlFor="return-notes" className="text-xs font-medium text-foreground">
-              Return Inspection Notes
-            </label>
-            <Textarea
-              id="return-notes"
-              placeholder="Inspection remarks, customer reason observation, or tailoring instructions…"
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              disabled={submitting}
-              rows={2}
-              className="text-xs resize-none"
-            />
-          </div>
-
-          <DialogFooter className="gap-2 sm:gap-0 pt-3 border-t">
+          <SheetFooter className="shrink-0 flex-row items-center justify-end gap-2 border-t border-border bg-card/50 px-5 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom,0px))]">
             <Button
               type="button"
               variant="outline"
               size="sm"
-              onClick={() => onOpenChange(false)}
+              onClick={() => handleOpenChange(false)}
               disabled={submitting}
             >
               Cancel
@@ -240,9 +249,11 @@ export function ReturnUnitIntakeDialog({
                 </>
               )}
             </Button>
-          </DialogFooter>
+          </SheetFooter>
         </form>
-      </DialogContent>
-    </Dialog>
+      </SheetContent>
+    </Sheet>
+    {discardConfirmDialog}
+  </>
   );
 }

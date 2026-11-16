@@ -24,6 +24,7 @@ import { OperationalFeedback } from '@/components/operational-worklist';
 import { StatusBadge } from '@/components/status-badge';
 import { Breadcrumb } from '@/components/ui/breadcrumb';
 import { Button } from '@/components/ui/button';
+import { AdminPage } from '@/components/ui/page-shell';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import {
   Dialog,
@@ -33,6 +34,14 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetFooter,
+  SheetHeader,
+  SheetTitle,
+} from '@/components/ui/sheet';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Input } from '@/components/ui/input';
 import { NativeSelect } from '@/components/ui/native-select';
@@ -156,32 +165,34 @@ export function ExpenseDetail({ expenseId }: { readonly expenseId: string }) {
 
   if (state === 'loading' && !expense)
     return (
-      <main className="grid gap-5 px-4 py-5 sm:px-6 lg:px-8">
+      <AdminPage variant="wide">
         <Skeleton className="h-24 rounded-xl" />
         <div className="grid gap-4 lg:grid-cols-3">
           <Skeleton className="h-40 rounded-xl lg:col-span-2" />
           <Skeleton className="h-40 rounded-xl" />
         </div>
-      </main>
+      </AdminPage>
     );
 
   if (!expense)
     return (
-      <main className="grid gap-4 px-4 py-5 sm:px-6 lg:px-8">
+      <AdminPage variant="wide">
         <OperationalFeedback tone="danger">
           {message || 'Expense was not found.'}
         </OperationalFeedback>
-        <Button variant="outline" render={<Link href="/finance/expenses" />}>
-          <ArrowLeft /> Back to expenses
-        </Button>
-      </main>
+        <div>
+          <Button variant="outline" render={<Link href="/finance/expenses" />}>
+            <ArrowLeft /> Back to expenses
+          </Button>
+        </div>
+      </AdminPage>
     );
 
   const paid = Number(expense.outstanding) === 0 && expense.status !== 'CANCELLED';
   const canCancelCurrent = canCancel && expense.status === 'RECORDED' && Number(expense.paid) === 0;
   return (
-    <main className="min-w-0 px-4 py-5 sm:px-6 lg:px-8">
-      <div className="mx-auto grid max-w-[1400px] gap-5">
+    <AdminPage variant="wide">
+      <div className="grid gap-5">
         <Breadcrumb
           mobileMode="back"
           items={[
@@ -302,7 +313,9 @@ export function ExpenseDetail({ expenseId }: { readonly expenseId: string }) {
               ) : null}
               {expense.linkedAssets && expense.linkedAssets.length > 0 ? (
                 <div className="sm:col-span-2 rounded-lg border border-primary/20 bg-primary/5 p-3">
-                  <span className="text-xs font-semibold text-primary">Connected Business Asset</span>
+                  <span className="text-xs font-semibold text-primary">
+                    Connected Business Asset
+                  </span>
                   <div className="mt-2 space-y-1.5">
                     {expense.linkedAssets.map((asset) => (
                       <div key={asset.id} className="flex items-center justify-between text-sm">
@@ -443,50 +456,52 @@ export function ExpenseDetail({ expenseId }: { readonly expenseId: string }) {
           onClose={() => setDialog(undefined)}
           onCommand={command}
         />
-        <Dialog open={adjustmentOpen} onOpenChange={setAdjustmentOpen}>
-          <DialogContent>
-            <form className="grid gap-4" onSubmit={adjust}>
-              <DialogHeader>
-                <DialogTitle>Adjust {expense.expense_number}</DialogTitle>
-                <DialogDescription>
+        <Sheet open={adjustmentOpen} onOpenChange={setAdjustmentOpen}>
+          <SheetContent side="right" className="gap-0 p-0 sm:max-w-lg">
+            <form className="flex min-h-0 flex-1 flex-col" onSubmit={adjust}>
+              <SheetHeader className="shrink-0 border-b border-border px-5 py-4 pr-11 text-left">
+                <SheetTitle>Adjust {expense.expense_number}</SheetTitle>
+                <SheetDescription>
                   Keep the original Expense intact while recording a traceable correction. Credits
                   and reversals require a negative amount.
-                </DialogDescription>
-              </DialogHeader>
-              <label className="grid gap-1.5 text-sm font-medium">
-                Adjustment type
-                <NativeSelect name="adjustmentType" defaultValue="CORRECTION" required>
-                  <option value="CORRECTION">Correction</option>
-                  <option value="CREDIT">Credit</option>
-                  <option value="REVERSAL">Reversal</option>
-                </NativeSelect>
-              </label>
-              <label className="grid gap-1.5 text-sm font-medium">
-                Signed amount
-                <Input
-                  name="amount"
-                  type="number"
-                  inputMode="decimal"
-                  step="0.0001"
-                  placeholder="Use -500.00 to reduce the Expense"
-                  required
-                />
-              </label>
-              <label className="grid gap-1.5 text-sm font-medium">
-                Reason
-                <Textarea name="reason" minLength={4} maxLength={1000} required />
-              </label>
-              <DialogFooter>
+                </SheetDescription>
+              </SheetHeader>
+              <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-5 py-4">
+                <label className="grid gap-1.5 text-sm font-medium">
+                  Adjustment type
+                  <NativeSelect name="adjustmentType" defaultValue="CORRECTION" required>
+                    <option value="CORRECTION">Correction</option>
+                    <option value="CREDIT">Credit</option>
+                    <option value="REVERSAL">Reversal</option>
+                  </NativeSelect>
+                </label>
+                <label className="grid gap-1.5 text-sm font-medium">
+                  Signed amount
+                  <Input
+                    name="amount"
+                    type="number"
+                    inputMode="decimal"
+                    step="0.0001"
+                    placeholder="Use -500.00 to reduce the Expense"
+                    required
+                  />
+                </label>
+                <label className="grid gap-1.5 text-sm font-medium">
+                  Reason
+                  <Textarea name="reason" minLength={4} maxLength={1000} required />
+                </label>
+              </div>
+              <SheetFooter className="shrink-0 flex-row items-center justify-end gap-2 border-t border-border bg-card/50 px-5 py-3">
                 <Button type="button" variant="outline" onClick={() => setAdjustmentOpen(false)}>
                   Close
                 </Button>
                 <Button type="submit" disabled={busy}>
                   Record adjustment
                 </Button>
-              </DialogFooter>
+              </SheetFooter>
             </form>
-          </DialogContent>
-        </Dialog>
+          </SheetContent>
+        </Sheet>
         <Dialog open={cancelOpen} onOpenChange={setCancelOpen}>
           <DialogContent>
             <form className="grid gap-4" onSubmit={cancel}>
@@ -499,7 +514,7 @@ export function ExpenseDetail({ expenseId }: { readonly expenseId: string }) {
               </DialogHeader>
               <label className="grid gap-1.5 text-sm font-medium">
                 Cancellation reason
-                <Textarea name="reason" minLength={4} maxLength={1000} required autoFocus />
+                <Textarea name="reason" minLength={4} maxLength={1000} required />
               </label>
               <DialogFooter>
                 <Button type="button" variant="outline" onClick={() => setCancelOpen(false)}>
@@ -513,7 +528,7 @@ export function ExpenseDetail({ expenseId }: { readonly expenseId: string }) {
           </DialogContent>
         </Dialog>
       </div>
-    </main>
+    </AdminPage>
   );
 }
 

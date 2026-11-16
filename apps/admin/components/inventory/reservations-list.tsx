@@ -12,6 +12,7 @@ import type {
 
 import { inventoryRequest, formatInventoryDate, formatInventoryNumber } from '@/lib/inventory/api';
 import { InventoryFeedback, InventoryEmptyState, InventoryPager } from './inventory-page-ui';
+import { AdminPage, PageHeader } from '@/components/ui/page-shell';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
@@ -141,15 +142,15 @@ export function ReservationsList() {
   const hasActiveFilters = locationId !== 'all' || status !== 'ACTIVE' || search.trim() !== '';
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">Stock Reservations</h1>
-          <p className="text-sm text-muted-foreground">
-            Trace held stock to its owner and safely release standalone operational holds.
-          </p>
-        </div>
-      </div>
+    <AdminPage variant="wide">
+      <PageHeader
+        breadcrumbs={[
+          { label: 'Inventory', href: '/inventory' },
+          { label: 'Reservations', current: true },
+        ]}
+        title="Stock Reservations"
+        description="Trace held stock to its owner and safely release standalone operational holds."
+      />
 
       {/* Filter Bar */}
       <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between bg-card p-3.5 rounded-lg border">
@@ -179,12 +180,9 @@ export function ReservationsList() {
             <SelectContent>
               <SelectItem value="all">All Locations</SelectItem>
               {locations.map((loc) => (
-                <SelectItem
-                  key={loc.id}
-                  value={loc.id}
-                  label={`${loc.name} (${loc.code})`}
-                >
-                  {loc.name} <span className="text-muted-foreground text-xs font-mono">({loc.code})</span>
+                <SelectItem key={loc.id} value={loc.id} label={`${loc.name} (${loc.code})`}>
+                  {loc.name}{' '}
+                  <span className="text-muted-foreground text-xs font-mono">({loc.code})</span>
                 </SelectItem>
               ))}
             </SelectContent>
@@ -390,10 +388,7 @@ export function ReservationsList() {
                               </AlertDialogHeader>
                               <AlertDialogFooter>
                                 <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                <AlertDialogAction
-                                  onClick={() => handleRelease(res)}
-                                  className="bg-primary text-primary-foreground hover:bg-primary/90"
-                                >
+                                <AlertDialogAction onClick={() => handleRelease(res)}>
                                   Confirm Release
                                 </AlertDialogAction>
                               </AlertDialogFooter>
@@ -420,6 +415,6 @@ export function ReservationsList() {
       {(hasNext || page > 1) && (
         <InventoryPager page={page} hasNext={hasNext} onPageChange={setPage} />
       )}
-    </div>
+    </AdminPage>
   );
 }

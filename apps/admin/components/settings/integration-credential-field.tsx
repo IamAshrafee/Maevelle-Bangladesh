@@ -6,13 +6,13 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetFooter,
+  SheetHeader,
+  SheetTitle,
+} from '@/components/ui/sheet';
 import { SettingsConfirmationDialog } from './settings-confirmation-dialog';
 import { cn } from '@/lib/utils';
 
@@ -77,19 +77,14 @@ export function IntegrationCredentialField({
   }
 
   return (
-    <div
-      className={cn(
-        'p-4 rounded-lg border border-border bg-card/60 space-y-3',
-        className,
-      )}
-    >
+    <div className={cn('p-4 rounded-lg border border-border bg-card/60 space-y-3', className)}>
       <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
         <div className="space-y-1">
           <div className="flex items-center gap-2">
             <KeyRound className="size-4 text-muted-foreground shrink-0" />
             <span className="text-sm font-semibold text-foreground">{label}</span>
             {isDeploymentManaged && (
-              <span className="text-[10px] font-medium text-slate-600 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded border border-slate-200 dark:border-slate-700 inline-flex items-center gap-1">
+              <span className="text-[10px] font-medium text-muted-foreground bg-muted px-2 py-0.5 rounded border border-border inline-flex items-center gap-1">
                 <Lock className="size-2.5" />
                 Deployment managed
               </span>
@@ -158,20 +153,20 @@ export function IntegrationCredentialField({
         )}
       </div>
 
-      {/* Replace Credential Modal */}
-      <Dialog open={replaceModalOpen} onOpenChange={(open) => !busy && setReplaceModalOpen(open)}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle className="text-base font-semibold text-foreground">
+      {/* Replace Credential Sheet */}
+      <Sheet open={replaceModalOpen} onOpenChange={(open) => !busy && setReplaceModalOpen(open)}>
+        <SheetContent side="right" className="gap-0 p-0 sm:max-w-md">
+          <SheetHeader className="shrink-0 border-b border-border px-5 py-4 pr-11 text-left">
+            <SheetTitle className="text-base font-semibold text-foreground">
               {configured ? `Replace ${label}` : `Configure ${label}`}
-            </DialogTitle>
-            <DialogDescription className="text-xs text-muted-foreground pt-1.5 leading-relaxed">
-              Enter the new secret below. The value will be encrypted with AES-256-GCM before storage.
-              Maevelle never displays plaintext credentials once saved.
-            </DialogDescription>
-          </DialogHeader>
+            </SheetTitle>
+            <SheetDescription className="text-xs text-muted-foreground pt-1.5 leading-relaxed">
+              Enter the new secret below. The value will be encrypted with AES-256-GCM before
+              storage. Maevelle never displays plaintext credentials once saved.
+            </SheetDescription>
+          </SheetHeader>
 
-          <div className="space-y-3 py-2">
+          <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-5 py-4">
             <div className="space-y-1.5">
               <Label htmlFor="credential-input" className="text-xs font-medium">
                 Secret Value
@@ -194,7 +189,7 @@ export function IntegrationCredentialField({
             {error && <p className="text-xs font-medium text-destructive">{error}</p>}
           </div>
 
-          <DialogFooter className="flex flex-row justify-end gap-2 pt-2">
+          <SheetFooter className="shrink-0 flex-row items-center justify-end gap-2 border-t border-border bg-card/50 px-5 py-3">
             <Button
               type="button"
               variant="outline"
@@ -214,9 +209,9 @@ export function IntegrationCredentialField({
             >
               {busy ? 'Saving...' : 'Save encrypted credential'}
             </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+          </SheetFooter>
+        </SheetContent>
+      </Sheet>
 
       {/* Remove Credential Confirmation */}
       <SettingsConfirmationDialog

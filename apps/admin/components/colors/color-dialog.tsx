@@ -8,13 +8,13 @@ import { Loader2, Palette } from 'lucide-react';
 import type { CatalogColorDto } from '@maevelle/contracts';
 import { Button } from '@/components/ui/button';
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetFooter,
+  SheetHeader,
+  SheetTitle,
+} from '@/components/ui/sheet';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import {
@@ -25,6 +25,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { catalogData } from '@/lib/catalog/api';
+import { useFormDialogLifecycle } from '@/hooks/use-form-dialog-lifecycle';
 
 import { ColorSwatch } from './color-swatch';
 import {
@@ -132,200 +133,217 @@ export function ColorDialog({ open, color, onClose, onSaved }: ColorDialogProps)
     }
   }
 
+  const { handleOpenChange, discardConfirmDialog } = useFormDialogLifecycle({
+    onClose,
+    isDirty: form.formState.isDirty,
+    isSubmitting: saving,
+    title: isEditing ? 'Discard color changes?' : 'Discard new color?',
+  });
+
   return (
-    <Dialog open={open} onOpenChange={(next) => !saving && !next && onClose()}>
-      <DialogContent className="max-h-[92vh] overflow-y-auto sm:max-w-lg">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
+    <>
+      <Sheet open={open} onOpenChange={handleOpenChange}>
+      <SheetContent side="right" className="gap-0 p-0 sm:max-w-lg">
+        <SheetHeader className="shrink-0 border-b border-border px-5 py-4 pr-11 text-left">
+          <SheetTitle className="flex items-center gap-2">
             <Palette className="size-5 text-primary" />
             {isEditing ? `Edit Color: ${color?.name}` : 'Add New Color'}
-          </DialogTitle>
-          <DialogDescription>
+          </SheetTitle>
+          <SheetDescription>
             Normalized colors are shared catalog-wide across product variants, swatches, and
             filters.
-          </DialogDescription>
-        </DialogHeader>
+          </SheetDescription>
+        </SheetHeader>
 
-        <form className="space-y-5" onSubmit={form.handleSubmit(onSubmit)}>
-          {error && (
-            <div
-              className="rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive"
-              role="alert"
-            >
-              {error}
-            </div>
-          )}
+        <form className="flex min-h-0 flex-1 flex-col" onSubmit={form.handleSubmit(onSubmit)}>
+          <div className="min-h-0 flex-1 space-y-5 overflow-y-auto px-5 py-4">
+            {error && (
+              <div
+                className="rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive"
+                role="alert"
+              >
+                {error}
+              </div>
+            )}
 
-          {/* Live Preview Box */}
-          <div className="flex items-center justify-between rounded-xl border bg-muted/40 p-4">
-            <div className="flex items-center gap-3">
-              <ColorSwatch
-                hexValue={currentHex}
-                name={currentName || 'Preview'}
-                size="xl"
-                showHex
-              />
+            {/* Live Preview Box */}
+            <div className="flex items-center justify-between rounded-xl border bg-muted/40 p-4">
+              <div className="flex items-center gap-3">
+                <ColorSwatch
+                  hexValue={currentHex}
+                  name={currentName || 'Preview'}
+                  size="xl"
+                  showHex
+                />
+              </div>
+              <div className="text-right">
+                <span className="block text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                  Status
+                </span>
+                <span className="text-sm font-medium">
+                  {form.watch('status') === 'ACTIVE' ? 'Active' : 'Archived'}
+                </span>
+              </div>
             </div>
-            <div className="text-right">
-              <span className="block text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                Status
-              </span>
-              <span className="text-sm font-medium">
-                {form.watch('status') === 'ACTIVE' ? 'Active' : 'Archived'}
-              </span>
-            </div>
-          </div>
 
-          {/* Name & Code */}
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div className="space-y-2">
-              <Label htmlFor="color-name">Color Name *</Label>
-              <Input
-                id="color-name"
-                autoComplete="off"
-                placeholder="e.g. Forest Green"
-                {...form.register('name')}
-                onChange={(e) => {
-                  const val = e.target.value;
-                  form.setValue('name', val, { shouldValidate: true, shouldDirty: true });
-                  if (!codeManuallyEdited) {
-                    form.setValue('code', slugifyColorCode(val), {
+            {/* Name & Code */}
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-2">
+                <Label htmlFor="color-name">Color Name *</Label>
+                <Input
+                  id="color-name"
+                  autoComplete="off"
+                  placeholder="e.g. Forest Green"
+                  {...form.register('name')}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    form.setValue('name', val, { shouldValidate: true, shouldDirty: true });
+                    if (!codeManuallyEdited) {
+                      form.setValue('code', slugifyColorCode(val), {
+                        shouldValidate: true,
+                        shouldDirty: true,
+                      });
+                    }
+                  }}
+                />
+                {form.formState.errors.name && (
+                  <p className="text-xs text-destructive">{form.formState.errors.name.message}</p>
+                )}
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="color-code">Unique Code *</Label>
+                <Input
+                  id="color-code"
+                  autoCapitalize="none"
+                  autoComplete="off"
+                  spellCheck={false}
+                  placeholder="forest-green"
+                  {...form.register('code')}
+                  onChange={(e) => {
+                    setCodeManuallyEdited(true);
+                    form.setValue('code', e.target.value.toLowerCase(), {
                       shouldValidate: true,
                       shouldDirty: true,
                     });
-                  }
-                }}
-              />
-              {form.formState.errors.name && (
-                <p className="text-xs text-destructive">{form.formState.errors.name.message}</p>
-              )}
+                  }}
+                />
+                {form.formState.errors.code && (
+                  <p className="text-xs text-destructive">{form.formState.errors.code.message}</p>
+                )}
+              </div>
             </div>
 
+            {/* Hex Value & Color Picker */}
             <div className="space-y-2">
-              <Label htmlFor="color-code">Unique Code *</Label>
-              <Input
-                id="color-code"
-                autoCapitalize="none"
-                autoComplete="off"
-                spellCheck={false}
-                placeholder="forest-green"
-                {...form.register('code')}
-                onChange={(e) => {
-                  setCodeManuallyEdited(true);
-                  form.setValue('code', e.target.value.toLowerCase(), {
-                    shouldValidate: true,
-                    shouldDirty: true,
-                  });
-                }}
-              />
-              {form.formState.errors.code && (
-                <p className="text-xs text-destructive">{form.formState.errors.code.message}</p>
-              )}
-            </div>
-          </div>
-
-          {/* Hex Value & Color Picker */}
-          <div className="space-y-2">
-            <Label htmlFor="color-hex">HEX Color Value</Label>
-            <div className="flex items-center gap-3">
-              <div className="relative size-10 shrink-0 overflow-hidden rounded-lg border shadow-xs">
-                <input
-                  type="color"
-                  value={currentHex && /^#[0-9a-fA-F]{6}$/.test(currentHex) ? currentHex : '#000000'}
-                  className="absolute inset-0 size-full cursor-pointer opacity-0"
+              <Label htmlFor="color-hex">HEX Color Value</Label>
+              <div className="flex items-center gap-3">
+                <div className="relative size-10 shrink-0 overflow-hidden rounded-lg border shadow-xs">
+                  <input
+                    type="color"
+                    value={
+                      currentHex && /^#[0-9a-fA-F]{6}$/.test(currentHex) ? currentHex : '#000000'
+                    }
+                    className="absolute inset-0 size-full cursor-pointer opacity-0"
+                    onChange={(e) => {
+                      form.setValue('hexValue', e.target.value.toUpperCase(), {
+                        shouldValidate: true,
+                        shouldDirty: true,
+                      });
+                    }}
+                    title="Pick a color"
+                  />
+                  <div
+                    className="size-full"
+                    style={{
+                      backgroundColor:
+                        currentHex && /^#[0-9a-fA-F]{6}$/.test(currentHex)
+                          ? currentHex
+                          : 'transparent',
+                    }}
+                  />
+                </div>
+                <Input
+                  id="color-hex"
+                  autoComplete="off"
+                  placeholder="#000000"
+                  className="font-mono uppercase"
+                  maxLength={7}
+                  {...form.register('hexValue')}
                   onChange={(e) => {
                     form.setValue('hexValue', e.target.value.toUpperCase(), {
                       shouldValidate: true,
                       shouldDirty: true,
                     });
                   }}
-                  title="Pick a color"
-                />
-                <div
-                  className="size-full"
-                  style={{
-                    backgroundColor:
-                      currentHex && /^#[0-9a-fA-F]{6}$/.test(currentHex)
-                        ? currentHex
-                        : 'transparent',
-                  }}
                 />
               </div>
-              <Input
-                id="color-hex"
-                autoComplete="off"
-                placeholder="#000000"
-                className="font-mono uppercase"
-                maxLength={7}
-                {...form.register('hexValue')}
-                onChange={(e) => {
-                  form.setValue('hexValue', e.target.value.toUpperCase(), {
+              {form.formState.errors.hexValue && (
+                <p className="text-xs text-destructive">{form.formState.errors.hexValue.message}</p>
+              )}
+              <p className="text-xs text-muted-foreground">
+                Click the square swatch to launch the native color picker, or type any 6-digit hex
+                value directly.
+              </p>
+            </div>
+
+            {/* Preset Color Swatches */}
+            <div className="space-y-2">
+              <Label className="text-xs text-muted-foreground">Quick Palette Presets</Label>
+              <div className="flex max-h-32 flex-wrap gap-1.5 overflow-y-auto rounded-lg border p-2 bg-background">
+                {POPULAR_COLOR_PRESETS.map((preset) => (
+                  <button
+                    key={preset.name}
+                    type="button"
+                    onClick={() => handlePresetClick(preset)}
+                    title={`${preset.name} (${preset.hex})`}
+                    className="group relative flex items-center gap-1.5 rounded-md border px-2 py-1 text-xs hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  >
+                    <span
+                      className="size-3.5 rounded-full border shadow-2xs"
+                      style={{ backgroundColor: preset.hex }}
+                      aria-hidden="true"
+                    />
+                    <span>{preset.name}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Status Selection */}
+            <div className="space-y-2">
+              <Label htmlFor="color-status">Lifecycle Status</Label>
+              <Select
+                value={form.watch('status')}
+                onValueChange={(val) =>
+                  form.setValue('status', val as 'ACTIVE' | 'ARCHIVED', {
                     shouldValidate: true,
                     shouldDirty: true,
-                  });
-                }}
-              />
-            </div>
-            {form.formState.errors.hexValue && (
-              <p className="text-xs text-destructive">{form.formState.errors.hexValue.message}</p>
-            )}
-            <p className="text-xs text-muted-foreground">
-              Click the square swatch to launch the native color picker, or type any 6-digit hex
-              value directly.
-            </p>
-          </div>
-
-          {/* Preset Color Swatches */}
-          <div className="space-y-2">
-            <Label className="text-xs text-muted-foreground">Quick Palette Presets</Label>
-            <div className="flex max-h-32 flex-wrap gap-1.5 overflow-y-auto rounded-lg border p-2 bg-background">
-              {POPULAR_COLOR_PRESETS.map((preset) => (
-                <button
-                  key={preset.name}
-                  type="button"
-                  onClick={() => handlePresetClick(preset)}
-                  title={`${preset.name} (${preset.hex})`}
-                  className="group relative flex items-center gap-1.5 rounded-md border px-2 py-1 text-xs hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                >
-                  <span
-                    className="size-3.5 rounded-full border shadow-2xs"
-                    style={{ backgroundColor: preset.hex }}
-                    aria-hidden="true"
-                  />
-                  <span>{preset.name}</span>
-                </button>
-              ))}
+                  })
+                }
+              >
+                <SelectTrigger id="color-status">
+                  <SelectValue placeholder="Select status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="ACTIVE">Active (Available for products)</SelectItem>
+                  <SelectItem value="ARCHIVED">Archived (Hidden from new selections)</SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                Archiving a color prevents new products from picking it, while preserving existing
+                variants.
+              </p>
             </div>
           </div>
 
-          {/* Status Selection */}
-          <div className="space-y-2">
-            <Label htmlFor="color-status">Lifecycle Status</Label>
-            <Select
-              value={form.watch('status')}
-              onValueChange={(val) =>
-                form.setValue('status', val as 'ACTIVE' | 'ARCHIVED', {
-                  shouldValidate: true,
-                  shouldDirty: true,
-                })
-              }
+          <SheetFooter className="shrink-0 flex-row items-center justify-end gap-2 border-t border-border bg-card/50 px-5 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom,0px))]">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => handleOpenChange(false)}
+              disabled={saving}
             >
-              <SelectTrigger id="color-status">
-                <SelectValue placeholder="Select status" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="ACTIVE">Active (Available for products)</SelectItem>
-                <SelectItem value="ARCHIVED">Archived (Hidden from new selections)</SelectItem>
-              </SelectContent>
-            </Select>
-            <p className="text-xs text-muted-foreground">
-              Archiving a color prevents new products from picking it, while preserving existing
-              variants.
-            </p>
-          </div>
-
-          <DialogFooter className="gap-2 sm:gap-0">
-            <Button type="button" variant="outline" onClick={onClose} disabled={saving}>
               Cancel
             </Button>
             <Button type="submit" disabled={saving}>
@@ -339,9 +357,11 @@ export function ColorDialog({ open, color, onClose, onSaved }: ColorDialogProps)
                 'Create Color'
               )}
             </Button>
-          </DialogFooter>
+          </SheetFooter>
         </form>
-      </DialogContent>
-    </Dialog>
+      </SheetContent>
+    </Sheet>
+    {discardConfirmDialog}
+  </>
   );
 }

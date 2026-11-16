@@ -154,7 +154,7 @@ export const SearchInput = React.forwardRef<HTMLInputElement, SearchInputProps>(
     return (
       <div
         className={cn(
-          'group flex h-9 w-full items-center gap-2 rounded-lg border bg-card px-3 text-sm ring-offset-background transition-colors focus-within:border-ring focus-within:ring-3 focus-within:ring-ring/20',
+          'group flex h-9 w-full items-center gap-2 rounded-lg border bg-card px-3 text-base md:text-sm pointer-coarse:text-base ring-offset-background transition-colors focus-within:border-ring focus-within:ring-3 focus-within:ring-ring/20',
           className
         )}
       >
@@ -169,7 +169,7 @@ export const SearchInput = React.forwardRef<HTMLInputElement, SearchInputProps>(
           role="searchbox"
           aria-label={label ?? props['aria-label'] ?? 'Search'}
           aria-busy={isLoading}
-          className="min-w-0 flex-1 appearance-none border-0 bg-transparent p-0 shadow-none outline-none focus:ring-0 focus-visible:ring-0 placeholder:text-muted-foreground disabled:cursor-not-allowed disabled:opacity-50"
+          className="min-w-0 flex-1 appearance-none border-0 bg-transparent p-0 text-base md:text-sm pointer-coarse:text-base shadow-none outline-none focus:ring-0 focus-visible:ring-0 placeholder:text-muted-foreground disabled:cursor-not-allowed disabled:opacity-50"
           value={value}
           onChange={handleChange}
           onKeyDown={handleInputKeyDown}

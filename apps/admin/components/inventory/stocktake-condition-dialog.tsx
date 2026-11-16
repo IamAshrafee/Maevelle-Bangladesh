@@ -6,13 +6,13 @@ import { AlertCircle, CheckCircle2, SlidersHorizontal } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetFooter,
+  SheetHeader,
+  SheetTitle,
+} from '@/components/ui/sheet';
 import { Input } from '@/components/ui/input';
 import { formatInventoryNumber } from '@/lib/inventory/api';
 import { InventoryConditionBadge } from './inventory-page-ui';
@@ -60,7 +60,8 @@ export function StocktakeConditionDialog({
     if (!line || !open) return;
     setTargetCounted(currentCounted || '0');
     const initial = { ...conditionValues };
-    if (!conditions.some((condition) => initial[condition])) initial.SELLABLE = currentCounted || '0';
+    if (!conditions.some((condition) => initial[condition]))
+      initial.SELLABLE = currentCounted || '0';
     setValues(initial);
     setError(null);
   }, [conditionValues, currentCounted, line, open]);
@@ -68,7 +69,10 @@ export function StocktakeConditionDialog({
   if (!line) return null;
   const currentLine = line;
 
-  const allocated = conditions.reduce((total, condition) => total + (Number(values[condition]) || 0), 0);
+  const allocated = conditions.reduce(
+    (total, condition) => total + (Number(values[condition]) || 0),
+    0,
+  );
   const target = Number(targetCounted) || 0;
   const remaining = target - allocated;
   const balanced = Math.abs(remaining) < 0.000001;
@@ -86,27 +90,30 @@ export function StocktakeConditionDialog({
       await onSave(currentLine.inventoryItemId, targetCounted, values);
       onOpenChange(false);
     } catch (saveError) {
-      setError(saveError instanceof Error ? saveError.message : 'Condition counts could not be saved.');
+      setError(
+        saveError instanceof Error ? saveError.message : 'Condition counts could not be saved.',
+      );
     } finally {
       setSaving(false);
     }
   }
 
   return (
-    <Dialog open={open} onOpenChange={(next) => !saving && onOpenChange(next)}>
-      <DialogContent className="inset-0 flex h-[100dvh] w-full max-w-none translate-x-0 translate-y-0 flex-col rounded-none sm:inset-auto sm:left-1/2 sm:top-1/2 sm:h-auto sm:max-h-[90vh] sm:max-w-md sm:-translate-x-1/2 sm:-translate-y-1/2 sm:rounded-lg">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
+    <Sheet open={open} onOpenChange={(next) => !saving && onOpenChange(next)}>
+      <SheetContent side="right" className="gap-0 p-0 sm:max-w-md">
+        <SheetHeader className="shrink-0 border-b border-border px-5 py-4 pr-11 text-left">
+          <SheetTitle className="flex items-center gap-2">
             <SlidersHorizontal className="size-5 text-primary" />
             Split condition quantities
-          </DialogTitle>
-          <DialogDescription>
-            Record the physical condition of <strong className="text-foreground">{currentLine.productTitle}</strong>{' '}
+          </SheetTitle>
+          <SheetDescription>
+            Record the physical condition of{' '}
+            <strong className="text-foreground">{currentLine.productTitle}</strong>{' '}
             <span className="font-mono tabular-nums">({currentLine.sku})</span>.
-          </DialogDescription>
-        </DialogHeader>
+          </SheetDescription>
+        </SheetHeader>
 
-        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto py-2">
+        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-5 py-4">
           <div className="flex items-center justify-between rounded-lg bg-muted/60 p-3 text-sm">
             <div>
               <p className="text-xs text-muted-foreground">Physical count</p>
@@ -128,7 +135,10 @@ export function StocktakeConditionDialog({
                 <div className="flex min-w-0 items-center gap-2">
                   <InventoryConditionBadge condition={condition} />
                   <span className="font-mono text-xs tabular-nums text-muted-foreground">
-                    Exp. {formatInventoryNumber(currentLine.expectedQuantitiesByCondition?.[condition] ?? '0')}
+                    Exp.{' '}
+                    {formatInventoryNumber(
+                      currentLine.expectedQuantitiesByCondition?.[condition] ?? '0',
+                    )}
                   </span>
                 </div>
                 <Input
@@ -182,33 +192,50 @@ export function StocktakeConditionDialog({
           </div>
 
           {error ? (
-            <p role="alert" className="rounded-md bg-destructive/10 p-2 text-xs font-medium text-destructive">
+            <p
+              role="alert"
+              className="rounded-md bg-destructive/10 p-2 text-xs font-medium text-destructive"
+            >
               {error}
             </p>
           ) : null}
         </div>
 
-        <DialogFooter className="gap-2 sm:justify-between">
+        <SheetFooter className="shrink-0 flex-row items-center justify-between gap-2 border-t border-border bg-card/50 px-5 py-3">
           <div className="flex gap-2">
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={saving}>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => onOpenChange(false)}
+              disabled={saving}
+            >
               Cancel
             </Button>
             <Button
               type="button"
               variant="secondary"
               onClick={() =>
-                setValues({ SELLABLE: targetCounted, DAMAGED: '0', QUARANTINE: '0', INSPECTION: '0' })
+                setValues({
+                  SELLABLE: targetCounted,
+                  DAMAGED: '0',
+                  QUARANTINE: '0',
+                  INSPECTION: '0',
+                })
               }
               disabled={disabled || saving}
             >
               All sellable
             </Button>
           </div>
-          <Button type="button" onClick={() => void save()} disabled={disabled || saving || !balanced}>
+          <Button
+            type="button"
+            onClick={() => void save()}
+            disabled={disabled || saving || !balanced}
+          >
             {saving ? 'Saving…' : 'Apply conditions'}
           </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+        </SheetFooter>
+      </SheetContent>
+    </Sheet>
   );
 }

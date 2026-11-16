@@ -2,6 +2,7 @@
 
 import * as React from 'react';
 import { useEffect } from 'react';
+import Link from 'next/link';
 import { AlertCircle, RotateCcw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
@@ -22,26 +23,20 @@ export default function AdminError({
       <div className="size-12 rounded-full bg-destructive/10 text-destructive flex items-center justify-center mb-4 border border-destructive/20 shadow-2xs">
         <AlertCircle className="size-6" />
       </div>
-      <h2 className="text-lg font-bold text-foreground mb-1">
-        This workspace view could not load
-      </h2>
+      <h2 className="text-lg font-bold text-foreground mb-1">This workspace view could not load</h2>
       <p className="text-xs text-muted-foreground max-w-md mb-6 leading-relaxed">
-        An unexpected error occurred while loading this view. You can retry loading or return to the main dashboard.
+        An unexpected error occurred while loading this view. You can retry loading or return to the
+        main dashboard.
       </p>
       <div className="flex items-center gap-3">
-        <Button
-          variant="outline"
-          onClick={() => reset()}
-          className="gap-2 cursor-pointer"
-        >
+        <Button variant="outline" onClick={() => reset()} className="gap-2 cursor-pointer">
           <RotateCcw className="size-3.5" />
           Try again
         </Button>
         <Button
           variant="default"
-          onClick={() => {
-            window.location.href = '/admin';
-          }}
+          render={<Link href="/" />}
+          nativeButton={false}
           className="cursor-pointer"
         >
           Go to Dashboard

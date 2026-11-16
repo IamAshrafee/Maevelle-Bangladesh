@@ -59,7 +59,9 @@ export function EmailTemplatesTab({ templates, policies }: EmailTemplatesTabProp
         {
           method: 'POST',
           body: JSON.stringify({
-            ...(previewMode === 'order' && targetOrderId.trim() ? { orderId: targetOrderId.trim() } : {}),
+            ...(previewMode === 'order' && targetOrderId.trim()
+              ? { orderId: targetOrderId.trim() }
+              : {}),
             ...(previewMode === 'fixture' && targetFixture ? { fixtureKey: targetFixture } : {}),
           }),
         },
@@ -90,9 +92,12 @@ export function EmailTemplatesTab({ templates, policies }: EmailTemplatesTabProp
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-lg font-semibold tracking-tight">Transactional Email Template Gallery</h2>
+        <h2 className="text-lg font-semibold tracking-tight">
+          Transactional Email Template Gallery
+        </h2>
         <p className="text-xs text-muted-foreground mt-0.5">
-          Version-controlled, code-backed HTML and plain-text templates with real order rendering and deterministic test fixtures.
+          Version-controlled, code-backed HTML and plain-text templates with real order rendering
+          and deterministic test fixtures.
         </p>
       </div>
 
@@ -106,7 +111,7 @@ export function EmailTemplatesTab({ templates, policies }: EmailTemplatesTabProp
           return (
             <Card
               key={tpl.key}
-              className="flex flex-col justify-between transition-all hover:border-primary/50 hover:shadow-xs group"
+              className="flex flex-col justify-between transition-[border-color,box-shadow] duration-150 hover:border-primary/50 hover:shadow-xs group"
             >
               <CardHeader className="pb-3">
                 <div className="flex items-start justify-between gap-2">
@@ -178,7 +183,10 @@ export function EmailTemplatesTab({ templates, policies }: EmailTemplatesTabProp
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div>
                 <DialogTitle className="text-lg">
-                  {selectedTemplate ? eventDisplayLabels[templateKeyToEventMap[selectedTemplate.key] ?? ''] || selectedTemplate.key : 'Email Preview'}
+                  {selectedTemplate
+                    ? eventDisplayLabels[templateKeyToEventMap[selectedTemplate.key] ?? ''] ||
+                      selectedTemplate.key
+                    : 'Email Preview'}
                 </DialogTitle>
                 <DialogDescription className="text-xs font-mono">
                   Template key: {selectedTemplate?.key} · Version {selectedTemplate?.version ?? 1}
@@ -195,11 +203,12 @@ export function EmailTemplatesTab({ templates, policies }: EmailTemplatesTabProp
                     type="button"
                     onClick={() => {
                       setPreviewMode('fixture');
-                      if (selectedTemplate) void openPreview(selectedTemplate, '', activeFixtureKey);
+                      if (selectedTemplate)
+                        void openPreview(selectedTemplate, '', activeFixtureKey);
                     }}
                     className={`px-2.5 py-1 rounded font-medium transition-colors ${
                       previewMode === 'fixture'
-                        ? 'bg-primary text-primary-foreground shadow-2xs'
+                        ? 'bg-primary-subtle text-primary-hover dark:text-primary border border-primary/25 font-semibold shadow-2xs'
                         : 'text-muted-foreground hover:text-foreground'
                     }`}
                   >
@@ -210,7 +219,7 @@ export function EmailTemplatesTab({ templates, policies }: EmailTemplatesTabProp
                     onClick={() => setPreviewMode('order')}
                     className={`px-2.5 py-1 rounded font-medium transition-colors ${
                       previewMode === 'order'
-                        ? 'bg-primary text-primary-foreground shadow-2xs'
+                        ? 'bg-primary-subtle text-primary-hover dark:text-primary border border-primary/25 font-semibold shadow-2xs'
                         : 'text-muted-foreground hover:text-foreground'
                     }`}
                   >
@@ -224,12 +233,16 @@ export function EmailTemplatesTab({ templates, policies }: EmailTemplatesTabProp
                   <select
                     value={activeFixtureKey}
                     onChange={(e) => handleFixtureChange(e.target.value)}
-                    className="h-8 rounded-md border bg-background px-2.5 text-xs text-foreground focus:outline-hidden"
+                    className="h-8 pointer-coarse:min-h-11 rounded-md border bg-background px-2.5 text-base md:text-xs pointer-coarse:text-base text-foreground focus:outline-hidden"
                   >
                     <option value="multi-item">Multi-item Order (Fatema · Kurti & Dupatta)</option>
-                    <option value="simple-cod">Simple COD Order (Tanvir · Minimalist Wallet)</option>
+                    <option value="simple-cod">
+                      Simple COD Order (Tanvir · Minimalist Wallet)
+                    </option>
                     <option value="discounted">Discounted Order (Sabrina · Jewelry Promo)</option>
-                    <option value="large-order">Large Order (Dr. Nusrat · Saree & Accessories)</option>
+                    <option value="large-order">
+                      Large Order (Dr. Nusrat · Saree & Accessories)
+                    </option>
                     <option value="cancelled">Cancelled Order (Rafiqul · Cotton Panjabi)</option>
                     <option value="refunded">Refunded Order (Mehzabin · Anarkali Gown)</option>
                   </select>
@@ -242,7 +255,13 @@ export function EmailTemplatesTab({ templates, policies }: EmailTemplatesTabProp
                     placeholder="Enter Order ID or Number (e.g. MV-10248)…"
                     className="h-8 w-60 text-xs"
                   />
-                  <Button type="submit" size="sm" variant="outline" className="h-8 text-xs" disabled={previewLoading}>
+                  <Button
+                    type="submit"
+                    size="sm"
+                    variant="outline"
+                    className="h-8 text-xs"
+                    disabled={previewLoading}
+                  >
                     Render Order
                   </Button>
                 </form>

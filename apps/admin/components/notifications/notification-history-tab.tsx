@@ -205,7 +205,12 @@ export function NotificationHistoryTab({
           <div className="p-6 text-xs text-destructive space-y-2">
             <p className="font-semibold">Unable to load delivery history</p>
             <p>{error}</p>
-            <Button size="sm" variant="outline" onClick={() => void loadHistory()} className="h-7 text-xs">
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => void loadHistory()}
+              className="h-7 text-xs"
+            >
               Retry
             </Button>
           </div>
@@ -221,7 +226,7 @@ export function NotificationHistoryTab({
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <Table>
+            <Table density="compact" stickyHeader>
               <TableHeader>
                 <TableRow className="hover:bg-transparent border-b border-border bg-muted/30 text-xs">
                   <TableHead className="w-36 font-semibold">Timestamp</TableHead>
@@ -284,16 +289,17 @@ export function NotificationHistoryTab({
                         <span className="text-muted-foreground font-sans text-[10px] capitalize">
                           {row.source_domain.replaceAll('_', ' ')}
                         </span>
-                        <span className="text-foreground truncate max-w-[140px]" title={row.source_id}>
+                        <span
+                          className="text-foreground truncate max-w-[140px]"
+                          title={row.source_id}
+                        >
                           {row.source_id.slice(0, 8)}…{row.source_id.slice(-4)}
                         </span>
                       </div>
                     </TableCell>
 
                     {/* Provider */}
-                    <TableCell className="text-muted-foreground">
-                      {row.provider || '—'}
-                    </TableCell>
+                    <TableCell className="text-muted-foreground">{row.provider || '—'}</TableCell>
 
                     {/* Inspect button */}
                     <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>

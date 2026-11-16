@@ -57,7 +57,7 @@ export function TriStateToggle({
                   ? choice.value === null
                     ? 'bg-card text-foreground shadow-2xs'
                     : choice.value
-                      ? 'bg-primary text-primary-foreground shadow-2xs'
+                      ? 'bg-primary-hover text-primary-foreground dark:bg-primary dark:text-primary-foreground shadow-2xs'
                       : 'bg-secondary text-secondary-foreground shadow-2xs'
                   : 'text-muted-foreground hover:text-foreground',
               )}

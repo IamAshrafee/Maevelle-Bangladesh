@@ -95,8 +95,13 @@ export function ScansTab({
                   <StatusBadge status={activeRun.status} />
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  Scope: <strong className="text-foreground">{activeRun.scope_module ? `Module: ${activeRun.scope_module}` : 'Full Organization'}</strong> · Trigger:{' '}
-                  <span className="font-mono">{activeRun.trigger_type}</span>
+                  Scope:{' '}
+                  <strong className="text-foreground">
+                    {activeRun.scope_module
+                      ? `Module: ${activeRun.scope_module}`
+                      : 'Full Organization'}
+                  </strong>{' '}
+                  · Trigger: <span className="font-mono">{activeRun.trigger_type}</span>
                 </p>
               </div>
             </div>
@@ -193,7 +198,7 @@ export function ScansTab({
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <Table>
+            <Table density="compact" stickyHeader>
               <TableHeader>
                 <TableRow className="bg-muted/40">
                   <TableHead className="w-24 text-xs font-semibold">Status</TableHead>
@@ -279,8 +284,10 @@ export function ScansTab({
         {totalPages > 1 && (
           <div className="flex flex-col sm:flex-row items-center justify-between gap-3 p-4 border-t border-border bg-card">
             <p className="text-xs text-muted-foreground">
-              Showing page <span className="font-mono font-medium text-foreground">{currentPage}</span> of{' '}
-              <span className="font-mono font-medium text-foreground">{totalPages}</span> ({totalItems} total runs)
+              Showing page{' '}
+              <span className="font-mono font-medium text-foreground">{currentPage}</span> of{' '}
+              <span className="font-mono font-medium text-foreground">{totalPages}</span> (
+              {totalItems} total runs)
             </p>
             <div className="flex items-center gap-2">
               <Button

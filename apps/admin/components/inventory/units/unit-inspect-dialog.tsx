@@ -8,13 +8,7 @@ import type {
   InspectionStageDto,
   InspectionDispositionDto,
 } from '@maevelle/contracts';
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
-} from '@/components/ui/dialog';
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetFooter } from '@/components/ui/sheet';
 import { Button } from '@/components/ui/button';
 import { NativeSelect } from '@/components/ui/native-select';
 import { Textarea } from '@/components/ui/textarea';
@@ -144,17 +138,17 @@ export function UnitInspectDialog({
   };
 
   return (
-    <Dialog open={open} onOpenChange={(nextOpen) => !submitting && onOpenChange(nextOpen)}>
-      <DialogContent className="max-sm:inset-0 max-sm:left-0 max-sm:top-0 max-sm:h-dvh max-sm:max-h-dvh max-sm:max-w-none max-sm:translate-x-0 max-sm:translate-y-0 max-sm:rounded-none sm:max-h-[90vh] sm:max-w-lg overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2 text-base font-semibold">
+    <Sheet open={open} onOpenChange={(nextOpen) => !submitting && onOpenChange(nextOpen)}>
+      <SheetContent side="right" className="w-full sm:max-w-lg overflow-y-auto p-6">
+        <SheetHeader className="p-0 pb-4 border-b border-border/60">
+          <SheetTitle className="flex items-center gap-2 text-base font-semibold">
             <ShieldCheck className="size-4 text-primary" />
             <span>Record QC Inspection — {unit.unitCode}</span>
-          </DialogTitle>
+          </SheetTitle>
           <p className="text-xs text-muted-foreground">
             {unit.productTitle} · <span className="font-mono">{unit.sku}</span>
           </p>
-        </DialogHeader>
+        </SheetHeader>
 
         <form onSubmit={handleSubmit} className="space-y-4 pt-2">
           {error ? (
@@ -314,7 +308,7 @@ export function UnitInspectDialog({
             )}
           </div>
 
-          <DialogFooter className="gap-2 sm:gap-0 pt-3 border-t">
+          <SheetFooter className="gap-2 sm:flex-row sm:justify-end p-0 pt-3 border-t">
             <Button
               type="button"
               variant="outline"
@@ -343,9 +337,9 @@ export function UnitInspectDialog({
                 </>
               )}
             </Button>
-          </DialogFooter>
+          </SheetFooter>
         </form>
-      </DialogContent>
-    </Dialog>
+      </SheetContent>
+    </Sheet>
   );
 }

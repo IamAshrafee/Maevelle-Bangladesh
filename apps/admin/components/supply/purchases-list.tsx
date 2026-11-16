@@ -44,7 +44,7 @@ import {
 } from '@/lib/supply/api';
 import { purchaseWorkflowStatus } from '@/lib/supply/status';
 import { CreatePurchaseDialog } from './create-purchase-dialog';
-import { SupplyWorkspaceNav } from './supply-workspace-nav';
+import { AdminPage } from '@/components/ui/page-shell';
 
 const STATUS_TABS = [
   { value: 'ALL', label: 'All Orders' },
@@ -229,7 +229,7 @@ export function PurchasesList() {
   }
 
   return (
-    <main className="min-w-0 space-y-5 px-4 py-5 sm:px-6 lg:px-8">
+    <AdminPage variant="wide">
       {/* Header */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
@@ -246,10 +246,7 @@ export function PurchasesList() {
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          <RefreshButton
-            loading={loading}
-            tooltip="Refresh purchase orders"
-          />
+          <RefreshButton loading={loading} tooltip="Refresh purchase orders" />
 
           {canManageProcurement ? (
             <Button size="sm" onClick={() => setCreateOpen(true)} className="h-11 gap-1.5 sm:h-8">
@@ -269,8 +266,6 @@ export function PurchasesList() {
           </Button>
         </div>
       </div>
-
-      <SupplyWorkspaceNav />
 
       {/* Operational Stats Cards */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
@@ -361,8 +356,8 @@ export function PurchasesList() {
                 onClick={() => updateFilter({ status: tab.value === 'ALL' ? null : tab.value })}
                 className={`min-h-11 touch-manipulation rounded-lg px-3 py-1.5 text-xs font-medium transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
                   isSelected
-                    ? 'bg-primary text-primary-foreground shadow-sm'
-                    : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+                    ? 'border border-primary/25 bg-primary-subtle text-primary-hover dark:text-primary font-semibold shadow-sm'
+                    : 'border border-transparent text-muted-foreground hover:bg-muted hover:text-foreground'
                 }`}
               >
                 {tab.label}
@@ -551,7 +546,7 @@ export function PurchasesList() {
 
       {/* Main Table */}
       <div className="hidden overflow-hidden rounded-xl border bg-card shadow-sm md:block">
-        <Table>
+        <Table density="compact" stickyHeader>
           <TableHeader>
             <TableRow>
               <TableHead className="w-8"></TableHead>
@@ -884,6 +879,6 @@ export function PurchasesList() {
           router.push(`/purchases/${created.id}`);
         }}
       />
-    </main>
+    </AdminPage>
   );
 }

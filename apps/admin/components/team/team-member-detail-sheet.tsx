@@ -142,8 +142,7 @@ export function TeamMemberDetailSheet({
   const isTargetOwner = member?.membership_type === 'OWNER';
   const canEditTargetPermissions =
     canManagePermissions && !isSelf && !isTargetOwner && member?.status !== 'REMOVED';
-  const canEditTargetLifecycle =
-    canManageLifecycle && !isSelf && !isTargetOwner;
+  const canEditTargetLifecycle = canManageLifecycle && !isSelf && !isTargetOwner;
 
   const roleSummary = member
     ? getRoleSummary(member.capabilities, presets, member.membership_type)
@@ -270,7 +269,10 @@ export function TeamMemberDetailSheet({
                       {member?.name ?? 'Loading member…'}
                     </SheetTitle>
                     {isSelf ? (
-                      <Badge variant="secondary" className="text-xs bg-primary/15 text-primary border-primary/30">
+                      <Badge
+                        variant="secondary"
+                        className="text-xs bg-primary/15 text-primary border-primary/30"
+                      >
                         You
                       </Badge>
                     ) : null}
@@ -339,7 +341,7 @@ export function TeamMemberDetailSheet({
           </SheetHeader>
 
           {/* Body Content */}
-          <div className="flex-1 overflow-y-auto p-6 space-y-4">
+          <div className="flex-1 overflow-y-auto overflow-x-hidden overscroll-contain touch-pan-y p-6 space-y-4">
             {feedback ? (
               <div
                 className={`rounded-md p-3 text-sm flex items-center gap-2 border ${
@@ -379,8 +381,9 @@ export function TeamMemberDetailSheet({
                       <div>
                         <strong>Owner access is protected.</strong>
                         <p className="mt-0.5">
-                          The organization Owner holds structural, non-delegated superuser authority.
-                          To transfer the Owner role, use the dedicated Ownership Transfer workflow.
+                          The organization Owner holds structural, non-delegated superuser
+                          authority. To transfer the Owner role, use the dedicated Ownership
+                          Transfer workflow.
                         </p>
                       </div>
                     </div>
@@ -390,8 +393,9 @@ export function TeamMemberDetailSheet({
                       <div>
                         <strong>Self-modification is protected.</strong>
                         <p className="mt-0.5">
-                          You cannot alter your own organizational capabilities. Another administrator with
-                          permission management rights or the Owner must grant or revoke access for you.
+                          You cannot alter your own organizational capabilities. Another
+                          administrator with permission management rights or the Owner must grant or
+                          revoke access for you.
                         </p>
                       </div>
                     </div>
@@ -401,8 +405,8 @@ export function TeamMemberDetailSheet({
                       <div>
                         <strong>Removed member.</strong>
                         <p className="mt-0.5">
-                          This member has been removed from the organization. To grant them access again,
-                          send a new invitation to their email address.
+                          This member has been removed from the organization. To grant them access
+                          again, send a new invitation to their email address.
                         </p>
                       </div>
                     </div>
@@ -434,7 +438,7 @@ export function TeamMemberDetailSheet({
                           type="button"
                           onClick={handleSavePermissions}
                           disabled={busy}
-                          className="button primary h-9"
+                          className="h-9"
                         >
                           <Save className="size-4" />
                           {busy ? 'Saving changes…' : 'Save capabilities'}
@@ -507,10 +511,14 @@ export function TeamMemberDetailSheet({
                             </div>
                             <div className="text-right text-[11px] text-muted-foreground">
                               {session.createdAt ? (
-                                <div>Created {new Date(session.createdAt).toLocaleDateString()}</div>
+                                <div>
+                                  Created {new Date(session.createdAt).toLocaleDateString()}
+                                </div>
                               ) : null}
                               {session.expiresAt ? (
-                                <div>Expires {new Date(session.expiresAt).toLocaleDateString()}</div>
+                                <div>
+                                  Expires {new Date(session.expiresAt).toLocaleDateString()}
+                                </div>
                               ) : null}
                             </div>
                           </div>
@@ -569,10 +577,13 @@ export function TeamMemberDetailSheet({
                   {/* Lifecycle Management Actions */}
                   {canEditTargetLifecycle ? (
                     <div className="rounded-lg border border-border bg-card p-4 space-y-3">
-                      <h4 className="text-sm font-semibold text-foreground">Management Operations</h4>
+                      <h4 className="text-sm font-semibold text-foreground">
+                        Management Operations
+                      </h4>
                       <p className="text-xs text-muted-foreground">
-                        Actions take effect immediately across all system APIs. All historical orders,
-                        audit trails, and business records created by this member are preserved.
+                        Actions take effect immediately across all system APIs. All historical
+                        orders, audit trails, and business records created by this member are
+                        preserved.
                       </p>
 
                       <div className="flex flex-wrap gap-2 pt-2">
@@ -663,13 +674,14 @@ export function TeamMemberDetailSheet({
                   </span>
                 ) : lifecycleAction === 'RESTORE' ? (
                   <span>
-                    <strong>{member?.name}</strong> will regain access to their assigned capabilities.
+                    <strong>{member?.name}</strong> will regain access to their assigned
+                    capabilities.
                   </span>
                 ) : (
                   <span>
                     <strong>{member?.name}</strong> will be permanently removed from this
-                    organization. Their capabilities and active sessions will be terminated. Historical
-                    records created by them will remain attributed in audit logs.
+                    organization. Their capabilities and active sessions will be terminated.
+                    Historical records created by them will remain attributed in audit logs.
                   </span>
                 )}
               </DialogDescription>
@@ -719,8 +731,8 @@ export function TeamMemberDetailSheet({
               </DialogTitle>
               <DialogDescription>
                 Are you sure you want to end all authenticated sessions for{' '}
-                <strong>{member?.name}</strong>? They will be immediately signed out of all devices and
-                required to authenticate again.
+                <strong>{member?.name}</strong>? They will be immediately signed out of all devices
+                and required to authenticate again.
               </DialogDescription>
             </DialogHeader>
             <DialogFooter className="gap-2 sm:gap-0">

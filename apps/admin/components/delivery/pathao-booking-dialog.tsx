@@ -5,16 +5,18 @@ import React, { useEffect, useState } from 'react';
 
 import { Button } from '@/components/ui/button';
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetFooter,
+  SheetHeader,
+  SheetTitle,
+} from '@/components/ui/sheet';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select';
 import { fetchApiData } from '@/lib/api';
+import { useFormDialogLifecycle } from '@/hooks/use-form-dialog-lifecycle';
 import type { CourierAccountDto, CourierQuoteDto } from '@maevelle/contracts';
 
 import { CourierQuoteCard } from './courier-quote-card';
@@ -114,164 +116,190 @@ export function PathaoBookingDialog({
     }
   };
 
+  const isDirty =
+    selectedAccountId !== (pathaoAccounts[0]?.id ?? courierAccounts[0]?.id ?? '') ||
+    weightKg !== '0.5' ||
+    quote !== null;
+
+  const { handleOpenChange, discardConfirmDialog } = useFormDialogLifecycle({
+    open,
+    onOpenChange,
+    isDirty,
+    isSubmitting: bookingLoading || quoteLoading,
+    title: 'Discard Pathao booking?',
+  });
+
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2 text-lg">
+    <>
+      <Sheet open={open} onOpenChange={handleOpenChange}>
+      <SheetContent side="right" className="gap-0 p-0 sm:max-w-lg">
+        <SheetHeader className="shrink-0 border-b border-border px-5 py-4 pr-11 text-left">
+          <SheetTitle className="flex items-center gap-2 text-lg">
             <Truck className="size-5 text-primary" /> Book with Pathao Courier
-          </DialogTitle>
-          <DialogDescription>
-            Dispatch <strong className="text-foreground">{deliveryNumber}</strong> via Pathao Courier with authenticated tracking & COD collection.
-          </DialogDescription>
-        </DialogHeader>
+          </SheetTitle>
+          <SheetDescription>
+            Dispatch <strong className="text-foreground">{deliveryNumber}</strong> via Pathao
+            Courier with authenticated tracking & COD collection.
+          </SheetDescription>
+        </SheetHeader>
 
-        {error ? (
-          <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-xs text-destructive flex items-start gap-2">
-            <AlertCircle className="size-4 shrink-0 mt-0.5" />
-            <p>{error}</p>
-          </div>
-        ) : null}
-
-        <form onSubmit={handleConfirmBooking} className="space-y-4 text-xs">
-          {/* Account Selection */}
-          <div className="space-y-1.5">
-            <Label htmlFor="accountSelect" className="text-xs font-medium">Pathao Integration Account</Label>
-            {pathaoAccounts.length === 0 ? (
-              <p className="text-xs text-amber-600 bg-amber-50 p-2.5 rounded border border-amber-200">
-                No active Pathao account configured. Please configure Pathao under Delivery → Couriers first.
-              </p>
-            ) : (
-              <select
-                id="accountSelect"
-                className="w-full rounded-md border bg-background px-3 py-2 text-xs focus:ring-2 focus:ring-primary"
-                value={selectedAccountId}
-                onChange={(e) => {
-                  setSelectedAccountId(e.target.value);
-                  setQuote(null);
-                }}
-              >
-                {pathaoAccounts.map((acc) => (
-                  <option key={acc.id} value={acc.id}>
-                    {acc.name} ({acc.providerCode})
-                  </option>
-                ))}
-              </select>
-            )}
-          </div>
-
-          {/* Recipient Snapshot */}
-          <div className="rounded-lg border bg-muted/30 p-3 space-y-1.5">
-            <p className="font-semibold text-foreground flex items-center gap-1.5 text-xs">
-              <User className="size-3.5 text-primary" /> Recipient Details
-            </p>
-            <div className="grid grid-cols-2 gap-2 text-muted-foreground pt-1 border-t text-[11px]">
-              <div>
-                <span>Customer:</span> <strong className="text-foreground">{recipient.name}</strong>
+        <form onSubmit={handleConfirmBooking} className="flex min-h-0 flex-1 flex-col text-xs">
+          <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-5 py-4">
+            {error ? (
+              <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-xs text-destructive flex items-start gap-2">
+                <AlertCircle className="size-4 shrink-0 mt-0.5" />
+                <p>{error}</p>
               </div>
-              <div>
-                <span>Phone:</span> <strong className="text-foreground">{recipient.phone}</strong>
-              </div>
-            </div>
-            <p className="text-[11px] text-muted-foreground">
-              Address: <strong className="text-foreground">{recipient.address}</strong>
-            </p>
-          </div>
-
-          {/* Weight & Parcel Config */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            ) : null}
+            {/* Account Selection */}
             <div className="space-y-1.5">
-              <Label htmlFor="weightInput" className="text-xs font-medium flex items-center justify-between">
-                <span>Parcel Weight (kg)</span>
-                <span className="text-[10px] text-muted-foreground">Accurate for quotes</span>
+              <Label htmlFor="accountSelect" className="text-xs font-medium">
+                Pathao Integration Account
               </Label>
-              <div className="flex gap-1.5">
-                <Input
-                  id="weightInput"
-                  type="number"
-                  step="0.1"
-                  min="0.1"
-                  max="50"
-                  value={weightKg}
+              {pathaoAccounts.length === 0 ? (
+                <p className="text-xs text-amber-600 bg-amber-50 p-2.5 rounded border border-amber-200">
+                  No active Pathao account configured. Please configure Pathao under Delivery →
+                  Couriers first.
+                </p>
+              ) : (
+                <NativeSelect
+                  id="accountSelect"
+                  value={selectedAccountId}
                   onChange={(e) => {
-                    setWeightKg(e.target.value);
+                    setSelectedAccountId(e.target.value);
                     setQuote(null);
                   }}
-                  className="text-xs h-8"
-                  required
-                />
+                >
+                  {pathaoAccounts.map((acc) => (
+                    <NativeSelectOption key={acc.id} value={acc.id}>
+                      {acc.name} ({acc.providerCode})
+                    </NativeSelectOption>
+                  ))}
+                </NativeSelect>
+              )}
+            </div>
+
+            {/* Recipient Snapshot */}
+            <div className="rounded-lg border bg-muted/30 p-3 space-y-1.5">
+              <p className="font-semibold text-foreground flex items-center gap-1.5 text-xs">
+                <User className="size-3.5 text-primary" /> Recipient Details
+              </p>
+              <div className="grid grid-cols-2 gap-2 text-muted-foreground pt-1 border-t text-[11px]">
+                <div>
+                  <span>Customer:</span>{' '}
+                  <strong className="text-foreground">{recipient.name}</strong>
+                </div>
+                <div>
+                  <span>Phone:</span> <strong className="text-foreground">{recipient.phone}</strong>
+                </div>
               </div>
-              <div className="flex gap-1 pt-0.5">
-                {['0.5', '1.0', '2.0'].map((preset) => (
-                  <button
-                    key={preset}
-                    type="button"
-                    onClick={() => {
-                      setWeightKg(preset);
+              <p className="text-[11px] text-muted-foreground">
+                Address: <strong className="text-foreground">{recipient.address}</strong>
+              </p>
+            </div>
+
+            {/* Weight & Parcel Config */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label
+                  htmlFor="weightInput"
+                  className="text-xs font-medium flex items-center justify-between"
+                >
+                  <span>Parcel Weight (kg)</span>
+                  <span className="text-[10px] text-muted-foreground">Accurate for quotes</span>
+                </Label>
+                <div className="flex gap-1.5">
+                  <Input
+                    id="weightInput"
+                    type="number"
+                    step="0.1"
+                    min="0.1"
+                    max="50"
+                    value={weightKg}
+                    onChange={(e) => {
+                      setWeightKg(e.target.value);
                       setQuote(null);
                     }}
-                    className="text-[10px] px-1.5 py-0.5 rounded border hover:bg-muted text-muted-foreground"
-                  >
-                    {preset} kg
-                  </button>
-                ))}
+                    className="text-xs h-8"
+                    required
+                  />
+                </div>
+                <div className="flex gap-1 pt-0.5">
+                  {['0.5', '1.0', '2.0'].map((preset) => (
+                    <button
+                      key={preset}
+                      type="button"
+                      onClick={() => {
+                        setWeightKg(preset);
+                        setQuote(null);
+                      }}
+                      className="text-[10px] px-1.5 py-0.5 rounded border hover:bg-muted text-muted-foreground"
+                    >
+                      {preset} kg
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label className="text-xs font-medium">COD Collection Amount</Label>
+                <div className="rounded-md border bg-muted/40 px-3 py-1.5 text-xs font-semibold text-foreground h-8 flex items-center justify-between">
+                  <span>
+                    {cod.required ? `${cod.expectedAmount} ${cod.currency}` : 'None (Prepaid)'}
+                  </span>
+                  <span className="text-[10px] font-normal text-muted-foreground">
+                    {cod.required ? 'Cash on Delivery' : 'Already Paid'}
+                  </span>
+                </div>
+                <p className="text-[10px] text-muted-foreground">
+                  Authoritative balance from order payment ledger.
+                </p>
               </div>
             </div>
 
-            <div className="space-y-1.5">
-              <Label className="text-xs font-medium">COD Collection Amount</Label>
-              <div className="rounded-md border bg-muted/40 px-3 py-1.5 text-xs font-semibold text-foreground h-8 flex items-center justify-between">
-                <span>{cod.required ? `${cod.expectedAmount} ${cod.currency}` : 'None (Prepaid)'}</span>
-                <span className="text-[10px] font-normal text-muted-foreground">
-                  {cod.required ? 'Cash on Delivery' : 'Already Paid'}
+            {/* Live Quote Section */}
+            <div className="space-y-2 pt-1 border-t">
+              <div className="flex items-center justify-between">
+                <span className="font-semibold text-foreground text-xs flex items-center gap-1.5">
+                  <Calculator className="size-3.5" /> Provider Live Quote
                 </span>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={handleGetQuote}
+                  disabled={quoteLoading || !selectedAccountId || !weightKg}
+                  className="h-7 text-xs"
+                >
+                  {quoteLoading ? (
+                    <>
+                      <Loader2 className="size-3 animate-spin mr-1" /> Calculating…
+                    </>
+                  ) : (
+                    'Calculate quote'
+                  )}
+                </Button>
               </div>
-              <p className="text-[10px] text-muted-foreground">Authoritative balance from order payment ledger.</p>
+
+              {quote ? (
+                <CourierQuoteCard
+                  quote={quote}
+                  customerShippingCharge={customerShippingCharge}
+                  providerName="Pathao"
+                />
+              ) : (
+                <p className="text-[11px] text-muted-foreground italic">
+                  Optional: Calculate estimated delivery cost and COD fee before confirming.
+                </p>
+              )}
             </div>
           </div>
 
-          {/* Live Quote Section */}
-          <div className="space-y-2 pt-1 border-t">
-            <div className="flex items-center justify-between">
-              <span className="font-semibold text-foreground text-xs flex items-center gap-1.5">
-                <Calculator className="size-3.5" /> Provider Live Quote
-              </span>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={handleGetQuote}
-                disabled={quoteLoading || !selectedAccountId || !weightKg}
-                className="h-7 text-xs"
-              >
-                {quoteLoading ? (
-                  <>
-                    <Loader2 className="size-3 animate-spin mr-1" /> Calculating…
-                  </>
-                ) : (
-                  'Calculate quote'
-                )}
-              </Button>
-            </div>
-
-            {quote ? (
-              <CourierQuoteCard
-                quote={quote}
-                customerShippingCharge={customerShippingCharge}
-                providerName="Pathao"
-              />
-            ) : (
-              <p className="text-[11px] text-muted-foreground italic">
-                Optional: Calculate estimated delivery cost and COD fee before confirming.
-              </p>
-            )}
-          </div>
-
-          <DialogFooter className="pt-2 gap-2 sm:gap-0">
+          <SheetFooter className="shrink-0 flex-row items-center justify-end gap-2 border-t border-border bg-card/50 px-5 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom,0px))]">
             <Button
               type="button"
               variant="outline"
-              onClick={() => onOpenChange(false)}
+              onClick={() => handleOpenChange(false)}
               disabled={bookingLoading}
             >
               Cancel
@@ -291,9 +319,11 @@ export function PathaoBookingDialog({
                 </>
               )}
             </Button>
-          </DialogFooter>
+          </SheetFooter>
         </form>
-      </DialogContent>
-    </Dialog>
+      </SheetContent>
+    </Sheet>
+    {discardConfirmDialog}
+  </>
   );
 }

@@ -15,14 +15,20 @@ export function DeliveryPricingInfoCard() {
           className="flex items-center gap-2 text-left font-medium text-foreground hover:text-primary transition-colors cursor-pointer"
         >
           <HelpCircle className="size-4 text-primary shrink-0" />
-          <span className="text-xs font-semibold">How Maevelle delivery pricing & resolution works</span>
+          <span className="text-xs font-semibold">
+            How Maevelle delivery pricing & resolution works
+          </span>
         </button>
 
         <button
           type="button"
           onClick={() => setExpanded((prev) => !prev)}
           className="text-muted-foreground hover:text-foreground transition-colors p-1 cursor-pointer"
-          aria-label={expanded ? 'Collapse delivery pricing explanation' : 'Expand delivery pricing explanation'}
+          aria-label={
+            expanded
+              ? 'Collapse delivery pricing explanation'
+              : 'Expand delivery pricing explanation'
+          }
         >
           {expanded ? <ChevronUp className="size-4" /> : <ChevronDown className="size-4" />}
         </button>
@@ -36,8 +42,8 @@ export function DeliveryPricingInfoCard() {
               <span>1. Priority & Hierarchy</span>
             </strong>
             <p className="text-[11px] leading-relaxed">
-              Rules with higher priority evaluate first. For equal priority, specific local nodes (Thana / District)
-              automatically beat country-level defaults.
+              Rules with higher priority evaluate first. For equal priority, specific local nodes
+              (Thana / District) automatically beat country-level defaults.
             </p>
           </div>
 
@@ -47,8 +53,8 @@ export function DeliveryPricingInfoCard() {
               <span>2. Immutable Snapshots</span>
             </strong>
             <p className="text-[11px] leading-relaxed">
-              When a customer completes checkout, the exact quote is snapshotted. Updating delivery rates
-              will never alter past order amounts or accounting books.
+              When a customer completes checkout, the exact quote is snapshotted. Updating delivery
+              rates will never alter past order amounts or accounting books.
             </p>
           </div>
 
@@ -58,8 +64,8 @@ export function DeliveryPricingInfoCard() {
               <span>3. Server-Owned Rates</span>
             </strong>
             <p className="text-[11px] leading-relaxed">
-              Delivery charges cannot be manipulated on the frontend. The server verifies and prices each
-              cart directly from these authoritative rules.
+              Delivery charges cannot be manipulated on the frontend. The server verifies and prices
+              each cart directly from these authoritative rules.
             </p>
           </div>
         </div>
@@ -67,4 +73,3 @@ export function DeliveryPricingInfoCard() {
     </div>
   );
 }
-

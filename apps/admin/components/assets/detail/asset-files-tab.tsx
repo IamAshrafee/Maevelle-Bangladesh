@@ -68,7 +68,7 @@ export function AssetFilesTab({
               return (
                 <div
                   key={file.id}
-                  className="rounded-xl border bg-card overflow-hidden hover:border-primary/50 transition-all flex flex-col justify-between group shadow-xs"
+                  className="rounded-xl border bg-card overflow-hidden hover:border-primary/50 transition-colors duration-150 flex flex-col justify-between group shadow-xs"
                 >
                   {/* Thumbnail / Header Area */}
                   {isImage ? (
@@ -79,7 +79,7 @@ export function AssetFilesTab({
                         className="object-cover w-full h-full group-hover:scale-105 transition-transform duration-300"
                         loading="lazy"
                       />
-                      <span className="absolute top-2 left-2 rounded-full bg-background/80 backdrop-blur-xs px-2 py-0.5 text-[10px] font-semibold">
+                      <span className="absolute top-2 left-2 rounded-full bg-background/90 px-2 py-0.5 text-[10px] font-semibold">
                         {humanizeAssetCode(file.role)}
                       </span>
                     </div>

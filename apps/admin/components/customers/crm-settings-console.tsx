@@ -19,7 +19,6 @@ import {
   PagePanel,
   PageSection,
 } from '@/components/ui/page-shell';
-import { CrmNav } from './crm-nav';
 import { useAdminCapability } from '@/components/admin-capabilities';
 
 export function CrmSettingsConsole() {
@@ -105,11 +104,8 @@ export function CrmSettingsConsole() {
         eyebrow="Customer 360"
         title="CRM settings"
         description="Govern lifecycle thresholds, typed profile attributes, and protected CRM behavior."
-        actions={
-          <RefreshButton onRefresh={() => void load()} tooltip="Refresh CRM settings" />
-        }
+        actions={<RefreshButton onRefresh={() => void load()} tooltip="Refresh CRM settings" />}
       />
-      <CrmNav />
       {error ? <ErrorState message={error} onRetry={() => void load()} /> : null}
       {canManageIdentity ? (
         <PageSection

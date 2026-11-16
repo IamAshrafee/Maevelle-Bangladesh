@@ -37,7 +37,7 @@ export function SmsMessagePreview({
           PREVIEW ONLY · NO SMS WILL BE SENT
         </div>
       ) : null}
-      <div className="mx-auto w-full max-w-sm rounded-[2rem] border-8 border-slate-900 bg-slate-100 p-3 shadow-sm dark:border-slate-700 dark:bg-slate-900">
+      <div className="mx-auto w-full max-w-sm rounded-[2rem] border-8 border-foreground/85 bg-muted/60 p-3 shadow-sm dark:border-border dark:bg-muted/30">
         <div className="mb-3 flex items-center justify-between px-2 text-[11px] text-muted-foreground">
           <span translate="no">{sender}</span>
           <MessageSquareText aria-hidden="true" className="size-3.5" />

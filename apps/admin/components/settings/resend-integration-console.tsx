@@ -13,6 +13,7 @@ import {
   Shield,
   Zap,
 } from 'lucide-react';
+import { AdminPage } from '@/components/ui/page-shell';
 import { Button, buttonVariants } from '@/components/ui/button';
 
 import { SettingsSection } from './settings-card';
@@ -94,10 +95,12 @@ export function ResendIntegrationConsole() {
 
   if (loading && !data) {
     return (
-      <div className="flex flex-col items-center justify-center h-64 gap-2 text-muted-foreground text-xs">
-        <RefreshCw className="size-5 animate-spin text-primary" />
-        <span>Loading Resend Integration...</span>
-      </div>
+      <AdminPage variant="narrow">
+        <div className="flex flex-col items-center justify-center h-64 gap-2 text-muted-foreground text-xs">
+          <RefreshCw className="size-5 animate-spin text-primary" />
+          <span>Loading Resend Integration...</span>
+        </div>
+      </AdminPage>
     );
   }
 
@@ -106,7 +109,7 @@ export function ResendIntegrationConsole() {
   const isConnected = data?.status === 'CONNECTED';
 
   return (
-    <div className="space-y-6 pb-16 max-w-4xl">
+    <AdminPage variant="narrow" className="pb-16">
       <SettingsPageHeader
         title="Resend Integration"
         description="External transactional email delivery provider used by Maevelle for customer notifications."
@@ -164,7 +167,9 @@ export function ResendIntegrationConsole() {
             <div>
               <p className="font-semibold">{testResult.message}</p>
               {testResult.latencyMs !== undefined && (
-                <p className="text-[11px] opacity-80">Round-trip response latency: {testResult.latencyMs}ms</p>
+                <p className="text-[11px] opacity-80">
+                  Round-trip response latency: {testResult.latencyMs}ms
+                </p>
               )}
             </div>
           </div>
@@ -202,7 +207,11 @@ export function ResendIntegrationConsole() {
           <div className="pt-1">
             <Link
               href="/email?tab=settings"
-              className={buttonVariants({ variant: 'link', size: 'sm', className: 'h-auto p-0 text-xs font-semibold inline-flex items-center gap-1' })}
+              className={buttonVariants({
+                variant: 'link',
+                size: 'sm',
+                className: 'h-auto p-0 text-xs font-semibold inline-flex items-center gap-1',
+              })}
             >
               <Mail className="size-3.5" />
               Email Operations
@@ -245,16 +254,23 @@ export function ResendIntegrationConsole() {
       {/* External Provider Resources */}
       <div className="p-4 rounded-xl border border-dashed border-border bg-muted/20 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
         <div className="space-y-0.5">
-          <span className="font-semibold text-foreground">Need to manage DNS or create API keys?</span>
+          <span className="font-semibold text-foreground">
+            Need to manage DNS or create API keys?
+          </span>
           <p className="text-muted-foreground">
-            Visit your Resend dashboard to inspect domain DNS records (SPF, DKIM, DMARC) or generate restricted tokens.
+            Visit your Resend dashboard to inspect domain DNS records (SPF, DKIM, DMARC) or generate
+            restricted tokens.
           </p>
         </div>
         <a
           href="https://resend.com/overview"
           target="_blank"
           rel="noopener noreferrer"
-          className={buttonVariants({ variant: 'outline', size: 'sm', className: 'text-xs h-8 shrink-0 gap-1.5' })}
+          className={buttonVariants({
+            variant: 'outline',
+            size: 'sm',
+            className: 'text-xs h-8 shrink-0 gap-1.5',
+          })}
         >
           Resend Console
           <ExternalLink className="size-3.5" />
@@ -268,6 +284,6 @@ export function ResendIntegrationConsole() {
         module="integrations"
         title="Resend Integration History"
       />
-    </div>
+    </AdminPage>
   );
 }

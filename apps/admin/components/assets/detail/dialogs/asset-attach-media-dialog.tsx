@@ -5,13 +5,13 @@ import { FileText, UploadCloud } from 'lucide-react';
 import type { AssetDetailDto } from '@maevelle/contracts';
 import { Button } from '@/components/ui/button';
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetFooter,
+  SheetHeader,
+  SheetTitle,
+} from '@/components/ui/sheet';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { NativeSelect } from '@/components/ui/native-select';
@@ -71,18 +71,21 @@ export function AssetAttachMediaDialog({
 
   return (
     <>
-      <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
+      <Sheet open={open} onOpenChange={onOpenChange}>
+        <SheetContent
+          side="right"
+          className="flex w-full flex-col gap-5 overflow-y-auto p-6 sm:max-w-md"
+        >
+          <SheetHeader className="border-b border-border/60 p-0 pb-4">
+            <SheetTitle className="flex items-center gap-2">
               <FileText className="size-5 text-primary" />
               <span>Attach Private Document or Photo</span>
-            </DialogTitle>
-            <DialogDescription>
+            </SheetTitle>
+            <SheetDescription>
               Attach invoices, warranty certificates, repair receipts, or serial number photos.
               Documents remain private to authorized organization members.
-            </DialogDescription>
-          </DialogHeader>
+            </SheetDescription>
+          </SheetHeader>
 
           {error ? (
             <div className="rounded-lg bg-destructive/10 border border-destructive/20 p-2.5 text-xs text-destructive font-medium">
@@ -141,17 +144,17 @@ export function AssetAttachMediaDialog({
               <Input name="label" placeholder="e.g. Original Purchase Bill, 3-Year Warranty Slip" />
             </Label>
 
-            <DialogFooter className="gap-2 sm:gap-0">
+            <SheetFooter className="gap-2 border-t border-border/60 p-0 pt-4 sm:flex-row sm:justify-end">
               <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
                 Cancel
               </Button>
               <Button type="submit" disabled={busy || !selectedMedia}>
                 {busy ? 'Attaching…' : 'Attach File'}
               </Button>
-            </DialogFooter>
+            </SheetFooter>
           </form>
-        </DialogContent>
-      </Dialog>
+        </SheetContent>
+      </Sheet>
 
       <AssetPickerDialog
         open={pickerOpen}

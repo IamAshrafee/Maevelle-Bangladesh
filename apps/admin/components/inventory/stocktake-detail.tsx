@@ -24,12 +24,8 @@ import {
   formatInventoryNumber,
   formatInventoryDate,
 } from '@/lib/inventory/api';
-import {
-  InventoryStatCards,
-  InventoryEmptyState,
-  InventoryFeedback,
-} from './inventory-page-ui';
-import { Breadcrumb } from '@/components/ui/breadcrumb';
+import { InventoryStatCards, InventoryEmptyState, InventoryFeedback } from './inventory-page-ui';
+import { AdminPage, PageHeader } from '@/components/ui/page-shell';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -38,10 +34,7 @@ import {
   SerializedStocktakeCountDialog,
   type SerializedCountEntry,
 } from './serialized-stocktake-count-dialog';
-import {
-  StocktakeConditionDialog,
-  type StocktakeCondition,
-} from './stocktake-condition-dialog';
+import { StocktakeConditionDialog, type StocktakeCondition } from './stocktake-condition-dialog';
 import { StocktakeFoundItemDialog } from './stocktake-found-item-dialog';
 import {
   AlertDialog,
@@ -364,7 +357,7 @@ export function StocktakeDetail({ stocktakeId }: { stocktakeId: string }) {
 
   if (isLoading) {
     return (
-      <div className="space-y-6">
+      <AdminPage variant="wide">
         <div className="h-6 w-48 animate-pulse rounded bg-muted" />
         <div className="h-10 w-80 animate-pulse rounded bg-muted" />
         <div className="grid gap-4 md:grid-cols-4">
@@ -373,25 +366,26 @@ export function StocktakeDetail({ stocktakeId }: { stocktakeId: string }) {
           ))}
         </div>
         <div className="h-96 animate-pulse rounded-lg bg-muted" />
-      </div>
+      </AdminPage>
     );
   }
 
   if (!stocktake) {
     return (
-      <div className="space-y-6">
-        <Breadcrumb
-          items={[
+      <AdminPage variant="wide">
+        <PageHeader
+          breadcrumbs={[
             { label: 'Inventory', href: '/inventory' },
             { label: 'Stocktakes', href: '/inventory/stocktakes' },
             { label: 'Session Details', current: true },
           ]}
+          title="Stocktake Session"
         />
         <InventoryEmptyState
           title="Stocktake session not found"
           description="This stocktake session does not exist, was removed, or you do not have permission to view it."
         />
-      </div>
+      </AdminPage>
     );
   }
 
@@ -531,199 +525,188 @@ export function StocktakeDetail({ stocktakeId }: { stocktakeId: string }) {
   ];
 
   return (
-    <div className="space-y-6">
-      {/* Standard Breadcrumb Navigation */}
-      <Breadcrumb
-        items={[
+    <AdminPage variant="wide">
+      <PageHeader
+        breadcrumbs={[
           { label: 'Inventory', href: '/inventory' },
           { label: 'Stocktakes', href: '/inventory/stocktakes' },
           { label: stocktake.stocktakeNumber || 'Session Details', current: true },
         ]}
-      />
+        title={`Stocktake — ${stocktake.locationName}`}
+        badge={<StocktakeStatusBadge status={stocktake.status} />}
+        actions={
+          <>
+            {stocktake.status === 'COUNTING' && (
+              <>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => void openFoundSkuModal()}
+                  disabled={isTransitioning}
+                  className="gap-1.5"
+                >
+                  <Plus className="size-4" />
+                  Add Found SKU
+                </Button>
 
-      {/* Header */}
-      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between border-b pb-5">
-        <div className="space-y-1 min-w-0">
-          <div className="flex items-center gap-3 flex-wrap">
-            <h1 className="text-2xl font-bold tracking-tight">
-              Stocktake — {stocktake.locationName}
-            </h1>
-            <StocktakeStatusBadge status={stocktake.status} />
-          </div>
+                <AlertDialog>
+                  <AlertDialogTrigger
+                    render={<Button variant="outline" size="sm" disabled={isTransitioning} />}
+                  >
+                    Cancel Stocktake
+                  </AlertDialogTrigger>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>Cancel this stocktake?</AlertDialogTitle>
+                      <AlertDialogDescription>
+                        Recorded counts remain as historical audit notes, but no inventory balances
+                        will be changed.
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel>Keep Counting</AlertDialogCancel>
+                      <AlertDialogAction
+                        onClick={() => handleTransition('cancel')}
+                        className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                      >
+                        Cancel Stocktake
+                      </AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
 
-          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground pt-0.5">
-            <span className="flex items-center gap-1.5">
-              <MapPin className="size-3.5 text-primary" />
-              {stocktake.locationName}
-            </span>
-
-            <span className="flex items-center gap-1.5">
-              <Clock className="size-3.5" />
-              Snapshot: {formatInventoryDate(stocktake.snapshotAt?.toString())}
-            </span>
-
-            <button
-              type="button"
-              onClick={copyStocktakeNumber}
-              className="inline-flex items-center gap-1 hover:text-foreground transition-colors cursor-pointer"
-              title="Copy session number"
-            >
-              <span>{stocktake.stocktakeNumber}</span>
-              {copied ? <Check className="size-3 text-success" /> : <Copy className="size-3" />}
-            </button>
-
-            {stocktake.status === 'POSTED' && stocktake.postedInventoryTransactionId && (
-              <Link
-                href="/inventory/adjustments"
-                className="inline-flex items-center gap-1 text-primary hover:underline"
-              >
-                <span>View Ledger Adjustment</span>
-                <ExternalLink className="size-3" />
-              </Link>
+                <Button
+                  size="sm"
+                  onClick={() => handleTransition('submit-review')}
+                  disabled={totalCount === 0 || !allCounted || isTransitioning}
+                  className="gap-1.5"
+                >
+                  {isTransitioning ? (
+                    <>
+                      <RefreshCw className="size-3.5 animate-spin" />
+                      Submitting…
+                    </>
+                  ) : (
+                    <>
+                      <Check className="size-3.5" />
+                      Submit for Review
+                    </>
+                  )}
+                </Button>
+              </>
             )}
-          </div>
-        </div>
 
-        {/* Action Controls */}
-        <div className="flex flex-wrap items-center gap-2">
-          {stocktake.status === 'COUNTING' && (
-            <>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => void openFoundSkuModal()}
-                disabled={isTransitioning}
-                className="gap-1.5"
-              >
-                <Plus className="size-4" />
-                Add Found SKU
-              </Button>
+            {stocktake.status === 'REVIEW' && (
+              <>
+                {/* Backend supports cancellation in REVIEW state */}
+                <AlertDialog>
+                  <AlertDialogTrigger
+                    render={
+                      <Button variant="outline" size="sm" disabled={isTransitioning || isPosting} />
+                    }
+                  >
+                    Cancel Stocktake
+                  </AlertDialogTrigger>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>Cancel this stocktake?</AlertDialogTitle>
+                      <AlertDialogDescription>
+                        This will abort the stocktake without applying any adjustments. Recorded
+                        counts will be preserved as audit records.
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel>Back to Review</AlertDialogCancel>
+                      <AlertDialogAction
+                        onClick={() => handleTransition('cancel')}
+                        className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                      >
+                        Cancel Stocktake
+                      </AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
 
-              <AlertDialog>
-                <AlertDialogTrigger
-                  render={<Button variant="outline" size="sm" disabled={isTransitioning} />}
+                <Button
+                  size="sm"
+                  disabled={isPosting || isTransitioning}
+                  onClick={() => void preparePostReview()}
+                  className="gap-1.5"
                 >
-                  Cancel Stocktake
-                </AlertDialogTrigger>
-                <AlertDialogContent>
-                  <AlertDialogHeader>
-                    <AlertDialogTitle>Cancel this stocktake?</AlertDialogTitle>
-                    <AlertDialogDescription>
-                      Recorded counts remain as historical audit notes, but no inventory balances
-                      will be changed.
-                    </AlertDialogDescription>
-                  </AlertDialogHeader>
-                  <AlertDialogFooter>
-                    <AlertDialogCancel>Keep Counting</AlertDialogCancel>
-                    <AlertDialogAction
-                      onClick={() => handleTransition('cancel')}
-                      className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                    >
-                      Cancel Stocktake
-                    </AlertDialogAction>
-                  </AlertDialogFooter>
-                </AlertDialogContent>
-              </AlertDialog>
-
-              <Button
-                size="sm"
-                onClick={() => handleTransition('submit-review')}
-                disabled={totalCount === 0 || !allCounted || isTransitioning}
-                className="gap-1.5"
-              >
-                {isTransitioning ? (
-                  <>
+                  {isTransitioning ? (
                     <RefreshCw className="size-3.5 animate-spin" />
-                    Submitting…
-                  </>
-                ) : (
-                  <>
-                    <Check className="size-3.5" />
-                    Submit for Review
-                  </>
-                )}
-              </Button>
-            </>
-          )}
+                  ) : (
+                    <CheckCircle2 className="size-3.5" />
+                  )}
+                  Review and post
+                </Button>
+                <AlertDialog open={postConfirmOpen} onOpenChange={setPostConfirmOpen}>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>Post this stocktake to ledger?</AlertDialogTitle>
+                      <AlertDialogDescription>
+                        This refreshed preview contains {discrepantCount} variance line
+                        {discrepantCount === 1 ? '' : 's'} ({gainCount} gain, {lossCount} loss) and{' '}
+                        {movementAffectedCount} line{movementAffectedCount === 1 ? '' : 's'}{' '}
+                        affected by net movement after the snapshot. Posting re-locks current
+                        balances and recomputes every variance before writing the authoritative
+                        ledger adjustment. It cannot be undone.
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel>Keep Reviewing</AlertDialogCancel>
+                      <AlertDialogAction onClick={handlePost} disabled={isPosting}>
+                        Post Stocktake
+                      </AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
+              </>
+            )}
 
-          {stocktake.status === 'REVIEW' && (
-            <>
-              {/* Backend supports cancellation in REVIEW state */}
-              <AlertDialog>
-                <AlertDialogTrigger
-                  render={
-                    <Button variant="outline" size="sm" disabled={isTransitioning || isPosting} />
-                  }
-                >
-                  Cancel Stocktake
-                </AlertDialogTrigger>
-                <AlertDialogContent>
-                  <AlertDialogHeader>
-                    <AlertDialogTitle>Cancel this stocktake?</AlertDialogTitle>
-                    <AlertDialogDescription>
-                      This will abort the stocktake without applying any adjustments. Recorded
-                      counts will be preserved as audit records.
-                    </AlertDialogDescription>
-                  </AlertDialogHeader>
-                  <AlertDialogFooter>
-                    <AlertDialogCancel>Back to Review</AlertDialogCancel>
-                    <AlertDialogAction
-                      onClick={() => handleTransition('cancel')}
-                      className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                    >
-                      Cancel Stocktake
-                    </AlertDialogAction>
-                  </AlertDialogFooter>
-                </AlertDialogContent>
-              </AlertDialog>
-
-              <Button
-                size="sm"
-                disabled={isPosting || isTransitioning}
-                onClick={() => void preparePostReview()}
-                className="gap-1.5"
+            {stocktake.status === 'POSTED' && (
+              <Badge
+                variant="outline"
+                className="border-success/20 bg-success/10 px-3 py-1.5 text-success"
               >
-                {isTransitioning ? (
-                  <RefreshCw className="size-3.5 animate-spin" />
-                ) : (
-                  <CheckCircle2 className="size-3.5" />
-                )}
-                Review and post
-              </Button>
-              <AlertDialog open={postConfirmOpen} onOpenChange={setPostConfirmOpen}>
-                <AlertDialogContent>
-                  <AlertDialogHeader>
-                    <AlertDialogTitle>Post this stocktake to ledger?</AlertDialogTitle>
-                    <AlertDialogDescription>
-                      This refreshed preview contains {discrepantCount} variance line
-                      {discrepantCount === 1 ? '' : 's'} ({gainCount} gain, {lossCount} loss) and{' '}
-                      {movementAffectedCount} line{movementAffectedCount === 1 ? '' : 's'} affected
-                      by net movement after the snapshot. Posting re-locks current balances and
-                      recomputes every variance before writing the authoritative ledger adjustment.
-                      It cannot be undone.
-                    </AlertDialogDescription>
-                  </AlertDialogHeader>
-                  <AlertDialogFooter>
-                    <AlertDialogCancel>Keep Reviewing</AlertDialogCancel>
-                    <AlertDialogAction onClick={handlePost} disabled={isPosting}>
-                      Post Stocktake
-                    </AlertDialogAction>
-                  </AlertDialogFooter>
-                </AlertDialogContent>
-              </AlertDialog>
-            </>
-          )}
+                Reconciliation Completed on {formatInventoryDate(stocktake.postedAt?.toString())}
+              </Badge>
+            )}
+          </>
+        }
+      >
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground pt-0.5">
+          <span className="flex items-center gap-1.5">
+            <MapPin className="size-3.5 text-primary" />
+            {stocktake.locationName}
+          </span>
 
-          {stocktake.status === 'POSTED' && (
-            <Badge
-              variant="outline"
-              className="border-success/20 bg-success/10 px-3 py-1.5 text-success"
+          <span className="flex items-center gap-1.5">
+            <Clock className="size-3.5" />
+            Snapshot: {formatInventoryDate(stocktake.snapshotAt?.toString())}
+          </span>
+
+          <button
+            type="button"
+            onClick={copyStocktakeNumber}
+            className="inline-flex items-center gap-1 hover:text-foreground transition-colors cursor-pointer"
+            title="Copy session number"
+          >
+            <span>{stocktake.stocktakeNumber}</span>
+            {copied ? <Check className="size-3 text-success" /> : <Copy className="size-3" />}
+          </button>
+
+          {stocktake.status === 'POSTED' && stocktake.postedInventoryTransactionId && (
+            <Link
+              href="/inventory/adjustments"
+              className="inline-flex items-center gap-1 text-primary hover:underline"
             >
-              Reconciliation Completed on {formatInventoryDate(stocktake.postedAt?.toString())}
-            </Badge>
+              <span>View Ledger Adjustment</span>
+              <ExternalLink className="size-3" />
+            </Link>
           )}
         </div>
-      </div>
+      </PageHeader>
 
       {/* Operational Feedback */}
       {error && <InventoryFeedback message={error} isError />}
@@ -1260,6 +1243,6 @@ export function StocktakeDetail({ stocktakeId }: { stocktakeId: string }) {
           await reload();
         }}
       />
-    </div>
+    </AdminPage>
   );
 }

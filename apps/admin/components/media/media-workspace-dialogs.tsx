@@ -12,6 +12,14 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetFooter,
+  SheetHeader,
+  SheetTitle,
+} from '@/components/ui/sheet';
 import { Input } from '@/components/ui/input';
 import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -174,12 +182,16 @@ export function MediaWorkspaceDialogs({
           <DialogHeader>
             <DialogTitle className="text-sm">Move Selected Assets</DialogTitle>
             <DialogDescription className="text-xs">
-              Assign {selectedCount} selected asset{selectedCount === 1 ? '' : 's'} to a destination folder.
+              Assign {selectedCount} selected asset{selectedCount === 1 ? '' : 's'} to a destination
+              folder.
             </DialogDescription>
           </DialogHeader>
 
           <div className="py-2 space-y-2">
-            <label htmlFor="media-bulk-destination" className="text-xs font-medium text-foreground block">
+            <label
+              htmlFor="media-bulk-destination"
+              className="text-xs font-medium text-foreground block"
+            >
               Destination Folder
             </label>
             <NativeSelect
@@ -269,7 +281,9 @@ export function MediaWorkspaceDialogs({
                                 });
                               }}
                               className={`px-1.5 py-0.5 rounded text-[10px] transition-colors ${
-                                isAdding ? 'bg-success text-success-foreground font-semibold' : 'text-muted-foreground hover:text-success'
+                                isAdding
+                                  ? 'bg-success text-success-foreground font-semibold'
+                                  : 'text-muted-foreground hover:text-success'
                               }`}
                             >
                               +Add
@@ -292,7 +306,9 @@ export function MediaWorkspaceDialogs({
                                 });
                               }}
                               className={`px-1.5 py-0.5 rounded text-[10px] transition-colors ${
-                                isRemoving ? 'bg-destructive text-destructive-foreground font-semibold' : 'text-muted-foreground hover:text-destructive'
+                                isRemoving
+                                  ? 'bg-destructive text-destructive-foreground font-semibold'
+                                  : 'text-muted-foreground hover:text-destructive'
                               }`}
                             >
                               -Remove
@@ -307,7 +323,9 @@ export function MediaWorkspaceDialogs({
                 <div className="text-[11px] text-muted-foreground">
                   {bulkAddTags.size > 0 && `Adding ${bulkAddTags.size} tag(s). `}
                   {bulkRemoveTags.size > 0 && `Removing ${bulkRemoveTags.size} tag(s). `}
-                  {bulkAddTags.size === 0 && bulkRemoveTags.size === 0 && 'No tag changes selected.'}
+                  {bulkAddTags.size === 0 &&
+                    bulkRemoveTags.size === 0 &&
+                    'No tag changes selected.'}
                 </div>
               </div>
             ) : (
@@ -323,7 +341,9 @@ export function MediaWorkspaceDialogs({
             </Button>
             <Button
               size="sm"
-              onClick={() => void handleBulkManageTags(Array.from(bulkAddTags), Array.from(bulkRemoveTags))}
+              onClick={() =>
+                void handleBulkManageTags(Array.from(bulkAddTags), Array.from(bulkRemoveTags))
+              }
               disabled={bulkAddTags.size === 0 && bulkRemoveTags.size === 0}
             >
               Apply Tag Changes
@@ -332,22 +352,25 @@ export function MediaWorkspaceDialogs({
         </DialogContent>
       </Dialog>
 
-      {/* New Folder Modal */}
-      <Dialog open={isNewFolderOpen} onOpenChange={setIsNewFolderOpen}>
-        <DialogContent className="max-w-sm">
-          <form onSubmit={(e) => void createLibraryFolder(e)}>
-            <DialogHeader>
-              <DialogTitle className="flex items-center gap-1.5 text-sm">
+      {/* New Folder Sheet */}
+      <Sheet open={isNewFolderOpen} onOpenChange={setIsNewFolderOpen}>
+        <SheetContent side="right" className="w-full sm:max-w-sm overflow-y-auto">
+          <form onSubmit={(e) => void createLibraryFolder(e)} className="flex flex-1 flex-col">
+            <SheetHeader>
+              <SheetTitle className="flex items-center gap-1.5 text-sm">
                 <FolderPlus className="size-4 text-primary" /> Create New Folder
-              </DialogTitle>
-              <DialogDescription className="text-xs">
+              </SheetTitle>
+              <SheetDescription className="text-xs">
                 Organize images and documents hierarchically.
-              </DialogDescription>
-            </DialogHeader>
+              </SheetDescription>
+            </SheetHeader>
 
-            <div className="space-y-3 py-3">
+            <div className="space-y-3 px-4 py-3">
               <div>
-                <label htmlFor="media-new-folder-name" className="text-xs font-medium text-foreground block mb-1">
+                <label
+                  htmlFor="media-new-folder-name"
+                  className="text-xs font-medium text-foreground block mb-1"
+                >
                   Folder Name
                 </label>
                 <Input
@@ -356,13 +379,15 @@ export function MediaWorkspaceDialogs({
                   placeholder="e.g. Eid 2026 Collection"
                   maxLength={120}
                   required
-                  className="h-9 text-xs bg-card"
-                  autoFocus
+                  className="h-9 bg-card"
                 />
               </div>
 
               <div>
-                <label htmlFor="media-new-folder-parent" className="text-xs font-medium text-foreground block mb-1">
+                <label
+                  htmlFor="media-new-folder-parent"
+                  className="text-xs font-medium text-foreground block mb-1"
+                >
                   Parent Folder (optional)
                 </label>
                 <NativeSelect
@@ -381,7 +406,7 @@ export function MediaWorkspaceDialogs({
               </div>
             </div>
 
-            <DialogFooter className="gap-2">
+            <SheetFooter className="sm:flex-row sm:justify-end">
               <Button
                 type="button"
                 variant="outline"
@@ -393,37 +418,45 @@ export function MediaWorkspaceDialogs({
               <Button type="submit" size="sm">
                 Create Folder
               </Button>
-            </DialogFooter>
+            </SheetFooter>
           </form>
-        </DialogContent>
-      </Dialog>
+        </SheetContent>
+      </Sheet>
 
-      {/* Rename Folder Modal */}
-      <Dialog
+      {/* Rename Folder Sheet */}
+      <Sheet
         open={Boolean(editingFolder)}
         onOpenChange={(open) => {
           if (!open) setEditingFolder(null);
         }}
       >
-        <DialogContent className="max-w-sm">
+        <SheetContent side="right" className="w-full sm:max-w-sm overflow-y-auto">
           <form
             onSubmit={(e) => {
               e.preventDefault();
               if (!editingFolder || !renameFolderName.trim()) return;
-              void updateLibraryFolder(editingFolder.id, editingFolder.version, renameFolderName.trim());
+              void updateLibraryFolder(
+                editingFolder.id,
+                editingFolder.version,
+                renameFolderName.trim(),
+              );
             }}
+            className="flex flex-1 flex-col"
           >
-            <DialogHeader>
-              <DialogTitle className="flex items-center gap-1.5 text-sm">
+            <SheetHeader>
+              <SheetTitle className="flex items-center gap-1.5 text-sm">
                 <FolderEdit className="size-4 text-primary" /> Rename Folder
-              </DialogTitle>
-              <DialogDescription className="text-xs">
+              </SheetTitle>
+              <SheetDescription className="text-xs">
                 Update the display name of this collection folder.
-              </DialogDescription>
-            </DialogHeader>
+              </SheetDescription>
+            </SheetHeader>
 
-            <div className="py-3">
-              <label htmlFor="media-rename-folder" className="text-xs font-medium text-foreground block mb-1">
+            <div className="px-4 py-3">
+              <label
+                htmlFor="media-rename-folder"
+                className="text-xs font-medium text-foreground block mb-1"
+              >
                 Folder Name
               </label>
               <Input
@@ -432,12 +465,11 @@ export function MediaWorkspaceDialogs({
                 onChange={(e) => setRenameFolderName(e.target.value)}
                 maxLength={120}
                 required
-                className="h-9 text-xs bg-card"
-                autoFocus
+                className="h-9 bg-card"
               />
             </div>
 
-            <DialogFooter className="gap-2">
+            <SheetFooter className="sm:flex-row sm:justify-end">
               <Button
                 type="button"
                 variant="outline"
@@ -449,10 +481,10 @@ export function MediaWorkspaceDialogs({
               <Button type="submit" size="sm">
                 Save Name
               </Button>
-            </DialogFooter>
+            </SheetFooter>
           </form>
-        </DialogContent>
-      </Dialog>
+        </SheetContent>
+      </Sheet>
 
       {/* Delete Folder Modal */}
       <Dialog
@@ -467,7 +499,8 @@ export function MediaWorkspaceDialogs({
               <Trash2 className="size-4" /> Delete Folder
             </DialogTitle>
             <DialogDescription className="text-xs">
-              Are you sure you want to delete folder &ldquo;{deletingFolder?.name}&rdquo;? Assets in this folder will not be deleted; they will become unfiled.
+              Are you sure you want to delete folder &ldquo;{deletingFolder?.name}&rdquo;? Assets in
+              this folder will not be deleted; they will become unfiled.
             </DialogDescription>
           </DialogHeader>
 
@@ -493,21 +526,24 @@ export function MediaWorkspaceDialogs({
         </DialogContent>
       </Dialog>
 
-      {/* New Tag Modal */}
-      <Dialog open={isNewTagOpen} onOpenChange={setIsNewTagOpen}>
-        <DialogContent className="max-w-sm">
-          <form onSubmit={(e) => void createLibraryTag(e)}>
-            <DialogHeader>
-              <DialogTitle className="flex items-center gap-1.5 text-sm">
+      {/* New Tag Sheet */}
+      <Sheet open={isNewTagOpen} onOpenChange={setIsNewTagOpen}>
+        <SheetContent side="right" className="w-full sm:max-w-sm overflow-y-auto">
+          <form onSubmit={(e) => void createLibraryTag(e)} className="flex flex-1 flex-col">
+            <SheetHeader>
+              <SheetTitle className="flex items-center gap-1.5 text-sm">
                 <TagIcon className="size-4 text-primary" /> Create New Tag
-              </DialogTitle>
-              <DialogDescription className="text-xs">
+              </SheetTitle>
+              <SheetDescription className="text-xs">
                 Add a classification tag across multiple assets.
-              </DialogDescription>
-            </DialogHeader>
+              </SheetDescription>
+            </SheetHeader>
 
-            <div className="py-3">
-              <label htmlFor="media-new-tag-name" className="text-xs font-medium text-foreground block mb-1">
+            <div className="px-4 py-3">
+              <label
+                htmlFor="media-new-tag-name"
+                className="text-xs font-medium text-foreground block mb-1"
+              >
                 Tag Name
               </label>
               <Input
@@ -516,12 +552,11 @@ export function MediaWorkspaceDialogs({
                 placeholder="e.g. Silk, Lookbook, Studio"
                 maxLength={80}
                 required
-                className="h-9 text-xs bg-card"
-                autoFocus
+                className="h-9 bg-card"
               />
             </div>
 
-            <DialogFooter className="gap-2">
+            <SheetFooter className="sm:flex-row sm:justify-end">
               <Button
                 type="button"
                 variant="outline"
@@ -533,10 +568,10 @@ export function MediaWorkspaceDialogs({
               <Button type="submit" size="sm">
                 Create Tag
               </Button>
-            </DialogFooter>
+            </SheetFooter>
           </form>
-        </DialogContent>
-      </Dialog>
+        </SheetContent>
+      </Sheet>
 
       {/* Delete Tag Modal */}
       <Dialog
@@ -551,17 +586,13 @@ export function MediaWorkspaceDialogs({
               <Trash2 className="size-4" /> Delete Tag
             </DialogTitle>
             <DialogDescription className="text-xs">
-              Are you sure you want to delete tag #{deletingTag?.name}? This removes the tag from all assigned media assets.
+              Are you sure you want to delete tag #{deletingTag?.name}? This removes the tag from
+              all assigned media assets.
             </DialogDescription>
           </DialogHeader>
 
           <DialogFooter className="gap-2 pt-2">
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => setDeletingTag(null)}
-            >
+            <Button type="button" variant="outline" size="sm" onClick={() => setDeletingTag(null)}>
               Cancel
             </Button>
             <Button

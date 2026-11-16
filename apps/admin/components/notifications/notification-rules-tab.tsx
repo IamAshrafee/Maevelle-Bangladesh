@@ -47,9 +47,15 @@ export function NotificationRulesTab() {
     setError(null);
     try {
       const [catalogRes, emailPolRes, smsPolRes] = await Promise.all([
-        apiRequest<{ data: readonly NotificationEventCatalogItemDto[] }>('/admin/notifications/catalog'),
-        apiRequest<{ data: readonly PolicyRecord[] }>('/admin/email/policies').catch(() => ({ data: [] })),
-        apiRequest<{ data: readonly PolicyRecord[] }>('/admin/sms/policies').catch(() => ({ data: [] })),
+        apiRequest<{ data: readonly NotificationEventCatalogItemDto[] }>(
+          '/admin/notifications/catalog',
+        ),
+        apiRequest<{ data: readonly PolicyRecord[] }>('/admin/email/policies').catch(() => ({
+          data: [],
+        })),
+        apiRequest<{ data: readonly PolicyRecord[] }>('/admin/sms/policies').catch(() => ({
+          data: [],
+        })),
       ]);
 
       setCatalog(catalogRes.data);
@@ -167,9 +173,10 @@ export function NotificationRulesTab() {
           Authoritative Event Routing & Channel Policy
         </div>
         <p className="text-xs text-muted-foreground leading-relaxed max-w-3xl">
-          Maevelle separates business domain truth from communication side effects. These rules govern
-          which committed outbox events trigger customer and staff notifications. Security-critical
-          events and mandatory commerce confirmations are strictly locked to protect operations.
+          Maevelle separates business domain truth from communication side effects. These rules
+          govern which committed outbox events trigger customer and staff notifications.
+          Security-critical events and mandatory commerce confirmations are strictly locked to
+          protect operations.
         </p>
       </div>
 
@@ -183,7 +190,9 @@ export function NotificationRulesTab() {
               onClick={() => setAudienceFilter('ALL')}
               className={cn(
                 'px-2.5 py-1 rounded font-medium transition-colors cursor-pointer',
-                audienceFilter === 'ALL' ? 'bg-card text-foreground shadow-2xs' : 'text-muted-foreground hover:text-foreground',
+                audienceFilter === 'ALL'
+                  ? 'bg-card text-foreground shadow-2xs'
+                  : 'text-muted-foreground hover:text-foreground',
               )}
             >
               All Audiences
@@ -193,7 +202,9 @@ export function NotificationRulesTab() {
               onClick={() => setAudienceFilter('CUSTOMER')}
               className={cn(
                 'px-2.5 py-1 rounded font-medium transition-colors cursor-pointer',
-                audienceFilter === 'CUSTOMER' ? 'bg-card text-foreground shadow-2xs' : 'text-muted-foreground hover:text-foreground',
+                audienceFilter === 'CUSTOMER'
+                  ? 'bg-card text-foreground shadow-2xs'
+                  : 'text-muted-foreground hover:text-foreground',
               )}
             >
               Customer
@@ -203,7 +214,9 @@ export function NotificationRulesTab() {
               onClick={() => setAudienceFilter('STAFF')}
               className={cn(
                 'px-2.5 py-1 rounded font-medium transition-colors cursor-pointer',
-                audienceFilter === 'STAFF' ? 'bg-card text-foreground shadow-2xs' : 'text-muted-foreground hover:text-foreground',
+                audienceFilter === 'STAFF'
+                  ? 'bg-card text-foreground shadow-2xs'
+                  : 'text-muted-foreground hover:text-foreground',
               )}
             >
               Internal Staff
@@ -261,7 +274,12 @@ export function NotificationRulesTab() {
           <div className="p-6 text-xs text-destructive space-y-2">
             <p className="font-semibold">Unable to load rules catalog</p>
             <p>{error}</p>
-            <Button size="sm" variant="outline" onClick={() => void loadData()} className="h-7 text-xs">
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => void loadData()}
+              className="h-7 text-xs"
+            >
               Retry
             </Button>
           </div>
@@ -271,7 +289,7 @@ export function NotificationRulesTab() {
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <Table>
+            <Table density="compact" stickyHeader>
               <TableHeader>
                 <TableRow className="hover:bg-transparent border-b border-border bg-muted/30 text-xs">
                   <TableHead className="font-semibold">Event Name & Notification Type</TableHead>
@@ -288,11 +306,16 @@ export function NotificationRulesTab() {
                   const emailPolicy = emailPolicies[item.notificationType];
                   const smsPolicy = smsPolicies[item.notificationType];
 
-                  const emailEnabled = emailPolicy ? emailPolicy.enabled : item.audience === 'CUSTOMER';
+                  const emailEnabled = emailPolicy
+                    ? emailPolicy.enabled
+                    : item.audience === 'CUSTOMER';
                   const smsEnabled = smsPolicy ? smsPolicy.enabled : false;
 
                   return (
-                    <TableRow key={`${item.eventType}-${item.notificationType}`} className="hover:bg-muted/40">
+                    <TableRow
+                      key={`${item.eventType}-${item.notificationType}`}
+                      className="hover:bg-muted/40"
+                    >
                       {/* Event Name */}
                       <TableCell>
                         <div className="space-y-0.5">
@@ -311,7 +334,9 @@ export function NotificationRulesTab() {
                           variant="secondary"
                           className={cn(
                             'text-[10px]',
-                            item.audience === 'CUSTOMER' ? 'bg-sky-500/10 text-sky-700 dark:text-sky-300' : 'bg-muted text-muted-foreground',
+                            item.audience === 'CUSTOMER'
+                              ? 'bg-sky-500/10 text-sky-700 dark:text-sky-300'
+                              : 'bg-muted text-muted-foreground',
                           )}
                         >
                           {item.audience === 'CUSTOMER' ? 'Customer' : 'Staff'}
@@ -337,7 +362,9 @@ export function NotificationRulesTab() {
                             <Lock className="size-3" /> Mandatory Transactional
                           </span>
                         ) : (
-                          <span className="text-[11px] text-muted-foreground">Standard Commerce Event</span>
+                          <span className="text-[11px] text-muted-foreground">
+                            Standard Commerce Event
+                          </span>
                         )}
                       </TableCell>
 
@@ -345,7 +372,10 @@ export function NotificationRulesTab() {
                       <TableCell className="text-center">
                         {item.audience === 'CUSTOMER' ? (
                           isSecurityLocked ? (
-                            <Badge variant="outline" className="text-[10px] gap-1 text-muted-foreground border-border/80">
+                            <Badge
+                              variant="outline"
+                              className="text-[10px] gap-1 text-muted-foreground border-border/80"
+                            >
                               <Lock className="size-2.5" /> Enforced
                             </Badge>
                           ) : (
@@ -353,7 +383,9 @@ export function NotificationRulesTab() {
                               <Switch
                                 checked={emailEnabled}
                                 disabled={updatingType === `${item.notificationType}-EMAIL`}
-                                onCheckedChange={() => toggleEmailPolicy(item.notificationType, emailEnabled)}
+                                onCheckedChange={() =>
+                                  toggleEmailPolicy(item.notificationType, emailEnabled)
+                                }
                               />
                             </div>
                           )
@@ -369,7 +401,9 @@ export function NotificationRulesTab() {
                             <Switch
                               checked={smsEnabled}
                               disabled={updatingType === `${item.notificationType}-SMS`}
-                              onCheckedChange={() => toggleSmsPolicy(item.notificationType, smsEnabled)}
+                              onCheckedChange={() =>
+                                toggleSmsPolicy(item.notificationType, smsEnabled)
+                              }
                             />
                           </div>
                         ) : (

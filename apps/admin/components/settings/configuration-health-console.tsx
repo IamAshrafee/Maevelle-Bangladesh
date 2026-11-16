@@ -16,6 +16,7 @@ import {
   Store,
   Truck,
 } from 'lucide-react';
+import { AdminPage, PageHeader } from '@/components/ui/page-shell';
 import { Button, buttonVariants } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { SettingsNav } from '@/components/settings/settings-nav';
@@ -47,10 +48,12 @@ export function ConfigurationHealthConsole() {
 
   if (loading && !data) {
     return (
-      <div className="flex flex-col items-center justify-center h-64 gap-2 text-muted-foreground text-xs">
-        <RefreshCw className="size-5 animate-spin text-primary" />
-        <span>Auditing Configuration Health...</span>
-      </div>
+      <AdminPage variant="standard">
+        <div className="flex flex-col items-center justify-center h-64 gap-2 text-muted-foreground text-xs">
+          <RefreshCw className="size-5 animate-spin text-primary" />
+          <span>Auditing Configuration Health...</span>
+        </div>
+      </AdminPage>
     );
   }
 
@@ -68,32 +71,27 @@ export function ConfigurationHealthConsole() {
   };
 
   return (
-    <div className="space-y-6 pb-20 max-w-5xl">
+    <AdminPage variant="standard" className="pb-20">
       <SettingsNav />
 
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-4 border-b">
-        <div>
-          <h1 className="text-xl font-semibold tracking-tight text-foreground">
-            Configuration Health
-          </h1>
-          <p className="text-xs text-muted-foreground mt-1">
-            Authoritative readiness verification across business modules, external integrations, and delivery pipelines.
-          </p>
-        </div>
-
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          onClick={loadData}
-          disabled={loading}
-          className="text-xs h-8 gap-1.5"
-        >
-          <RefreshCw className={`size-3.5 ${loading ? 'animate-spin' : ''}`} />
-          Run Health Audit
-        </Button>
-      </div>
+      <PageHeader
+        eyebrow="Platform Settings"
+        title="Configuration Health"
+        description="Authoritative readiness verification across business modules, external integrations, and delivery pipelines."
+        actions={
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={loadData}
+            disabled={loading}
+            className="text-xs h-8 gap-1.5"
+          >
+            <RefreshCw className={`size-3.5 ${loading ? 'animate-spin' : ''}`} />
+            Run Health Audit
+          </Button>
+        }
+      />
 
       {error && (
         <div className="p-3 text-xs rounded-lg bg-destructive/10 text-destructive border border-destructive/20">
@@ -152,7 +150,11 @@ export function ConfigurationHealthConsole() {
             variant="outline"
             className="text-xs font-mono font-semibold uppercase px-3 py-1 bg-background/60"
           >
-            {overall === 'HEALTHY' ? '● Healthy' : overall === 'NEEDS_ATTENTION' ? '⚠ Attention' : '✖ Critical'}
+            {overall === 'HEALTHY'
+              ? '● Healthy'
+              : overall === 'NEEDS_ATTENTION'
+                ? '⚠ Attention'
+                : '✖ Critical'}
           </Badge>
         </div>
       </div>
@@ -210,7 +212,9 @@ export function ConfigurationHealthConsole() {
         {issues.length === 0 ? (
           <div className="p-8 rounded-xl border border-dashed border-border bg-muted/10 text-center space-y-2">
             <CheckCircle2 className="size-8 mx-auto text-emerald-600" />
-            <p className="text-sm font-semibold text-foreground">Zero configuration issues detected</p>
+            <p className="text-sm font-semibold text-foreground">
+              Zero configuration issues detected
+            </p>
             <p className="text-xs text-muted-foreground">
               All credentials, domains, URLs, and operational thresholds are operating normally.
             </p>
@@ -260,7 +264,11 @@ export function ConfigurationHealthConsole() {
                 {issue.actionHref && (
                   <Link
                     href={issue.actionHref}
-                    className={buttonVariants({ variant: 'outline', size: 'sm', className: 'text-xs h-8 shrink-0 gap-1.5' })}
+                    className={buttonVariants({
+                      variant: 'outline',
+                      size: 'sm',
+                      className: 'text-xs h-8 shrink-0 gap-1.5',
+                    })}
                   >
                     {issue.actionLabel ?? 'Fix configuration'}
                     <ArrowRight className="size-3" />
@@ -271,6 +279,6 @@ export function ConfigurationHealthConsole() {
           </div>
         )}
       </div>
-    </div>
+    </AdminPage>
   );
 }

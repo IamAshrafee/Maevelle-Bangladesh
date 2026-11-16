@@ -3,14 +3,7 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import {
-  Save,
-  ArrowLeft,
-  Plus,
-  Loader2,
-  Package,
-  AlertTriangle,
-} from 'lucide-react';
+import { Save, ArrowLeft, Plus, Loader2, Package, AlertTriangle } from 'lucide-react';
 import { z } from 'zod';
 import { useForm, useFieldArray } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -22,12 +15,14 @@ import type {
   WarehouseTransferDetailDto,
 } from '@maevelle/contracts';
 import { Button } from '@/components/ui/button';
+import { AdminPage } from '@/components/ui/page-shell';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Breadcrumb } from '@/components/ui/breadcrumb';
 import { OperationalFeedback } from '@/components/operational-worklist';
 import { TransferLineRow } from '@/components/inventory/transfer-line-row';
 import { TransferRoutingCard } from '@/components/inventory/transfer-routing-card';
+import { useUnsavedChangesGuard } from '@/hooks/use-unsaved-changes-guard';
 
 const lineSchema = z.object({
   variantId: z.string().min(1, 'Item selection is required'),
@@ -297,8 +292,14 @@ export function TransferForm({
     [watchLines],
   );
 
+  const { guardDialog } = useUnsavedChangesGuard({
+    when: form.formState.isDirty && !form.formState.isSubmitting,
+    message: 'You have an unsaved stock transfer draft. Leave without saving?',
+  });
+
   return (
-    <main className="mx-auto min-w-0 max-w-4xl space-y-5 px-4 py-6 sm:px-6">
+    <AdminPage variant="narrow">
+      {guardDialog}
       <Breadcrumb
         mobileMode="back"
         items={[
@@ -571,6 +572,6 @@ export function TransferForm({
           </div>
         </div>
       </form>
-    </main>
+    </AdminPage>
   );
 }

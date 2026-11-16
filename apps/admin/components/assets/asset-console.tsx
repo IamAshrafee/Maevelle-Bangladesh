@@ -13,13 +13,9 @@ import type {
   PaginatedResultDto,
 } from '@maevelle/contracts';
 import { useAdminCapability } from '@/components/admin-capabilities';
-import {
-  OperationalEmptyState,
-  OperationalFeedback,
-  OperationalPageHeader,
-} from '@/components/operational-worklist';
-import { Breadcrumb } from '@/components/ui/breadcrumb';
+import { OperationalEmptyState, OperationalFeedback } from '@/components/operational-worklist';
 import { Button } from '@/components/ui/button';
+import { AdminPage, PageHeader } from '@/components/ui/page-shell';
 import { Skeleton } from '@/components/ui/skeleton';
 import { fetchApiData } from '@/lib/api';
 import { AssetStats } from './console/asset-stats';
@@ -143,7 +139,7 @@ export function AssetConsole() {
 
   if (!canView) {
     return (
-      <main className="grid gap-5 px-4 py-5 sm:px-6 lg:px-8">
+      <AdminPage variant="wide">
         <OperationalFeedback tone="danger">
           You do not have permission to view asset management. Please contact your organization
           administrator.
@@ -152,7 +148,7 @@ export function AssetConsole() {
           <ArrowLeft className="size-4 mr-1.5" />
           Back to Dashboard
         </Button>
-      </main>
+      </AdminPage>
     );
   }
 
@@ -164,10 +160,9 @@ export function AssetConsole() {
   }
 
   return (
-    <main className="grid gap-5 px-4 py-5 sm:px-6 lg:px-8">
-      <Breadcrumb items={[{ label: 'Operations', href: '/' }, { label: 'Assets' }]} />
-
-      <OperationalPageHeader
+    <AdminPage variant="wide">
+      <PageHeader
+        breadcrumbs={[{ label: 'Operations', href: '/' }, { label: 'Assets' }]}
         eyebrow="Business Operations"
         title="Asset Management"
         description="Track durable business property, physical custody, location, condition, maintenance history, private documents, and financial provenance without distorting saleable Inventory."
@@ -268,6 +263,6 @@ export function AssetConsole() {
         categories={categories}
         onChanged={() => void load()}
       />
-    </main>
+    </AdminPage>
   );
 }

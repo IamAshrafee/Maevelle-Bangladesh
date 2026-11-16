@@ -14,13 +14,13 @@ import type {
 
 import { Button } from '@/components/ui/button';
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetFooter,
+  SheetHeader,
+  SheetTitle,
+} from '@/components/ui/sheet';
 import { Field, FieldDescription, FieldError, FieldLabel } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
 import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select';
@@ -131,7 +131,9 @@ export function ReplenishmentPolicyDialog({
       })
       .catch((caught: unknown) => {
         if (!controller.signal.aborted)
-          setError(caught instanceof Error ? caught.message : 'Reference data could not be loaded.');
+          setError(
+            caught instanceof Error ? caught.message : 'Reference data could not be loaded.',
+          );
       })
       .finally(() => {
         if (!controller.signal.aborted) setLoadingReferences(false);
@@ -183,15 +185,22 @@ export function ReplenishmentPolicyDialog({
   }
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="h-[100dvh] max-w-none grid-rows-[auto_minmax(0,1fr)_auto] rounded-none p-4 sm:h-auto sm:max-h-[min(48rem,calc(100dvh-2rem))] sm:max-w-2xl sm:rounded-xl">
-        <DialogHeader>
-          <DialogTitle>{policy ? 'Edit replenishment policy' : 'Create replenishment policy'}</DialogTitle>
-          <DialogDescription>
-            Set when stock needs attention, the recovery target, and the preferred operational handoff.
-          </DialogDescription>
-        </DialogHeader>
-        <form id="replenishment-policy-form" onSubmit={submit} className="min-h-0 overflow-y-auto pr-1">
+    <Sheet open={open} onOpenChange={onOpenChange}>
+      <SheetContent side="right" className="w-full sm:max-w-xl flex flex-col p-6">
+        <SheetHeader className="p-0 pb-4 border-b border-border/60">
+          <SheetTitle>
+            {policy ? 'Edit replenishment policy' : 'Create replenishment policy'}
+          </SheetTitle>
+          <SheetDescription>
+            Set when stock needs attention, the recovery target, and the preferred operational
+            handoff.
+          </SheetDescription>
+        </SheetHeader>
+        <form
+          id="replenishment-policy-form"
+          onSubmit={submit}
+          className="min-h-0 overflow-y-auto pr-1"
+        >
           <div className="grid gap-5 py-1 sm:grid-cols-2">
             <Field className="sm:col-span-2">
               <FieldLabel htmlFor="policy-item">Inventory item</FieldLabel>
@@ -206,7 +215,8 @@ export function ReplenishmentPolicyDialog({
                 <NativeSelectOption value="">Choose a SKU</NativeSelectOption>
                 {items.map((item) => (
                   <NativeSelectOption key={item.inventoryItemId} value={item.inventoryItemId}>
-                    {item.sku} · {item.productTitle}{item.optionSummary ? ` · ${item.optionSummary}` : ''}
+                    {item.sku} · {item.productTitle}
+                    {item.optionSummary ? ` · ${item.optionSummary}` : ''}
                   </NativeSelectOption>
                 ))}
               </NativeSelect>
@@ -222,7 +232,9 @@ export function ReplenishmentPolicyDialog({
                 onChange={(event) => update('scope', event.target.value as 'ITEM' | 'LOCATION')}
               >
                 <NativeSelectOption value="LOCATION">One location</NativeSelectOption>
-                <NativeSelectOption value="ITEM">All locations without an override</NativeSelectOption>
+                <NativeSelectOption value="ITEM">
+                  All locations without an override
+                </NativeSelectOption>
               </NativeSelect>
             </Field>
 
@@ -249,59 +261,133 @@ export function ReplenishmentPolicyDialog({
 
             <Field>
               <FieldLabel htmlFor="policy-reorder">Reorder point</FieldLabel>
-              <Input id="policy-reorder" inputMode="decimal" min="0" step="0.000001" type="number" value={form.reorderPoint} onChange={(event) => update('reorderPoint', event.target.value)} required />
-              <FieldDescription>Recommendations start below this projected quantity.</FieldDescription>
+              <Input
+                id="policy-reorder"
+                inputMode="decimal"
+                min="0"
+                step="0.000001"
+                type="number"
+                value={form.reorderPoint}
+                onChange={(event) => update('reorderPoint', event.target.value)}
+                required
+              />
+              <FieldDescription>
+                Recommendations start below this projected quantity.
+              </FieldDescription>
             </Field>
             <Field>
               <FieldLabel htmlFor="policy-safety">Safety stock</FieldLabel>
-              <Input id="policy-safety" inputMode="decimal" min="0" step="0.000001" type="number" value={form.safetyStock} onChange={(event) => update('safetyStock', event.target.value)} required />
+              <Input
+                id="policy-safety"
+                inputMode="decimal"
+                min="0"
+                step="0.000001"
+                type="number"
+                value={form.safetyStock}
+                onChange={(event) => update('safetyStock', event.target.value)}
+                required
+              />
               <FieldDescription>Protected buffer used when setting the target.</FieldDescription>
             </Field>
             <Field>
               <FieldLabel htmlFor="policy-target">Target stock</FieldLabel>
-              <Input id="policy-target" inputMode="decimal" min="0" step="0.000001" type="number" value={form.targetStock} onChange={(event) => update('targetStock', event.target.value)} required />
-              <FieldDescription>The recommendation restores projected stock to this level.</FieldDescription>
+              <Input
+                id="policy-target"
+                inputMode="decimal"
+                min="0"
+                step="0.000001"
+                type="number"
+                value={form.targetStock}
+                onChange={(event) => update('targetStock', event.target.value)}
+                required
+              />
+              <FieldDescription>
+                The recommendation restores projected stock to this level.
+              </FieldDescription>
             </Field>
             <Field>
               <FieldLabel htmlFor="policy-lead">Lead time (days)</FieldLabel>
-              <Input id="policy-lead" inputMode="numeric" min="0" step="1" type="number" value={form.leadTimeDays} onChange={(event) => update('leadTimeDays', event.target.value)} placeholder="Optional" />
-              <FieldDescription>Operational context; it does not create an order automatically.</FieldDescription>
+              <Input
+                id="policy-lead"
+                inputMode="numeric"
+                min="0"
+                step="1"
+                type="number"
+                value={form.leadTimeDays}
+                onChange={(event) => update('leadTimeDays', event.target.value)}
+                placeholder="Optional"
+              />
+              <FieldDescription>
+                Operational context; it does not create an order automatically.
+              </FieldDescription>
             </Field>
 
             <Field>
               <FieldLabel htmlFor="policy-source">Preferred transfer source</FieldLabel>
-              <NativeSelect id="policy-source" className="w-full" value={form.preferredSourceLocationId} onChange={(event) => update('preferredSourceLocationId', event.target.value)} disabled={loadingReferences}>
+              <NativeSelect
+                id="policy-source"
+                className="w-full"
+                value={form.preferredSourceLocationId}
+                onChange={(event) => update('preferredSourceLocationId', event.target.value)}
+                disabled={loadingReferences}
+              >
                 <NativeSelectOption value="">No preferred source</NativeSelectOption>
                 {sourceLocations.map((location) => (
-                  <NativeSelectOption key={location.id} value={location.id}>{location.name} · {location.code}</NativeSelectOption>
+                  <NativeSelectOption key={location.id} value={location.id}>
+                    {location.name} · {location.code}
+                  </NativeSelectOption>
                 ))}
               </NativeSelect>
-              <FieldDescription>Suggested only when this location has genuine surplus.</FieldDescription>
+              <FieldDescription>
+                Suggested only when this location has genuine surplus.
+              </FieldDescription>
             </Field>
             <Field>
               <FieldLabel htmlFor="policy-supplier">Fallback supplier</FieldLabel>
-              <NativeSelect id="policy-supplier" className="w-full" value={form.preferredSupplierId} onChange={(event) => update('preferredSupplierId', event.target.value)} disabled={loadingReferences}>
+              <NativeSelect
+                id="policy-supplier"
+                className="w-full"
+                value={form.preferredSupplierId}
+                onChange={(event) => update('preferredSupplierId', event.target.value)}
+                disabled={loadingReferences}
+              >
                 <NativeSelectOption value="">No preferred supplier</NativeSelectOption>
                 {suppliers.map((supplier) => (
-                  <NativeSelectOption key={supplier.id} value={supplier.id}>{supplier.name} · {supplier.code}</NativeSelectOption>
+                  <NativeSelectOption key={supplier.id} value={supplier.id}>
+                    {supplier.name} · {supplier.code}
+                  </NativeSelectOption>
                 ))}
               </NativeSelect>
               <FieldDescription>Used when transfer surplus is insufficient.</FieldDescription>
             </Field>
           </div>
           {loadingReferences ? (
-            <p className="flex items-center gap-2 py-3 text-sm text-muted-foreground"><Loader2 className="size-4 animate-spin" />Loading items, locations, and suppliers…</p>
+            <p className="flex items-center gap-2 py-3 text-sm text-muted-foreground">
+              <Loader2 className="size-4 animate-spin" />
+              Loading items, locations, and suppliers…
+            </p>
           ) : null}
           <FieldError className="pt-2">{error}</FieldError>
         </form>
-        <DialogFooter>
-          <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={saving}>Cancel</Button>
-          <Button type="submit" form="replenishment-policy-form" disabled={saving || loadingReferences}>
+        <SheetFooter className="p-0 pt-3 border-t sm:flex-row sm:justify-end">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => onOpenChange(false)}
+            disabled={saving}
+          >
+            Cancel
+          </Button>
+          <Button
+            type="submit"
+            form="replenishment-policy-form"
+            disabled={saving || loadingReferences}
+          >
             {saving ? <Loader2 className="size-4 animate-spin" /> : null}
             {policy ? 'Save policy' : 'Create policy'}
           </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+        </SheetFooter>
+      </SheetContent>
+    </Sheet>
   );
 }

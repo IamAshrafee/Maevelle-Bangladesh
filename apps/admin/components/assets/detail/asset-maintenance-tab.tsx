@@ -65,7 +65,7 @@ export function AssetMaintenanceTab({
             return (
               <div
                 key={m.id}
-                className={`rounded-xl border bg-card p-4 transition-all space-y-3 ${
+                className={`rounded-xl border bg-card p-4 transition-colors duration-150 space-y-3 ${
                   isVoided ? 'opacity-60 bg-muted/20 border-dashed' : 'hover:border-primary/40'
                 }`}
               >

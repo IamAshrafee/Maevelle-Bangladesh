@@ -23,7 +23,20 @@ interface EmailPreviewFrameProps {
   readonly className?: string | undefined;
 }
 
-export function EmailPreviewFrame({ subject, html, text, from = 'Maevelle <orders@maevelle.com>', replyTo = 'maevelleBangladesh@gmail.com', recipient, intendedRecipient, supportEmail, isSampleFixture = false, fixtureName, showBanner = true, className }: EmailPreviewFrameProps) {
+export function EmailPreviewFrame({
+  subject,
+  html,
+  text,
+  from = 'Maevelle <orders@maevelle.com>',
+  replyTo = 'maevelleBangladesh@gmail.com',
+  recipient,
+  intendedRecipient,
+  supportEmail,
+  isSampleFixture = false,
+  fixtureName,
+  showBanner = true,
+  className,
+}: EmailPreviewFrameProps) {
   const effectiveRecipient = recipient ?? intendedRecipient ?? 'customer@example.com';
   const effectiveReplyTo = supportEmail ?? replyTo;
   const [mode, setMode] = useState<'desktop' | 'mobile' | 'text'>('desktop');
@@ -40,7 +53,12 @@ export function EmailPreviewFrame({ subject, html, text, from = 'Maevelle <order
   };
 
   return (
-    <div className={cn('flex flex-col rounded-xl border bg-card text-card-foreground shadow-sm overflow-hidden', className)}>
+    <div
+      className={cn(
+        'flex flex-col rounded-xl border bg-card text-card-foreground shadow-sm overflow-hidden',
+        className,
+      )}
+    >
       {/* Top Controls & Meta */}
       <div className="flex flex-wrap items-center justify-between gap-3 border-b bg-muted/40 p-3 sm:px-4">
         <div className="flex items-center gap-2">
@@ -51,7 +69,7 @@ export function EmailPreviewFrame({ subject, html, text, from = 'Maevelle <order
               className={cn(
                 'flex items-center gap-1.5 rounded-md px-2.5 py-1 font-medium transition-colors',
                 mode === 'desktop'
-                  ? 'bg-primary text-primary-foreground shadow-xs'
+                  ? 'bg-primary-subtle text-primary-hover dark:text-primary border border-primary/25 font-semibold shadow-2xs'
                   : 'text-muted-foreground hover:text-foreground',
               )}
             >
@@ -64,7 +82,7 @@ export function EmailPreviewFrame({ subject, html, text, from = 'Maevelle <order
               className={cn(
                 'flex items-center gap-1.5 rounded-md px-2.5 py-1 font-medium transition-colors',
                 mode === 'mobile'
-                  ? 'bg-primary text-primary-foreground shadow-xs'
+                  ? 'bg-primary-subtle text-primary-hover dark:text-primary border border-primary/25 font-semibold shadow-2xs'
                   : 'text-muted-foreground hover:text-foreground',
               )}
             >
@@ -77,7 +95,7 @@ export function EmailPreviewFrame({ subject, html, text, from = 'Maevelle <order
               className={cn(
                 'flex items-center gap-1.5 rounded-md px-2.5 py-1 font-medium transition-colors',
                 mode === 'text'
-                  ? 'bg-primary text-primary-foreground shadow-xs'
+                  ? 'bg-primary-subtle text-primary-hover dark:text-primary border border-primary/25 font-semibold shadow-2xs'
                   : 'text-muted-foreground hover:text-foreground',
               )}
             >
@@ -89,7 +107,10 @@ export function EmailPreviewFrame({ subject, html, text, from = 'Maevelle <order
 
         <div className="flex items-center gap-2">
           {isSampleFixture ? (
-            <Badge variant="outline" className="border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-400">
+            <Badge
+              variant="outline"
+              className="border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-400"
+            >
               Sample Fixture {fixtureName ? `· ${fixtureName}` : ''}
             </Badge>
           ) : (
@@ -97,7 +118,11 @@ export function EmailPreviewFrame({ subject, html, text, from = 'Maevelle <order
           )}
           {mode === 'text' ? (
             <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={copyText}>
-              {copied ? <Check className="mr-1 size-3 text-emerald-600" /> : <Copy className="mr-1 size-3" />}
+              {copied ? (
+                <Check className="mr-1 size-3 text-emerald-600" />
+              ) : (
+                <Copy className="mr-1 size-3" />
+              )}
               {copied ? 'Copied' : 'Copy Text'}
             </Button>
           ) : null}
@@ -116,8 +141,12 @@ export function EmailPreviewFrame({ subject, html, text, from = 'Maevelle <order
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <span className="font-semibold text-muted-foreground w-16">Reply-To:</span>
-          <span className="font-mono text-emerald-800 dark:text-emerald-400">{effectiveReplyTo}</span>
-          <span className="text-[11px] text-muted-foreground">(Human customer support mailbox)</span>
+          <span className="font-mono text-emerald-800 dark:text-emerald-400">
+            {effectiveReplyTo}
+          </span>
+          <span className="text-[11px] text-muted-foreground">
+            (Human customer support mailbox)
+          </span>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <span className="font-semibold text-muted-foreground w-16">To:</span>
@@ -128,8 +157,14 @@ export function EmailPreviewFrame({ subject, html, text, from = 'Maevelle <order
       {/* Preview Warning Banner */}
       {showBanner ? (
         <div className="flex items-center gap-2 bg-amber-500/15 border-b border-amber-500/30 px-4 py-2 text-xs font-medium text-amber-900 dark:text-amber-200">
-          <ShieldAlert className="size-4 shrink-0 text-amber-600 dark:text-amber-400" aria-hidden="true" />
-          <span>PREVIEW ONLY — Zero business side effects. No email or external network request was sent.</span>
+          <ShieldAlert
+            className="size-4 shrink-0 text-amber-600 dark:text-amber-400"
+            aria-hidden="true"
+          />
+          <span>
+            PREVIEW ONLY — Zero business side effects. No email or external network request was
+            sent.
+          </span>
         </div>
       ) : null}
 
@@ -144,8 +179,10 @@ export function EmailPreviewFrame({ subject, html, text, from = 'Maevelle <order
         ) : (
           <div
             className={cn(
-              'transition-all duration-200 ease-in-out overflow-hidden rounded-xl border bg-white shadow-md',
-              mode === 'desktop' ? 'w-full max-w-[640px]' : 'w-[375px] max-w-full ring-8 ring-neutral-800/10',
+              'transition-[width] duration-200 ease-in-out overflow-hidden rounded-xl border bg-white shadow-md',
+              mode === 'desktop'
+                ? 'w-full max-w-[640px]'
+                : 'w-[375px] max-w-full ring-8 ring-neutral-800/10',
             )}
           >
             {/* Sandboxed iframe for safe and accurate email HTML rendering */}
@@ -154,7 +191,7 @@ export function EmailPreviewFrame({ subject, html, text, from = 'Maevelle <order
               srcDoc={html}
               sandbox="allow-same-origin"
               className={cn(
-                'w-full border-none transition-all',
+                'w-full border-none transition-[height] duration-150',
                 mode === 'desktop' ? 'min-h-[520px] h-[580px]' : 'min-h-[600px] h-[640px]',
               )}
             />

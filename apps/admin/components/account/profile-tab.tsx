@@ -13,10 +13,7 @@ import {
   Upload,
   User,
 } from 'lucide-react';
-import type {
-  ApiEnvelope,
-  UserAccountOverviewDto,
-} from '@maevelle/contracts';
+import type { ApiEnvelope, UserAccountOverviewDto } from '@maevelle/contracts';
 import { apiRequest } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -53,11 +50,17 @@ export function ProfileTab({ overview, onOverviewChange, onReload }: ProfileTabP
   // Name editing state
   const [nameInput, setNameInput] = useState(profile.name);
   const [nameSaving, setNameSaving] = useState(false);
-  const [nameFeedback, setNameFeedback] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [nameFeedback, setNameFeedback] = useState<{
+    type: 'success' | 'error';
+    text: string;
+  } | null>(null);
 
   // Avatar state
   const [avatarUploading, setAvatarUploading] = useState(false);
-  const [avatarFeedback, setAvatarFeedback] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [avatarFeedback, setAvatarFeedback] = useState<{
+    type: 'success' | 'error';
+    text: string;
+  } | null>(null);
   const [removeAvatarDialogOpen, setRemoveAvatarDialogOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -65,7 +68,10 @@ export function ProfileTab({ overview, onOverviewChange, onReload }: ProfileTabP
   const [changeEmailDialogOpen, setChangeEmailDialogOpen] = useState(false);
   const [resendingVerification, setResendingVerification] = useState(false);
   const [cancellingChange, setCancellingChange] = useState(false);
-  const [emailFeedback, setEmailFeedback] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [emailFeedback, setEmailFeedback] = useState<{
+    type: 'success' | 'error';
+    text: string;
+  } | null>(null);
 
   // Handle display name update
   const handleUpdateName = async (e: React.FormEvent) => {
@@ -82,10 +88,13 @@ export function ProfileTab({ overview, onOverviewChange, onReload }: ProfileTabP
     setNameFeedback(null);
 
     try {
-      const res = await apiRequest<ApiEnvelope<{ profile: { name: string } }>>('/admin/account/profile', {
-        method: 'PATCH',
-        body: JSON.stringify({ name: trimmed }),
-      });
+      const res = await apiRequest<ApiEnvelope<{ profile: { name: string } }>>(
+        '/admin/account/profile',
+        {
+          method: 'PATCH',
+          body: JSON.stringify({ name: trimmed }),
+        },
+      );
 
       onOverviewChange({
         ...overview,
@@ -167,7 +176,10 @@ export function ProfileTab({ overview, onOverviewChange, onReload }: ProfileTabP
         ...overview,
         profile: { ...overview.profile, image: null },
       });
-      setAvatarFeedback({ type: 'success', text: 'Profile photo removed. Maevelle will display your initials.' });
+      setAvatarFeedback({
+        type: 'success',
+        text: 'Profile photo removed. Maevelle will display your initials.',
+      });
       notifyAccountUpdated();
     } catch (err) {
       setAvatarFeedback({
@@ -193,7 +205,10 @@ export function ProfileTab({ overview, onOverviewChange, onReload }: ProfileTabP
     } catch (err) {
       setEmailFeedback({
         type: 'error',
-        text: getAccountErrorMessage(err, 'Failed to send verification email. Please try again shortly.'),
+        text: getAccountErrorMessage(
+          err,
+          'Failed to send verification email. Please try again shortly.',
+        ),
       });
     } finally {
       setResendingVerification(false);
@@ -248,7 +263,7 @@ export function ProfileTab({ overview, onOverviewChange, onReload }: ProfileTabP
                 </div>
               )}
               {avatarUploading ? (
-                <div className="absolute inset-0 bg-background/80 backdrop-blur-xs rounded-full flex items-center justify-center">
+                <div className="absolute inset-0 bg-background/90 rounded-full flex items-center justify-center">
                   <RefreshCw className="size-5 text-primary animate-spin" />
                 </div>
               ) : null}
@@ -394,7 +409,8 @@ export function ProfileTab({ overview, onOverviewChange, onReload }: ProfileTabP
               {!profile.emailVerified ? (
                 <div className="pt-3 border-t border-border flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs text-muted-foreground">
                   <p>
-                    Verify your email address to ensure you receive operational notices and account alerts.
+                    Verify your email address to ensure you receive operational notices and account
+                    alerts.
                   </p>
                   <Button
                     type="button"
@@ -419,8 +435,12 @@ export function ProfileTab({ overview, onOverviewChange, onReload }: ProfileTabP
                 </div>
                 <p>
                   A verification message was sent to{' '}
-                  <strong className="font-semibold text-foreground font-mono">{pendingEmailChange.pendingEmail}</strong>.
-                  Your sign-in email remains <strong className="font-mono">{profile.email}</strong> until the new address is verified.
+                  <strong className="font-semibold text-foreground font-mono">
+                    {pendingEmailChange.pendingEmail}
+                  </strong>
+                  . Your sign-in email remains{' '}
+                  <strong className="font-mono">{profile.email}</strong> until the new address is
+                  verified.
                 </p>
                 <div className="flex items-center gap-2 pt-1">
                   <Button
@@ -517,7 +537,11 @@ export function ProfileTab({ overview, onOverviewChange, onReload }: ProfileTabP
             <div className="p-3 rounded-lg border border-border/60 bg-muted/30 text-xs text-muted-foreground flex items-start gap-2.5">
               <Info className="size-4 text-primary shrink-0 mt-0.5" aria-hidden="true" />
               <div>
-                <strong className="font-semibold text-foreground">Managed by your organization:</strong> Role, permissions, and team access scopes are governed administratively in Team & Access. They cannot be altered through self-service profile updates.
+                <strong className="font-semibold text-foreground">
+                  Managed by your organization:
+                </strong>{' '}
+                Role, permissions, and team access scopes are governed administratively in Team &
+                Access. They cannot be altered through self-service profile updates.
               </div>
             </div>
           </div>
@@ -530,7 +554,8 @@ export function ProfileTab({ overview, onOverviewChange, onReload }: ProfileTabP
           <AlertDialogHeader>
             <AlertDialogTitle>Remove profile photo?</AlertDialogTitle>
             <AlertDialogDescription>
-              Your custom photo will be permanently deleted and Maevelle will display your name initials instead.
+              Your custom photo will be permanently deleted and Maevelle will display your name
+              initials instead.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

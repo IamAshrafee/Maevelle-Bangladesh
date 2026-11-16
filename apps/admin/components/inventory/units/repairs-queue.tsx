@@ -108,11 +108,11 @@ export function RepairsQueue() {
         <div>
           <PageTitle className="flex items-center gap-2">
             <Wrench className="size-6 text-warning" />
-            <span>Garment Repair & Tailoring Queue</span>
+            <span>Unit Repair &amp; Restoration Queue</span>
           </PageTitle>
           <PageDescription>
-            Manage physical items set aside for seam sewing, zipper fixes, ironing, cleaning, or
-            tailoring before quality reinspection.
+            Manage physical units set aside for hardware fixes, polishing, cleaning, packaging
+            restoration, or reconditioning before quality reinspection.
           </PageDescription>
         </div>
 
@@ -190,8 +190,8 @@ export function RepairsQueue() {
           ) : units.length === 0 ? (
             <EmptyState
               icon={Wrench}
-              title="No garments in repair queue"
-              description="No physical units currently require repair or tailoring. Flawless items are ready in available inventory."
+              title="No units in repair queue"
+              description="No physical units currently require repair or restoration. Verified items are ready in available inventory."
             />
           ) : (
             <>
@@ -273,7 +273,7 @@ export function RepairsQueue() {
                 })}
               </div>
               <div className="hidden md:block">
-                <Table density="compact">
+                <Table stickyHeader density="compact">
                   <TableHeader>
                     <TableRow>
                       <TableHead className="text-xs">Unit Code</TableHead>
@@ -326,8 +326,8 @@ export function RepairsQueue() {
                           <TableCell className="text-right">
                             <div className="flex items-center justify-end gap-1.5">
                               {/* Log / Complete Repair button */}
-                          {canManage &&
-                          (unitCanCompleteRepair(unit) || unitCanEnterRepair(unit)) ? (
+                              {canManage &&
+                              (unitCanCompleteRepair(unit) || unitCanEnterRepair(unit)) ? (
                                 <Button
                                   variant="default"
                                   size="xs"
@@ -344,7 +344,7 @@ export function RepairsQueue() {
                               ) : null}
 
                               {/* Reinspect button */}
-                          {canManage && unitCanBeInspected(unit) ? (
+                              {canManage && unitCanBeInspected(unit) ? (
                                 <Button
                                   variant="outline"
                                   size="xs"
@@ -361,7 +361,7 @@ export function RepairsQueue() {
                               ) : null}
 
                               {/* Authorize Release button */}
-                          {canRelease && unitCanBeReleased(unit) ? (
+                              {canRelease && unitCanBeReleased(unit) ? (
                                 <Button
                                   variant="outline"
                                   size="xs"

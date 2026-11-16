@@ -21,8 +21,8 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { CrmNav } from './crm-nav';
 import { UsersRound } from 'lucide-react';
+import { formatWholeTaka } from '@/lib/format/numbers';
 export function SegmentMembersConsole({ segmentId }: { segmentId: string }) {
   const [data, setData] = useState<{
     items: readonly CustomerSummaryDto[];
@@ -42,7 +42,7 @@ export function SegmentMembersConsole({ segmentId }: { segmentId: string }) {
     void load();
   }, [load]);
   return (
-    <AdminPage>
+    <AdminPage variant="wide">
       <PageHeader
         eyebrow="Customer 360"
         title="Segment members"
@@ -60,7 +60,6 @@ export function SegmentMembersConsole({ segmentId }: { segmentId: string }) {
           </div>
         }
       />
-      <CrmNav />
       {error ? (
         <ErrorState message={error} onRetry={() => void load()} />
       ) : !data ? (
@@ -73,7 +72,7 @@ export function SegmentMembersConsole({ segmentId }: { segmentId: string }) {
         />
       ) : (
         <PagePanel className="overflow-x-auto p-0">
-          <Table density="compact">
+          <Table density="compact" stickyHeader>
             <TableHeader>
               <TableRow>
                 <TableHead>Customer</TableHead>
@@ -91,7 +90,7 @@ export function SegmentMembersConsole({ segmentId }: { segmentId: string }) {
                   </TableCell>
                   <TableCell className="font-mono tabular-nums">{item.orderCount ?? 0}</TableCell>
                   <TableCell className="font-mono tabular-nums">
-                    ৳{Number(item.totalSpend ?? 0).toLocaleString('en-BD')}
+                    {formatWholeTaka(item.totalSpend ?? 0)}
                   </TableCell>
                   <TableCell className="text-right">
                     <Button

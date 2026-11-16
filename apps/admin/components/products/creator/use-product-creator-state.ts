@@ -20,6 +20,8 @@ import type {
   OptionAxisState,
   MediaCardScopeOption,
   ProductCreatorReferences,
+  ReferenceLoadingStates,
+  ReferenceErrors,
   ShippingPreset,
   SizingReferenceData,
   VariantMatrixRow,
@@ -53,8 +55,23 @@ export function useProductCreatorState({
   const router = useRouter();
   const isEditMode = Boolean(productId);
 
-  // General Lifecycle State
-  const [loading, setLoading] = useState(true);
+  // General Lifecycle State: In create mode, independent sections render immediately (loading = false).
+  // In edit mode, we wait only for the existing product workspace payload.
+  const [workspaceLoading, setWorkspaceLoading] = useState(isEditMode);
+  const loading = isEditMode ? workspaceLoading : false;
+  const [referenceLoading, setReferenceLoading] = useState<ReferenceLoadingStates>({
+    types: true,
+    categories: true,
+    colors: true,
+    tags: true,
+    occasions: true,
+    collections: true,
+    sizing: true,
+    sizeGuides: true,
+    locations: true,
+    workspace: isEditMode,
+  });
+  const [referenceErrors, setReferenceErrors] = useState<ReferenceErrors>({});
   const [saving, setSaving] = useState(false);
   const [savingStatusText] = useState('Saving product workspace…');
   const [generalError, setGeneralError] = useState<string | null>(null);
@@ -314,258 +331,398 @@ export function useProductCreatorState({
   }, [variants.activeAxes, variants.matrixRows, variants.variantMode, workspaceData, isEditMode]);
 
   // --------------------------------------------------------------------------
-  // Fetch Reference Data on Mount
+  // Apply Workspace Data (for Edit Mode)
+  // --------------------------------------------------------------------------
+  const applyWorkspaceData = (workspace: CatalogProductWorkspaceDto) => {
+    setWorkspaceData(workspace);
+    setTitle(workspace.title);
+    setHandle(workspace.handle);
+    setIsHandleLocked(false);
+    setProductTypeId(workspace.productTypeId);
+    setDescription(workspace.description || '');
+    setSelectedCategoryIds([...(workspace.organization.categoryIds || [])]);
+    setPrimaryCategoryId(workspace.organization.primaryCategoryId || '');
+    setSelectedTagIds([...(workspace.organization.tagIds || [])]);
+    setSelectedOccasionIds([...(workspace.organization.occasionIds || [])]);
+    setSelectedCollectionIds([...(workspace.organization.collectionIds || [])]);
+    setSizeSystemId(workspace.sizeSystemId || '');
+    setSizeGuideId(workspace.sizeGuideId || '');
+    setSizingGuideSource(workspace.sizingGuideSource || 'CATEGORY');
+    setNoGuideReason(workspace.noGuideReason || '');
+
+    const attrs: Record<string, string | boolean | null> = {};
+    (workspace.organization.attributes || []).forEach((a) => {
+      if (a.value !== null && a.value !== undefined) {
+        attrs[a.id] = a.value;
+      }
+    });
+    setAttributeValues(attrs);
+
+    media.setMediaItems(
+      (workspace.media || []).map((m) => ({
+        id: m.id,
+        assetId: m.assetId,
+        previewUrl: productMediaUrl(m.assetId, 'PUBLIC'),
+        isPrimary: m.isPrimary,
+        role: m.role,
+        variantId: m.variantId,
+        optionValueId: m.optionValueId,
+        position: m.position,
+        altText: m.altText || m.title || '',
+        isUploading: false,
+        pendingImport: m.pendingImport ?? false,
+      })),
+    );
+
+    if (workspace.shipping?.weight) {
+      setWeightValue(workspace.shipping.weight.value);
+      setWeightUnit((workspace.shipping.weight.unit as 'G' | 'KG') || 'G');
+    }
+    if (workspace.shipping?.dimensions) {
+      setLengthValue(workspace.shipping.dimensions.length);
+      setWidthValue(workspace.shipping.dimensions.width);
+      setHeightValue(workspace.shipping.dimensions.height);
+      setDimensionUnit((workspace.shipping.dimensions.unit as 'CM' | 'MM' | 'IN') || 'CM');
+    }
+
+    if (workspace.options.length > 0) {
+      variants.setVariantMode('variants');
+      variants.setOptionAxes(
+        workspace.options.map((axis) => ({
+          id: axis.id,
+          name: axis.name,
+          isVisual: axis.isVisual,
+          values: axis.values.map((v) => ({
+            id: v.id,
+            label: v.label,
+            isPrimary: v.isPrimary,
+            colorId: v.color?.id ?? null,
+            colorHex: v.color?.hexValue ?? null,
+            sizeDefinitionId: v.sizeDefinitionId ?? null,
+          })),
+        })),
+      );
+
+      variants.setMatrixRows(
+        workspace.variants.map((v) => {
+          const selections = v.optionValueIds.map((optValId) => {
+            for (const axis of workspace.options) {
+              const matchedVal = axis.values.find((val) => val.id === optValId);
+              if (matchedVal) {
+                return {
+                  axisName: axis.name,
+                  valueDisplay: matchedVal.label,
+                  valueRef: matchedVal.id,
+                };
+              }
+            }
+            return { axisName: '', valueDisplay: optValId, valueRef: optValId };
+          });
+
+          return {
+            id: v.id,
+            enabled: v.status === 'ACTIVE',
+            title: v.title || selections.map((s) => s.valueDisplay).join(' / '),
+            optionSelections: selections,
+            sku: v.sku,
+            barcode: v.barcode || '',
+            priceAmount: v.currentPrice?.amount || '',
+            compareAtAmount: v.currentPrice?.compareAtAmount || '',
+            costAmount: v.estimatedCostAmount || '',
+            estimatedCostAmount: v.estimatedCostAmount || '',
+            latestAcquisitionCost: v.latestAcquisitionCost,
+            initialStock: [],
+            primaryColorId: v.primaryColor?.id || null,
+            weightValue: v.shipping?.weight?.value || '400',
+            weightUnit: (v.shipping?.weight?.unit as 'G' | 'KG') || 'G',
+            lengthValue: v.shipping?.dimensions?.length || '30',
+            widthValue: v.shipping?.dimensions?.width || '25',
+            heightValue: v.shipping?.dimensions?.height || '4',
+            dimensionUnit: (v.shipping?.dimensions?.unit as 'CM' | 'MM' | 'IN') || 'CM',
+          };
+        }),
+      );
+    } else {
+      variants.setVariantMode('simple');
+      const firstV = workspace.variants[0];
+      if (firstV) {
+        variants.setSku(firstV.sku);
+        variants.setBarcode(firstV.barcode || '');
+        setPriceAmount(firstV.currentPrice?.amount || '');
+        setCompareAtAmount(firstV.currentPrice?.compareAtAmount || '');
+        setCostAmount(firstV.estimatedCostAmount || '');
+        setEstimatedCostAmount(firstV.estimatedCostAmount || '');
+        if (firstV.shipping?.weight || firstV.weight) {
+          const w = firstV.shipping?.weight || firstV.weight;
+          if (w) {
+            setWeightValue(w.value);
+            setWeightUnit((w.unit as 'G' | 'KG') || 'G');
+          }
+        }
+        if (firstV.shipping?.dimensions || firstV.dimensions) {
+          const d = firstV.shipping?.dimensions || firstV.dimensions;
+          if (d) {
+            setLengthValue(d.length);
+            setWidthValue(d.width);
+            setHeightValue(d.height);
+            setDimensionUnit((d.unit as 'CM' | 'MM' | 'IN') || 'CM');
+          }
+        }
+      }
+    }
+
+    setSeoTitle(workspace.content.seoTitle || '');
+    setSeoDescription(workspace.content.seoDescription || '');
+    content.setInformationGroups(
+      workspace.content.informationGroups.map((group, groupIndex) => ({
+        id: group.id || `group-${groupIndex}`,
+        title: group.title,
+        items: group.items.map((item, itemIndex) => ({
+          id: item.id || `item-${groupIndex}-${itemIndex}`,
+          label: item.label,
+          value: item.value,
+        })),
+      })),
+    );
+    content.setFaqs(
+      (workspace.content.faqs || []).map((f, idx) => ({
+        id: `${idx}-${f.question}`,
+        question: f.question,
+        answer: f.answer,
+      })),
+    );
+
+    setProductVersion(workspace.version);
+    setProductStatus(workspace.status);
+    setPublicationStatus(workspace.publicationStatus);
+    setIsDirty(false);
+  };
+
+  // --------------------------------------------------------------------------
+  // Granular Asynchronous Reference Loaders & Error Handlers
+  // --------------------------------------------------------------------------
+  const fetchTypes = async (signal?: AbortSignal) => {
+    setReferenceLoading((prev) => ({ ...prev, types: true }));
+    setReferenceErrors((prev) => ({ ...prev, types: null }));
+    try {
+      const data = await catalogData<readonly CatalogProductTypeDefinitionDto[]>(
+        '/admin/catalog/product-type-definitions',
+        signal ? { signal } : undefined,
+      );
+      if (signal?.aborted) return;
+      setReferences((prev) => ({ ...prev, types: data }));
+      setReferenceLoading((prev) => ({ ...prev, types: false }));
+    } catch (err) {
+      if (signal?.aborted) return;
+      setReferenceLoading((prev) => ({ ...prev, types: false }));
+      setReferenceErrors((prev) => ({
+        ...prev,
+        types: err instanceof Error ? err.message : 'Failed to load product types',
+      }));
+    }
+  };
+
+  const fetchCategories = async (signal?: AbortSignal) => {
+    setReferenceLoading((prev) => ({ ...prev, categories: true }));
+    setReferenceErrors((prev) => ({ ...prev, categories: null }));
+    try {
+      const data = await catalogData<readonly CatalogCategoryChoiceDto[]>(
+        '/admin/catalog/categories',
+        signal ? { signal } : undefined,
+      );
+      if (signal?.aborted) return;
+      setReferences((prev) => ({ ...prev, categories: data }));
+      setReferenceLoading((prev) => ({ ...prev, categories: false }));
+    } catch (err) {
+      if (signal?.aborted) return;
+      setReferenceLoading((prev) => ({ ...prev, categories: false }));
+      setReferenceErrors((prev) => ({
+        ...prev,
+        categories: err instanceof Error ? err.message : 'Failed to load categories',
+      }));
+    }
+  };
+
+  const fetchColors = async (signal?: AbortSignal) => {
+    setReferenceLoading((prev) => ({ ...prev, colors: true }));
+    setReferenceErrors((prev) => ({ ...prev, colors: null }));
+    try {
+      const data = await catalogData<readonly CatalogColorDto[]>(
+        '/admin/catalog/colors',
+        signal ? { signal } : undefined,
+      );
+      if (signal?.aborted) return;
+      setReferences((prev) => ({ ...prev, colors: data }));
+      setReferenceLoading((prev) => ({ ...prev, colors: false }));
+    } catch (err) {
+      if (signal?.aborted) return;
+      setReferenceLoading((prev) => ({ ...prev, colors: false }));
+      setReferenceErrors((prev) => ({
+        ...prev,
+        colors: err instanceof Error ? err.message : 'Failed to load colors',
+      }));
+    }
+  };
+
+  const fetchTags = async (signal?: AbortSignal) => {
+    setReferenceLoading((prev) => ({ ...prev, tags: true }));
+    setReferenceErrors((prev) => ({ ...prev, tags: null }));
+    try {
+      const data = await catalogData<CatalogVocabularyListDto>(
+        '/admin/catalog/vocabulary/TAG?status=ACTIVE&page=1&pageSize=100',
+        signal ? { signal } : undefined,
+      );
+      if (signal?.aborted) return;
+      setReferences((prev) => ({ ...prev, tags: data.items }));
+      setReferenceLoading((prev) => ({ ...prev, tags: false }));
+    } catch (err) {
+      if (signal?.aborted) return;
+      setReferenceLoading((prev) => ({ ...prev, tags: false }));
+      setReferenceErrors((prev) => ({
+        ...prev,
+        tags: err instanceof Error ? err.message : 'Failed to load tags',
+      }));
+    }
+  };
+
+  const fetchOccasions = async (signal?: AbortSignal) => {
+    setReferenceLoading((prev) => ({ ...prev, occasions: true }));
+    setReferenceErrors((prev) => ({ ...prev, occasions: null }));
+    try {
+      const data = await catalogData<CatalogVocabularyListDto>(
+        '/admin/catalog/vocabulary/OCCASION?status=ACTIVE&page=1&pageSize=100',
+        signal ? { signal } : undefined,
+      );
+      if (signal?.aborted) return;
+      setReferences((prev) => ({ ...prev, occasions: data.items }));
+      setReferenceLoading((prev) => ({ ...prev, occasions: false }));
+    } catch (err) {
+      if (signal?.aborted) return;
+      setReferenceLoading((prev) => ({ ...prev, occasions: false }));
+      setReferenceErrors((prev) => ({
+        ...prev,
+        occasions: err instanceof Error ? err.message : 'Failed to load occasions',
+      }));
+    }
+  };
+
+  const fetchCollections = async (signal?: AbortSignal) => {
+    setReferenceLoading((prev) => ({ ...prev, collections: true }));
+    setReferenceErrors((prev) => ({ ...prev, collections: null }));
+    try {
+      const data = await catalogData<CatalogVocabularyListDto>(
+        '/admin/catalog/vocabulary/COLLECTION?status=ACTIVE&page=1&pageSize=100',
+        signal ? { signal } : undefined,
+      );
+      if (signal?.aborted) return;
+      setReferences((prev) => ({ ...prev, collections: data.items }));
+      setReferenceLoading((prev) => ({ ...prev, collections: false }));
+    } catch (err) {
+      if (signal?.aborted) return;
+      setReferenceLoading((prev) => ({ ...prev, collections: false }));
+      setReferenceErrors((prev) => ({
+        ...prev,
+        collections: err instanceof Error ? err.message : 'Failed to load collections',
+      }));
+    }
+  };
+
+  const fetchSizing = async (signal?: AbortSignal) => {
+    setReferenceLoading((prev) => ({ ...prev, sizing: true }));
+    setReferenceErrors((prev) => ({ ...prev, sizing: null }));
+    try {
+      const data = await catalogData<SizingReferenceData>(
+        '/admin/sizing',
+        signal ? { signal } : undefined,
+      );
+      if (signal?.aborted) return;
+      setReferences((prev) => ({ ...prev, sizingData: data }));
+      setReferenceLoading((prev) => ({ ...prev, sizing: false }));
+    } catch {
+      if (signal?.aborted) return;
+      setReferences((prev) => ({ ...prev, sizingData: { systems: [], sizeDefinitions: [] } }));
+      setReferenceLoading((prev) => ({ ...prev, sizing: false }));
+    }
+  };
+
+  const fetchSizeGuides = async (signal?: AbortSignal) => {
+    setReferenceLoading((prev) => ({ ...prev, sizeGuides: true }));
+    setReferenceErrors((prev) => ({ ...prev, sizeGuides: null }));
+    try {
+      const data = await catalogData<readonly SizeGuideSummaryDto[]>(
+        '/admin/sizing/guides',
+        signal ? { signal } : undefined,
+      );
+      if (signal?.aborted) return;
+      setReferences((prev) => ({ ...prev, sizeGuides: data }));
+      setReferenceLoading((prev) => ({ ...prev, sizeGuides: false }));
+    } catch {
+      if (signal?.aborted) return;
+      setReferences((prev) => ({ ...prev, sizeGuides: [] }));
+      setReferenceLoading((prev) => ({ ...prev, sizeGuides: false }));
+    }
+  };
+
+  const fetchLocations = async (signal?: AbortSignal) => {
+    setReferenceLoading((prev) => ({ ...prev, locations: true }));
+    setReferenceErrors((prev) => ({ ...prev, locations: null }));
+    try {
+      const data = await catalogData<readonly WarehouseLocationDto[]>(
+        '/admin/warehouse/locations',
+        signal ? { signal } : undefined,
+      );
+      if (signal?.aborted) return;
+      setReferences((prev) => ({ ...prev, locations: data || [] }));
+      setReferenceLoading((prev) => ({ ...prev, locations: false }));
+    } catch {
+      if (signal?.aborted) return;
+      setReferences((prev) => ({ ...prev, locations: [] }));
+      setReferenceLoading((prev) => ({ ...prev, locations: false }));
+    }
+  };
+
+  const fetchWorkspace = async (id: string, signal?: AbortSignal) => {
+    setWorkspaceLoading(true);
+    setReferenceLoading((prev) => ({ ...prev, workspace: true }));
+    setReferenceErrors((prev) => ({ ...prev, workspace: null }));
+    try {
+      const workspace = await catalogData<CatalogProductWorkspaceDto>(
+        `/admin/catalog/products/${id}`,
+        signal ? { signal } : undefined,
+      );
+      if (signal?.aborted) return;
+      applyWorkspaceData(workspace);
+      setWorkspaceLoading(false);
+      setReferenceLoading((prev) => ({ ...prev, workspace: false }));
+    } catch (err) {
+      if (signal?.aborted) return;
+      setWorkspaceLoading(false);
+      setReferenceLoading((prev) => ({ ...prev, workspace: false }));
+      const msg = err instanceof Error ? err.message : 'Unable to load product workspace';
+      setReferenceErrors((prev) => ({ ...prev, workspace: msg }));
+      setGeneralError(msg);
+    }
+  };
+
+  // --------------------------------------------------------------------------
+  // Concurrent Fetch on Mount
   // --------------------------------------------------------------------------
   useEffect(() => {
     const controller = new AbortController();
-    setLoading(true);
+    const { signal } = controller;
 
-    void Promise.all([
-      catalogData<readonly CatalogProductTypeDefinitionDto[]>(
-        '/admin/catalog/product-type-definitions',
-        { signal: controller.signal },
-      ),
-      catalogData<readonly CatalogCategoryChoiceDto[]>('/admin/catalog/categories', {
-        signal: controller.signal,
-      }),
-      catalogData<readonly CatalogColorDto[]>('/admin/catalog/colors', {
-        signal: controller.signal,
-      }),
-      catalogData<CatalogVocabularyListDto>(
-        '/admin/catalog/vocabulary/TAG?status=ACTIVE&page=1&pageSize=100',
-        { signal: controller.signal },
-      ),
-      catalogData<CatalogVocabularyListDto>(
-        '/admin/catalog/vocabulary/OCCASION?status=ACTIVE&page=1&pageSize=100',
-        { signal: controller.signal },
-      ),
-      catalogData<CatalogVocabularyListDto>(
-        '/admin/catalog/vocabulary/COLLECTION?status=ACTIVE&page=1&pageSize=100',
-        { signal: controller.signal },
-      ),
-      catalogData<SizingReferenceData>('/admin/sizing', { signal: controller.signal }).catch(
-        () => ({
-          systems: [],
-          sizeDefinitions: [],
-        }),
-      ),
-      catalogData<readonly SizeGuideSummaryDto[]>('/admin/sizing/guides', {
-        signal: controller.signal,
-      }).catch(() => []),
-      catalogData<readonly WarehouseLocationDto[]>('/admin/warehouse/locations', {
-        signal: controller.signal,
-      }).catch(() => []),
-      isEditMode && productId
-        ? catalogData<CatalogProductWorkspaceDto>(`/admin/catalog/products/${productId}`, {
-            signal: controller.signal,
-          }).catch(() => null)
-        : Promise.resolve(null),
-    ])
-      .then(
-        ([
-          typesData,
-          catData,
-          colorData,
-          tagData,
-          occData,
-          collData,
-          sizing,
-          guidesData,
-          locationsData,
-          workspace,
-        ]) => {
-          if (controller.signal.aborted) return;
-          setReferences({
-            types: typesData,
-            categories: catData,
-            colors: colorData,
-            tags: tagData.items,
-            occasions: occData.items,
-            collections: collData.items,
-            sizingData: sizing,
-            sizeGuides: guidesData,
-            locations: locationsData || [],
-          });
-
-          if (workspace) {
-            setWorkspaceData(workspace);
-            setTitle(workspace.title);
-            setHandle(workspace.handle);
-            setIsHandleLocked(false);
-            setProductTypeId(workspace.productTypeId);
-            setDescription(workspace.description || '');
-            setSelectedCategoryIds([...(workspace.organization.categoryIds || [])]);
-            setPrimaryCategoryId(workspace.organization.primaryCategoryId || '');
-            setSelectedTagIds([...(workspace.organization.tagIds || [])]);
-            setSelectedOccasionIds([...(workspace.organization.occasionIds || [])]);
-            setSelectedCollectionIds([...(workspace.organization.collectionIds || [])]);
-            setSizeSystemId(workspace.sizeSystemId || '');
-            setSizeGuideId(workspace.sizeGuideId || '');
-            setSizingGuideSource(workspace.sizingGuideSource || 'CATEGORY');
-            setNoGuideReason(workspace.noGuideReason || '');
-
-            const attrs: Record<string, string | boolean | null> = {};
-            (workspace.organization.attributes || []).forEach((a) => {
-              if (a.value !== null && a.value !== undefined) {
-                attrs[a.id] = a.value;
-              }
-            });
-            setAttributeValues(attrs);
-
-            media.setMediaItems(
-              (workspace.media || []).map((m) => ({
-                id: m.id,
-                assetId: m.assetId,
-                previewUrl: productMediaUrl(m.assetId, 'PUBLIC'),
-                isPrimary: m.isPrimary,
-                role: m.role,
-                variantId: m.variantId,
-                optionValueId: m.optionValueId,
-                position: m.position,
-                altText: m.altText || m.title || '',
-                isUploading: false,
-                pendingImport: m.pendingImport ?? false,
-              })),
-            );
-
-            if (workspace.shipping?.weight) {
-              setWeightValue(workspace.shipping.weight.value);
-              setWeightUnit((workspace.shipping.weight.unit as 'G' | 'KG') || 'G');
-            }
-            if (workspace.shipping?.dimensions) {
-              setLengthValue(workspace.shipping.dimensions.length);
-              setWidthValue(workspace.shipping.dimensions.width);
-              setHeightValue(workspace.shipping.dimensions.height);
-              setDimensionUnit((workspace.shipping.dimensions.unit as 'CM' | 'MM' | 'IN') || 'CM');
-            }
-
-            if (workspace.options.length > 0) {
-              variants.setVariantMode('variants');
-              variants.setOptionAxes(
-                workspace.options.map((axis) => ({
-                  id: axis.id,
-                  name: axis.name,
-                  isVisual: axis.isVisual,
-                  values: axis.values.map((v) => ({
-                    id: v.id,
-                    label: v.label,
-                    isPrimary: v.isPrimary,
-                    colorId: v.color?.id ?? null,
-                    colorHex: v.color?.hexValue ?? null,
-                    sizeDefinitionId: v.sizeDefinitionId ?? null,
-                  })),
-                })),
-              );
-
-              variants.setMatrixRows(
-                workspace.variants.map((v) => {
-                  const selections = v.optionValueIds.map((optValId) => {
-                    for (const axis of workspace.options) {
-                      const matchedVal = axis.values.find((val) => val.id === optValId);
-                      if (matchedVal) {
-                        return {
-                          axisName: axis.name,
-                          valueDisplay: matchedVal.label,
-                          valueRef: matchedVal.id,
-                        };
-                      }
-                    }
-                    return { axisName: '', valueDisplay: optValId, valueRef: optValId };
-                  });
-
-                  return {
-                    id: v.id,
-                    enabled: v.status === 'ACTIVE',
-                    title: v.title || selections.map((s) => s.valueDisplay).join(' / '),
-                    optionSelections: selections,
-                    sku: v.sku,
-                    barcode: v.barcode || '',
-                    priceAmount: v.currentPrice?.amount || '',
-                    compareAtAmount: v.currentPrice?.compareAtAmount || '',
-                    costAmount: v.estimatedCostAmount || '',
-                    estimatedCostAmount: v.estimatedCostAmount || '',
-                    latestAcquisitionCost: v.latestAcquisitionCost,
-                    initialStock: [],
-                    primaryColorId: v.primaryColor?.id || null,
-                    weightValue: v.shipping?.weight?.value || '400',
-                    weightUnit: (v.shipping?.weight?.unit as 'G' | 'KG') || 'G',
-                    lengthValue: v.shipping?.dimensions?.length || '30',
-                    widthValue: v.shipping?.dimensions?.width || '25',
-                    heightValue: v.shipping?.dimensions?.height || '4',
-                    dimensionUnit: (v.shipping?.dimensions?.unit as 'CM' | 'MM' | 'IN') || 'CM',
-                  };
-                }),
-              );
-            } else {
-              variants.setVariantMode('simple');
-              const firstV = workspace.variants[0];
-              if (firstV) {
-                variants.setSku(firstV.sku);
-                variants.setBarcode(firstV.barcode || '');
-                setPriceAmount(firstV.currentPrice?.amount || '');
-                setCompareAtAmount(firstV.currentPrice?.compareAtAmount || '');
-                setCostAmount(firstV.estimatedCostAmount || '');
-                setEstimatedCostAmount(firstV.estimatedCostAmount || '');
-                if (firstV.shipping?.weight || firstV.weight) {
-                  const w = firstV.shipping?.weight || firstV.weight;
-                  if (w) {
-                    setWeightValue(w.value);
-                    setWeightUnit((w.unit as 'G' | 'KG') || 'G');
-                  }
-                }
-                if (firstV.shipping?.dimensions || firstV.dimensions) {
-                  const d = firstV.shipping?.dimensions || firstV.dimensions;
-                  if (d) {
-                    setLengthValue(d.length);
-                    setWidthValue(d.width);
-                    setHeightValue(d.height);
-                    setDimensionUnit((d.unit as 'CM' | 'MM' | 'IN') || 'CM');
-                  }
-                }
-              }
-            }
-
-            setSeoTitle(workspace.content.seoTitle || '');
-            setSeoDescription(workspace.content.seoDescription || '');
-            content.setInformationGroups(
-              workspace.content.informationGroups.map((group, groupIndex) => ({
-                id: group.id || `group-${groupIndex}`,
-                title: group.title,
-                items: group.items.map((item, itemIndex) => ({
-                  id: item.id || `item-${groupIndex}-${itemIndex}`,
-                  label: item.label,
-                  value: item.value,
-                })),
-              })),
-            );
-            content.setFaqs(
-              (workspace.content.faqs || []).map((f, idx) => ({
-                id: `${idx}-${f.question}`,
-                question: f.question,
-                answer: f.answer,
-              })),
-            );
-
-            setProductVersion(workspace.version);
-            setProductStatus(workspace.status);
-            setPublicationStatus(workspace.publicationStatus);
-            setIsDirty(false);
-          }
-        },
-      )
-      .catch((err) => {
-        if (controller.signal.aborted) return;
-        setGeneralError(
-          err instanceof Error
-            ? err.message
-            : 'Failed to load catalog configurations and taxonomies.',
-        );
-      })
-      .finally(() => {
-        if (!controller.signal.aborted) {
-          setLoading(false);
-        }
-      });
+    void fetchTypes(signal);
+    void fetchCategories(signal);
+    void fetchColors(signal);
+    void fetchTags(signal);
+    void fetchOccasions(signal);
+    void fetchCollections(signal);
+    void fetchSizing(signal);
+    void fetchSizeGuides(signal);
+    void fetchLocations(signal);
+    if (isEditMode && productId) {
+      void fetchWorkspace(productId, signal);
+    }
 
     return () => {
       controller.abort();
@@ -681,6 +838,20 @@ export function useProductCreatorState({
 
     setGeneralError(null);
     setSuccessMessage(null);
+
+    // Guard against submission while mandatory taxonomies are still loading
+    if (referenceLoading.types || referenceLoading.categories) {
+      setGeneralError(
+        'Product classifications and categories are still loading. Please wait a moment.',
+      );
+      return;
+    }
+    if (referenceErrors.types) {
+      setGeneralError(
+        'Product classification could not be loaded. Please retry loading before saving.',
+      );
+      return;
+    }
     const errors: Record<string, string> = {};
 
     if (!title.trim()) {
@@ -979,7 +1150,20 @@ export function useProductCreatorState({
     productStatus,
     publicationStatus,
     fileInputRef: media.fileInputRef,
-    loading,
+    loading: isEditMode ? workspaceLoading : false,
+    workspaceLoading,
+    referenceLoading,
+    referenceErrors,
+    retryCategories: () => void fetchCategories(),
+    retryTypes: () => void fetchTypes(),
+    retryColors: () => void fetchColors(),
+    retryTags: () => void fetchTags(),
+    retryOccasions: () => void fetchOccasions(),
+    retryCollections: () => void fetchCollections(),
+    retrySizing: () => void fetchSizing(),
+    retrySizeGuides: () => void fetchSizeGuides(),
+    retryLocations: () => void fetchLocations(),
+    retryWorkspace: () => (productId ? void fetchWorkspace(productId) : undefined),
     saving,
     savingStatusText,
     generalError,

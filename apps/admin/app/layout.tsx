@@ -1,9 +1,12 @@
-import type { Metadata } from 'next';
+import type { Metadata, Viewport } from 'next';
 
 import './globals.css';
 import { Inter, JetBrains_Mono } from 'next/font/google';
 import { cn } from '@/lib/utils';
 import { AdminShell } from '@/components/admin-shell';
+import { AdminMotionProvider } from '@/components/motion/motion-primitives';
+import { THEME_INIT_SCRIPT, ThemeProvider } from '@/components/theme-provider';
+import { Toaster } from '@/components/ui/toast';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { requireAdminAccess } from '@/lib/auth/server-access';
 
@@ -18,6 +21,13 @@ const jetbrainsMono = JetBrains_Mono({
   variable: '--font-mono',
   display: 'swap',
 });
+
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  viewportFit: 'cover',
+  interactiveWidget: 'resizes-content',
+};
 
 export const metadata: Metadata = {
   title: {
@@ -35,10 +45,21 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
       className={cn('font-sans antialiased', inter.variable, jetbrainsMono.variable)}
       suppressHydrationWarning
     >
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
+      </head>
       <body suppressHydrationWarning>
-        <TooltipProvider>
-          <AdminShell {...(context ? { initialContext: context } : {})}>{children}</AdminShell>
-        </TooltipProvider>
+        <AdminMotionProvider>
+          <ThemeProvider>
+            <TooltipProvider>
+              <Toaster>
+                <AdminShell {...(context ? { initialContext: context } : {})}>
+                  {children}
+                </AdminShell>
+              </Toaster>
+            </TooltipProvider>
+          </ThemeProvider>
+        </AdminMotionProvider>
       </body>
     </html>
   );

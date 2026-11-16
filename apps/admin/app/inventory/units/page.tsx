@@ -1,15 +1,10 @@
 import { Suspense } from 'react';
 import { UnitsList } from '@/components/inventory/units/units-list';
+import { PageSkeleton } from '@/components/ui/page-shell';
 
 export default function InventoryUnitsPage() {
   return (
-    <Suspense
-      fallback={
-        <main className="p-8 text-center text-sm text-muted-foreground">
-          Loading individual physical inventory units…
-        </main>
-      }
-    >
+    <Suspense fallback={<PageSkeleton variant="table" widthVariant="standard" />}>
       <UnitsList />
     </Suspense>
   );

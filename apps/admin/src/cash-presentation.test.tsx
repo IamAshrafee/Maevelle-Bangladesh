@@ -23,7 +23,7 @@ it('distinguishes original, collected, waiver, balance and refunds in the manage
       }}
     />,
   );
-  for (const t of ['৳81', '৳80', '৳1', '৳0', 'Actual funds received', 'Settled with adjustment'])
+  for (const t of ['৳81', '৳80', '৳1', '৳0', 'Actual Received', 'Settled with adjustment'])
     expect(html).toContain(t);
   expect(html).not.toContain('81.0000');
 });

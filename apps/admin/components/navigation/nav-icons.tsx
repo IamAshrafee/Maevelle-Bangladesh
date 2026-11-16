@@ -1,0 +1,98 @@
+'use client';
+
+import type { LucideIcon } from 'lucide-react';
+import {
+  Activity,
+  BarChart3,
+  Bell,
+  Boxes,
+  Briefcase,
+  Building2,
+  CircleDollarSign,
+  ClipboardCheck,
+  CreditCard,
+  FolderTree,
+  Gauge,
+  HandCoins,
+  HeartHandshake,
+  Image,
+  Inbox,
+  Landmark,
+  Laptop,
+  LayoutDashboard,
+  Mail,
+  MessageSquare,
+  PackageCheck,
+  PackageOpen,
+  PackageSearch,
+  Palette,
+  Plug,
+  Receipt,
+  RefreshCw,
+  Ruler,
+  ScanBarcode,
+  Settings,
+  ShieldCheck,
+  ShoppingBag,
+  Sparkles,
+  Tags,
+  Truck,
+  User,
+  UserRoundCog,
+  Users,
+  Warehouse,
+} from 'lucide-react';
+import type { NavIconKey } from '@/lib/navigation/route-registry';
+
+export const NAV_ICON_MAP: Record<NavIconKey, LucideIcon> = {
+  activity: Activity,
+  'bar-chart': BarChart3,
+  bell: Bell,
+  boxes: Boxes,
+  briefcase: Briefcase,
+  building: Building2,
+  'circle-dollar': CircleDollarSign,
+  'clipboard-check': ClipboardCheck,
+  'credit-card': CreditCard,
+  'folder-tree': FolderTree,
+  gauge: Gauge,
+  'hand-coins': HandCoins,
+  'heart-handshake': HeartHandshake,
+  image: Image,
+  inbox: Inbox,
+  landmark: Landmark,
+  laptop: Laptop,
+  'layout-dashboard': LayoutDashboard,
+  mail: Mail,
+  'message-square': MessageSquare,
+  'package-check': PackageCheck,
+  'package-open': PackageOpen,
+  'package-search': PackageSearch,
+  palette: Palette,
+  plug: Plug,
+  receipt: Receipt,
+  'refresh-cw': RefreshCw,
+  ruler: Ruler,
+  'scan-barcode': ScanBarcode,
+  settings: Settings,
+  'shield-check': ShieldCheck,
+  'shopping-bag': ShoppingBag,
+  sparkles: Sparkles,
+  tags: Tags,
+  truck: Truck,
+  user: User,
+  'user-round-cog': UserRoundCog,
+  users: Users,
+  warehouse: Warehouse,
+};
+
+export function NavIcon({
+  name,
+  className = 'size-4 shrink-0',
+}: {
+  readonly name: NavIconKey;
+  readonly className?: string;
+}) {
+  const Icon = NAV_ICON_MAP[name];
+  return <Icon className={className} aria-hidden="true" />;
+}

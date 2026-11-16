@@ -15,6 +15,7 @@ import {
   ShieldCheck,
   Users,
 } from 'lucide-react';
+import { AdminPage, PageHeader } from '@/components/ui/page-shell';
 import { Button, buttonVariants } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -39,7 +40,9 @@ export function SecuritySettingsConsole() {
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+  const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(
+    null,
+  );
 
   const [resetConfirmOpen, setResetConfirmOpen] = useState(false);
   const [auditDrawerOpen, setAuditDrawerOpen] = useState(false);
@@ -69,7 +72,9 @@ export function SecuritySettingsConsole() {
     void loadData();
   }, [loadData]);
 
-  const isDirty = Boolean(initialData && timeoutMinutes !== initialData.settings.sessionTimeoutMinutes);
+  const isDirty = Boolean(
+    initialData && timeoutMinutes !== initialData.settings.sessionTimeoutMinutes,
+  );
 
   const handleDiscard = () => {
     if (!initialData) return;
@@ -83,7 +88,10 @@ export function SecuritySettingsConsole() {
     setFeedback(null);
 
     if (timeoutMinutes < 15 || timeoutMinutes > 43200) {
-      setFeedback({ type: 'error', message: 'Session timeout must be between 15 and 43200 minutes (30 days).' });
+      setFeedback({
+        type: 'error',
+        message: 'Session timeout must be between 15 and 43200 minutes (30 days).',
+      });
       setSaving(false);
       return;
     }
@@ -134,7 +142,10 @@ export function SecuritySettingsConsole() {
         setInitialData(resetRes);
         setTimeoutMinutes(resetRes.settings.sessionTimeoutMinutes);
         setResetConfirmOpen(false);
-        setFeedback({ type: 'success', message: 'Security settings restored to defaults (24 hours).' });
+        setFeedback({
+          type: 'success',
+          message: 'Security settings restored to defaults (24 hours).',
+        });
       }
     } catch (err) {
       setFeedback({
@@ -148,54 +159,55 @@ export function SecuritySettingsConsole() {
 
   if (loading && !initialData) {
     return (
-      <div className="flex flex-col items-center justify-center h-64 gap-2 text-muted-foreground text-xs">
-        <RefreshCw className="size-5 animate-spin text-primary" />
-        <span>Loading Security Settings...</span>
-      </div>
+      <AdminPage variant="narrow">
+        <div className="flex flex-col items-center justify-center h-64 gap-2 text-muted-foreground text-xs">
+          <RefreshCw className="size-5 animate-spin text-primary" />
+          <span>Loading Security Settings...</span>
+        </div>
+      </AdminPage>
     );
   }
 
   return (
-    <div className="space-y-6 pb-20 max-w-4xl">
+    <AdminPage variant="narrow" className="pb-20">
       <SettingsNav />
 
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-4 border-b">
-        <div>
-          <div className="flex flex-wrap items-center gap-2.5">
-            <h1 className="text-xl font-semibold tracking-tight text-foreground">Security Settings</h1>
+      <PageHeader
+        eyebrow="Platform Settings"
+        title="Security Settings"
+        badge={
+          <>
             <SettingStatusBadge status="ready" label="Enforced" />
             <RuntimeEffectBadge runtimeMutable requiresRestart={false} />
-          </div>
-          <p className="text-xs text-muted-foreground mt-1">
-            Session expiration rules, authentication policy verification, and infrastructure isolation boundaries.
-          </p>
-        </div>
+          </>
+        }
+        description="Session expiration rules, authentication policy verification, and infrastructure isolation boundaries."
+        actions={
+          <>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setAuditDrawerOpen(true)}
+              className="text-xs h-8 gap-1.5"
+            >
+              <History className="size-3.5 text-muted-foreground" />
+              History
+            </Button>
 
-        <div className="flex items-center gap-2">
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={() => setAuditDrawerOpen(true)}
-            className="text-xs h-8 gap-1.5"
-          >
-            <History className="size-3.5 text-muted-foreground" />
-            History
-          </Button>
-
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            onClick={() => setResetConfirmOpen(true)}
-            className="text-xs h-8 text-muted-foreground hover:text-foreground"
-          >
-            <RotateCcw className="size-3.5 mr-1" />
-            Reset to default
-          </Button>
-        </div>
-      </div>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={() => setResetConfirmOpen(true)}
+              className="text-xs h-8 text-muted-foreground hover:text-foreground"
+            >
+              <RotateCcw className="size-3.5 mr-1" />
+              Reset to default
+            </Button>
+          </>
+        }
+      />
 
       {feedback && (
         <div
@@ -252,7 +264,8 @@ export function SecuritySettingsConsole() {
                 <span className="text-xs font-semibold text-muted-foreground">Minutes</span>
               </div>
               <p className="text-[11px] text-muted-foreground mt-1">
-                Currently configured: {(timeoutMinutes / 60).toFixed(1)} hours ({timeoutMinutes} minutes)
+                Currently configured: {(timeoutMinutes / 60).toFixed(1)} hours ({timeoutMinutes}{' '}
+                minutes)
               </p>
             </SettingField>
           </div>
@@ -275,7 +288,9 @@ export function SecuritySettingsConsole() {
           <div className="space-y-1">
             <div className="flex items-center gap-2">
               <Users className="size-4 text-primary" />
-              <span className="text-sm font-semibold text-foreground">Operator Accounts & Roles</span>
+              <span className="text-sm font-semibold text-foreground">
+                Operator Accounts & Roles
+              </span>
             </div>
             <p className="text-xs text-muted-foreground">
               Manage team members, grant role capabilities, and configure workspace permissions.
@@ -283,7 +298,11 @@ export function SecuritySettingsConsole() {
           </div>
           <Link
             href="/team"
-            className={buttonVariants({ variant: 'outline', size: 'sm', className: 'text-xs h-8 shrink-0' })}
+            className={buttonVariants({
+              variant: 'outline',
+              size: 'sm',
+              className: 'text-xs h-8 shrink-0',
+            })}
           >
             Open Team & Access
           </Link>
@@ -305,7 +324,9 @@ export function SecuritySettingsConsole() {
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <KeyRound className="size-4 text-primary" />
-                  <span className="text-xs font-semibold text-foreground">Auth Encryption Master Key (256-bit AES-GCM)</span>
+                  <span className="text-xs font-semibold text-foreground">
+                    Auth Encryption Master Key (256-bit AES-GCM)
+                  </span>
                 </div>
                 <Badge variant="outline" className="text-[10px] font-mono">
                   <Lock className="size-2.5 mr-1" />
@@ -313,8 +334,9 @@ export function SecuritySettingsConsole() {
                 </Badge>
               </div>
               <p className="text-[11px] text-muted-foreground leading-relaxed">
-                Used to encrypt third-party integration secrets before persisting to PostgreSQL. The plaintext key
-                is injected via server environment and is never accessible through APIs or rendered to browsers.
+                Used to encrypt third-party integration secrets before persisting to PostgreSQL. The
+                plaintext key is injected via server environment and is never accessible through
+                APIs or rendered to browsers.
               </p>
             </div>
 
@@ -322,7 +344,9 @@ export function SecuritySettingsConsole() {
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <Shield className="size-4 text-primary" />
-                  <span className="text-xs font-semibold text-foreground">Better Auth Signing Secret</span>
+                  <span className="text-xs font-semibold text-foreground">
+                    Better Auth Signing Secret
+                  </span>
                 </div>
                 <Badge variant="outline" className="text-[10px] font-mono">
                   <Lock className="size-2.5 mr-1" />
@@ -330,8 +354,8 @@ export function SecuritySettingsConsole() {
                 </Badge>
               </div>
               <p className="text-[11px] text-muted-foreground leading-relaxed">
-                Signs and verifies cryptographic HTTP session cookies and authorization tokens. Kept in server memory
-                only to prevent session forgery.
+                Signs and verifies cryptographic HTTP session cookies and authorization tokens. Kept
+                in server memory only to prevent session forgery.
               </p>
             </div>
           </div>
@@ -365,6 +389,6 @@ export function SecuritySettingsConsole() {
         module="security"
         title="Security Settings History"
       />
-    </div>
+    </AdminPage>
   );
 }

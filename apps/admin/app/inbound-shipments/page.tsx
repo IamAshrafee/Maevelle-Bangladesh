@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import { Suspense } from 'react';
 import { redirect } from 'next/navigation';
 import { ShipmentsList } from '@/components/supply/shipments-list';
+import { PageSkeleton } from '@/components/ui/page-shell';
 
 export const metadata: Metadata = {
   title: 'Inbound Shipments',
@@ -20,13 +21,7 @@ export default async function InboundShipmentsPage({ searchParams }: InboundShip
   if (requestedTab === 'receipts') redirect('/receiving?tab=history');
 
   return (
-    <Suspense
-      fallback={
-        <main className="min-w-0 space-y-5 px-4 py-5 text-sm text-muted-foreground sm:px-6 lg:px-8">
-          Loading inbound shipments…
-        </main>
-      }
-    >
+    <Suspense fallback={<PageSkeleton variant="table" widthVariant="wide" />}>
       <ShipmentsList />
     </Suspense>
   );

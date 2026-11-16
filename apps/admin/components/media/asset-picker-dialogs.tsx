@@ -177,11 +177,10 @@ export function AssetPickerDialogs({
                   <Input
                     id="new-folder-name"
                     type="text"
-                    autoFocus
                     placeholder="e.g. Eid Collection 2026, Tops, Size Charts…"
                     value={newFolderName}
                     onChange={(e) => setNewFolderName(e.target.value)}
-                    className="h-9 text-xs"
+                    className="h-9"
                     disabled={isSavingFolder}
                   />
                 </div>

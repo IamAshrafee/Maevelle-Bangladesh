@@ -19,6 +19,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 
+import { useTheme } from '@/components/theme-provider';
 import {
   AdminPage,
   PageActions,
@@ -28,14 +29,17 @@ import {
   PageSection,
   PageTitle,
 } from '@/components/ui/page-shell';
+import { MobileFormsLab } from './mobile-forms-lab';
 
 export function DesignSystemView() {
-  const [isDark, setIsDark] = useState(false);
-  const [activeTab, setActiveTab] = useState<'tokens' | 'typography' | 'buttons' | 'forms' | 'tables' | 'surfaces'>('tokens');
+  const { resolvedTheme, setTheme } = useTheme();
+  const isDark = resolvedTheme === 'dark';
+  const [activeTab, setActiveTab] = useState<
+    'tokens' | 'typography' | 'buttons' | 'forms' | 'tables' | 'surfaces' | 'mobile-forms'
+  >('tokens');
 
   const toggleDarkMode = () => {
-    setIsDark(!isDark);
-    document.documentElement.classList.toggle('dark');
+    setTheme(isDark ? 'light' : 'dark');
   };
 
   return (
@@ -45,12 +49,17 @@ export function DesignSystemView() {
           <p className="eyebrow">Design System & Architecture</p>
           <PageTitle>Maevelle Visual System Lab</PageTitle>
           <PageDescription>
-            Authoritative operational UI primitives, semantic tokens, and interaction guidelines for Maevelle Admin.
+            Authoritative operational UI primitives, semantic tokens, and interaction guidelines for
+            Maevelle Admin.
           </PageDescription>
         </div>
         <PageActions>
           <Button variant="outline" size="sm" onClick={toggleDarkMode} className="gap-2">
-            {isDark ? <Sun className="size-4 text-amber-500" /> : <Moon className="size-4 text-slate-700" />}
+            {isDark ? (
+              <Sun className="size-4 text-amber-500" />
+            ) : (
+              <Moon className="size-4 text-slate-700" />
+            )}
             <span>{isDark ? 'Light Theme' : 'Dark Theme'}</span>
           </Button>
         </PageActions>
@@ -65,6 +74,7 @@ export function DesignSystemView() {
           { id: 'forms', label: 'Form Elements' },
           { id: 'tables', label: 'Data Tables' },
           { id: 'surfaces', label: 'Surfaces & Elevation' },
+          { id: 'mobile-forms', label: 'Mobile Forms & Dialogs' },
         ].map((tab) => (
           <button
             key={tab.id}
@@ -149,49 +159,65 @@ export function DesignSystemView() {
               {/* Success */}
               <div className="rounded-lg border border-success/30 bg-success-subtle p-4 space-y-2">
                 <div className="flex items-center justify-between">
-                  <span className="text-xs font-semibold text-success uppercase tracking-wider">Success</span>
+                  <span className="text-xs font-semibold text-success uppercase tracking-wider">
+                    Success
+                  </span>
                   <StatusBadge status="ACTIVE" />
                 </div>
                 <p className="text-xs text-muted-foreground">
                   Committed, verified, completed, or authorized operational state.
                 </p>
-                <div className="text-[11px] font-mono text-muted-foreground">--color-success: #16a34a</div>
+                <div className="text-[11px] font-mono text-muted-foreground">
+                  --color-success: #16a34a
+                </div>
               </div>
 
               {/* Warning */}
               <div className="rounded-lg border border-warning/30 bg-warning-subtle p-4 space-y-2">
                 <div className="flex items-center justify-between">
-                  <span className="text-xs font-semibold text-warning uppercase tracking-wider">Warning</span>
+                  <span className="text-xs font-semibold text-warning uppercase tracking-wider">
+                    Warning
+                  </span>
                   <StatusBadge status="PENDING" />
                 </div>
                 <p className="text-xs text-muted-foreground">
                   Action required, pending verification, stock running low, or review necessary.
                 </p>
-                <div className="text-[11px] font-mono text-muted-foreground">--color-warning: #d97706</div>
+                <div className="text-[11px] font-mono text-muted-foreground">
+                  --color-warning: #d97706
+                </div>
               </div>
 
               {/* Destructive */}
               <div className="rounded-lg border border-destructive/30 bg-destructive-subtle p-4 space-y-2">
                 <div className="flex items-center justify-between">
-                  <span className="text-xs font-semibold text-destructive uppercase tracking-wider">Destructive</span>
+                  <span className="text-xs font-semibold text-destructive uppercase tracking-wider">
+                    Destructive
+                  </span>
                   <StatusBadge status="FAILED" />
                 </div>
                 <p className="text-xs text-muted-foreground">
                   Failed operation, error, cancellation, fraud alert, or destructive deletion.
                 </p>
-                <div className="text-[11px] font-mono text-muted-foreground">--color-destructive: #dc2626</div>
+                <div className="text-[11px] font-mono text-muted-foreground">
+                  --color-destructive: #dc2626
+                </div>
               </div>
 
               {/* Info */}
               <div className="rounded-lg border border-info/30 bg-info-subtle p-4 space-y-2">
                 <div className="flex items-center justify-between">
-                  <span className="text-xs font-semibold text-info uppercase tracking-wider">Info / Neutral</span>
+                  <span className="text-xs font-semibold text-info uppercase tracking-wider">
+                    Info / Neutral
+                  </span>
                   <StatusBadge status="INFO" />
                 </div>
                 <p className="text-xs text-muted-foreground">
                   General telemetry, queued items, information notice, or neutral state.
                 </p>
-                <div className="text-[11px] font-mono text-muted-foreground">--color-info: #2563eb</div>
+                <div className="text-[11px] font-mono text-muted-foreground">
+                  --color-info: #2563eb
+                </div>
               </div>
             </div>
           </PageSection>
@@ -266,7 +292,8 @@ export function DesignSystemView() {
                 <span className="text-[11px]">14px / 21px · Regular (400)</span>
               </div>
               <div className="text-sm text-foreground/90 max-w-xl leading-relaxed">
-                Cart and checkout reservation steps never consume physical stock. Dispatch is the authoritative physical movement that triggers ledger deductions and cost allocation.
+                Cart and checkout reservation steps never consume physical stock. Dispatch is the
+                authoritative physical movement that triggers ledger deductions and cost allocation.
               </div>
             </div>
 
@@ -306,7 +333,10 @@ export function DesignSystemView() {
       {/* 3. BUTTONS & CONTROLS */}
       {activeTab === 'buttons' ? (
         <div className="space-y-6">
-          <PageSection title="Button Variants" description="Consistent hierarchy for primary, secondary, and destructive actions.">
+          <PageSection
+            title="Button Variants"
+            description="Consistent hierarchy for primary, secondary, and destructive actions."
+          >
             <div className="flex flex-wrap items-center gap-3">
               <Button variant="default">Primary Action</Button>
               <Button variant="secondary">Secondary Action</Button>
@@ -318,17 +348,27 @@ export function DesignSystemView() {
             </div>
           </PageSection>
 
-          <PageSection title="Button Sizes" description="Standardized control heights (sm: 32px, default: 36px, lg: 40px).">
+          <PageSection
+            title="Button Sizes"
+            description="Standardized control heights (sm: 32px, default: 36px, lg: 40px)."
+          >
             <div className="flex flex-wrap items-center gap-3">
               <Button size="sm">Small (32px)</Button>
               <Button size="default">Default (36px)</Button>
               <Button size="lg">Large (40px)</Button>
-              <Button size="icon"><Sparkles className="size-4" /></Button>
-              <Button size="icon-sm"><Sparkles className="size-3.5" /></Button>
+              <Button size="icon">
+                <Sparkles className="size-4" />
+              </Button>
+              <Button size="icon-sm">
+                <Sparkles className="size-3.5" />
+              </Button>
             </div>
           </PageSection>
 
-          <PageSection title="Button States" description="Interactive states: loading, disabled, with icon.">
+          <PageSection
+            title="Button States"
+            description="Interactive states: loading, disabled, with icon."
+          >
             <div className="flex flex-wrap items-center gap-3">
               <Button disabled>Disabled State</Button>
               <Button disabled variant="outline">
@@ -343,7 +383,10 @@ export function DesignSystemView() {
             </div>
           </PageSection>
 
-          <PageSection title="Smart Animated RefreshButton" description="Production-grade refresh interaction: SVG path morphing (Refresh → Emerald Checkmark / Red Error X), smooth deceleration, rapid click queueing, independent timelines, and tooltip state awareness.">
+          <PageSection
+            title="Smart Animated RefreshButton"
+            description="Production-grade refresh interaction: SVG path morphing (Refresh → Emerald Checkmark / Red Error X), smooth deceleration, rapid click queueing, independent timelines, and tooltip state awareness."
+          >
             <div className="flex flex-wrap items-center gap-6">
               <div className="flex items-center gap-2">
                 <RefreshButton
@@ -396,7 +439,10 @@ export function DesignSystemView() {
             </div>
           </PageSection>
 
-          <PageSection title="Status Badges" description="Rebuilt with pure Tailwind semantic tokens.">
+          <PageSection
+            title="Status Badges"
+            description="Rebuilt with pure Tailwind semantic tokens."
+          >
             <div className="flex flex-wrap items-center gap-3">
               <StatusBadge status="ACTIVE" />
               <StatusBadge status="PENDING" />
@@ -419,8 +465,13 @@ export function DesignSystemView() {
                 <label className="text-xs font-medium text-foreground block">
                   Product Title <span className="text-destructive">*</span>
                 </label>
-                <Input placeholder="e.g. Silk Jamdani Saree" defaultValue="Maevelle Signature Saree" />
-                <p className="text-[11px] text-muted-foreground">The public Storefront display title.</p>
+                <Input
+                  placeholder="e.g. Silk Jamdani Saree"
+                  defaultValue="Maevelle Signature Saree"
+                />
+                <p className="text-[11px] text-muted-foreground">
+                  The public Storefront display title.
+                </p>
               </div>
 
               <div className="space-y-1.5">
@@ -432,13 +483,13 @@ export function DesignSystemView() {
                   <option value="ctg-1">Chittagong Port Facility (CTG-01)</option>
                   <option value="syl-1">Sylhet Regional Depot (SYL-01)</option>
                 </NativeSelect>
-                <p className="text-[11px] text-muted-foreground">Location owning inventory dispatch.</p>
+                <p className="text-[11px] text-muted-foreground">
+                  Location owning inventory dispatch.
+                </p>
               </div>
 
               <div className="space-y-1.5">
-                <label className="text-xs font-medium text-foreground block">
-                  Search Query
-                </label>
+                <label className="text-xs font-medium text-foreground block">Search Query</label>
                 <div className="relative">
                   <Search className="absolute left-2.5 top-2.5 size-4 text-muted-foreground" />
                   <Input placeholder="Search SKU, order or customer…" className="pl-8" />
@@ -464,7 +515,10 @@ export function DesignSystemView() {
       {/* 5. DATA TABLES */}
       {activeTab === 'tables' ? (
         <div className="space-y-6">
-          <PageSection title="Operational Data Table" description="Optimized with tabular-nums, hover states, and density support.">
+          <PageSection
+            title="Operational Data Table"
+            description="Optimized with tabular-nums, hover states, and density support."
+          >
             <PagePanel className="overflow-hidden">
               <Table density="comfortable">
                 <TableHeader>
@@ -480,18 +534,52 @@ export function DesignSystemView() {
                 </TableHeader>
                 <TableBody>
                   {[
-                    { id: 'ORD-2026-9041', name: 'Tanvir Hossain', channel: 'Online Store', lines: 3, total: '৳ 12,450', status: 'PAID' },
-                    { id: 'ORD-2026-9042', name: 'Nusrat Jahan', channel: 'Instagram Direct', lines: 1, total: '৳ 3,200', status: 'PENDING' },
-                    { id: 'ORD-2026-9043', name: 'Farhan Ahmed', channel: 'POS Showroom', lines: 5, total: '৳ 28,900', status: 'DISPATCHED' },
-                    { id: 'ORD-2026-9044', name: 'Sabrina Rahman', channel: 'Online Store', lines: 2, total: '৳ 6,800', status: 'CANCELLED' },
+                    {
+                      id: 'ORD-2026-9041',
+                      name: 'Tanvir Hossain',
+                      channel: 'Online Store',
+                      lines: 3,
+                      total: '৳ 12,450',
+                      status: 'PAID',
+                    },
+                    {
+                      id: 'ORD-2026-9042',
+                      name: 'Nusrat Jahan',
+                      channel: 'Instagram Direct',
+                      lines: 1,
+                      total: '৳ 3,200',
+                      status: 'PENDING',
+                    },
+                    {
+                      id: 'ORD-2026-9043',
+                      name: 'Farhan Ahmed',
+                      channel: 'POS Showroom',
+                      lines: 5,
+                      total: '৳ 28,900',
+                      status: 'DISPATCHED',
+                    },
+                    {
+                      id: 'ORD-2026-9044',
+                      name: 'Sabrina Rahman',
+                      channel: 'Online Store',
+                      lines: 2,
+                      total: '৳ 6,800',
+                      status: 'CANCELLED',
+                    },
                   ].map((row) => (
                     <TableRow key={row.id}>
-                      <TableCell className="font-medium text-foreground font-mono">{row.id}</TableCell>
+                      <TableCell className="font-medium text-foreground font-mono">
+                        {row.id}
+                      </TableCell>
                       <TableCell>{row.name}</TableCell>
                       <TableCell className="text-muted-foreground">{row.channel}</TableCell>
                       <TableCell className="text-right tabular-nums">{row.lines}</TableCell>
-                      <TableCell className="text-right font-medium tabular-nums">{row.total}</TableCell>
-                      <TableCell><StatusBadge status={row.status} /></TableCell>
+                      <TableCell className="text-right font-medium tabular-nums">
+                        {row.total}
+                      </TableCell>
+                      <TableCell>
+                        <StatusBadge status={row.status} />
+                      </TableCell>
                       <TableCell className="text-right">
                         <Button variant="ghost" size="sm" className="h-8 px-2 text-xs">
                           Inspect
@@ -509,53 +597,79 @@ export function DesignSystemView() {
       {/* 6. SURFACES & ELEVATION */}
       {activeTab === 'surfaces' ? (
         <div className="space-y-6">
-          <PageSection title="Three-Tier Elevation Hierarchy" description="Restrained, border-first elevation designed for long operational sessions.">
+          <PageSection
+            title="Three-Tier Elevation Hierarchy"
+            description="Restrained, border-first elevation designed for long operational sessions."
+          >
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
               {/* Flat */}
               <div className="rounded-lg border border-border bg-card p-5 space-y-2">
-                <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Level 1: Flat</div>
+                <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  Level 1: Flat
+                </div>
                 <h3 className="text-base font-semibold text-foreground">Standard Border Surface</h3>
                 <p className="text-xs text-muted-foreground">
-                  Used for tables, data panels, forms, and general content cards. No heavy shadow, high focus on content.
+                  Used for tables, data panels, forms, and general content cards. No heavy shadow,
+                  high focus on content.
                 </p>
-                <div className="pt-2 text-[11px] font-mono text-muted-foreground">border border-border bg-card</div>
+                <div className="pt-2 text-[11px] font-mono text-muted-foreground">
+                  border border-border bg-card
+                </div>
               </div>
 
               {/* Raised */}
               <div className="rounded-lg border border-border bg-card p-5 space-y-2 shadow-2xs">
-                <div className="text-xs font-semibold uppercase tracking-wider text-primary">Level 2: Raised</div>
+                <div className="text-xs font-semibold uppercase tracking-wider text-primary">
+                  Level 2: Raised
+                </div>
                 <h3 className="text-base font-semibold text-foreground">Interactive Raised Card</h3>
                 <p className="text-xs text-muted-foreground">
                   Used for key metric cards, active hover cards, and sticky chrome elements.
                 </p>
-                <div className="pt-2 text-[11px] font-mono text-muted-foreground">shadow-2xs border border-border</div>
+                <div className="pt-2 text-[11px] font-mono text-muted-foreground">
+                  shadow-2xs border border-border
+                </div>
               </div>
 
               {/* Floating */}
               <div className="rounded-lg border border-border bg-card p-5 space-y-2 shadow-lg">
-                <div className="text-xs font-semibold uppercase tracking-wider text-info">Level 3: Floating</div>
-                <h3 className="text-base font-semibold text-foreground">Overlay & Dialog Surface</h3>
+                <div className="text-xs font-semibold uppercase tracking-wider text-info">
+                  Level 3: Floating
+                </div>
+                <h3 className="text-base font-semibold text-foreground">
+                  Overlay & Dialog Surface
+                </h3>
                 <p className="text-xs text-muted-foreground">
-                  Used for command palette, modal dialogs, flyout menus, and floating inspection drawers.
+                  Used for command palette, modal dialogs, flyout menus, and floating inspection
+                  drawers.
                 </p>
-                <div className="pt-2 text-[11px] font-mono text-muted-foreground">shadow-lg border border-border</div>
+                <div className="pt-2 text-[11px] font-mono text-muted-foreground">
+                  shadow-lg border border-border
+                </div>
               </div>
             </div>
           </PageSection>
 
-          <PageSection title="Restrained Liquid Glass" description="Used exclusively for sticky chrome, topbars, and search modals.">
+          <PageSection
+            title="Restrained Liquid Glass"
+            description="Used exclusively for sticky chrome, topbars, and search modals."
+          >
             <div className="p-8 rounded-xl bg-gradient-to-r from-teal-500/10 via-sky-500/10 to-emerald-500/10 border border-border flex items-center justify-center">
               <div className="p-6 rounded-xl border border-border/80 bg-background/80 backdrop-blur-md shadow-md max-w-md text-center space-y-2">
                 <Sparkles className="size-6 text-primary mx-auto" />
                 <h4 className="text-sm font-semibold text-foreground">Translucent Frosted Glass</h4>
                 <p className="text-xs text-muted-foreground leading-relaxed">
-                  Only applied to floating and sticky navigation chrome where the background content softly shines through without sacrificing readability.
+                  Only applied to floating and sticky navigation chrome where the background content
+                  softly shines through without sacrificing readability.
                 </p>
               </div>
             </div>
           </PageSection>
         </div>
       ) : null}
+
+      {/* 7. MOBILE FORMS & DIALOGS */}
+      {activeTab === 'mobile-forms' ? <MobileFormsLab /> : null}
     </AdminPage>
   );
 }

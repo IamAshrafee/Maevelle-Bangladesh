@@ -14,18 +14,19 @@ import type {
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import {
-  Dialog,
-  DialogClose,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
-import { SupplyTaskDialogContent } from '@/components/supply/supply-task-dialog-content';
+  Sheet,
+  SheetClose,
+  SheetContent,
+  SheetDescription,
+  SheetFooter,
+  SheetHeader,
+  SheetTitle,
+} from '@/components/ui/sheet';
 import { Field, FieldDescription, FieldLabel } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
 import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select';
 import { Textarea } from '@/components/ui/textarea';
+import { useFormDialogLifecycle } from '@/hooks/use-form-dialog-lifecycle';
 import { supplyRequest } from '@/lib/supply/api';
 
 export interface SupplierDialogProps {
@@ -93,6 +94,44 @@ export function SupplierDialog({ open, onOpenChange, supplier, onSuccess }: Supp
 
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const isDirty = isEditing
+    ? Boolean(
+        supplier &&
+          (name !== supplier.name ||
+            code !== supplier.code ||
+            status !== supplier.status ||
+            supplierType !== supplier.supplierType ||
+            countryCode !== (supplier.countryCode ?? '') ||
+            preferredCurrencyCode !== (supplier.preferredCurrencyCode ?? '') ||
+            leadTimeDays !==
+              (supplier.leadTimeDays !== undefined ? String(supplier.leadTimeDays) : '') ||
+            paymentTerms !== (supplier.paymentTerms ?? '') ||
+            defaultAdvancePercentage !== (supplier.defaultAdvancePercentage ?? '') ||
+            balanceDueEvent !== (supplier.balanceDueEvent ?? '') ||
+            websiteUrl !== (supplier.websiteUrl ?? '') ||
+            contactName !== (supplier.contactName ?? '') ||
+            contactEmail !== (supplier.contactEmail ?? '') ||
+            contactPhone !== (supplier.contactPhone ?? '') ||
+            notes !== (supplier.notes ?? '')),
+      )
+    : name.trim() !== '' ||
+      code.trim() !== '' ||
+      contactName.trim() !== '' ||
+      notes.trim() !== '' ||
+      websiteUrl.trim() !== '' ||
+      contactEmail.trim() !== '' ||
+      contactPhone.trim() !== '' ||
+      leadTimeDays !== '14' ||
+      defaultAdvancePercentage !== '30';
+
+  const { handleOpenChange, discardConfirmDialog } = useFormDialogLifecycle({
+    open,
+    onOpenChange,
+    isDirty,
+    isSubmitting: saving,
+    title: isEditing ? 'Discard supplier changes?' : 'Discard new supplier draft?',
+  });
 
   useEffect(() => {
     if (open) {
@@ -208,7 +247,7 @@ export function SupplierDialog({ open, onOpenChange, supplier, onSuccess }: Supp
         });
         onSuccess?.(response.data);
       }
-      onOpenChange(false);
+      handleOpenChange(false);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to save supplier.');
     } finally {
@@ -217,37 +256,44 @@ export function SupplierDialog({ open, onOpenChange, supplier, onSuccess }: Supp
   }
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <SupplyTaskDialogContent className="max-h-[92vh] max-w-2xl overflow-y-auto sm:max-w-2xl">
-        <DialogHeader>
-          <DialogTitle>{isEditing ? 'Edit Supplier Profile' : 'Add New Supplier'}</DialogTitle>
-          <DialogDescription>
-            {isEditing
-              ? `Update commercial terms, contact details, and lead time for ${supplier?.name}.`
-              : 'Register a manufacturer, wholesaler, or vendor with buying agreements and lead time defaults.'}
-          </DialogDescription>
-        </DialogHeader>
+    <>
+      <Sheet open={open} onOpenChange={handleOpenChange}>
+        <SheetContent side="right" className="flex w-full flex-col p-0 sm:max-w-2xl">
+          <SheetHeader className="shrink-0 border-b border-border/60 px-6 py-4 pr-12 text-left">
+            <SheetTitle>{isEditing ? 'Edit Supplier Profile' : 'Add New Supplier'}</SheetTitle>
+            <SheetDescription>
+              {isEditing
+                ? `Update commercial terms, contact details, and lead time for ${supplier?.name}.`
+                : 'Register a manufacturer, wholesaler, or vendor with buying agreements and lead time defaults.'}
+            </SheetDescription>
+          </SheetHeader>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
-          {error ? (
-            <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-xs text-destructive">
-              {error}
-            </div>
-          ) : null}
+          <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col">
+            <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-6 py-4">
+              {error ? (
+                <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-xs text-destructive">
+                  {error}
+                </div>
+              ) : null}
 
-          {!isEditing ? (
-            <div className="flex flex-col gap-3 rounded-lg border border-primary/25 bg-primary-subtle p-3 sm:flex-row sm:items-center sm:justify-between">
-              <div>
-                <p className="text-sm font-medium">Using a sourcing and import intermediary?</p>
-                <p className="text-xs text-muted-foreground">
-                  Apply an editable SkyBuy-style payment and end-to-end service setup.
-                </p>
-              </div>
-              <Button type="button" variant="outline" size="sm" onClick={applyIntermediaryPreset}>
-                Apply intermediary preset
-              </Button>
-            </div>
-          ) : null}
+              {!isEditing ? (
+                <div className="flex flex-col gap-3 rounded-lg border border-primary/25 bg-primary-subtle p-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <p className="text-sm font-medium">Using a sourcing and import intermediary?</p>
+                    <p className="text-xs text-muted-foreground">
+                      Apply an editable SkyBuy-style payment and end-to-end service setup.
+                    </p>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={applyIntermediaryPreset}
+                  >
+                    Apply intermediary preset
+                  </Button>
+                </div>
+              ) : null}
 
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <Field>
@@ -536,18 +582,25 @@ export function SupplierDialog({ open, onOpenChange, supplier, onSuccess }: Supp
               disabled={saving}
             />
           </Field>
+            </div>
 
-          <DialogFooter className="pt-2">
-            <DialogClose render={<Button type="button" variant="outline" disabled={saving} />}>
-              Cancel
-            </DialogClose>
-            <Button type="submit" disabled={saving}>
-              {saving ? <Loader2 className="size-4 animate-spin" /> : <Check className="size-4" />}
-              <span>{isEditing ? 'Save Changes' : 'Create Supplier'}</span>
-            </Button>
-          </DialogFooter>
-        </form>
-      </SupplyTaskDialogContent>
-    </Dialog>
+            <SheetFooter className="shrink-0 border-t border-border/60 px-6 py-4 pb-[max(1rem,env(safe-area-inset-bottom,0px))] sm:flex-row sm:justify-end">
+              <SheetClose render={<Button type="button" variant="outline" disabled={saving} />}>
+                Cancel
+              </SheetClose>
+              <Button type="submit" disabled={saving}>
+                {saving ? (
+                  <Loader2 className="size-4 animate-spin" />
+                ) : (
+                  <Check className="size-4" />
+                )}
+                <span>{isEditing ? 'Save Changes' : 'Create Supplier'}</span>
+              </Button>
+            </SheetFooter>
+          </form>
+        </SheetContent>
+      </Sheet>
+      {discardConfirmDialog}
+    </>
   );
 }

@@ -27,15 +27,11 @@ import type {
 } from '@maevelle/contracts';
 
 import { useAdminCapability } from '@/components/admin-capabilities';
-import {
-  OperationalEmptyState,
-  OperationalFeedback,
-  OperationalPageHeader,
-} from '@/components/operational-worklist';
+import { OperationalEmptyState, OperationalFeedback } from '@/components/operational-worklist';
 import { StatusBadge } from '@/components/status-badge';
 import { Badge } from '@/components/ui/badge';
-import { Breadcrumb } from '@/components/ui/breadcrumb';
 import { Button } from '@/components/ui/button';
+import { AdminPage, PageHeader } from '@/components/ui/page-shell';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { NativeSelect } from '@/components/ui/native-select';
 import { SearchInput } from '@/components/ui/search-input';
@@ -58,11 +54,7 @@ import { CapitalContributorDialog } from './capital/capital-contributor-dialog';
 import { CapitalMovementDialog } from './capital/capital-movement-dialog';
 import { CapitalOwnerExpenseDialog } from './capital/capital-owner-expense-dialog';
 import { CapitalReversalDialog } from './capital/capital-reversal-dialog';
-import {
-  type CapitalDialog,
-  type CapitalSheet,
-  signedMoney,
-} from './capital/types';
+import { type CapitalDialog, type CapitalSheet, signedMoney } from './capital/types';
 
 const emptyPagination = { page: 1, pageSize: 25, totalItems: 0, totalPages: 0 };
 
@@ -88,7 +80,9 @@ export function CapitalConsole() {
   // Filtering state
   const [searchQuery, setSearchQuery] = useState('');
   const [contributorFilter, setContributorFilter] = useState('');
-  const [eventTypeFilter, setEventTypeFilter] = useState<'ALL' | CapitalEventDto['eventType']>('ALL');
+  const [eventTypeFilter, setEventTypeFilter] = useState<'ALL' | CapitalEventDto['eventType']>(
+    'ALL',
+  );
   const [page, setPage] = useState(1);
 
   const [state, setState] = useState<'loading' | 'ready' | 'error'>('loading');
@@ -125,7 +119,9 @@ export function CapitalConsole() {
       setAccounts(financialAccounts);
       setExpenses(outstandingExpenses.items);
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : 'Owner capital data could not be loaded.');
+      setMessage(
+        error instanceof Error ? error.message : 'Owner capital data could not be loaded.',
+      );
       setTone('danger');
       setState('error');
     }
@@ -204,10 +200,16 @@ export function CapitalConsole() {
     setPage(1);
   }
 
-  const hasActiveFilters = Boolean(searchQuery.trim()) || Boolean(contributorFilter) || eventTypeFilter !== 'ALL';
+  const hasActiveFilters =
+    Boolean(searchQuery.trim()) || Boolean(contributorFilter) || eventTypeFilter !== 'ALL';
 
   // Command execution helper
-  async function submitCommand(path: string, method: string, body: Record<string, unknown>, successMessage: string) {
+  async function submitCommand(
+    path: string,
+    method: string,
+    body: Record<string, unknown>,
+    successMessage: string,
+  ) {
     setBusy(true);
     setMessage('');
     try {
@@ -235,47 +237,43 @@ export function CapitalConsole() {
 
   if (!canView) {
     return (
-      <main className="px-4 py-5 sm:px-6 lg:px-8">
+      <AdminPage variant="wide">
         <OperationalFeedback tone="danger">
           You do not have permission to view owner capital. Contact your organization administrator.
         </OperationalFeedback>
-      </main>
+      </AdminPage>
     );
   }
 
   if (state === 'loading' && !overview) {
     return (
-      <main className="grid gap-5 px-4 py-5 sm:px-6 lg:px-8">
+      <AdminPage variant="wide">
         <Skeleton className="h-16 rounded-xl" />
         <Skeleton className="h-28 rounded-xl" />
         <Skeleton className="h-64 rounded-xl" />
         <Skeleton className="h-80 rounded-xl" />
-      </main>
+      </AdminPage>
     );
   }
 
   if (!overview) {
     return (
-      <main className="px-4 py-5 sm:px-6 lg:px-8">
+      <AdminPage variant="wide">
         <OperationalFeedback tone="danger">
           {message || 'Owner capital is currently unavailable.'}
         </OperationalFeedback>
-      </main>
+      </AdminPage>
     );
   }
 
   return (
-    <main className="min-w-0 px-4 py-5 sm:px-6 lg:px-8">
-      <div className="mx-auto grid max-w-[1500px] gap-6">
-        <Breadcrumb
-          mobileMode="back"
-          items={[
+    <AdminPage variant="wide">
+      <div className="grid gap-6">
+        <PageHeader
+          breadcrumbs={[
             { label: 'Finance', href: '/finance' },
             { label: 'Owner capital', current: true },
           ]}
-        />
-
-        <OperationalPageHeader
           eyebrow="Finance"
           title="Owner capital & funding"
           description="Track money contributed into business accounts and commercial costs paid directly with personal funds. Owner capital updates cash and funding positions without distorting sales revenue."
@@ -313,7 +311,9 @@ export function CapitalConsole() {
           <StatsCard>
             <StatsTitle>Personally funded costs</StatsTitle>
             <StatsValue>{formatMoney(overview.ownerFundedExpenses, overview.currency)}</StatsValue>
-            <StatsDescription>Business expenses & supplier bills paid outside accounts</StatsDescription>
+            <StatsDescription>
+              Business expenses & supplier bills paid outside accounts
+            </StatsDescription>
           </StatsCard>
           <StatsCard>
             <StatsTitle>Withdrawn</StatsTitle>
@@ -337,11 +337,13 @@ export function CapitalConsole() {
             <div>
               <CardTitle className="text-base font-semibold">Capital contributors</CardTitle>
               <CardDescription className="text-xs">
-                Individuals providing permanent capital or funding costs personally. Independent of team membership or cap-table shares.
+                Individuals providing permanent capital or funding costs personally. Independent of
+                team membership or cap-table shares.
               </CardDescription>
             </div>
             <span className="text-xs text-muted-foreground font-medium shrink-0">
-              {overview.contributorCount} registered {overview.contributorCount === 1 ? 'person' : 'people'}
+              {overview.contributorCount} registered{' '}
+              {overview.contributorCount === 1 ? 'person' : 'people'}
             </span>
           </CardHeader>
           <CardContent>
@@ -350,7 +352,7 @@ export function CapitalConsole() {
                 {contributors.map((person) => (
                   <div
                     key={person.id}
-                    className="group rounded-xl border border-border/70 bg-card p-4 transition-all hover:border-primary/40 hover:shadow-xs flex flex-col justify-between"
+                    className="group rounded-xl border border-border/70 bg-card p-4 transition-[border-color,box-shadow] duration-150 hover:border-primary/40 hover:shadow-xs flex flex-col justify-between"
                   >
                     <div>
                       <div className="flex items-start justify-between gap-2">
@@ -428,7 +430,9 @@ export function CapitalConsole() {
                         size="xs"
                         variant="ghost"
                         className="text-xs text-primary hover:underline gap-1 p-0 h-auto font-medium"
-                        onClick={() => setSheet({ kind: 'contributor-detail', contributorId: person.id })}
+                        onClick={() =>
+                          setSheet({ kind: 'contributor-detail', contributorId: person.id })
+                        }
                       >
                         <span>View details & ledger</span>
                         <ExternalLink className="size-3" />
@@ -461,7 +465,8 @@ export function CapitalConsole() {
               <div>
                 <CardTitle className="text-base font-semibold">Capital ledger</CardTitle>
                 <CardDescription className="text-xs">
-                  Authoritative, append-only history tracing contributions, personal payments, withdrawals, and corrections.
+                  Authoritative, append-only history tracing contributions, personal payments,
+                  withdrawals, and corrections.
                 </CardDescription>
               </div>
               <span className="text-xs text-muted-foreground">
@@ -541,7 +546,7 @@ export function CapitalConsole() {
             {events.length ? (
               <div className="rounded-xl border overflow-hidden">
                 <div className="overflow-x-auto">
-                  <Table>
+                  <Table density="compact" stickyHeader>
                     <TableHeader>
                       <TableRow className="hover:bg-transparent">
                         <TableHead className="w-[14%]">Date</TableHead>
@@ -560,7 +565,9 @@ export function CapitalConsole() {
                           <TableRow
                             key={event.id}
                             className="cursor-pointer hover:bg-muted/40 transition-colors"
-                            onClick={() => setSheet({ kind: 'transaction-detail', eventId: event.id })}
+                            onClick={() =>
+                              setSheet({ kind: 'transaction-detail', eventId: event.id })
+                            }
                           >
                             {/* Date */}
                             <TableCell className="whitespace-nowrap text-xs text-muted-foreground">
@@ -574,7 +581,10 @@ export function CapitalConsole() {
                                 className="font-semibold text-xs text-foreground hover:text-primary hover:underline flex items-center gap-1.5"
                                 onClick={(e) => {
                                   e.stopPropagation();
-                                  setSheet({ kind: 'contributor-detail', contributorId: event.contributorId });
+                                  setSheet({
+                                    kind: 'contributor-detail',
+                                    contributorId: event.contributorId,
+                                  });
                                 }}
                               >
                                 <User className="size-3.5 text-muted-foreground" />
@@ -603,7 +613,9 @@ export function CapitalConsole() {
                                   onClick={(e) => e.stopPropagation()}
                                 >
                                   <Landmark className="size-3.5 text-emerald-600 shrink-0" />
-                                  <span className="truncate max-w-[140px]">{event.accountName}</span>
+                                  <span className="truncate max-w-[140px]">
+                                    {event.accountName}
+                                  </span>
                                 </Link>
                               ) : event.expenseId && event.expenseNumber ? (
                                 <Link
@@ -643,10 +655,16 @@ export function CapitalConsole() {
                             {/* Capital Impact */}
                             <TableCell
                               className={`text-right text-xs font-semibold tabular-nums ${
-                                isNeg ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-600 dark:text-emerald-400'
+                                isNeg
+                                  ? 'text-rose-600 dark:text-rose-400'
+                                  : 'text-emerald-600 dark:text-emerald-400'
                               }`}
                             >
-                              {signedMoney(event.amountDelta, event.currencyCode || defaultCurrency, formatMoney)}
+                              {signedMoney(
+                                event.amountDelta,
+                                event.currencyCode || defaultCurrency,
+                                formatMoney,
+                              )}
                             </TableCell>
 
                             {/* Actions */}
@@ -675,7 +693,11 @@ export function CapitalConsole() {
               </div>
             ) : (
               <OperationalEmptyState
-                title={hasActiveFilters ? 'No matching capital transactions' : 'No capital activity recorded yet'}
+                title={
+                  hasActiveFilters
+                    ? 'No matching capital transactions'
+                    : 'No capital activity recorded yet'
+                }
                 description={
                   hasActiveFilters
                     ? 'No transactions matched the search query or selected filters. Try clearing or relaxing filters.'
@@ -687,7 +709,9 @@ export function CapitalConsole() {
                       Clear filters
                     </Button>
                   ) : canManage ? (
-                    <Button onClick={() => setDialog({ kind: 'movement', movementType: 'CONTRIBUTION' })}>
+                    <Button
+                      onClick={() => setDialog({ kind: 'movement', movementType: 'CONTRIBUTION' })}
+                    >
                       <Plus className="size-4 mr-1.5" />
                       <span>Record first contribution</span>
                     </Button>
@@ -740,7 +764,11 @@ export function CapitalConsole() {
           }}
           onRecordContribution={(cId) => {
             setSheet(undefined);
-            setDialog({ kind: 'movement', movementType: 'CONTRIBUTION', preselectedContributorId: cId });
+            setDialog({
+              kind: 'movement',
+              movementType: 'CONTRIBUTION',
+              preselectedContributorId: cId,
+            });
           }}
           onRecordPersonalPayment={(cId) => {
             setSheet(undefined);
@@ -748,7 +776,11 @@ export function CapitalConsole() {
           }}
           onRecordWithdrawal={(cId) => {
             setSheet(undefined);
-            setDialog({ kind: 'movement', movementType: 'WITHDRAWAL', preselectedContributorId: cId });
+            setDialog({
+              kind: 'movement',
+              movementType: 'WITHDRAWAL',
+              preselectedContributorId: cId,
+            });
           }}
           onOpenTransaction={(eId) => {
             setSheet({ kind: 'transaction-detail', eventId: eId });
@@ -826,7 +858,9 @@ export function CapitalConsole() {
         {/* Record Capital Movement (Contribution or Withdrawal) Dialog */}
         <CapitalMovementDialog
           initialType={dialog?.kind === 'movement' ? dialog.movementType : 'CONTRIBUTION'}
-          preselectedContributorId={dialog?.kind === 'movement' ? dialog.preselectedContributorId : undefined}
+          preselectedContributorId={
+            dialog?.kind === 'movement' ? dialog.preselectedContributorId : undefined
+          }
           contributors={contributors}
           accounts={accounts}
           defaultCurrency={defaultCurrency}
@@ -850,8 +884,12 @@ export function CapitalConsole() {
 
         {/* Record Personal Payment (Owner-Funded Expense) Dialog */}
         <CapitalOwnerExpenseDialog
-          preselectedExpenseId={dialog?.kind === 'owner-expense' ? dialog.preselectedExpenseId : undefined}
-          preselectedContributorId={dialog?.kind === 'owner-expense' ? dialog.preselectedContributorId : undefined}
+          preselectedExpenseId={
+            dialog?.kind === 'owner-expense' ? dialog.preselectedExpenseId : undefined
+          }
+          preselectedContributorId={
+            dialog?.kind === 'owner-expense' ? dialog.preselectedContributorId : undefined
+          }
           contributors={contributors}
           expenses={expenses}
           defaultCurrency={defaultCurrency}
@@ -896,6 +934,6 @@ export function CapitalConsole() {
           }}
         />
       </div>
-    </main>
+    </AdminPage>
   );
 }

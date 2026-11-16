@@ -125,7 +125,7 @@ export function UnitsCollection({
   return (
     <div className="overflow-hidden rounded-xl border bg-card shadow-2xs">
       <div className="hidden overflow-x-auto md:block">
-        <Table density="compact">
+        <Table stickyHeader density="compact">
           <TableHeader>
             <TableRow>
               <TableHead className="w-10">

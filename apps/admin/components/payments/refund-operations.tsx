@@ -2,6 +2,7 @@
 import { useState } from 'react';
 import type { PaymentDto, RefundDto } from '@maevelle/contracts';
 import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
 import { PaymentCommand } from './payment-command';
 import { PaymentField, PaymentMoney, PaymentNotice } from './payment-ui';
 import { usePaymentPermission } from './use-payment-query';
@@ -128,9 +129,9 @@ export function RefundOperations({
                 name="externalReference"
                 maxLength={128}
               />
-              <label className="flex items-center gap-2 text-sm">
-                <input type="checkbox" name="originalSourceVerified" required />I independently
-                verified the original payment source and actual refund transfer.
+              <label className="flex items-center gap-2.5 text-xs text-foreground cursor-pointer">
+                <Checkbox name="originalSourceVerified" required />
+                <span>I independently verified the original payment source and actual refund transfer.</span>
               </label>
             </>
           ) : (

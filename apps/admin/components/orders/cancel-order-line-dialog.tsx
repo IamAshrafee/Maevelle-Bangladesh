@@ -16,7 +16,9 @@ import {
   DialogTrigger,
 } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
+import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select';
 import { Textarea } from '@/components/ui/textarea';
+import { useFormDialogLifecycle } from '@/hooks/use-form-dialog-lifecycle';
 import { fetchApiData } from '@/lib/api';
 import { formatQuantity } from '@/lib/format/numbers';
 
@@ -36,6 +38,17 @@ export function CancelOrderLineDialog({
   const [reasonText, setReasonText] = useState('');
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
+
+  const isDirty = reasonText.trim().length > 0 || reasonCode !== 'CUSTOMER_REQUEST';
+
+  const lifecycle = useFormDialogLifecycle({
+    open,
+    onOpenChange: setOpen,
+    isDirty,
+    isSubmitting: busy,
+    title: 'Discard item cancellation notes?',
+    description: 'You have entered explanation notes. Are you sure you want to dismiss?',
+  });
 
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -62,7 +75,7 @@ export function CancelOrderLineDialog({
   }
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog open={open} onOpenChange={lifecycle.handleOpenChange}>
       <DialogTrigger
         render={<Button size="sm" variant="ghost" aria-label={`Cancel ${line.productTitle}`} />}
       >
@@ -88,18 +101,17 @@ export function CancelOrderLineDialog({
         <form className="space-y-4" onSubmit={submit}>
           <div className="space-y-2">
             <Label htmlFor={`line-cancel-reason-${line.id}`}>Reason</Label>
-            <select
+            <NativeSelect
               id={`line-cancel-reason-${line.id}`}
-              className="flex h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
               value={reasonCode}
               onChange={(event) => setReasonCode(event.target.value)}
             >
-              <option value="CUSTOMER_REQUEST">Customer request</option>
-              <option value="OUT_OF_STOCK">Stock correction</option>
-              <option value="DUPLICATE_ITEM">Duplicate item</option>
-              <option value="ADMIN_CORRECTION">Admin correction</option>
-              <option value="OTHER">Other</option>
-            </select>
+              <NativeSelectOption value="CUSTOMER_REQUEST">Customer request</NativeSelectOption>
+              <NativeSelectOption value="OUT_OF_STOCK">Stock correction</NativeSelectOption>
+              <NativeSelectOption value="DUPLICATE_ITEM">Duplicate item</NativeSelectOption>
+              <NativeSelectOption value="ADMIN_CORRECTION">Admin correction</NativeSelectOption>
+              <NativeSelectOption value="OTHER">Other</NativeSelectOption>
+            </NativeSelect>
           </div>
           <div className="space-y-2">
             <Label htmlFor={`line-cancel-note-${line.id}`}>Internal explanation</Label>
@@ -112,7 +124,12 @@ export function CancelOrderLineDialog({
             />
           </div>
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => setOpen(false)} disabled={busy}>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => lifecycle.handleOpenChange(false)}
+              disabled={busy}
+            >
               Keep item
             </Button>
             <Button type="submit" variant="destructive" disabled={busy}>
@@ -122,6 +139,7 @@ export function CancelOrderLineDialog({
           </DialogFooter>
         </form>
       </DialogContent>
+      {lifecycle.discardConfirmDialog}
     </Dialog>
   );
 }

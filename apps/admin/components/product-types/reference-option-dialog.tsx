@@ -4,16 +4,19 @@ import { type FormEvent, useState } from 'react';
 
 import type { CatalogDefinitionStatusDto } from '@maevelle/contracts';
 
-import { classificationRequest, slugify } from '@/components/catalog-classification/classification-api';
+import {
+  classificationRequest,
+  slugify,
+} from '@/components/catalog-classification/classification-api';
 import { Button } from '@/components/ui/button';
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetFooter,
+  SheetHeader,
+  SheetTitle,
+} from '@/components/ui/sheet';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import {
@@ -57,91 +60,92 @@ export function ReferenceOptionDialog(props: {
   }
 
   return (
-    <Dialog open onOpenChange={(open) => !open && !props.saving && props.onClose()}>
-      <DialogContent className="sm:max-w-lg">
-        <DialogHeader>
-          <DialogTitle>
+    <Sheet open onOpenChange={(open) => !open && !props.saving && props.onClose()}>
+      <SheetContent side="right" className="gap-0 p-0 sm:max-w-lg">
+        <SheetHeader className="shrink-0 border-b border-border px-5 py-4 pr-11 text-left">
+          <SheetTitle>
             {item ? 'Edit selector option' : `Add option to ${props.editor.attribute.name}`}
-          </DialogTitle>
-          <DialogDescription>
+          </SheetTitle>
+          <SheetDescription>
             Options are tenant-scoped stable references; archiving one preserves existing Product
             selections.
-          </DialogDescription>
-        </DialogHeader>
-        <form
-          className="grid gap-4"
-          id="reference-option-form"
-          onSubmit={(event) => void submit(event)}
-        >
-          <ErrorNotice message={props.error} />
-          <div className="grid gap-2">
-            <Label htmlFor="reference-option-label">Label</Label>
-            <Input
-              autoFocus
-              id="reference-option-label"
-              maxLength={120}
-              required
-              value={label}
-              onChange={(event) => {
-                setLabel(event.target.value);
-                if (!codeEdited) setCode(slugify(event.target.value));
-              }}
-            />
-          </div>
-          <div className="grid gap-2">
-            <Label htmlFor="reference-option-code">Code</Label>
-            <Input
-              disabled={Boolean(item)}
-              id="reference-option-code"
-              pattern="^[a-z0-9]+(?:-[a-z0-9]+)*$"
-              required
-              value={code}
-              onChange={(event) => {
-                setCodeEdited(true);
-                setCode(event.target.value.toLowerCase());
-              }}
-            />
-          </div>
-          <div className="grid gap-4 sm:grid-cols-2">
+          </SheetDescription>
+        </SheetHeader>
+        <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
+          <form
+            className="grid gap-4"
+            id="reference-option-form"
+            onSubmit={(event) => void submit(event)}
+          >
+            <ErrorNotice message={props.error} />
             <div className="grid gap-2">
-              <Label htmlFor="reference-option-position">Display order</Label>
+              <Label htmlFor="reference-option-label">Label</Label>
               <Input
-                id="reference-option-position"
-                min={0}
+                id="reference-option-label"
+                maxLength={120}
                 required
-                type="number"
-                value={position}
-                onChange={(event) => setPosition(Math.max(0, Number(event.target.value) || 0))}
+                value={label}
+                onChange={(event) => {
+                  setLabel(event.target.value);
+                  if (!codeEdited) setCode(slugify(event.target.value));
+                }}
               />
             </div>
-            {item ? (
+            <div className="grid gap-2">
+              <Label htmlFor="reference-option-code">Code</Label>
+              <Input
+                disabled={Boolean(item)}
+                id="reference-option-code"
+                pattern="^[a-z0-9]+(?:-[a-z0-9]+)*$"
+                required
+                value={code}
+                onChange={(event) => {
+                  setCodeEdited(true);
+                  setCode(event.target.value.toLowerCase());
+                }}
+              />
+            </div>
+            <div className="grid gap-4 sm:grid-cols-2">
               <div className="grid gap-2">
-                <Label htmlFor="reference-option-status">Status</Label>
-                <Select
-                  value={status}
-                  onValueChange={(value) => setStatus(value as CatalogDefinitionStatusDto)}
-                >
-                  <SelectTrigger id="reference-option-status">
-                    <SelectValue placeholder="Select status" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="ACTIVE">Active</SelectItem>
-                    <SelectItem value="ARCHIVED">Archived</SelectItem>
-                  </SelectContent>
-                </Select>
+                <Label htmlFor="reference-option-position">Display order</Label>
+                <Input
+                  id="reference-option-position"
+                  min={0}
+                  required
+                  type="number"
+                  value={position}
+                  onChange={(event) => setPosition(Math.max(0, Number(event.target.value) || 0))}
+                />
               </div>
-            ) : null}
-          </div>
-        </form>
-        <DialogFooter>
+              {item ? (
+                <div className="grid gap-2">
+                  <Label htmlFor="reference-option-status">Status</Label>
+                  <Select
+                    value={status}
+                    onValueChange={(value) => setStatus(value as CatalogDefinitionStatusDto)}
+                  >
+                    <SelectTrigger id="reference-option-status">
+                      <SelectValue placeholder="Select status" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="ACTIVE">Active</SelectItem>
+                      <SelectItem value="ARCHIVED">Archived</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              ) : null}
+            </div>
+          </form>
+        </div>
+        <SheetFooter className="shrink-0 flex-row items-center justify-end gap-2 border-t border-border bg-card/50 px-5 py-3">
           <Button disabled={props.saving} type="button" variant="outline" onClick={props.onClose}>
             Cancel
           </Button>
           <Button disabled={props.saving} form="reference-option-form" type="submit">
             {props.saving ? 'Saving…' : item ? 'Save option' : 'Add option'}
           </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+        </SheetFooter>
+      </SheetContent>
+    </Sheet>
   );
 }

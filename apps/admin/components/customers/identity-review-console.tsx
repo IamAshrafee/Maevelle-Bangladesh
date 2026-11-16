@@ -24,7 +24,6 @@ import {
   PageHeader,
   PagePanel,
 } from '@/components/ui/page-shell';
-import { CrmNav } from './crm-nav';
 import { IdentityDecisionDialog } from './identity-decision-dialog';
 
 export function IdentityReviewConsole() {
@@ -47,16 +46,13 @@ export function IdentityReviewConsole() {
     void load();
   }, [load]);
   return (
-    <AdminPage>
+    <AdminPage variant="wide">
       <PageHeader
         eyebrow="Customer 360"
         title="Identity review"
         description="Review scoped website, Facebook, and Instagram identity evidence. Unverified candidates never expose customer history."
-        actions={
-          <RefreshButton onRefresh={() => void load()} tooltip="Refresh identity review" />
-        }
+        actions={<RefreshButton onRefresh={() => void load()} tooltip="Refresh identity review" />}
       />
-      <CrmNav />
       {error ? (
         <ErrorState message={error} onRetry={() => void load()} />
       ) : !result ? (
@@ -69,7 +65,7 @@ export function IdentityReviewConsole() {
         />
       ) : (
         <PagePanel className="overflow-x-auto p-0">
-          <Table density="compact">
+          <Table density="compact" stickyHeader>
             <TableHeader>
               <TableRow>
                 <TableHead>Channel identity</TableHead>

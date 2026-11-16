@@ -2,10 +2,18 @@
 
 import { type FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
 import type { FinancialAccountDto } from '@maevelle/contracts';
-import { Sparkles } from 'lucide-react';
+import { AlertCircle, Loader2, Sparkles } from 'lucide-react';
 
-import { ActionDialog } from '@/components/ui/action-dialog';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetFooter,
+  SheetHeader,
+  SheetTitle,
+} from '@/components/ui/sheet';
 import { Field, FieldDescription, FieldError, FieldLabel } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
 import {
@@ -15,6 +23,8 @@ import {
   InputGroupInput,
 } from '@/components/ui/input-group';
 import { NativeSelect } from '@/components/ui/native-select';
+import { MoneyField } from '@/components/ui/money-field';
+import { useFormDialogLifecycle } from '@/hooks/use-form-dialog-lifecycle';
 
 export type AccountType = 'MOBILE_WALLET' | 'BANK' | 'CASH' | 'OTHER';
 
@@ -234,149 +244,175 @@ export function CreateFinancialAccountDialog({
 
   const isFormBusy = busy || isSubmitting;
 
-  return (
-    <ActionDialog
-      open={open}
-      onOpenChange={onOpenChange}
-      size="lg"
-      title="Create financial account"
-      description="Add a bank account, mobile wallet, cash drawer, or courier clearing account."
-      onSubmit={handleSubmit}
-      error={inDialogError}
-      busy={isFormBusy}
-      submitLabel="Create account"
-      busyLabel="Creating…"
-      submitDisabled={Boolean(conflictingAccount) || isOpeningBalanceInvalid}
-    >
-      <div className="grid gap-3.5 sm:grid-cols-2">
-        <Field className="sm:col-span-2">
-          <FieldLabel className="text-xs font-medium">Account name</FieldLabel>
-          <Input
-            name="name"
-            value={name}
-            onChange={(e) => handleNameChange(e.target.value)}
-            placeholder="e.g. Main bKash Wallet"
-            disabled={isFormBusy}
-            required
-            autoFocus
-          />
-        </Field>
-
-        <Field>
-          <FieldLabel className="text-xs font-medium">Account type</FieldLabel>
-          <NativeSelect
-            name="accountType"
-            value={accountType}
-            onChange={(e) => handleTypeChange(e.target.value as AccountType)}
-            disabled={isFormBusy}
-            className="w-full"
-          >
-            <option value="MOBILE_WALLET">Mobile wallet (bKash, Nagad…)</option>
-            <option value="BANK">Bank account</option>
-            <option value="CASH">Cash drawer / register</option>
-            <option value="OTHER">Courier holding / other</option>
-          </NativeSelect>
-        </Field>
-
-        <Field>
-          <div className="flex items-center justify-between">
-            <FieldLabel className="text-xs font-medium">Account code</FieldLabel>
-            <Button
-              type="button"
-              variant="ghost"
-              size="xs"
-              onClick={handleAutoSuggestCode}
-              disabled={isFormBusy}
-              className="h-4 px-1 text-[11px] text-muted-foreground hover:text-foreground"
-            >
-              <Sparkles className="size-3 mr-1" /> Suggest
-            </Button>
-          </div>
-          <Input
-            name="accountNumber"
-            value={accountNumber}
-            onChange={(e) => {
-              setAccountNumber(e.target.value.toUpperCase());
-              setUserCustomizedCode(true);
-            }}
-            placeholder="BKASH-01"
-            disabled={isFormBusy}
-            required
-          />
-          {conflictingAccount ? (
-            <FieldError className="text-[11px]">
-              Already used by &quot;{conflictingAccount.name}&quot;
-            </FieldError>
-          ) : null}
-        </Field>
-
-        <Field>
-          <FieldLabel className="text-xs font-medium">Currency</FieldLabel>
-          <NativeSelect
-            name="currencyCode"
-            value={currencyCode}
-            onChange={(e) => setCurrencyCode(e.target.value)}
-            disabled={isFormBusy}
-            className="w-full"
-          >
-            <option value="BDT">BDT — Bangladeshi Taka (৳)</option>
-            <option value="USD">USD — US Dollar ($)</option>
-            <option value="EUR">EUR — Euro (€)</option>
-            <option value="GBP">GBP — British Pound (£)</option>
-          </NativeSelect>
-        </Field>
-
-        <Field>
-          <FieldLabel className="text-xs font-medium">
-            Reference <span className="font-normal text-muted-foreground">(optional)</span>
-          </FieldLabel>
-          <Input
-            name="referenceLabel"
-            value={referenceLabel}
-            onChange={(e) => setReferenceLabel(e.target.value)}
-            placeholder={currentReferencePlaceholder}
-            disabled={isFormBusy}
-            maxLength={200}
-          />
-        </Field>
-
-        <Field className="sm:col-span-2">
-          <FieldLabel className="text-xs font-medium">
-            Opening balance <span className="font-normal text-muted-foreground">(optional)</span>
-          </FieldLabel>
-          <InputGroup>
-            <InputGroupAddon align="inline-start">
-              <span className="text-xs font-medium text-muted-foreground">{currencyCode}</span>
-            </InputGroupAddon>
-            <InputGroupInput
-              name="openingBalance"
-              value={openingBalance}
-              onChange={(e) => setOpeningBalance(e.target.value)}
-              inputMode="decimal"
-              placeholder="0.00"
-              disabled={isFormBusy}
-            />
-            {openingBalance ? (
-              <InputGroupButton
-                size="xs"
-                onClick={() => setOpeningBalance('')}
-                disabled={isFormBusy}
-              >
-                Clear
-              </InputGroupButton>
-            ) : null}
-          </InputGroup>
-          {isOpeningBalanceInvalid ? (
-            <FieldError className="text-[11px]">
-              Please enter a valid numeric amount (e.g. 15000 or 15000.50).
-            </FieldError>
-          ) : (
-            <FieldDescription className="text-[11px] text-muted-foreground">
-              Immutable opening ledger entry. Leave empty for zero starting balance.
-            </FieldDescription>
-          )}
-        </Field>
-      </div>
-    </ActionDialog>
+  const isDirty = Boolean(
+    name.trim() !== '' ||
+      openingBalance.trim() !== '' ||
+      referenceLabel.trim() !== '' ||
+      userCustomizedCode,
   );
+
+  const { handleOpenChange, discardConfirmDialog } = useFormDialogLifecycle({
+    isDirty,
+    isSubmitting: isFormBusy,
+    onClose: () => onOpenChange(false),
+    confirmTitle: 'Discard new financial account?',
+    confirmDescription:
+      'You have entered account details. Closing without saving will discard your changes.',
+  });
+
+  return (
+    <>
+      <Sheet open={open} onOpenChange={handleOpenChange}>
+        <SheetContent
+          side="right"
+          className="flex w-full flex-col gap-0 p-0 sm:max-w-lg"
+        >
+          <SheetHeader className="shrink-0 border-b border-border/60 px-6 py-4 text-left">
+            <SheetTitle>Create financial account</SheetTitle>
+            <SheetDescription>
+              Add a bank account, mobile wallet, cash drawer, or courier clearing account.
+            </SheetDescription>
+          </SheetHeader>
+
+          <form className="flex min-h-0 flex-1 flex-col" onSubmit={handleSubmit}>
+            <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-6 py-4">
+              {inDialogError ? (
+                <Alert variant="destructive">
+                  <AlertCircle className="size-4" />
+                  <AlertDescription>{inDialogError}</AlertDescription>
+                </Alert>
+              ) : null}
+
+              <div className="grid gap-3.5 sm:grid-cols-2">
+            <Field className="sm:col-span-2">
+              <FieldLabel className="text-xs font-medium">Account name</FieldLabel>
+              <Input
+                name="name"
+                value={name}
+                onChange={(e) => handleNameChange(e.target.value)}
+                placeholder="e.g. Main bKash Wallet"
+                disabled={isFormBusy}
+                required
+              />
+            </Field>
+
+            <Field>
+              <FieldLabel className="text-xs font-medium">Account type</FieldLabel>
+              <NativeSelect
+                name="accountType"
+                value={accountType}
+                onChange={(e) => handleTypeChange(e.target.value as AccountType)}
+                disabled={isFormBusy}
+                className="w-full"
+              >
+                <option value="MOBILE_WALLET">Mobile wallet (bKash, Nagad…)</option>
+                <option value="BANK">Bank account</option>
+                <option value="CASH">Cash drawer / register</option>
+                <option value="OTHER">Courier holding / other</option>
+              </NativeSelect>
+            </Field>
+
+            <Field>
+              <div className="flex items-center justify-between">
+                <FieldLabel className="text-xs font-medium">Account code</FieldLabel>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="xs"
+                  onClick={handleAutoSuggestCode}
+                  disabled={isFormBusy}
+                  className="h-4 px-1 text-[11px] text-muted-foreground hover:text-foreground"
+                >
+                  <Sparkles className="mr-1 size-3" /> Suggest
+                </Button>
+              </div>
+              <Input
+                name="accountNumber"
+                value={accountNumber}
+                onChange={(e) => {
+                  setAccountNumber(e.target.value.toUpperCase());
+                  setUserCustomizedCode(true);
+                }}
+                placeholder="BKASH-01"
+                disabled={isFormBusy}
+                required
+              />
+              {conflictingAccount ? (
+                <FieldError className="text-[11px]">
+                  Already used by &quot;{conflictingAccount.name}&quot;
+                </FieldError>
+              ) : null}
+            </Field>
+
+            <Field>
+              <FieldLabel className="text-xs font-medium">Currency</FieldLabel>
+              <NativeSelect
+                name="currencyCode"
+                value={currencyCode}
+                onChange={(e) => setCurrencyCode(e.target.value)}
+                disabled={isFormBusy}
+                className="w-full"
+              >
+                <option value="BDT">BDT — Bangladeshi Taka (৳)</option>
+                <option value="USD">USD — US Dollar ($)</option>
+                <option value="EUR">EUR — Euro (€)</option>
+                <option value="GBP">GBP — British Pound (£)</option>
+              </NativeSelect>
+            </Field>
+
+            <Field>
+              <FieldLabel className="text-xs font-medium">
+                Reference <span className="font-normal text-muted-foreground">(optional)</span>
+              </FieldLabel>
+              <Input
+                name="referenceLabel"
+                value={referenceLabel}
+                onChange={(e) => setReferenceLabel(e.target.value)}
+                placeholder={currentReferencePlaceholder}
+                disabled={isFormBusy}
+                maxLength={200}
+              />
+            </Field>
+
+            <MoneyField
+              label="Opening balance"
+              description="Immutable opening ledger entry. Leave empty for zero starting balance."
+              error={
+                isOpeningBalanceInvalid
+                  ? 'Please enter a valid numeric amount (e.g. 15000 or 15000.50).'
+                  : null
+              }
+              value={openingBalance}
+              onChange={setOpeningBalance}
+              placeholder="0.00"
+              currencySymbol={currencyCode === 'BDT' ? '৳' : currencyCode}
+              disabled={isFormBusy}
+              containerClassName="sm:col-span-2"
+            />
+          </div>
+        </div>
+
+        <SheetFooter className="shrink-0 flex-row items-center justify-end gap-2 border-t border-border/60 bg-card/50 px-6 py-3 pb-[max(1rem,env(safe-area-inset-bottom,0px))] sm:pb-3">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => handleOpenChange(false)}
+            disabled={isFormBusy}
+          >
+            Cancel
+          </Button>
+          <Button
+            type="submit"
+            disabled={isFormBusy || Boolean(conflictingAccount) || isOpeningBalanceInvalid}
+          >
+            {isFormBusy ? <Loader2 className="mr-2 size-4 animate-spin" /> : null}
+            <span>{isFormBusy ? 'Creating…' : 'Create account'}</span>
+          </Button>
+        </SheetFooter>
+        </form>
+      </SheetContent>
+    </Sheet>
+    {discardConfirmDialog}
+  </>
+);
 }

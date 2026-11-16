@@ -153,8 +153,8 @@ export function AuthorizeReturnDialog({
             Authorize Return Case #{returnCase.return_number}
           </DialogTitle>
           <DialogDescription>
-            Approve or reject the buyer&apos;s return request. Authorizing allows warehouse staff
-            to post physical receipts.
+            Approve or reject the buyer&apos;s return request. Authorizing allows warehouse staff to
+            post physical receipts.
           </DialogDescription>
         </DialogHeader>
 
@@ -172,7 +172,7 @@ export function AuthorizeReturnDialog({
               <button
                 type="button"
                 onClick={() => setDecision('APPROVE')}
-                className={`flex items-center justify-center gap-2 p-3 rounded-lg border text-sm font-medium transition-all ${
+                className={`flex items-center justify-center gap-2 p-3 rounded-lg border text-sm font-medium transition-colors duration-150 ${
                   decision === 'APPROVE'
                     ? 'border-emerald-600 bg-emerald-50 text-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-300 ring-2 ring-emerald-600'
                     : 'border-border hover:bg-muted text-muted-foreground'
@@ -184,7 +184,7 @@ export function AuthorizeReturnDialog({
               <button
                 type="button"
                 onClick={() => setDecision('REJECT')}
-                className={`flex items-center justify-center gap-2 p-3 rounded-lg border text-sm font-medium transition-all ${
+                className={`flex items-center justify-center gap-2 p-3 rounded-lg border text-sm font-medium transition-colors duration-150 ${
                   decision === 'REJECT'
                     ? 'border-red-600 bg-red-50 text-red-900 dark:bg-red-950/40 dark:text-red-300 ring-2 ring-red-600'
                     : 'border-border hover:bg-muted text-muted-foreground'
@@ -525,7 +525,7 @@ export function TransitionTransportDialog({
               <button
                 type="button"
                 onClick={() => setNextStatus('IN_TRANSIT')}
-                className={`w-full flex items-start gap-3 p-3 rounded-lg border text-left text-sm transition-all ${
+                className={`w-full flex items-start gap-3 p-3 rounded-lg border text-left text-sm transition-colors duration-150 ${
                   nextStatus === 'IN_TRANSIT'
                     ? 'border-blue-600 bg-blue-50 text-blue-900 dark:bg-blue-950/40 dark:text-blue-300 ring-2 ring-blue-600'
                     : 'border-border hover:bg-muted text-muted-foreground'
@@ -544,7 +544,7 @@ export function TransitionTransportDialog({
               <button
                 type="button"
                 onClick={() => setNextStatus('ARRIVED')}
-                className={`w-full flex items-start gap-3 p-3 rounded-lg border text-left text-sm transition-all ${
+                className={`w-full flex items-start gap-3 p-3 rounded-lg border text-left text-sm transition-colors duration-150 ${
                   nextStatus === 'ARRIVED'
                     ? 'border-emerald-600 bg-emerald-50 text-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-300 ring-2 ring-emerald-600'
                     : 'border-border hover:bg-muted text-muted-foreground'
@@ -563,7 +563,7 @@ export function TransitionTransportDialog({
               <button
                 type="button"
                 onClick={() => setNextStatus('LOST')}
-                className={`w-full flex items-start gap-3 p-3 rounded-lg border text-left text-sm transition-all ${
+                className={`w-full flex items-start gap-3 p-3 rounded-lg border text-left text-sm transition-colors duration-150 ${
                   nextStatus === 'LOST'
                     ? 'border-red-600 bg-red-50 text-red-900 dark:bg-red-950/40 dark:text-red-300 ring-2 ring-red-600'
                     : 'border-border hover:bg-muted text-muted-foreground'
@@ -757,7 +757,10 @@ export function PostReturnReceiptDialog({
                 Loading warehouse locations…
               </div>
             ) : (
-              <Select value={selectedLocationId} onValueChange={(val) => val && setSelectedLocationId(val)}>
+              <Select
+                value={selectedLocationId}
+                onValueChange={(val) => val && setSelectedLocationId(val)}
+              >
                 <SelectTrigger>
                   <SelectValue placeholder="Select warehouse facility" />
                 </SelectTrigger>
@@ -858,8 +861,8 @@ export function PostReturnReceiptDialog({
             <Info className="h-4 w-4" />
             <AlertDescription className="text-xs">
               Posting physical receipt creates a return receipt and moves stock into the warehouse
-              quarantine/inspection hold. It does <strong>not</strong> immediately restock items into
-              sellable inventory until condition inspection is completed.
+              quarantine/inspection hold. It does <strong>not</strong> immediately restock items
+              into sellable inventory until condition inspection is completed.
             </AlertDescription>
           </Alert>
 
@@ -1022,7 +1025,7 @@ export function InspectReceiptLineDialog({
               <button
                 type="button"
                 onClick={() => setOutcome('SELLABLE')}
-                className={`w-full flex items-start gap-3 p-3 rounded-lg border text-left text-xs transition-all ${
+                className={`w-full flex items-start gap-3 p-3 rounded-lg border text-left text-xs transition-colors duration-150 ${
                   outcome === 'SELLABLE'
                     ? 'border-emerald-600 bg-emerald-50 text-emerald-950 dark:bg-emerald-950/40 dark:text-emerald-200 ring-2 ring-emerald-600'
                     : 'border-border hover:bg-muted text-muted-foreground'
@@ -1041,7 +1044,7 @@ export function InspectReceiptLineDialog({
               <button
                 type="button"
                 onClick={() => setOutcome('DAMAGED')}
-                className={`w-full flex items-start gap-3 p-3 rounded-lg border text-left text-xs transition-all ${
+                className={`w-full flex items-start gap-3 p-3 rounded-lg border text-left text-xs transition-colors duration-150 ${
                   outcome === 'DAMAGED'
                     ? 'border-amber-600 bg-amber-50 text-amber-950 dark:bg-amber-950/40 dark:text-amber-200 ring-2 ring-amber-600'
                     : 'border-border hover:bg-muted text-muted-foreground'
@@ -1060,7 +1063,7 @@ export function InspectReceiptLineDialog({
               <button
                 type="button"
                 onClick={() => setOutcome('QUARANTINE')}
-                className={`w-full flex items-start gap-3 p-3 rounded-lg border text-left text-xs transition-all ${
+                className={`w-full flex items-start gap-3 p-3 rounded-lg border text-left text-xs transition-colors duration-150 ${
                   outcome === 'QUARANTINE'
                     ? 'border-purple-600 bg-purple-50 text-purple-950 dark:bg-purple-950/40 dark:text-purple-200 ring-2 ring-purple-600'
                     : 'border-border hover:bg-muted text-muted-foreground'
@@ -1078,7 +1081,7 @@ export function InspectReceiptLineDialog({
               <button
                 type="button"
                 onClick={() => setOutcome('REJECTED_RETURN')}
-                className={`w-full flex items-start gap-3 p-3 rounded-lg border text-left text-xs transition-all ${
+                className={`w-full flex items-start gap-3 p-3 rounded-lg border text-left text-xs transition-colors duration-150 ${
                   outcome === 'REJECTED_RETURN'
                     ? 'border-red-600 bg-red-50 text-red-950 dark:bg-red-950/40 dark:text-red-200 ring-2 ring-red-600'
                     : 'border-border hover:bg-muted text-muted-foreground'
@@ -1236,7 +1239,10 @@ export function LinkRefundDialog({
                 here.
               </p>
             ) : (
-              <Select value={selectedRefundId} onValueChange={(val) => val && setSelectedRefundId(val)}>
+              <Select
+                value={selectedRefundId}
+                onValueChange={(val) => val && setSelectedRefundId(val)}
+              >
                 <SelectTrigger>
                   <SelectValue placeholder="Choose a refund" />
                 </SelectTrigger>
@@ -1254,8 +1260,8 @@ export function LinkRefundDialog({
           <Alert className="bg-muted text-muted-foreground py-2">
             <Info className="h-4 w-4" />
             <AlertDescription className="text-xs">
-              Return approval does not automatically deduct gateway funds or credit customer wallets.
-              Linking ensures full auditability between warehouse physical returns and cash
+              Return approval does not automatically deduct gateway funds or credit customer
+              wallets. Linking ensures full auditability between warehouse physical returns and cash
               reconciliation.
             </AlertDescription>
           </Alert>
@@ -1351,8 +1357,8 @@ export function CancelReturnDialog({
             Cancel Return Case #{returnCase.return_number}
           </DialogTitle>
           <DialogDescription>
-            Cancelling terminates the return lifecycle. No physical receipts can be posted against
-            a cancelled case.
+            Cancelling terminates the return lifecycle. No physical receipts can be posted against a
+            cancelled case.
           </DialogDescription>
         </DialogHeader>
 
@@ -1385,11 +1391,7 @@ export function CancelReturnDialog({
             >
               Back
             </Button>
-            <Button
-              type="submit"
-              variant="destructive"
-              disabled={busy || !reason.trim()}
-            >
+            <Button type="submit" variant="destructive" disabled={busy || !reason.trim()}>
               {busy ? (
                 <>
                   <Loader2 className="h-4 w-4 mr-2 animate-spin" />

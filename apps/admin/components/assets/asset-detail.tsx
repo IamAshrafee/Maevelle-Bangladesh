@@ -8,7 +8,7 @@ import type { AssetDetailDto, AssetOptionsDto } from '@maevelle/contracts';
 import { useAdminCapability } from '@/components/admin-capabilities';
 import { OperationalFeedback } from '@/components/operational-worklist';
 import { Button } from '@/components/ui/button';
-import { Skeleton } from '@/components/ui/skeleton';
+import { AdminPage, PageSkeleton } from '@/components/ui/page-shell';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { fetchApiData } from '@/lib/api';
 import { AssetDetailHeader } from './detail/asset-detail-header';
@@ -108,7 +108,7 @@ export function AssetDetail({ assetId }: { readonly assetId: string }) {
 
   if (!canView) {
     return (
-      <main className="grid gap-5 px-4 py-5 sm:px-6 lg:px-8">
+      <AdminPage variant="standard">
         <OperationalFeedback tone="danger">
           You do not have permission to view asset details. Please contact your organization
           administrator.
@@ -117,28 +117,23 @@ export function AssetDetail({ assetId }: { readonly assetId: string }) {
           <ArrowLeft className="size-4 mr-1.5" />
           Back to Dashboard
         </Button>
-      </main>
+      </AdminPage>
     );
   }
 
   if (loading && !asset) {
-    return (
-      <main className="grid gap-5 px-4 py-5 sm:px-6 lg:px-8">
-        <Skeleton className="h-28 rounded-xl" />
-        <Skeleton className="h-96 rounded-xl" />
-      </main>
-    );
+    return <PageSkeleton variant="detail" widthVariant="standard" />;
   }
 
   if (!asset) {
     return (
-      <main className="grid gap-5 px-4 py-5 sm:px-6 lg:px-8">
+      <AdminPage variant="standard">
         <OperationalFeedback tone="danger">{error || 'Asset was not found.'}</OperationalFeedback>
         <Button nativeButton={false} render={<Link href="/assets" />}>
           <ArrowLeft className="size-4 mr-1.5" />
           Back to Assets
         </Button>
-      </main>
+      </AdminPage>
     );
   }
 
@@ -148,7 +143,7 @@ export function AssetDetail({ assetId }: { readonly assetId: string }) {
   }
 
   return (
-    <main className="grid gap-5 px-4 py-5 sm:px-6 lg:px-8">
+    <AdminPage variant="standard">
       {/* Header and top-level action controls */}
       <AssetDetailHeader
         asset={asset}
@@ -342,6 +337,6 @@ export function AssetDetail({ assetId }: { readonly assetId: string }) {
           />
         </>
       ) : null}
-    </main>
+    </AdminPage>
   );
 }

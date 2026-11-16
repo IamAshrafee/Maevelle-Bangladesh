@@ -7,14 +7,14 @@ import type { PurchaseDto, SupplierDto, WarehouseLocationDto } from '@maevelle/c
 import { PurchaseFormFields } from '@/components/supply/purchase-form-fields';
 import { Button } from '@/components/ui/button';
 import {
-  Dialog,
-  DialogClose,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
-import { SupplyTaskDialogContent } from '@/components/supply/supply-task-dialog-content';
+  Sheet,
+  SheetClose,
+  SheetContent,
+  SheetDescription,
+  SheetFooter,
+  SheetHeader,
+  SheetTitle,
+} from '@/components/ui/sheet';
 
 export interface PurchaseEditDialogProps {
   readonly open: boolean;
@@ -67,49 +67,51 @@ export function PurchaseEditDialog({
   }
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <SupplyTaskDialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-2xl">
-        <DialogHeader>
-          <DialogTitle>Edit {purchase.purchaseNumber}</DialogTitle>
-          <DialogDescription>
+    <Sheet open={open} onOpenChange={onOpenChange}>
+      <SheetContent side="right" className="gap-0 p-0 sm:max-w-2xl">
+        <SheetHeader className="shrink-0 border-b border-border px-5 py-4 pr-11 text-left">
+          <SheetTitle>Edit {purchase.purchaseNumber}</SheetTitle>
+          <SheetDescription>
             Update supplier reference, dates, destination warehouse, or internal notes while this
             purchase is still in Draft status.
-          </DialogDescription>
-        </DialogHeader>
+          </SheetDescription>
+        </SheetHeader>
 
-        <form onSubmit={handleSubmit} className="space-y-5">
-          <PurchaseFormFields
-            suppliers={suppliers}
-            locations={locations}
-            supplierId={supplierId}
-            onSupplierChange={setSupplierId}
-            currencyCode={currencyCode}
-            onCurrencyChange={setCurrencyCode}
-            orderDate={orderDate}
-            onOrderDateChange={setOrderDate}
-            expectedDate={expectedDate}
-            onExpectedDateChange={setExpectedDate}
-            destinationLocationId={destinationLocationId}
-            onDestinationLocationChange={setDestinationLocationId}
-            supplierReference={supplierReference}
-            onSupplierReferenceChange={setSupplierReference}
-            notes={notes}
-            onNotesChange={setNotes}
-            commercialFieldsLocked={purchase.lines.length > 0}
-            disabled={busy}
-          />
+        <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col">
+          <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
+            <PurchaseFormFields
+              suppliers={suppliers}
+              locations={locations}
+              supplierId={supplierId}
+              onSupplierChange={setSupplierId}
+              currencyCode={currencyCode}
+              onCurrencyChange={setCurrencyCode}
+              orderDate={orderDate}
+              onOrderDateChange={setOrderDate}
+              expectedDate={expectedDate}
+              onExpectedDateChange={setExpectedDate}
+              destinationLocationId={destinationLocationId}
+              onDestinationLocationChange={setDestinationLocationId}
+              supplierReference={supplierReference}
+              onSupplierReferenceChange={setSupplierReference}
+              notes={notes}
+              onNotesChange={setNotes}
+              commercialFieldsLocked={purchase.lines.length > 0}
+              disabled={busy}
+            />
+          </div>
 
-          <DialogFooter>
-            <DialogClose render={<Button variant="outline" type="button" disabled={busy} />}>
+          <SheetFooter className="shrink-0 flex-row items-center justify-end gap-2 border-t border-border bg-card/50 px-5 py-3">
+            <SheetClose render={<Button variant="outline" type="button" disabled={busy} />}>
               Cancel
-            </DialogClose>
+            </SheetClose>
             <Button type="submit" disabled={busy}>
               {busy ? <Loader2 className="size-4 animate-spin" /> : <Check className="size-4" />}
               <span>Save changes</span>
             </Button>
-          </DialogFooter>
+          </SheetFooter>
         </form>
-      </SupplyTaskDialogContent>
-    </Dialog>
+      </SheetContent>
+    </Sheet>
   );
 }

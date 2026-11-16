@@ -34,10 +34,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { AssetPickerDialog, type SelectedMediaAsset } from '@/components/media/asset-picker-dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import {
-  NativeSelect,
-  NativeSelectOption,
-} from '@/components/ui/native-select';
+import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select';
 import { MediaPlacementField, type MediaScopeUpdate } from './media-placement-field';
 import type { MediaCardScopeOption, StagedMediaItem } from './types';
 
@@ -293,8 +290,8 @@ export function MediaCard({
               <CardTitle className="text-base font-semibold">Product Media & Galleries</CardTitle>
             </div>
             <CardDescription className="text-xs">
-              Upload photos once and assign them to the shared product gallery, specific color options,
-              or the size guide diagram.
+              Upload photos once and assign them to the shared product gallery, specific color
+              options, or the size guide diagram.
             </CardDescription>
           </div>
 
@@ -359,8 +356,8 @@ export function MediaCard({
               type="button"
               className={`flex min-h-10 shrink-0 items-center gap-1.5 rounded-md px-3 py-2 text-xs font-medium transition-colors duration-150 ${
                 activeTab === 'all'
-                  ? 'bg-primary text-primary-foreground shadow-xs'
-                  : 'bg-muted/50 text-muted-foreground hover:text-foreground'
+                  ? 'border border-primary/25 bg-primary-subtle text-primary-hover dark:text-primary shadow-xs font-semibold'
+                  : 'border border-transparent bg-muted/50 text-muted-foreground hover:text-foreground'
               }`}
               onClick={() => setActiveTab('all')}
             >
@@ -374,8 +371,8 @@ export function MediaCard({
               type="button"
               className={`flex min-h-10 shrink-0 items-center gap-1.5 rounded-md px-3 py-2 text-xs font-medium transition-colors duration-150 ${
                 activeTab === 'shared'
-                  ? 'bg-primary text-primary-foreground shadow-xs'
-                  : 'bg-muted/50 text-muted-foreground hover:text-foreground'
+                  ? 'border border-primary/25 bg-primary-subtle text-primary-hover dark:text-primary shadow-xs font-semibold'
+                  : 'border border-transparent bg-muted/50 text-muted-foreground hover:text-foreground'
               }`}
               onClick={() => setActiveTab('shared')}
             >
@@ -400,8 +397,8 @@ export function MediaCard({
                   type="button"
                   className={`flex min-h-10 shrink-0 items-center gap-1.5 rounded-md px-3 py-2 text-xs font-medium transition-colors duration-150 ${
                     activeTab === opt.id
-                      ? 'bg-primary text-primary-foreground shadow-xs'
-                      : 'bg-muted/50 text-muted-foreground hover:text-foreground'
+                      ? 'border border-primary/25 bg-primary-subtle text-primary-hover dark:text-primary shadow-xs font-semibold'
+                      : 'border border-transparent bg-muted/50 text-muted-foreground hover:text-foreground'
                   }`}
                   onClick={() => setActiveTab(opt.id)}
                 >
@@ -426,8 +423,8 @@ export function MediaCard({
               type="button"
               className={`flex min-h-10 shrink-0 items-center gap-1.5 rounded-md px-3 py-2 text-xs font-medium transition-colors duration-150 ${
                 activeTab === 'size-diagram'
-                  ? 'bg-primary text-primary-foreground shadow-xs'
-                  : 'bg-muted/50 text-muted-foreground hover:text-foreground'
+                  ? 'border border-primary/25 bg-primary-subtle text-primary-hover dark:text-primary shadow-xs font-semibold'
+                  : 'border border-transparent bg-muted/50 text-muted-foreground hover:text-foreground'
               }`}
               onClick={() => setActiveTab('size-diagram')}
             >
@@ -526,7 +523,9 @@ export function MediaCard({
                 variant="ghost"
                 size="sm"
                 className="h-7 px-2 text-xs gap-1"
-                onClick={selectedIds.size === filteredMedia.length ? clearSelection : selectAllFiltered}
+                onClick={
+                  selectedIds.size === filteredMedia.length ? clearSelection : selectAllFiltered
+                }
               >
                 {selectedIds.size === filteredMedia.length && filteredMedia.length > 0 ? (
                   <>
@@ -561,7 +560,9 @@ export function MediaCard({
                   }}
                   defaultValue=""
                 >
-                  <NativeSelectOption value="" disabled>Choose gallery…</NativeSelectOption>
+                  <NativeSelectOption value="" disabled>
+                    Choose gallery…
+                  </NativeSelectOption>
                   <NativeSelectOption value="shared">Shared Gallery</NativeSelectOption>
                   {visualScopes.map((opt) => (
                     <NativeSelectOption key={opt.id} value={opt.id}>
@@ -633,7 +634,7 @@ export function MediaCard({
                       aria-label={isChecked ? 'Deselect image' : 'Select image'}
                       className={`absolute left-2 top-2 z-10 flex size-6 items-center justify-center rounded border transition-colors shadow-xs ${
                         isChecked
-                          ? 'border-primary bg-primary text-primary-foreground'
+                          ? 'border-primary bg-primary-subtle text-primary-hover dark:text-primary font-bold'
                           : 'border-white/60 bg-black/40 text-white hover:bg-black/60'
                       }`}
                       onClick={(e) => {
@@ -649,7 +650,7 @@ export function MediaCard({
                     </button>
 
                     {media.isUploading && (
-                      <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-background/80 backdrop-blur-xs">
+                      <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-background/90">
                         <LoaderCircle className="size-5 animate-spin text-primary" />
                         <span className="text-[10px] font-medium text-foreground">
                           {media.processingStage === 'PROCESSING'
@@ -668,7 +669,9 @@ export function MediaCard({
                     {/* Status & Scope Badges on preview */}
                     <div className="absolute right-2 top-2 flex flex-col items-end gap-1">
                       {media.pendingImport ? (
-                        <Badge variant="secondary" className="text-[10px] shadow-xs">Import pending</Badge>
+                        <Badge variant="secondary" className="text-[10px] shadow-xs">
+                          Import pending
+                        </Badge>
                       ) : !media.isUploading && media.assetId && !media.error ? (
                         <Badge className="bg-success text-success-foreground text-[10px] shadow-xs">
                           Ready
@@ -676,9 +679,12 @@ export function MediaCard({
                       ) : null}
 
                       {media.isPrimary && (
-                        <Badge className="gap-1 bg-primary text-primary-foreground text-[10px] font-semibold shadow-xs">
+                        <Badge className="gap-1 border border-primary/30 bg-card/95 text-primary-hover dark:text-primary text-[10px] font-semibold shadow-xs">
                           <Star className="size-2.5 fill-current" />
-                          {!media.optionValueRef && !media.optionValueId && !media.variantRef && !media.variantId
+                          {!media.optionValueRef &&
+                          !media.optionValueId &&
+                          !media.variantRef &&
+                          !media.variantId
                             ? 'Catalog Cover'
                             : `${matchedScope?.label || 'Option'} Lead`}
                         </Badge>
@@ -687,7 +693,7 @@ export function MediaCard({
                       {matchedScope && (
                         <Badge
                           variant="secondary"
-                          className="border bg-background/90 text-[9px] font-medium backdrop-blur-xs shadow-xs"
+                          className="border bg-background/95 text-[9px] font-medium shadow-xs"
                         >
                           {matchedScope.label}
                         </Badge>
@@ -696,7 +702,7 @@ export function MediaCard({
                       {media.role === 'SIZE_DIAGRAM' && (
                         <Badge
                           variant="outline"
-                          className="bg-background/90 text-[9px] font-medium backdrop-blur-xs shadow-xs"
+                          className="bg-background/95 text-[9px] font-medium shadow-xs"
                         >
                           Size Diagram
                         </Badge>
@@ -742,7 +748,10 @@ export function MediaCard({
                           <button
                             type="button"
                             title={
-                              !media.optionValueRef && !media.optionValueId && !media.variantRef && !media.variantId
+                              !media.optionValueRef &&
+                              !media.optionValueId &&
+                              !media.variantRef &&
+                              !media.variantId
                                 ? 'Set as Product Catalog Cover (main product hero image)'
                                 : `Set as Lead Photo for ${matchedScope?.label || 'Option'}`
                             }
@@ -789,7 +798,8 @@ export function MediaCard({
                                 ? 'size-diagram'
                                 : scopeLabel.toLowerCase().includes('shared')
                                   ? 'shared'
-                                  : visualScopes.find((v) => scopeLabel.includes(v.label))?.id || 'all',
+                                  : visualScopes.find((v) => scopeLabel.includes(v.label))?.id ||
+                                    'all',
                             });
                           }
                         }}
@@ -798,7 +808,10 @@ export function MediaCard({
 
                     {/* Alt Text / Image Description */}
                     <div className="space-y-1">
-                      <Label htmlFor={`media-alt-${media.id}`} className="text-xs font-medium text-foreground">
+                      <Label
+                        htmlFor={`media-alt-${media.id}`}
+                        className="text-xs font-medium text-foreground"
+                      >
                         Alt text (Accessibility & SEO)
                       </Label>
                       <Input
@@ -820,7 +833,9 @@ export function MediaCard({
         ) : (
           <div className="rounded-lg border border-dashed p-8 text-center text-xs text-muted-foreground">
             {activeTab !== 'all' ? (
-              <span>No photos in {activeTargetLabel} yet. Add photos above or select existing media.</span>
+              <span>
+                No photos in {activeTargetLabel} yet. Add photos above or select existing media.
+              </span>
             ) : (
               <span>No photos uploaded yet. Use the upload area above to get started.</span>
             )}

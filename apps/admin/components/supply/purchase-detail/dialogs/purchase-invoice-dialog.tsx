@@ -18,14 +18,14 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import {
-  Dialog,
-  DialogClose,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
-import { SupplyTaskDialogContent } from '@/components/supply/supply-task-dialog-content';
+  Sheet,
+  SheetClose,
+  SheetContent,
+  SheetDescription,
+  SheetFooter,
+  SheetHeader,
+  SheetTitle,
+} from '@/components/ui/sheet';
 import { Field, FieldDescription, FieldLabel } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
 import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select';
@@ -154,315 +154,321 @@ export function PurchaseInvoiceDialog({
   }
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <SupplyTaskDialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
-        <DialogHeader>
+    <Sheet open={open} onOpenChange={onOpenChange}>
+      <SheetContent side="right" className="gap-0 p-0 sm:max-w-2xl">
+        <SheetHeader className="shrink-0 border-b border-border px-5 py-4 pr-11 text-left">
           <div className="flex items-center gap-2">
             <div className="flex size-8 items-center justify-center rounded-lg bg-primary/10 text-primary">
               <Receipt className="size-4" />
             </div>
             <div>
-              <DialogTitle>Record Supplier Invoice</DialogTitle>
-              <DialogDescription>
+              <SheetTitle>Record Supplier Invoice</SheetTitle>
+              <SheetDescription>
                 Post an authoritative payable in Finance linked to {purchase.purchaseNumber}.
-              </DialogDescription>
+              </SheetDescription>
             </div>
           </div>
-        </DialogHeader>
+        </SheetHeader>
 
-        {/* Financial Context & Remaining Balance Banner */}
-        <div className="rounded-xl border bg-muted/30 p-3.5 space-y-2 text-xs">
-          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border/60 pb-2">
-            <span className="flex items-center gap-1.5 font-medium text-foreground">
-              <Building2 className="size-3.5 text-primary" />
-              {purchase.supplierName} ({purchase.purchaseNumber})
-            </span>
-            <Badge variant="outline" className="font-mono text-[11px]">
-              Currency: {purchase.currencyCode}
-            </Badge>
-          </div>
-
-          <div className="grid grid-cols-3 gap-2 pt-0.5">
-            <div>
-              <span className="text-muted-foreground block text-[11px]">Total Order Value</span>
-              <strong className="font-mono text-sm text-foreground">
-                {formatSupplyMoney(purchase.totalAmount, purchase.currencyCode)}
-              </strong>
-            </div>
-            <div>
-              <span className="text-muted-foreground block text-[11px]">Invoiced to Date</span>
-              <strong className="font-mono text-sm text-muted-foreground">
-                {formatSupplyMoney(String(previouslyInvoiced), purchase.currencyCode)}
-              </strong>
-            </div>
-            <div>
-              <span className="text-muted-foreground block text-[11px]">Un-invoiced Balance</span>
-              <div className="flex items-center gap-1.5">
-                <strong
-                  className={`font-mono text-sm ${
-                    remainingBalance > 0 ? 'text-foreground font-bold' : 'text-success'
-                  }`}
-                >
-                  {formatSupplyMoney(String(remainingBalance), purchase.currencyCode)}
-                </strong>
-                {remainingBalance > 0 && numAmount !== remainingBalance ? (
-                  <Tooltip>
-                    <TooltipTrigger
-                      render={
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon-xs"
-                          className="size-5 text-primary hover:bg-primary/10"
-                          onClick={fillRemaining}
-                          aria-label="Fill remaining un-invoiced balance"
-                        />
-                      }
-                    >
-                      <Sparkles className="size-3" />
-                    </TooltipTrigger>
-                    <TooltipContent side="top">Fill remaining un-invoiced balance</TooltipContent>
-                  </Tooltip>
-                ) : null}
-              </div>
-            </div>
-          </div>
-
-          {isFullyInvoiced ? (
-            <div className="flex items-center gap-1.5 pt-1 text-warning">
-              <AlertCircle className="size-3.5 shrink-0" />
-              <span>
-                This purchase order is already fully invoiced. Additional invoices will exceed the
-                original agreed PO value.
-              </span>
-            </div>
-          ) : null}
-        </div>
-
-        <form onSubmit={handleSubmit} className="space-y-4">
-          {/* Row 1: Category & Supplier Bill Number */}
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <Field>
-              <FieldLabel htmlFor="invoice-category">Expense Category</FieldLabel>
-              <NativeSelect
-                id="invoice-category"
-                name="categoryId"
-                value={categoryId}
-                required
-                disabled={busy || !activeCategories.length}
-                className="w-full"
-                onChange={(e) => setCategoryId(e.target.value)}
-              >
-                <NativeSelectOption value="" disabled>
-                  {activeCategories.length
-                    ? 'Choose an expense category'
-                    : 'No active expense categories found'}
-                </NativeSelectOption>
-                {activeCategories.map((cat) => (
-                  <NativeSelectOption key={cat.id} value={cat.id}>
-                    {cat.name}
-                  </NativeSelectOption>
-                ))}
-              </NativeSelect>
-              <FieldDescription>Finance chart category for cost allocation.</FieldDescription>
-            </Field>
-
-            <Field>
-              <div className="flex items-center justify-between">
-                <FieldLabel htmlFor="invoice-external-ref">Supplier Bill / Invoice #</FieldLabel>
-                <Tooltip>
-                  <TooltipTrigger render={<span className="cursor-help inline-flex" />}>
-                    <HelpCircle className="size-3 text-muted-foreground/60 hover:text-muted-foreground" />
-                  </TooltipTrigger>
-                  <TooltipContent side="top">
-                    The external invoice or bill number printed on the vendor's invoice document
-                  </TooltipContent>
-                </Tooltip>
-              </div>
-              <Input
-                id="invoice-external-ref"
-                name="externalReference"
-                placeholder="e.g. INV-2026-9042 or BILL-081"
-                value={externalReference}
-                disabled={busy}
-                onChange={(e) => setExternalReference(e.target.value)}
-              />
-              <FieldDescription>Supplier's official reference for audits.</FieldDescription>
-            </Field>
-          </div>
-
-          {/* Row 2: Payee Name & Description */}
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <Field>
-              <FieldLabel htmlFor="invoice-payee">Payee / Billing Entity</FieldLabel>
-              <Input
-                id="invoice-payee"
-                name="payeeName"
-                value={payeeName}
-                required
-                disabled={busy}
-                onChange={(e) => setPayeeName(e.target.value)}
-              />
-              <FieldDescription>Vendor or entity issuing the invoice.</FieldDescription>
-            </Field>
-
-            <Field>
-              <FieldLabel htmlFor="invoice-description">Description</FieldLabel>
-              <Input
-                id="invoice-description"
-                name="description"
-                value={description}
-                required
-                disabled={busy}
-                onChange={(e) => setDescription(e.target.value)}
-              />
-              <FieldDescription>Line item description in the Finance ledger.</FieldDescription>
-            </Field>
-          </div>
-
-          {/* Row 3: Amount & Invoice Date */}
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <Field>
-              <div className="flex items-center justify-between">
-                <FieldLabel htmlFor="invoice-amount">
-                  Invoice Amount ({purchase.currencyCode})
-                </FieldLabel>
-                {remainingBalance > 0 && numAmount !== remainingBalance ? (
-                  <button
-                    type="button"
-                    onClick={fillRemaining}
-                    className="text-[11px] text-primary hover:underline font-medium"
-                  >
-                    Match balance (
-                    {formatSupplyMoney(String(remainingBalance), purchase.currencyCode)})
-                  </button>
-                ) : null}
-              </div>
-              <Input
-                id="invoice-amount"
-                name="amount"
-                type="number"
-                inputMode="decimal"
-                min="0.01"
-                step="0.01"
-                value={amount}
-                required
-                disabled={busy}
-                onChange={(e) => setAmount(e.target.value)}
-              />
-              {isOverRemaining ? (
-                <p className="mt-1 text-[11px] text-warning">
-                  Exceeds remaining PO balance by{' '}
-                  {formatSupplyMoney(String(numAmount - remainingBalance), purchase.currencyCode)}.
-                </p>
-              ) : (
-                <FieldDescription>Gross payable amount to be recorded.</FieldDescription>
-              )}
-            </Field>
-
-            <Field>
-              <div className="flex items-center justify-between">
-                <FieldLabel htmlFor="invoice-date">Invoice / Bill Date</FieldLabel>
-                <button
-                  type="button"
-                  onClick={() => setExpenseDate(new Date().toISOString().slice(0, 10))}
-                  className="text-[11px] text-primary hover:underline font-medium"
-                >
-                  Set Today
-                </button>
-              </div>
-              <Input
-                id="invoice-date"
-                name="expenseDate"
-                type="date"
-                value={expenseDate}
-                required
-                disabled={busy}
-                onChange={(e) => setExpenseDate(e.target.value)}
-              />
-              <FieldDescription>Date stamped on the supplier invoice.</FieldDescription>
-            </Field>
-          </div>
-
-          {/* Optional 1-Step Immediate Settlement */}
-          {canPayInvoice && eligibleAccounts.length > 0 ? (
-            <div className="rounded-xl border bg-card p-3.5 space-y-3">
-              <label className="flex items-center gap-2 text-xs font-medium cursor-pointer select-none">
-                <Checkbox
-                  checked={immediatePayment}
-                  onCheckedChange={(checked) => setImmediatePayment(Boolean(checked))}
-                  disabled={busy}
-                />
-                <span className="flex items-center gap-1.5">
-                  <CreditCard className="size-3.5 text-primary" />
-                  <span>Record immediate payment upon saving</span>
+        <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col">
+          <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-5 py-4">
+            {/* Financial Context & Remaining Balance Banner */}
+            <div className="rounded-xl border bg-muted/30 p-3.5 space-y-2 text-xs">
+              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border/60 pb-2">
+                <span className="flex items-center gap-1.5 font-medium text-foreground">
+                  <Building2 className="size-3.5 text-primary" />
+                  {purchase.supplierName} ({purchase.purchaseNumber})
                 </span>
-              </label>
+                <Badge variant="outline" className="font-mono text-[11px]">
+                  Currency: {purchase.currencyCode}
+                </Badge>
+              </div>
 
-              {immediatePayment ? (
-                <div className="grid grid-cols-1 gap-3 pt-1 sm:grid-cols-2 border-t border-border/50">
-                  <Field>
-                    <FieldLabel htmlFor="invoice-pay-account">Disburse From Account</FieldLabel>
-                    <NativeSelect
-                      id="invoice-pay-account"
-                      name="accountId"
-                      value={accountId}
-                      required={immediatePayment}
-                      disabled={busy}
-                      className="w-full text-xs"
-                      onChange={(e) => setAccountId(e.target.value)}
+              <div className="grid grid-cols-3 gap-2 pt-0.5">
+                <div>
+                  <span className="text-muted-foreground block text-[11px]">Total Order Value</span>
+                  <strong className="font-mono text-sm text-foreground">
+                    {formatSupplyMoney(purchase.totalAmount, purchase.currencyCode)}
+                  </strong>
+                </div>
+                <div>
+                  <span className="text-muted-foreground block text-[11px]">Invoiced to Date</span>
+                  <strong className="font-mono text-sm text-muted-foreground">
+                    {formatSupplyMoney(String(previouslyInvoiced), purchase.currencyCode)}
+                  </strong>
+                </div>
+                <div>
+                  <span className="text-muted-foreground block text-[11px]">
+                    Un-invoiced Balance
+                  </span>
+                  <div className="flex items-center gap-1.5">
+                    <strong
+                      className={`font-mono text-sm ${
+                        remainingBalance > 0 ? 'text-foreground font-bold' : 'text-success'
+                      }`}
                     >
-                      {eligibleAccounts.map((acc) => (
-                        <NativeSelectOption key={acc.id} value={acc.id}>
-                          {acc.name} · Bal:{' '}
-                          {formatSupplyMoney(acc.ledger_balance, acc.currency_code)}
-                        </NativeSelectOption>
-                      ))}
-                    </NativeSelect>
-                    <FieldDescription>Ledger account to debit.</FieldDescription>
-                  </Field>
+                      {formatSupplyMoney(String(remainingBalance), purchase.currencyCode)}
+                    </strong>
+                    {remainingBalance > 0 && numAmount !== remainingBalance ? (
+                      <Tooltip>
+                        <TooltipTrigger
+                          render={
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon-xs"
+                              className="size-5 text-primary hover:bg-primary/10"
+                              onClick={fillRemaining}
+                              aria-label="Fill remaining un-invoiced balance"
+                            />
+                          }
+                        >
+                          <Sparkles className="size-3" />
+                        </TooltipTrigger>
+                        <TooltipContent side="top">
+                          Fill remaining un-invoiced balance
+                        </TooltipContent>
+                      </Tooltip>
+                    ) : null}
+                  </div>
+                </div>
+              </div>
 
-                  <Field>
-                    <FieldLabel htmlFor="invoice-payment-ref">Payment Reference #</FieldLabel>
-                    <Input
-                      id="invoice-payment-ref"
-                      name="paymentReference"
-                      placeholder="e.g. Wire SWIFT ref, Check #, or Cash receipt"
-                      value={paymentReference}
-                      disabled={busy}
-                      className="text-xs"
-                      onChange={(e) => setPaymentReference(e.target.value)}
-                    />
-                    <FieldDescription>
-                      Optional bank / cash confirmation reference.
-                    </FieldDescription>
-                  </Field>
+              {isFullyInvoiced ? (
+                <div className="flex items-center gap-1.5 pt-1 text-warning">
+                  <AlertCircle className="size-3.5 shrink-0" />
+                  <span>
+                    This purchase order is already fully invoiced. Additional invoices will exceed
+                    the original agreed PO value.
+                  </span>
                 </div>
               ) : null}
             </div>
-          ) : null}
+            {/* Row 1: Category & Supplier Bill Number */}
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <Field>
+                <FieldLabel htmlFor="invoice-category">Expense Category</FieldLabel>
+                <NativeSelect
+                  id="invoice-category"
+                  name="categoryId"
+                  value={categoryId}
+                  required
+                  disabled={busy || !activeCategories.length}
+                  className="w-full"
+                  onChange={(e) => setCategoryId(e.target.value)}
+                >
+                  <NativeSelectOption value="" disabled>
+                    {activeCategories.length
+                      ? 'Choose an expense category'
+                      : 'No active expense categories found'}
+                  </NativeSelectOption>
+                  {activeCategories.map((cat) => (
+                    <NativeSelectOption key={cat.id} value={cat.id}>
+                      {cat.name}
+                    </NativeSelectOption>
+                  ))}
+                </NativeSelect>
+                <FieldDescription>Finance chart category for cost allocation.</FieldDescription>
+              </Field>
 
-          {/* Commercial Notes / Payment Terms */}
-          <Field>
-            <FieldLabel htmlFor="invoice-notes">Commercial Terms & Internal Notes</FieldLabel>
-            <Textarea
-              id="invoice-notes"
-              name="notes"
-              value={notes}
-              rows={2}
-              placeholder="e.g. Net 30 payment terms, 2% early payment discount, includes shipping and handling fees…"
-              disabled={busy}
-              onChange={(e) => setNotes(e.target.value)}
-            />
-            <FieldDescription>
-              Optional commercial notes or payment conditions for Finance audit.
-            </FieldDescription>
-          </Field>
+              <Field>
+                <div className="flex items-center justify-between">
+                  <FieldLabel htmlFor="invoice-external-ref">Supplier Bill / Invoice #</FieldLabel>
+                  <Tooltip>
+                    <TooltipTrigger render={<span className="cursor-help inline-flex" />}>
+                      <HelpCircle className="size-3 text-muted-foreground/60 hover:text-muted-foreground" />
+                    </TooltipTrigger>
+                    <TooltipContent side="top">
+                      The external invoice or bill number printed on the vendor's invoice document
+                    </TooltipContent>
+                  </Tooltip>
+                </div>
+                <Input
+                  id="invoice-external-ref"
+                  name="externalReference"
+                  placeholder="e.g. INV-2026-9042 or BILL-081"
+                  value={externalReference}
+                  disabled={busy}
+                  onChange={(e) => setExternalReference(e.target.value)}
+                />
+                <FieldDescription>Supplier's official reference for audits.</FieldDescription>
+              </Field>
+            </div>
 
-          <DialogFooter>
-            <DialogClose render={<Button variant="outline" type="button" disabled={busy} />}>
+            {/* Row 2: Payee Name & Description */}
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <Field>
+                <FieldLabel htmlFor="invoice-payee">Payee / Billing Entity</FieldLabel>
+                <Input
+                  id="invoice-payee"
+                  name="payeeName"
+                  value={payeeName}
+                  required
+                  disabled={busy}
+                  onChange={(e) => setPayeeName(e.target.value)}
+                />
+                <FieldDescription>Vendor or entity issuing the invoice.</FieldDescription>
+              </Field>
+
+              <Field>
+                <FieldLabel htmlFor="invoice-description">Description</FieldLabel>
+                <Input
+                  id="invoice-description"
+                  name="description"
+                  value={description}
+                  required
+                  disabled={busy}
+                  onChange={(e) => setDescription(e.target.value)}
+                />
+                <FieldDescription>Line item description in the Finance ledger.</FieldDescription>
+              </Field>
+            </div>
+
+            {/* Row 3: Amount & Invoice Date */}
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <Field>
+                <div className="flex items-center justify-between">
+                  <FieldLabel htmlFor="invoice-amount">
+                    Invoice Amount ({purchase.currencyCode})
+                  </FieldLabel>
+                  {remainingBalance > 0 && numAmount !== remainingBalance ? (
+                    <button
+                      type="button"
+                      onClick={fillRemaining}
+                      className="text-[11px] text-primary hover:underline font-medium"
+                    >
+                      Match balance (
+                      {formatSupplyMoney(String(remainingBalance), purchase.currencyCode)})
+                    </button>
+                  ) : null}
+                </div>
+                <Input
+                  id="invoice-amount"
+                  name="amount"
+                  type="number"
+                  inputMode="decimal"
+                  min="0.01"
+                  step="0.01"
+                  value={amount}
+                  required
+                  disabled={busy}
+                  onChange={(e) => setAmount(e.target.value)}
+                />
+                {isOverRemaining ? (
+                  <p className="mt-1 text-[11px] text-warning">
+                    Exceeds remaining PO balance by{' '}
+                    {formatSupplyMoney(String(numAmount - remainingBalance), purchase.currencyCode)}
+                    .
+                  </p>
+                ) : (
+                  <FieldDescription>Gross payable amount to be recorded.</FieldDescription>
+                )}
+              </Field>
+
+              <Field>
+                <div className="flex items-center justify-between">
+                  <FieldLabel htmlFor="invoice-date">Invoice / Bill Date</FieldLabel>
+                  <button
+                    type="button"
+                    onClick={() => setExpenseDate(new Date().toISOString().slice(0, 10))}
+                    className="text-[11px] text-primary hover:underline font-medium"
+                  >
+                    Set Today
+                  </button>
+                </div>
+                <Input
+                  id="invoice-date"
+                  name="expenseDate"
+                  type="date"
+                  value={expenseDate}
+                  required
+                  disabled={busy}
+                  onChange={(e) => setExpenseDate(e.target.value)}
+                />
+                <FieldDescription>Date stamped on the supplier invoice.</FieldDescription>
+              </Field>
+            </div>
+
+            {/* Optional 1-Step Immediate Settlement */}
+            {canPayInvoice && eligibleAccounts.length > 0 ? (
+              <div className="rounded-xl border bg-card p-3.5 space-y-3">
+                <label className="flex items-center gap-2 text-xs font-medium cursor-pointer select-none">
+                  <Checkbox
+                    checked={immediatePayment}
+                    onCheckedChange={(checked) => setImmediatePayment(Boolean(checked))}
+                    disabled={busy}
+                  />
+                  <span className="flex items-center gap-1.5">
+                    <CreditCard className="size-3.5 text-primary" />
+                    <span>Record immediate payment upon saving</span>
+                  </span>
+                </label>
+
+                {immediatePayment ? (
+                  <div className="grid grid-cols-1 gap-3 pt-1 sm:grid-cols-2 border-t border-border/50">
+                    <Field>
+                      <FieldLabel htmlFor="invoice-pay-account">Disburse From Account</FieldLabel>
+                      <NativeSelect
+                        id="invoice-pay-account"
+                        name="accountId"
+                        value={accountId}
+                        required={immediatePayment}
+                        disabled={busy}
+                        className="w-full text-xs"
+                        onChange={(e) => setAccountId(e.target.value)}
+                      >
+                        {eligibleAccounts.map((acc) => (
+                          <NativeSelectOption key={acc.id} value={acc.id}>
+                            {acc.name} · Bal:{' '}
+                            {formatSupplyMoney(acc.ledger_balance, acc.currency_code)}
+                          </NativeSelectOption>
+                        ))}
+                      </NativeSelect>
+                      <FieldDescription>Ledger account to debit.</FieldDescription>
+                    </Field>
+
+                    <Field>
+                      <FieldLabel htmlFor="invoice-payment-ref">Payment Reference #</FieldLabel>
+                      <Input
+                        id="invoice-payment-ref"
+                        name="paymentReference"
+                        placeholder="e.g. Wire SWIFT ref, Check #, or Cash receipt"
+                        value={paymentReference}
+                        disabled={busy}
+                        className="text-xs"
+                        onChange={(e) => setPaymentReference(e.target.value)}
+                      />
+                      <FieldDescription>
+                        Optional bank / cash confirmation reference.
+                      </FieldDescription>
+                    </Field>
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
+
+            {/* Commercial Notes / Payment Terms */}
+            <Field>
+              <FieldLabel htmlFor="invoice-notes">Commercial Terms & Internal Notes</FieldLabel>
+              <Textarea
+                id="invoice-notes"
+                name="notes"
+                value={notes}
+                rows={2}
+                placeholder="e.g. Net 30 payment terms, 2% early payment discount, includes shipping and handling fees…"
+                disabled={busy}
+                onChange={(e) => setNotes(e.target.value)}
+              />
+              <FieldDescription>
+                Optional commercial notes or payment conditions for Finance audit.
+              </FieldDescription>
+            </Field>
+          </div>
+
+          <SheetFooter className="shrink-0 flex-row items-center justify-end gap-2 border-t border-border bg-card/50 px-5 py-3">
+            <SheetClose render={<Button variant="outline" type="button" disabled={busy} />}>
               Cancel
-            </DialogClose>
+            </SheetClose>
             <Button
               type="submit"
               disabled={
@@ -478,9 +484,9 @@ export function PurchaseInvoiceDialog({
               )}
               <span>{immediatePayment ? 'Record & Post Payment' : 'Record Invoice'}</span>
             </Button>
-          </DialogFooter>
+          </SheetFooter>
         </form>
-      </SupplyTaskDialogContent>
-    </Dialog>
+      </SheetContent>
+    </Sheet>
   );
 }

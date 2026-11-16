@@ -32,10 +32,15 @@ export function FindingDetailSheet({
   const [error, setError] = React.useState<string | null>(null);
 
   // Status mutation state
-  const [targetStatus, setTargetStatus] = React.useState<'OPEN' | 'INVESTIGATING' | 'ACCEPTED'>('OPEN');
+  const [targetStatus, setTargetStatus] = React.useState<'OPEN' | 'INVESTIGATING' | 'ACCEPTED'>(
+    'OPEN',
+  );
   const [acceptedReason, setAcceptedReason] = React.useState('');
   const [updatingStatus, setUpdatingStatus] = React.useState(false);
-  const [statusFeedback, setStatusFeedback] = React.useState<{ type: 'success' | 'error'; message: string } | null>(null);
+  const [statusFeedback, setStatusFeedback] = React.useState<{
+    type: 'success' | 'error';
+    message: string;
+  } | null>(null);
 
   const canViewFinance = useAdminCapability('finance.view');
   const canRepair = useAdminCapability('admin.integrity.repair');
@@ -67,7 +72,8 @@ export function FindingDetailSheet({
         }
       })
       .catch((err) => {
-        if (active) setError(err instanceof Error ? err.message : 'Failed to load finding details.');
+        if (active)
+          setError(err instanceof Error ? err.message : 'Failed to load finding details.');
       })
       .finally(() => {
         if (active) setLoading(false);
@@ -194,15 +200,19 @@ export function FindingDetailSheet({
           </div>
 
           <div>
-            <SheetTitle className="text-xl font-bold text-foreground">
-              {finding.summary}
-            </SheetTitle>
+            <SheetTitle className="text-xl font-bold text-foreground">{finding.summary}</SheetTitle>
             <SheetDescription className="text-xs text-muted-foreground mt-1 flex flex-wrap items-center gap-x-3 gap-y-1">
-              <span>Domain: <strong className="text-foreground">{finding.domain}</strong></span>
+              <span>
+                Domain: <strong className="text-foreground">{finding.domain}</strong>
+              </span>
               <span>·</span>
-              <span>Check: <code className="font-mono text-primary">{finding.check_id}</code></span>
+              <span>
+                Check: <code className="font-mono text-primary">{finding.check_id}</code>
+              </span>
               <span>·</span>
-              <span>Code: <code className="font-mono">{finding.code}</code></span>
+              <span>
+                Code: <code className="font-mono">{finding.code}</code>
+              </span>
             </SheetDescription>
           </div>
         </div>
@@ -239,7 +249,9 @@ export function FindingDetailSheet({
                   <PagePanel className="p-4 border-amber-200 bg-amber-50/40 dark:bg-amber-950/20 text-amber-800 dark:text-amber-300 text-xs flex items-center gap-2.5">
                     <Lock className="size-4 shrink-0 text-amber-600" />
                     <span>
-                      Financial evidence details are restricted. Your role requires <code className="font-mono font-semibold">finance.view</code> permission to inspect authoritative amounts.
+                      Financial evidence details are restricted. Your role requires{' '}
+                      <code className="font-mono font-semibold">finance.view</code> permission to
+                      inspect authoritative amounts.
                     </span>
                   </PagePanel>
                 ) : (
@@ -289,7 +301,10 @@ export function FindingDetailSheet({
                 <div className="p-4 rounded-xl border border-border bg-card flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                   <div className="space-y-0.5 min-w-0">
                     <p className="text-xs text-muted-foreground">
-                      Entity Type: <span className="font-mono text-foreground font-medium">{finding.entity_type ?? 'Global / Module'}</span>
+                      Entity Type:{' '}
+                      <span className="font-mono text-foreground font-medium">
+                        {finding.entity_type ?? 'Global / Module'}
+                      </span>
                     </p>
                     <p className="text-xs font-mono text-foreground break-all">
                       {finding.entity_id ?? 'No single entity ID (aggregate discrepancy)'}
@@ -322,9 +337,12 @@ export function FindingDetailSheet({
                       <div className="flex items-start gap-2.5 text-xs text-muted-foreground">
                         <Wrench className="size-4 text-primary shrink-0 mt-0.5" />
                         <div>
-                          <p className="font-semibold text-foreground">Safe Projection Rebuild Available</p>
+                          <p className="font-semibold text-foreground">
+                            Safe Projection Rebuild Available
+                          </p>
                           <p className="mt-0.5">
-                            This discrepancy affects a derived read projection that can be rebuilt from authoritative source records without mutating transactional truth.
+                            This discrepancy affects a derived read projection that can be rebuilt
+                            from authoritative source records without mutating transactional truth.
                           </p>
                         </div>
                       </div>
@@ -342,7 +360,9 @@ export function FindingDetailSheet({
                         )
                       ) : (
                         <p className="text-xs text-amber-600 dark:text-amber-400">
-                          Your role does not possess <code className="font-mono font-semibold">admin.integrity.repair</code> capability.
+                          Your role does not possess{' '}
+                          <code className="font-mono font-semibold">admin.integrity.repair</code>{' '}
+                          capability.
                         </p>
                       )}
                     </div>
@@ -350,9 +370,13 @@ export function FindingDetailSheet({
                     <div className="flex items-start gap-2.5 text-xs text-muted-foreground">
                       <Info className="size-4 text-muted-foreground shrink-0 mt-0.5" />
                       <div className="space-y-1">
-                        <p className="font-semibold text-foreground">Diagnosis Only — Manual Reconciliation Required</p>
+                        <p className="font-semibold text-foreground">
+                          Diagnosis Only — Manual Reconciliation Required
+                        </p>
                         <p className="leading-relaxed">
-                          Transactional facts (Orders, Inventory ledgers, Finance entries) are immutable. System Integrity does not perform blind balance corrections or artificial offsetting movements.
+                          Transactional facts (Orders, Inventory ledgers, Finance entries) are
+                          immutable. System Integrity does not perform blind balance corrections or
+                          artificial offsetting movements.
                         </p>
                         {entityDest && (
                           <div className="pt-2">
@@ -387,7 +411,7 @@ export function FindingDetailSheet({
                       onClick={() => setTargetStatus('OPEN')}
                       className={`px-3 py-1.5 rounded-lg border text-xs font-medium cursor-pointer transition-colors ${
                         targetStatus === 'OPEN'
-                          ? 'bg-primary text-primary-foreground border-primary'
+                          ? 'bg-primary-subtle text-primary-hover dark:text-primary border-primary/30 font-semibold'
                           : 'bg-muted/50 border-border text-muted-foreground hover:bg-muted'
                       }`}
                     >
@@ -409,7 +433,7 @@ export function FindingDetailSheet({
                       onClick={() => setTargetStatus('ACCEPTED')}
                       className={`px-3 py-1.5 rounded-lg border text-xs font-medium cursor-pointer transition-colors ${
                         targetStatus === 'ACCEPTED'
-                          ? 'bg-slate-700 text-white border-slate-700'
+                          ? 'bg-foreground text-background border-foreground font-semibold'
                           : 'bg-muted/50 border-border text-muted-foreground hover:bg-muted'
                       }`}
                     >

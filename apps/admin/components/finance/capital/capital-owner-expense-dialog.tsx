@@ -2,22 +2,21 @@
 
 import { useEffect, useState, type FormEvent } from 'react';
 import { HandCoins, ReceiptText, User } from 'lucide-react';
-import type {
-  CapitalContributorDto,
-  FinanceExpenseDto,
-} from '@maevelle/contracts';
+import type { CapitalContributorDto, FinanceExpenseDto } from '@maevelle/contracts';
 import { Button } from '@/components/ui/button';
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetFooter,
+  SheetHeader,
+  SheetTitle,
+} from '@/components/ui/sheet';
 import { Input } from '@/components/ui/input';
 import { NativeSelect } from '@/components/ui/native-select';
 import { Textarea } from '@/components/ui/textarea';
+import { MoneyField } from '@/components/ui/money-field';
+import { useFormDialogLifecycle } from '@/hooks/use-form-dialog-lifecycle';
 import { formatMoney } from '@/lib/finance/types';
 import { localDateTime } from './types';
 
@@ -55,12 +54,25 @@ export function CapitalOwnerExpenseDialog({
   const [contributorId, setContributorId] = useState(preselectedContributorId || '');
   const [amount, setAmount] = useState('');
 
+  const isDirty = Boolean(
+    amount.trim() ||
+      expenseId !== (preselectedExpenseId || '') ||
+      contributorId !== (preselectedContributorId || ''),
+  );
+
+  const { handleOpenChange, discardConfirmDialog } = useFormDialogLifecycle({
+    isDirty,
+    isSubmitting: busy,
+    onClose,
+    confirmTitle: 'Discard personal payment entry?',
+    confirmDescription:
+      'You have entered payment details for this expense. Closing now will discard this entry.',
+  });
+
   const activeContributors = contributors.filter((c) => c.status === 'ACTIVE');
   const outstandingExpenses = expenses.filter(
     (e) =>
-      e.status === 'RECORDED' &&
-      Number(e.outstanding) > 0 &&
-      e.currency_code === defaultCurrency,
+      e.status === 'RECORDED' && Number(e.outstanding) > 0 && e.currency_code === defaultCurrency,
   );
 
   // Sync initial expense selection and pre-fill amount
@@ -111,20 +123,26 @@ export function CapitalOwnerExpenseDialog({
   }
 
   return (
-    <Dialog open={open} onOpenChange={(val) => !val && onClose()}>
-      <DialogContent className="sm:max-w-lg">
-        <form className="grid gap-4" onSubmit={handleSubmit}>
-          <DialogHeader>
+    <>
+      <Sheet open={open} onOpenChange={handleOpenChange}>
+        <SheetContent
+          side="right"
+          className="flex w-full flex-col gap-0 p-0 sm:max-w-lg"
+        >
+          <SheetHeader className="shrink-0 border-b border-border/60 px-6 py-4 text-left">
             <div className="flex items-center gap-2">
               <HandCoins className="size-5 text-emerald-600 shrink-0" />
-              <DialogTitle>Record personally funded expense</DialogTitle>
+              <SheetTitle>Record personally funded expense</SheetTitle>
             </div>
-            <DialogDescription className="leading-relaxed">
-              The contributor personally paid a real business cost or supplier bill. This settles the
-              outstanding expense and increases their capital position without altering business
+            <SheetDescription className="leading-relaxed">
+              The contributor personally paid a real business cost or supplier bill. This settles
+              the outstanding expense and increases their capital position without altering business
               account cash balances.
-            </DialogDescription>
-          </DialogHeader>
+            </SheetDescription>
+          </SheetHeader>
+
+          <form className="flex min-h-0 flex-1 flex-col" onSubmit={handleSubmit}>
+            <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-6 py-4">
 
           <label className="grid gap-1.5 text-sm font-medium">
             <span className="flex items-center gap-1.5">
@@ -174,22 +192,22 @@ export function CapitalOwnerExpenseDialog({
           </label>
 
           <div className="grid gap-4 sm:grid-cols-2">
-            <label className="grid gap-1.5 text-sm font-medium">
-              <span>Amount ({defaultCurrency})</span>
-              <Input
-                name="amount"
-                inputMode="decimal"
+            <div>
+              <MoneyField
+                label={`Amount (${defaultCurrency})`}
+                currencySymbol={defaultCurrency === 'BDT' ? '৳' : defaultCurrency}
                 placeholder="0.00"
                 value={amount}
-                onChange={(e) => setAmount(e.target.value)}
+                onChange={setAmount}
+                disabled={busy}
                 required
               />
               {selectedExpense ? (
-                <span className="text-[11px] text-muted-foreground">
+                <span className="mt-1 block text-[11px] text-muted-foreground">
                   Outstanding: {formatMoney(selectedExpense.outstanding, defaultCurrency)}
                 </span>
               ) : null}
-            </label>
+            </div>
 
             <label className="grid gap-1.5 text-sm font-medium">
               <span>Date and time paid</span>
@@ -197,6 +215,7 @@ export function CapitalOwnerExpenseDialog({
                 name="occurredAt"
                 type="datetime-local"
                 defaultValue={localDateTime()}
+                disabled={busy}
                 required
               />
             </label>
@@ -204,7 +223,9 @@ export function CapitalOwnerExpenseDialog({
 
           {isOverpaying ? (
             <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-2.5 text-xs text-amber-700 dark:text-amber-400">
-              Note: Entered amount ({formatMoney(amount, defaultCurrency)}) exceeds outstanding balance ({formatMoney(outstandingLimit, defaultCurrency)}). Payments are capped at total obligation.
+              Note: Entered amount ({formatMoney(amount, defaultCurrency)}) exceeds outstanding
+              balance ({formatMoney(outstandingLimit, defaultCurrency)}). Payments are capped at
+              total obligation.
             </div>
           ) : null}
 
@@ -214,6 +235,7 @@ export function CapitalOwnerExpenseDialog({
               name="reference"
               maxLength={200}
               placeholder="Personal invoice, receipt #, bKash personal TrxID, voucher"
+              disabled={busy}
             />
           </label>
 
@@ -223,28 +245,32 @@ export function CapitalOwnerExpenseDialog({
               name="note"
               maxLength={2000}
               placeholder="Commercial purpose, vendor notes, or justification..."
+              disabled={busy}
             />
           </label>
+        </div>
 
-          <DialogFooter className="mt-2">
-            <Button type="button" variant="outline" onClick={onClose} disabled={busy}>
-              Cancel
-            </Button>
-            <Button
-              type="submit"
-              disabled={
-                busy ||
-                !activeContributors.length ||
-                !outstandingExpenses.length ||
-                !amount ||
-                Number(amount) <= 0
-              }
-            >
-              Record personal payment
-            </Button>
-          </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
+        <SheetFooter className="shrink-0 flex-row items-center justify-end gap-2 border-t border-border/60 bg-card/50 px-6 py-3 pb-[max(1rem,env(safe-area-inset-bottom,0px))] sm:pb-3">
+          <Button type="button" variant="outline" onClick={() => handleOpenChange(false)} disabled={busy}>
+            Cancel
+          </Button>
+          <Button
+            type="submit"
+            disabled={
+              busy ||
+              !activeContributors.length ||
+              !outstandingExpenses.length ||
+              !amount ||
+              Number(amount) <= 0
+            }
+          >
+            Record personal payment
+          </Button>
+        </SheetFooter>
+      </form>
+    </SheetContent>
+  </Sheet>
+  {discardConfirmDialog}
+</>
   );
 }

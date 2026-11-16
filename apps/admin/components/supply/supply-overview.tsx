@@ -26,7 +26,7 @@ import type {
 import { useAdminCapability } from '@/components/admin-capabilities';
 import { OperationalEmptyState, OperationalFeedback } from '@/components/operational-worklist';
 import { QuantityProgress } from '@/components/supply/supply-entity-ui';
-import { SupplyWorkspaceNav } from '@/components/supply/supply-workspace-nav';
+import { AdminPage } from '@/components/ui/page-shell';
 import { StatusBadge } from '@/components/status-badge';
 import { Button } from '@/components/ui/button';
 import { RefreshButton } from '@/components/ui/refresh-button';
@@ -116,7 +116,7 @@ export function SupplyOverview() {
     .slice(0, 5);
 
   return (
-    <main className="min-w-0 space-y-6 px-4 py-5 sm:px-6 lg:px-8">
+    <AdminPage variant="wide">
       <header className="flex flex-col gap-4 border-b pb-5 lg:flex-row lg:items-end lg:justify-between">
         <div>
           <p className="text-sm font-medium text-primary">Supply</p>
@@ -140,8 +140,6 @@ export function SupplyOverview() {
         </div>
       </header>
 
-      <SupplyWorkspaceNav />
-
       {message ? <OperationalFeedback tone="danger">{message}</OperationalFeedback> : null}
 
       <section aria-label="Supply workflow" className="rounded-xl border bg-card p-3">
@@ -155,7 +153,7 @@ export function SupplyOverview() {
               >
                 <span className="relative grid size-10 shrink-0 place-items-center rounded-full bg-primary/10 text-primary">
                   <Icon aria-hidden="true" className="size-4" />
-                  <span className="absolute -right-1 -top-1 grid size-4 place-items-center rounded-full bg-primary font-mono text-[9px] font-semibold text-primary-foreground">
+                  <span className="absolute -right-1 -top-1 grid size-4 place-items-center rounded-full border border-primary/30 bg-primary-subtle font-mono text-[9px] font-semibold text-primary-hover dark:text-primary">
                     {index + 1}
                   </span>
                 </span>
@@ -390,6 +388,6 @@ export function SupplyOverview() {
           </CardContent>
         </Card>
       </div>
-    </main>
+    </AdminPage>
   );
 }

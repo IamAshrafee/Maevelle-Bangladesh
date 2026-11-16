@@ -3,9 +3,8 @@
 import Link from 'next/link';
 import { ArrowLeft, Banknote, Calendar, Pencil, ShieldAlert } from 'lucide-react';
 import type { AssetDetailDto } from '@maevelle/contracts';
-import { OperationalPageHeader } from '@/components/operational-worklist';
-import { Breadcrumb } from '@/components/ui/breadcrumb';
 import { Button } from '@/components/ui/button';
+import { PageHeader } from '@/components/ui/page-shell';
 import { formatAssetDate, humanizeAssetCode } from '@/lib/assets/format';
 import { AssetConditionBadge, AssetStatusBadge } from '../asset-status-badge';
 import { isTerminalAsset } from '../types';
@@ -31,15 +30,12 @@ export function AssetDetailHeader({
 
   return (
     <div className="grid gap-3">
-      <Breadcrumb
-        items={[
+      <PageHeader
+        breadcrumbs={[
           { label: 'Operations', href: '/' },
           { label: 'Assets', href: '/assets' },
           { label: `${asset.assetCode} · ${asset.name}` },
         ]}
-      />
-
-      <OperationalPageHeader
         eyebrow={asset.assetCode}
         title={asset.name}
         description={`${asset.categoryName ?? 'Uncategorized'} · ${humanizeAssetCode(asset.acquisitionSource)} acquisition`}

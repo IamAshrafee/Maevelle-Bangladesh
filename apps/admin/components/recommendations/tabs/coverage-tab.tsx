@@ -76,8 +76,7 @@ export function CoverageTab({
     return items;
   }, [items, filterMode]);
 
-  const allPageSelected =
-    items.length > 0 && items.every((item) => selectedIds.includes(item.id));
+  const allPageSelected = items.length > 0 && items.every((item) => selectedIds.includes(item.id));
 
   return (
     <div className="space-y-4">
@@ -169,7 +168,7 @@ export function CoverageTab({
         />
       ) : (
         <div className="relative">
-          <Table density="comfortable">
+          <Table density="comfortable" stickyHeader>
             <TableHeader>
               <TableRow>
                 <TableHead className="w-10">

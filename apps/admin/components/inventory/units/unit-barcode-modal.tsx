@@ -144,7 +144,10 @@ export function UnitBarcodeModal({ open, onOpenChange, units }: UnitBarcodeModal
               </p>
             </div>
             <div className="flex items-center gap-2">
-              <label htmlFor="label-size" className="text-xs text-muted-foreground hidden sm:inline">
+              <label
+                htmlFor="label-size"
+                className="text-xs text-muted-foreground hidden sm:inline"
+              >
                 Label Size:
               </label>
               <NativeSelect
@@ -164,7 +167,10 @@ export function UnitBarcodeModal({ open, onOpenChange, units }: UnitBarcodeModal
         {/* Printable & Preview Area */}
         <div className="flex-1 overflow-y-auto p-4 sm:p-6 bg-muted/20">
           {printError ? (
-            <div role="alert" className="mb-4 flex items-start gap-2 rounded-lg border border-destructive/20 bg-destructive/10 p-3 text-xs text-destructive">
+            <div
+              role="alert"
+              className="mb-4 flex items-start gap-2 rounded-lg border border-destructive/20 bg-destructive/10 p-3 text-xs text-destructive"
+            >
               <AlertCircle className="mt-0.5 size-4 shrink-0" />
               <span>{printError}</span>
             </div>
@@ -179,7 +185,7 @@ export function UnitBarcodeModal({ open, onOpenChange, units }: UnitBarcodeModal
               return (
                 <div
                   key={unit.id}
-                  className={`bg-white text-black border border-slate-300 rounded shadow-xs p-2.5 flex flex-col justify-between items-center text-center relative print:border-none print:shadow-none print:m-0 print:break-inside-avoid ${activePreset.className}`}
+                  className={`printable-document bg-white text-black border border-slate-300 rounded shadow-xs p-2.5 flex flex-col justify-between items-center text-center relative print:border-none print:shadow-none print:m-0 print:break-inside-avoid ${activePreset.className}`}
                   style={{
                     pageBreakInside: 'avoid',
                   }}
@@ -223,7 +229,7 @@ export function UnitBarcodeModal({ open, onOpenChange, units }: UnitBarcodeModal
                       aria-label={`Copy unit code ${unit.unitCode}`}
                     >
                       {copiedId === unit.unitCode ? (
-                        <Check className="size-2.5 text-emerald-600" />
+                        <Check className="size-2.5 text-success" />
                       ) : (
                         <Copy className="size-2.5" />
                       )}
@@ -238,7 +244,8 @@ export function UnitBarcodeModal({ open, onOpenChange, units }: UnitBarcodeModal
         {/* Action Footer */}
         <DialogFooter className="p-4 border-t bg-card flex sm:justify-between items-center gap-2">
           <p className="text-xs text-muted-foreground hidden sm:block">
-            Standard thermal or desktop sticker printing. Contrast is optimized for optical scanners.
+            Standard thermal or desktop sticker printing. Contrast is optimized for optical
+            scanners.
           </p>
           <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
             <Button variant="outline" size="sm" onClick={() => onOpenChange(false)}>
@@ -251,13 +258,20 @@ export function UnitBarcodeModal({ open, onOpenChange, units }: UnitBarcodeModal
               disabled={printing || units.length === 0}
               className="gap-1.5 shadow-2xs"
             >
-              {printing ? <Loader2 className="size-3.5 animate-spin" /> : <Printer className="size-3.5" />}
-              <span>{printing ? 'Preparing…' : `Print ${units.length} ${units.length === 1 ? 'Label' : 'Labels'}`}</span>
+              {printing ? (
+                <Loader2 className="size-3.5 animate-spin" />
+              ) : (
+                <Printer className="size-3.5" />
+              )}
+              <span>
+                {printing
+                  ? 'Preparing…'
+                  : `Print ${units.length} ${units.length === 1 ? 'Label' : 'Labels'}`}
+              </span>
             </Button>
           </div>
         </DialogFooter>
       </DialogContent>
-
     </Dialog>
   );
 }

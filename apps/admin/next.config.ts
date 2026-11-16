@@ -19,7 +19,10 @@ function getAllowedDevOrigins(): string[] {
         const url = new URL(trimmed);
         if (url.hostname) origins.add(url.hostname);
       } catch {
-        const host = trimmed.replace(/^https?:\/\//, '').split(':')[0].split('/')[0];
+        const host = trimmed
+          .replace(/^https?:\/\//, '')
+          .split(':')[0]
+          .split('/')[0];
         if (host) origins.add(host);
       }
     }
@@ -30,7 +33,10 @@ function getAllowedDevOrigins(): string[] {
     for (const iface of Object.values(interfaces)) {
       if (!iface) continue;
       for (const net of iface) {
-        if ((net.family === 'IPv4' || (net as { family: string | number }).family === 4) && !net.internal) {
+        if (
+          (net.family === 'IPv4' || (net as { family: string | number }).family === 4) &&
+          !net.internal
+        ) {
           origins.add(net.address);
         }
       }
@@ -60,10 +66,14 @@ const nextConfig: NextConfig = {
     ];
   },
   async rewrites() {
+    const api =
+      process.env.NODE_ENV === 'development'
+        ? new URL(process.env.ADMIN_INTERNAL_API_URL ?? 'http://localhost:3002').origin
+        : 'http://localhost:3002';
     return [
       {
         source: '/api/:path*',
-        destination: 'http://localhost:3002/:path*',
+        destination: `${api}/:path*`,
         basePath: false,
       },
     ];

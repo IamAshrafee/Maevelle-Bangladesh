@@ -3,13 +3,13 @@
 import { useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import {
-  Dialog,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
-import { SupplyTaskDialogContent } from '@/components/supply/supply-task-dialog-content';
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetFooter,
+  SheetHeader,
+  SheetTitle,
+} from '@/components/ui/sheet';
 import { Input } from '@/components/ui/input';
 import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select';
 import { SupplyField } from '@/components/supply/supply-field';
@@ -77,163 +77,167 @@ export function EditShipmentDialog({
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <SupplyTaskDialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-2xl">
-        <DialogHeader>
-          <DialogTitle>Edit Logistics Details</DialogTitle>
-          <DialogDescription>
+    <Sheet open={open} onOpenChange={onOpenChange}>
+      <SheetContent side="right" className="gap-0 p-0 sm:max-w-2xl">
+        <SheetHeader className="shrink-0 border-b border-border px-5 py-4 pr-11 text-left">
+          <SheetTitle>Edit Logistics Details</SheetTitle>
+          <SheetDescription>
             Update tracking, route, transport mode, and estimated arrival date for{' '}
             {shipment.shipmentNumber}.
-          </DialogDescription>
-        </DialogHeader>
+          </SheetDescription>
+        </SheetHeader>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <SupplyField label="Transport Mode">
-            <NativeSelect
-              name="transportMode"
-              className="w-full"
-              value={transportMode}
-              onChange={(e) =>
-                setTransportMode(e.target.value as 'AIR' | 'SEA' | 'ROAD' | 'RAIL' | 'OTHER')
-              }
-              disabled={saving}
-            >
-              <NativeSelectOption value="SEA">Sea Freight (Container / Vessel)</NativeSelectOption>
-              <NativeSelectOption value="AIR">Air Freight (Cargo / Express)</NativeSelectOption>
-              <NativeSelectOption value="ROAD">Road Freight (Truck / Courier)</NativeSelectOption>
-              <NativeSelectOption value="RAIL">Rail Freight</NativeSelectOption>
-              <NativeSelectOption value="OTHER">Other / Multimodal Logistics</NativeSelectOption>
-            </NativeSelect>
-          </SupplyField>
+        <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col">
+          <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-5 py-4">
+            <SupplyField label="Transport Mode">
+              <NativeSelect
+                name="transportMode"
+                className="w-full"
+                value={transportMode}
+                onChange={(e) =>
+                  setTransportMode(e.target.value as 'AIR' | 'SEA' | 'ROAD' | 'RAIL' | 'OTHER')
+                }
+                disabled={saving}
+              >
+                <NativeSelectOption value="SEA">
+                  Sea Freight (Container / Vessel)
+                </NativeSelectOption>
+                <NativeSelectOption value="AIR">Air Freight (Cargo / Express)</NativeSelectOption>
+                <NativeSelectOption value="ROAD">Road Freight (Truck / Courier)</NativeSelectOption>
+                <NativeSelectOption value="RAIL">Rail Freight</NativeSelectOption>
+                <NativeSelectOption value="OTHER">Other / Multimodal Logistics</NativeSelectOption>
+              </NativeSelect>
+            </SupplyField>
 
-          <SupplyField label="Tracking / Bill of Lading / AWB #">
-            <Input
-              name="trackingReference"
-              autoComplete="off"
-              value={trackingReference}
-              onChange={(e) => setTrackingReference(e.target.value)}
-              placeholder="e.g. MSKU9281740 or AWB-784-90218"
-              disabled={saving}
-            />
-          </SupplyField>
+            <SupplyField label="Tracking / Bill of Lading / AWB #">
+              <Input
+                name="trackingReference"
+                autoComplete="off"
+                value={trackingReference}
+                onChange={(e) => setTrackingReference(e.target.value)}
+                placeholder="e.g. MSKU9281740 or AWB-784-90218"
+                disabled={saving}
+              />
+            </SupplyField>
 
-          <SupplyField label="Origin Port / City">
-            <Input
-              name="originText"
-              autoComplete="off"
-              value={originText}
-              onChange={(e) => setOriginText(e.target.value)}
-              placeholder="e.g. Guangzhou Port, China"
-              disabled={saving}
-            />
-          </SupplyField>
+            <SupplyField label="Origin Port / City">
+              <Input
+                name="originText"
+                autoComplete="off"
+                value={originText}
+                onChange={(e) => setOriginText(e.target.value)}
+                placeholder="e.g. Guangzhou Port, China"
+                disabled={saving}
+              />
+            </SupplyField>
 
-          <SupplyField label="Expected Arrival Date (ETA)">
-            <Input
-              name="expectedArrivalDate"
-              type="date"
-              value={expectedArrivalDate}
-              onChange={(e) => setExpectedArrivalDate(e.target.value)}
-              disabled={saving}
-            />
-          </SupplyField>
+            <SupplyField label="Expected Arrival Date (ETA)">
+              <Input
+                name="expectedArrivalDate"
+                type="date"
+                value={expectedArrivalDate}
+                onChange={(e) => setExpectedArrivalDate(e.target.value)}
+                disabled={saving}
+              />
+            </SupplyField>
 
-          <div className="border-t pt-4">
-            <p className="mb-3 text-sm font-semibold">Provider evidence & freight measurement</p>
-            <div className="grid gap-4 sm:grid-cols-2">
-              <SupplyField label="Provider batch / shipment reference">
-                <Input
-                  name="providerReference"
-                  autoComplete="off"
-                  value={providerReference}
-                  onChange={(event) => setProviderReference(event.target.value)}
-                  placeholder="e.g. CB-A-G-661"
-                  disabled={saving}
-                />
-              </SupplyField>
-              <SupplyField label="Weight unit">
-                <NativeSelect
-                  name="weightUnit"
-                  className="w-full"
-                  value={weightUnit}
-                  onChange={(event) => setWeightUnit(event.target.value as 'KG' | 'LB')}
-                  disabled={saving}
-                >
-                  <NativeSelectOption value="KG">Kilograms (kg)</NativeSelectOption>
-                  <NativeSelectOption value="LB">Pounds (lb)</NativeSelectOption>
-                </NativeSelect>
-              </SupplyField>
-              <SupplyField label="Gross / received weight">
-                <Input
-                  name="grossWeight"
-                  type="number"
-                  min="0"
-                  step="0.000001"
-                  value={grossWeight}
-                  onChange={(event) => setGrossWeight(event.target.value)}
-                  placeholder="0.830000"
-                  disabled={saving}
-                />
-              </SupplyField>
-              <SupplyField label="Chargeable weight">
-                <Input
-                  name="chargeableWeight"
-                  type="number"
-                  min="0"
-                  step="0.000001"
-                  value={chargeableWeight}
-                  onChange={(event) => setChargeableWeight(event.target.value)}
-                  placeholder="0.830000"
-                  disabled={saving}
-                />
-              </SupplyField>
-              <SupplyField label="Freight rate">
-                <div className="flex gap-2">
+            <div className="border-t pt-4">
+              <p className="mb-3 text-sm font-semibold">Provider evidence & freight measurement</p>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <SupplyField label="Provider batch / shipment reference">
                   <Input
-                    name="freightRate"
+                    name="providerReference"
+                    autoComplete="off"
+                    value={providerReference}
+                    onChange={(event) => setProviderReference(event.target.value)}
+                    placeholder="e.g. CB-A-G-661"
+                    disabled={saving}
+                  />
+                </SupplyField>
+                <SupplyField label="Weight unit">
+                  <NativeSelect
+                    name="weightUnit"
+                    className="w-full"
+                    value={weightUnit}
+                    onChange={(event) => setWeightUnit(event.target.value as 'KG' | 'LB')}
+                    disabled={saving}
+                  >
+                    <NativeSelectOption value="KG">Kilograms (kg)</NativeSelectOption>
+                    <NativeSelectOption value="LB">Pounds (lb)</NativeSelectOption>
+                  </NativeSelect>
+                </SupplyField>
+                <SupplyField label="Gross / received weight">
+                  <Input
+                    name="grossWeight"
+                    type="number"
+                    min="0"
+                    step="0.000001"
+                    value={grossWeight}
+                    onChange={(event) => setGrossWeight(event.target.value)}
+                    placeholder="0.830000"
+                    disabled={saving}
+                  />
+                </SupplyField>
+                <SupplyField label="Chargeable weight">
+                  <Input
+                    name="chargeableWeight"
+                    type="number"
+                    min="0"
+                    step="0.000001"
+                    value={chargeableWeight}
+                    onChange={(event) => setChargeableWeight(event.target.value)}
+                    placeholder="0.830000"
+                    disabled={saving}
+                  />
+                </SupplyField>
+                <SupplyField label="Freight rate">
+                  <div className="flex gap-2">
+                    <Input
+                      name="freightRate"
+                      type="number"
+                      min="0"
+                      step="0.0001"
+                      value={freightRate}
+                      onChange={(event) => setFreightRate(event.target.value)}
+                      placeholder="750"
+                      disabled={saving}
+                    />
+                    <NativeSelect
+                      name="freightRateUnit"
+                      className="w-32 shrink-0"
+                      value={freightRateUnit}
+                      onChange={(event) =>
+                        setFreightRateUnit(event.target.value as 'PER_KG' | 'PER_LB' | 'FLAT')
+                      }
+                      disabled={saving}
+                    >
+                      <NativeSelectOption value="PER_KG">per kg</NativeSelectOption>
+                      <NativeSelectOption value="PER_LB">per lb</NativeSelectOption>
+                      <NativeSelectOption value="FLAT">flat</NativeSelectOption>
+                    </NativeSelect>
+                  </div>
+                </SupplyField>
+                <SupplyField label={`Provider freight amount (${shipment.currencyCode})`}>
+                  <Input
+                    name="providerFreightAmount"
                     type="number"
                     min="0"
                     step="0.0001"
-                    value={freightRate}
-                    onChange={(event) => setFreightRate(event.target.value)}
-                    placeholder="750"
+                    value={reportedFreightAmount}
+                    onChange={(event) => setReportedFreightAmount(event.target.value)}
+                    placeholder="623"
                     disabled={saving}
                   />
-                  <NativeSelect
-                    name="freightRateUnit"
-                    className="w-32 shrink-0"
-                    value={freightRateUnit}
-                    onChange={(event) =>
-                      setFreightRateUnit(event.target.value as 'PER_KG' | 'PER_LB' | 'FLAT')
-                    }
-                    disabled={saving}
-                  >
-                    <NativeSelectOption value="PER_KG">per kg</NativeSelectOption>
-                    <NativeSelectOption value="PER_LB">per lb</NativeSelectOption>
-                    <NativeSelectOption value="FLAT">flat</NativeSelectOption>
-                  </NativeSelect>
-                </div>
-              </SupplyField>
-              <SupplyField label={`Provider freight amount (${shipment.currencyCode})`}>
-                <Input
-                  name="providerFreightAmount"
-                  type="number"
-                  min="0"
-                  step="0.0001"
-                  value={reportedFreightAmount}
-                  onChange={(event) => setReportedFreightAmount(event.target.value)}
-                  placeholder="623"
-                  disabled={saving}
-                />
-              </SupplyField>
+                </SupplyField>
+              </div>
+              <p className="mt-2 text-xs text-muted-foreground">
+                This is logistics evidence. Add or link the matching International Freight component
+                in Landed Cost before finalization.
+              </p>
             </div>
-            <p className="mt-2 text-xs text-muted-foreground">
-              This is logistics evidence. Add or link the matching International Freight component
-              in Landed Cost before finalization.
-            </p>
           </div>
 
-          <DialogFooter className="gap-2 sm:justify-end">
+          <SheetFooter className="shrink-0 flex-row items-center justify-end gap-2 border-t border-border bg-card/50 px-5 py-3">
             <Button
               type="button"
               variant="outline"
@@ -245,9 +249,9 @@ export function EditShipmentDialog({
             <Button type="submit" disabled={saving}>
               {saving ? 'Saving changes…' : 'Save Logistics Details'}
             </Button>
-          </DialogFooter>
+          </SheetFooter>
         </form>
-      </SupplyTaskDialogContent>
-    </Dialog>
+      </SheetContent>
+    </Sheet>
   );
 }

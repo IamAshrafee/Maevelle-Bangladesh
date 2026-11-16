@@ -3,500 +3,45 @@
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import {
-  Activity,
-  Bell,
-  Boxes,
-  Building2,
-  BriefcaseBusiness,
-  ChartNoAxesCombined,
   ChevronRight,
-  CircleDollarSign,
-  ClipboardCheck,
   Command,
-  CreditCard,
-  FolderTree,
-  Gauge,
-  HandCoins,
-  HeartHandshake,
-  Image,
-  Landmark,
-  Laptop,
-  LayoutDashboard,
-  Mail,
-  MessageSquareText,
   Menu,
-  PackageCheck,
-  PackageOpen,
-  PackageSearch,
-  Palette,
   PanelLeftClose,
-  Plug,
-  ReceiptText,
-  RefreshCw,
-  Ruler,
-  ScanBarcode,
   Search,
-  Settings,
   ShieldAlert,
-  ShieldCheck,
-  ShoppingBag,
-  Tags,
-  Truck,
-  User,
-  UserRoundCog,
-  Users,
-  Warehouse,
   X,
-  type LucideIcon,
 } from 'lucide-react';
 import * as React from 'react';
 import { type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
-
 import type { AdminContextDto, ApiEnvelope } from '@maevelle/contracts';
 
 import { AdminCapabilitiesProvider } from './admin-capabilities';
 import { TwoFactorRequiredGate } from './security/two-factor-required-gate';
 import { UserMenu } from './user-menu';
 import { NotificationBell } from './notifications/notification-bell';
+import { NavIcon } from './navigation/nav-icons';
 import { cn } from '@/lib/utils';
 import { publicAdminPaths, safeAdminReturnUrl } from '@/lib/auth/access-policy';
 import { useAdminAccess } from '@/lib/auth/use-admin-access';
+import {
+  getCommandPaletteEntries,
+  getPlatformUtilityItems,
+  getRouteEntry,
+  getSidebarPillars,
+  hasRoutePermission,
+  isSidebarItemActive,
+  toAppRoutePath,
+} from '@/lib/navigation/route-registry';
 import { AdminAccessFeedback } from './security/admin-access-feedback';
+import { ADMIN_MOTION, AnimatePresence, MotionBackdrop, motion } from './motion/motion-primitives';
+
+export function useAdminShellChrome() {
+  return { setMobileIslandHidden: () => undefined };
+}
 
 type AdminContext = AdminContextDto;
 
 type SearchResult = { kind: string; label: string; detail: string; href: string };
-
-type NavItem = {
-  label: string;
-  href: string;
-  icon: LucideIcon;
-  capability?: string;
-  keywords?: string;
-};
-
-type NavGroup = { label: string; items: readonly NavItem[] };
-
-const navigation: readonly NavGroup[] = [
-  {
-    label: 'Overview',
-    items: [
-      { label: 'Dashboard', href: '/', icon: LayoutDashboard },
-      { label: 'Attention', href: '/operations', icon: Gauge, capability: 'admin.operations.view' },
-    ],
-  },
-  {
-    label: 'Commerce',
-    items: [
-      { label: 'Orders', href: '/orders', icon: ShoppingBag, capability: 'orders.view' },
-      {
-        label: 'Delivery pricing',
-        href: '/orders/delivery-pricing',
-        icon: CircleDollarSign,
-        capability: 'orders.view',
-        keywords: 'delivery pricing rules shipping rates charges fees zones bangladesh',
-      },
-      { label: 'Customers', href: '/customers', icon: Users, capability: 'customers.view' },
-      { label: 'Reviews', href: '/reviews', icon: HeartHandshake, capability: 'reviews.view' },
-    ],
-  },
-  {
-    label: 'Catalog',
-    items: [
-      { label: 'Products', href: '/products', icon: PackageSearch, capability: 'catalog.view' },
-      {
-        label: 'Recommendations',
-        href: '/recommendations',
-        icon: ChartNoAxesCombined,
-        capability: 'recommendations.view',
-      },
-      {
-        label: 'Product organization',
-        href: '/categories',
-        icon: FolderTree,
-        capability: 'catalog.manage',
-        keywords: 'categories tags occasions events collections taxonomy',
-      },
-      { label: 'Media', href: '/media', icon: Image, capability: 'media.view' },
-      {
-        label: 'Color library',
-        href: '/settings/colors',
-        icon: Palette,
-        capability: 'catalog.view',
-        keywords: 'colors swatches hex library shades',
-      },
-      { label: 'Sizing', href: '/sizing', icon: Ruler, capability: 'sizing.view' },
-      { label: 'Pricing', href: '/pricing', icon: Tags, capability: 'pricing.view' },
-      { label: 'Promotions', href: '/promotions', icon: HandCoins, capability: 'promotions.view' },
-    ],
-  },
-  {
-    label: 'Inventory',
-    items: [
-      {
-        label: 'Overview',
-        href: '/inventory',
-        icon: LayoutDashboard,
-        capability: 'inventory.view',
-      },
-      { label: 'Stock', href: '/inventory/stock', icon: Boxes, capability: 'inventory.view' },
-      {
-        label: 'Locations',
-        href: '/inventory/warehouses',
-        icon: Warehouse,
-        capability: 'warehouse.view',
-        keywords: 'warehouses facilities stores stock holding',
-      },
-      {
-        label: 'Transfers',
-        href: '/inventory/transfers',
-        icon: RefreshCw,
-        capability: 'inventory.transfer',
-      },
-      {
-        label: 'Counts',
-        href: '/inventory/stocktakes',
-        icon: ClipboardCheck,
-        capability: 'inventory.stocktake',
-        keywords: 'stocktakes cycle counts reconciliation variance',
-      },
-      {
-        label: 'Quality',
-        href: '/inventory/units',
-        icon: ScanBarcode,
-        capability: 'inventory.units.view',
-        keywords:
-          'serial serialized individual barcode units qc inspection repair quarantine release write off',
-      },
-    ],
-  },
-  {
-    label: 'Purchasing & Supply',
-    items: [
-      {
-        label: 'Supply overview',
-        href: '/supply',
-        icon: LayoutDashboard,
-        capability: 'procurement.view',
-      },
-      {
-        label: 'Suppliers',
-        href: '/suppliers',
-        icon: Building2,
-        capability: 'procurement.view',
-      },
-      {
-        label: 'Purchases',
-        href: '/purchases',
-        icon: ShoppingBag,
-        capability: 'procurement.view',
-      },
-      {
-        label: 'Shipments',
-        href: '/inbound-shipments',
-        icon: Truck,
-        capability: 'inbound_shipment.view',
-      },
-      {
-        label: 'Goods receiving',
-        href: '/receiving',
-        icon: PackageCheck,
-        capability: 'receiving.view',
-      },
-      {
-        label: 'Landed cost',
-        href: '/landed-cost',
-        icon: Landmark,
-        capability: 'landed_cost.view',
-      },
-    ],
-  },
-  {
-    label: 'Fulfillment & Logistics',
-    items: [
-      {
-        label: 'Fulfillment queue',
-        href: '/fulfillments',
-        icon: Boxes,
-        capability: 'fulfillment.view',
-      },
-      {
-        label: 'Deliveries',
-        href: '/deliveries',
-        icon: Truck,
-        capability: 'delivery.view',
-      },
-      {
-        label: 'Delivery exceptions',
-        href: '/delivery/exceptions',
-        icon: Activity,
-        capability: 'delivery.view',
-      },
-      {
-        label: 'Returns',
-        href: '/returns',
-        icon: PackageOpen,
-        capability: 'returns.view',
-      },
-      {
-        label: 'Courier performance',
-        href: '/couriers',
-        icon: ChartNoAxesCombined,
-        capability: 'delivery.view',
-      },
-    ],
-  },
-  {
-    label: 'Finance',
-    items: [
-      { label: 'Overview', href: '/finance', icon: LayoutDashboard, capability: 'finance.view' },
-      { label: 'Accounts', href: '/finance/accounts', icon: Landmark, capability: 'finance.view' },
-      {
-        label: 'Expenses',
-        href: '/finance/expenses',
-        icon: ReceiptText,
-        capability: 'finance.view',
-      },
-      {
-        label: 'Ledger journal',
-        href: '/finance/journal',
-        icon: BriefcaseBusiness,
-        capability: 'finance.view',
-      },
-      {
-        label: 'Reconciliation',
-        href: '/finance/reconciliations',
-        icon: ClipboardCheck,
-        capability: 'reconciliation.view',
-      },
-      { label: 'Payments', href: '/payments', icon: CreditCard, capability: 'payments.view' },
-      {
-        label: 'Payouts',
-        href: '/finance/payouts',
-        icon: CircleDollarSign,
-        capability: 'finance.view',
-      },
-      { label: 'Capital', href: '/finance/capital', icon: Landmark, capability: 'finance.view' },
-    ],
-  },
-  {
-    label: 'Communication',
-    items: [
-      {
-        label: 'Messaging',
-        href: '/messaging',
-        icon: MessageSquareText,
-        capability: 'messaging.inbox.view_assigned',
-        keywords: 'inbox conversations chat agents follow ups customer support',
-      },
-      {
-        label: 'Notifications Center',
-        href: '/notifications',
-        icon: Bell,
-        capability: 'notifications.view',
-        keywords: 'inbox history alerts templates rules channels dispatch operations',
-      },
-      {
-        label: 'Email Operations',
-        href: '/email',
-        icon: Mail,
-        capability: 'notifications.view',
-        keywords: 'resend deliverability transactional sender identity logs',
-      },
-      {
-        label: 'SMS Operations',
-        href: '/sms',
-        icon: MessageSquareText,
-        capability: 'notifications.sms.view',
-        keywords: 'sms gateway campaigns broadcast mask operator',
-      },
-    ],
-  },
-  {
-    label: 'Operations & Intelligence',
-    items: [
-      {
-        label: 'Analytics',
-        href: '/analytics',
-        icon: ChartNoAxesCombined,
-        capability: 'analytics.view',
-        keywords:
-          'analytics reports business intelligence wishlist saves demand sharing products cohorts',
-      },
-      {
-        label: 'Costing & margins',
-        href: '/costing',
-        icon: Landmark,
-        capability: 'finance.view',
-      },
-      {
-        label: 'Fixed assets',
-        href: '/assets',
-        icon: BriefcaseBusiness,
-        capability: 'assets.view',
-      },
-      {
-        label: 'System integrity',
-        href: '/integrity',
-        icon: ShieldCheck,
-        capability: 'admin.integrity.view',
-      },
-      {
-        label: 'Integrations & Hub',
-        href: '/settings/integrations',
-        icon: Plug,
-        capability: 'integrations.view',
-      },
-    ],
-  },
-  {
-    label: 'Settings & Administration',
-    items: [
-      {
-        label: 'Settings',
-        href: '/settings',
-        icon: Settings,
-        keywords:
-          'general organization security integrations health system configuration design system',
-      },
-      {
-        label: 'Organization',
-        href: '/settings/organization',
-        icon: Building2,
-        capability: 'settings.organization.manage',
-      },
-      {
-        label: 'Team members',
-        href: '/team',
-        icon: UserRoundCog,
-        capability: 'admin.team.view',
-      },
-      {
-        label: 'Security & roles',
-        href: '/settings/security',
-        icon: ShieldCheck,
-        capability: 'settings.view',
-      },
-      {
-        label: 'Notification rules',
-        href: '/notifications',
-        icon: Bell,
-        capability: 'notifications.view',
-      },
-      {
-        label: 'Audit log',
-        href: '/settings/audit',
-        icon: Activity,
-        capability: 'settings.view',
-      },
-    ],
-  },
-];
-
-const quickCommands: readonly NavItem[] = [
-  {
-    label: 'Scan physical unit barcode',
-    href: '/inventory/units/scan',
-    icon: ScanBarcode,
-    capability: 'inventory.units.view',
-    keywords: 'barcode scan unit physical mvu camera',
-  },
-  {
-    label: 'My account & profile',
-    href: '/account',
-    icon: User,
-    keywords: 'profile password security email sessions 2fa avatar user self personal',
-  },
-  {
-    label: 'Account security & 2FA',
-    href: '/account?tab=security',
-    icon: ShieldCheck,
-    keywords: 'password two factor 2fa authenticator security',
-  },
-  {
-    label: 'Active sessions & devices',
-    href: '/account?tab=sessions',
-    icon: Laptop,
-    keywords: 'sessions devices revoke tokens logins device',
-  },
-  {
-    label: 'Add an expense',
-    href: '/finance/expenses?create=expense',
-    icon: ReceiptText,
-    capability: 'finance.manage',
-    keywords: 'spending payment out money expense',
-  },
-  {
-    label: 'Record fixed asset',
-    href: '/assets?create=asset',
-    icon: BriefcaseBusiness,
-    capability: 'assets.manage',
-    keywords: 'equipment property existing asset',
-  },
-  {
-    label: 'Create a product',
-    href: '/products/new',
-    icon: PackageSearch,
-    capability: 'catalog.manage',
-    keywords: 'new draft catalog',
-  },
-  {
-    label: 'Manage color library',
-    href: '/settings/colors',
-    icon: Palette,
-    capability: 'catalog.manage',
-    keywords: 'colors swatches hex library shades',
-  },
-  {
-    label: 'Create a purchase',
-    href: '/purchases?create=purchase',
-    icon: ReceiptText,
-    capability: 'procurement.manage',
-    keywords: 'new supplier order',
-  },
-  {
-    label: 'Receive a shipment',
-    href: '/supply#receiving',
-    icon: PackageCheck,
-    capability: 'receiving.post',
-    keywords: 'warehouse inbound',
-  },
-  {
-    label: 'Verify payments',
-    href: '/payments',
-    icon: CreditCard,
-    capability: 'payments.verify',
-    keywords: 'bkash nagad queue',
-  },
-  {
-    label: 'Open fulfillment queue',
-    href: '/fulfillments',
-    icon: Boxes,
-    capability: 'fulfillment.view',
-    keywords: 'pick pack dispatch',
-  },
-];
-
-function hasCapability(context: AdminContext | undefined, capability?: string) {
-  if (!capability) return true;
-  if (!context) return false;
-  if (context.membershipType === 'OWNER') return true;
-  return context.capabilities.includes(capability);
-}
-
-const allNavHrefs = navigation.flatMap((group) => group.items.map((item) => item.href));
-
-function isNavActive(pathname: string, href: string) {
-  if (href === '/') return pathname === '/';
-  if (pathname === href) return true;
-  if (!pathname.startsWith(`${href}/`)) return false;
-  return !allNavHrefs.some(
-    (other) =>
-      other !== href &&
-      other.startsWith(`${href}/`) &&
-      (pathname === other || pathname.startsWith(`${other}/`)),
-  );
-}
 
 function CommandPalette({
   open,
@@ -512,16 +57,15 @@ function CommandPalette({
   const [query, setQuery] = useState('');
   const [remote, setRemote] = useState<readonly SearchResult[]>([]);
   const [busy, setBusy] = useState(false);
-  const local = useMemo(
-    () =>
-      [...navigation.flatMap((group) => group.items), ...quickCommands]
-        .filter((item) => hasCapability(context, item.capability))
-        .filter((item) =>
-          `${item.label} ${item.keywords ?? ''}`.toLowerCase().includes(query.toLowerCase()),
-        )
-        .slice(0, 10),
-    [context, query],
-  );
+
+  const local = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return getCommandPaletteEntries(context)
+      .filter((item) =>
+        q.length === 0 ? true : `${item.label} ${item.keywords ?? ''}`.toLowerCase().includes(q),
+      )
+      .slice(0, 12);
+  }, [context, query]);
 
   useEffect(() => {
     if (!open) return;
@@ -531,7 +75,11 @@ function CommandPalette({
   }, [open]);
 
   useEffect(() => {
-    if (!open || query.trim().length < 2 || !hasCapability(context, 'admin.operations.view')) {
+    if (
+      !open ||
+      query.trim().length < 2 ||
+      !hasRoutePermission(context, { capability: 'admin.operations.view' })
+    ) {
       setRemote([]);
       return;
     }
@@ -543,8 +91,9 @@ function CommandPalette({
           credentials: 'include',
           signal: controller.signal,
         });
-        if (response.ok)
+        if (response.ok) {
           setRemote(((await response.json()) as ApiEnvelope<readonly SearchResult[]>).data);
+        }
       } finally {
         setBusy(false);
       }
@@ -555,118 +104,287 @@ function CommandPalette({
     };
   }, [context, open, query]);
 
-  if (!open) return null;
   const go = (href: string) => {
     onClose();
-    router.push(href);
+    router.push(toAppRoutePath(href));
   };
+
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-start justify-center p-4 sm:p-6 md:p-20 bg-slate-950/45 backdrop-blur-xs animate-in fade-in duration-150"
-      role="presentation"
-      onMouseDown={onClose}
-    >
-      <section
-        aria-label="Command palette"
-        aria-modal="true"
-        role="dialog"
-        onMouseDown={(event) => event.stopPropagation()}
-        className="w-full max-w-2xl rounded-2xl border border-border bg-card shadow-2xl overflow-hidden flex flex-col max-h-[80vh] text-card-foreground animate-in zoom-in-95 duration-150"
+    <AnimatePresence>
+      {open ? (
+        <MotionBackdrop
+          key="command-palette-backdrop"
+          data-shell-chrome="true"
+          className="fixed inset-0 z-50 flex items-start justify-center p-4 sm:p-6 md:p-20 bg-foreground/45 dark:bg-black/60 backdrop-blur-xs touch-none print:hidden"
+          role="presentation"
+          onMouseDown={onClose}
+        >
+          <motion.section
+            key="command-palette-panel"
+            aria-label="Command palette"
+            aria-modal="true"
+            role="dialog"
+            initial={{ opacity: 0, scale: 0.96, y: -10 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.96, y: -6 }}
+            transition={ADMIN_MOTION.panel}
+            onMouseDown={(event) => event.stopPropagation()}
+            className="w-full max-w-2xl rounded-2xl border border-border bg-card shadow-2xl overflow-hidden overscroll-contain flex flex-col max-h-[80vh] text-card-foreground"
+          >
+            <div className="flex items-center gap-3 px-4 py-3.5 border-b border-border bg-muted/20 text-muted-foreground">
+              <Search className="size-4 shrink-0" aria-hidden="true" />
+              <input
+                ref={input}
+                aria-label="Search navigation and business records"
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                placeholder="Go to a workspace or find an order, customer, product…"
+                className="flex-1 bg-transparent text-sm text-foreground placeholder:text-muted-foreground outline-none"
+              />
+              <kbd className="hidden sm:inline-flex items-center px-1.5 py-0.5 text-[10px] font-mono text-muted-foreground bg-muted border border-border rounded">
+                Esc
+              </kbd>
+              <button
+                type="button"
+                onClick={onClose}
+                aria-label="Close search"
+                className="sm:hidden min-h-11 min-w-11 flex items-center justify-center rounded-lg hover:bg-muted text-muted-foreground"
+              >
+                <X className="size-4" aria-hidden="true" />
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto overflow-x-hidden overscroll-contain touch-pan-y p-2 space-y-1 divide-y divide-border/40">
+              <div className="space-y-0.5">
+                <p className="px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                  Workspaces &amp; actions
+                </p>
+                {local.map((item) => (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() => go(item.href)}
+                    className="w-full min-h-11 flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm text-left text-foreground hover:bg-muted/60 transition-colors group cursor-pointer"
+                  >
+                    <NavIcon
+                      name={item.icon}
+                      className="size-4 text-muted-foreground group-hover:text-primary transition-colors shrink-0"
+                    />
+                    <span className="flex-1 truncate">{item.label}</span>
+                    <ChevronRight
+                      className="size-3.5 text-muted-foreground/60 group-hover:text-foreground shrink-0"
+                      aria-hidden="true"
+                    />
+                  </button>
+                ))}
+              </div>
+
+              {remote.length > 0 ? (
+                <div className="space-y-0.5 pt-2">
+                  <p className="px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                    Business records
+                  </p>
+                  {remote.map((result) => (
+                    <button
+                      key={`${result.kind}-${result.href}`}
+                      type="button"
+                      onClick={() => go(result.href)}
+                      className="w-full min-h-11 flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm text-left text-foreground hover:bg-muted/60 transition-colors group cursor-pointer"
+                    >
+                      <Search
+                        className="size-4 text-muted-foreground group-hover:text-primary transition-colors shrink-0"
+                        aria-hidden="true"
+                      />
+                      <span className="flex-1 min-w-0">
+                        <strong className="block text-sm font-medium text-foreground truncate">
+                          {result.label}
+                        </strong>
+                        <small className="block text-xs text-muted-foreground truncate">
+                          {result.kind} · {result.detail}
+                        </small>
+                      </span>
+                      <ChevronRight
+                        className="size-3.5 text-muted-foreground/60 group-hover:text-foreground shrink-0"
+                        aria-hidden="true"
+                      />
+                    </button>
+                  ))}
+                </div>
+              ) : null}
+
+              {busy ? (
+                <p className="px-3 py-4 text-xs text-center text-muted-foreground">
+                  Searching authoritative records…
+                </p>
+              ) : null}
+              {!busy && query && local.length === 0 && remote.length === 0 ? (
+                <p className="px-3 py-6 text-sm text-center text-muted-foreground">
+                  No accessible workspace or record matches “{query}”.
+                </p>
+              ) : null}
+            </div>
+            <footer className="flex items-center justify-between px-4 py-2 border-t border-border bg-muted/30 text-xs text-muted-foreground">
+              <span className="flex items-center gap-1">
+                <Command className="size-3" aria-hidden="true" /> K to open
+              </span>
+              <span>Results respect your active organization &amp; permissions</span>
+            </footer>
+          </motion.section>
+        </MotionBackdrop>
+      ) : null}
+    </AnimatePresence>
+  );
+}
+
+interface SidebarNavBodyProps {
+  readonly pathname: string;
+  readonly visiblePillars: ReturnType<typeof getSidebarPillars>;
+  readonly utilityItems: ReturnType<typeof getPlatformUtilityItems>;
+  readonly collapsed: boolean;
+  readonly onToggleCollapse: () => void;
+  readonly onCloseMobile: () => void;
+}
+
+function SidebarNavBody({
+  pathname,
+  visiblePillars,
+  utilityItems,
+  collapsed,
+  onToggleCollapse,
+  onCloseMobile,
+}: SidebarNavBodyProps) {
+  return (
+    <>
+      {/* Brand Lockup */}
+      <div
+        className={cn(
+          'h-14 flex items-center gap-3 px-4 border-b border-sidebar-border bg-sidebar shrink-0',
+          collapsed && 'md:justify-center md:px-2',
+        )}
       >
-        <div className="flex items-center gap-3 px-4 py-3.5 border-b border-border bg-muted/20 text-muted-foreground">
-          <Search className="size-4 shrink-0" aria-hidden="true" />
-          <input
-            ref={input}
-            aria-label="Search navigation and business records"
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            placeholder="Go to a workspace or find an order, customer, product…"
-            className="flex-1 bg-transparent text-sm text-foreground placeholder:text-muted-foreground outline-none"
-          />
-          <kbd className="hidden sm:inline-flex items-center px-1.5 py-0.5 text-[10px] font-mono text-muted-foreground bg-muted border border-border rounded">
-            Esc
-          </kbd>
+        <div
+          className="size-8 rounded-lg bg-primary text-foreground dark:text-primary-foreground font-bold flex items-center justify-center text-sm shadow-xs shrink-0 tracking-tight"
+          aria-hidden="true"
+        >
+          M
         </div>
-        <div className="flex-1 overflow-y-auto p-2 space-y-1 divide-y divide-border/40">
-          <div className="space-y-0.5">
-            <p className="px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-              Workspaces & actions
+        <div className={cn('min-w-0 flex flex-col leading-tight', collapsed && 'md:hidden')}>
+          <strong className="text-sm font-bold tracking-tight text-sidebar-foreground">
+            Maevelle
+          </strong>
+          <span className="text-[11px] text-muted-foreground font-normal">Business operations</span>
+        </div>
+        <button
+          className="ml-auto md:hidden min-h-11 min-w-11 flex items-center justify-center text-muted-foreground hover:text-foreground rounded-md hover:bg-sidebar-accent"
+          type="button"
+          aria-label="Close navigation"
+          onClick={onCloseMobile}
+        >
+          <X className="size-5" />
+        </button>
+      </div>
+
+      {/* Scrollable Operational Pillars Navigation */}
+      <nav
+        className="flex-1 overflow-y-auto overflow-x-hidden touch-pan-y px-3 py-3 space-y-4 overscroll-contain scrollbar-none"
+        aria-label="Admin navigation"
+      >
+        {visiblePillars.map((group) => (
+          <section key={group.id} className="space-y-0.5">
+            <p
+              className={cn(
+                'px-2 pb-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/80',
+                collapsed && 'md:hidden',
+              )}
+            >
+              {group.label}
             </p>
-            {local.map((item, index) => {
-              const Icon = item.icon;
+            {group.items.map((item) => {
+              const active = isSidebarItemActive(pathname, item);
               return (
-                <button
-                  key={`${item.href}-${index}`}
-                  type="button"
-                  onClick={() => go(item.href)}
-                  className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm text-left text-foreground hover:bg-muted/60 transition-colors group cursor-pointer"
+                <Link
+                  key={item.id}
+                  aria-current={active ? 'page' : undefined}
+                  href={item.href}
+                  onClick={onCloseMobile}
+                  title={collapsed ? item.label : undefined}
+                  className={cn(
+                    'group flex min-h-11 md:min-h-0 items-center gap-3 px-2.5 py-2 rounded-lg text-xs font-medium transition-colors outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring',
+                    active
+                      ? 'bg-primary-subtle text-primary-hover dark:text-primary font-semibold'
+                      : 'text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground',
+                    collapsed && 'md:justify-center md:px-0 md:size-9 md:mx-auto',
+                  )}
                 >
-                  <Icon
-                    className="size-4 text-muted-foreground group-hover:text-primary transition-colors shrink-0"
-                    aria-hidden="true"
+                  <NavIcon
+                    name={item.icon}
+                    className={cn(
+                      'size-4 shrink-0 transition-colors',
+                      active
+                        ? 'text-primary-hover dark:text-primary'
+                        : 'text-muted-foreground group-hover:text-foreground',
+                    )}
                   />
-                  <span className="flex-1 truncate">{item.label}</span>
-                  <ChevronRight
-                    className="size-3.5 text-muted-foreground/60 group-hover:text-foreground shrink-0"
-                    aria-hidden="true"
-                  />
-                </button>
+                  <span className={cn('truncate', collapsed && 'md:hidden')}>{item.label}</span>
+                </Link>
               );
             })}
-          </div>
+          </section>
+        ))}
+      </nav>
 
-          {remote.length > 0 ? (
-            <div className="space-y-0.5 pt-2">
-              <p className="px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-                Business records
-              </p>
-              {remote.map((result) => (
-                <button
-                  key={`${result.kind}-${result.href}`}
-                  type="button"
-                  onClick={() => go(result.href)}
-                  className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm text-left text-foreground hover:bg-muted/60 transition-colors group cursor-pointer"
-                >
-                  <Search
-                    className="size-4 text-muted-foreground group-hover:text-primary transition-colors shrink-0"
-                    aria-hidden="true"
-                  />
-                  <span className="flex-1 min-w-0">
-                    <strong className="block text-sm font-medium text-foreground truncate">
-                      {result.label}
-                    </strong>
-                    <small className="block text-xs text-muted-foreground truncate">
-                      {result.kind} · {result.detail}
-                    </small>
-                  </span>
-                  <ChevronRight
-                    className="size-3.5 text-muted-foreground/60 group-hover:text-foreground shrink-0"
-                    aria-hidden="true"
-                  />
-                </button>
-              ))}
-            </div>
-          ) : null}
+      {/* Sidebar Footer: Settings Utility & Collapse */}
+      <div className="flex flex-col gap-0.5 border-t border-sidebar-border p-2 shrink-0">
+        {utilityItems.map((item) => {
+          const active = isSidebarItemActive(pathname, item);
+          return (
+            <Link
+              key={item.id}
+              href={item.href}
+              onClick={onCloseMobile}
+              aria-current={active ? 'page' : undefined}
+              title={collapsed ? item.label : undefined}
+              className={cn(
+                'group flex min-h-11 md:min-h-0 items-center gap-3 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring',
+                active
+                  ? 'bg-primary-subtle text-primary-hover dark:text-primary font-semibold'
+                  : 'text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground',
+                collapsed && 'md:justify-center md:px-0 md:size-9 md:mx-auto',
+              )}
+            >
+              <NavIcon
+                name={item.icon}
+                className={cn(
+                  'size-4 shrink-0 transition-colors',
+                  active
+                    ? 'text-primary-hover dark:text-primary'
+                    : 'text-muted-foreground group-hover:text-foreground',
+                )}
+              />
+              <span className={cn('truncate', collapsed && 'md:hidden')}>{item.label}</span>
+            </Link>
+          );
+        })}
 
-          {busy ? (
-            <p className="px-3 py-4 text-xs text-center text-muted-foreground">
-              Searching authoritative records…
-            </p>
-          ) : null}
-          {!busy && query && local.length === 0 && remote.length === 0 ? (
-            <p className="px-3 py-6 text-sm text-center text-muted-foreground">
-              No accessible workspace or record matches “{query}”.
-            </p>
-          ) : null}
-        </div>
-        <footer className="flex items-center justify-between px-4 py-2 border-t border-border bg-muted/30 text-xs text-muted-foreground">
-          <span className="flex items-center gap-1">
-            <Command className="size-3" aria-hidden="true" /> K to open
+        <button
+          type="button"
+          onClick={onToggleCollapse}
+          className={cn(
+            'hidden md:flex w-full items-center gap-2 mt-1 px-2.5 py-1.5 rounded-lg text-xs font-medium text-muted-foreground hover:bg-sidebar-accent hover:text-foreground transition-colors cursor-pointer',
+            collapsed && 'justify-center px-0 size-9 mx-auto',
+          )}
+          title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+        >
+          {collapsed ? (
+            <ChevronRight className="size-4 shrink-0" />
+          ) : (
+            <PanelLeftClose className="size-4 shrink-0" />
+          )}
+          <span className={cn(collapsed && 'hidden')}>
+            {collapsed ? 'Expand' : 'Collapse sidebar'}
           </span>
-          <span>Results respect your active organization & permissions</span>
-        </footer>
-      </section>
-    </div>
+        </button>
+      </div>
+    </>
   );
 }
 
@@ -677,11 +395,31 @@ export function AdminShell({
   children: ReactNode;
   initialContext?: AdminContext;
 }) {
-  const pathname = usePathname();
+  const pathname = usePathname() ?? '/';
   const { context, failure, refresh, signOut } = useAdminAccess(pathname, initialContext);
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
+
+  useEffect(() => {
+    setMobileOpen(false);
+    setPaletteOpen(false);
+  }, [pathname]);
+
+  useEffect(() => {
+    if (!mobileOpen && !paletteOpen) return;
+    const originalOverflow = document.documentElement.style.overflow;
+    document.documentElement.style.overflow = 'hidden';
+
+    return () => {
+      document.documentElement.style.overflow = originalOverflow;
+    };
+  }, [mobileOpen, paletteOpen]);
+
+  const visiblePillars = useMemo(() => getSidebarPillars(context), [context]);
+  const utilityItems = useMemo(() => getPlatformUtilityItems(context), [context]);
+  const routeEntry = useMemo(() => getRouteEntry(pathname), [pathname]);
+  const viewportLocked = routeEntry?.pageVariant === 'immersive';
 
   useEffect(() => {
     const handler = (event: KeyboardEvent) => {
@@ -700,7 +438,7 @@ export function AdminShell({
 
   if (publicAdminPaths.has(pathname)) return children;
 
-  if (failure)
+  if (failure) {
     return (
       <AdminAccessFeedback
         reason={failure}
@@ -711,6 +449,7 @@ export function AdminShell({
         }
       />
     );
+  }
 
   if (context?.twoFactor.accessRestricted) {
     return (
@@ -726,305 +465,163 @@ export function AdminShell({
   }
 
   return (
-    <div className="min-h-screen bg-background text-foreground flex flex-col md:flex-row relative">
-      {/* Mobile Backdrop */}
-      {mobileOpen ? (
-        <button
-          type="button"
-          className="fixed inset-0 z-40 bg-slate-950/40 backdrop-blur-xs md:hidden"
-          aria-label="Close navigation"
-          onClick={() => setMobileOpen(false)}
-        />
-      ) : null}
-
-      {/* Sidebar Navigation */}
-      <aside
-        className={cn(
-          'fixed inset-y-0 left-0 z-50 flex flex-col bg-sidebar border-r border-sidebar-border transition-[width,transform] duration-200 md:sticky md:top-0 md:h-screen md:translate-x-0 shrink-0 select-none',
-          mobileOpen ? 'translate-x-0 w-72 shadow-2xl' : '-translate-x-full md:translate-x-0',
-          collapsed ? 'md:w-18' : 'md:w-64',
-        )}
-      >
-        {/* Brand Lockup */}
-        <div
-          className={cn(
-            'h-14 flex items-center gap-3 px-4 border-b border-sidebar-border bg-sidebar shrink-0',
-            collapsed && 'md:justify-center md:px-2',
-          )}
-        >
-          <div
-            className="size-8 rounded-lg bg-primary text-primary-foreground font-bold flex items-center justify-center text-sm shadow-xs shrink-0 tracking-tight"
-            aria-hidden="true"
-          >
-            M
-          </div>
-          <div className={cn('min-w-0 flex flex-col leading-tight', collapsed && 'md:hidden')}>
-            <strong className="text-sm font-bold tracking-tight text-sidebar-foreground">
-              Maevelle
-            </strong>
-            <span className="text-[11px] text-muted-foreground font-normal">
-              Business operations
-            </span>
-          </div>
-          <button
-            className="ml-auto md:hidden p-1.5 text-muted-foreground hover:text-foreground rounded-md hover:bg-sidebar-accent"
-            type="button"
-            aria-label="Close navigation"
-            onClick={() => setMobileOpen(false)}
-          >
-            <X className="size-5" />
-          </button>
-        </div>
-
-        {/* Scrollable Navigation Groups */}
-        <nav
-          className="flex-1 overflow-y-auto px-3 py-3 space-y-4 overscroll-contain scrollbar-none"
-          aria-label="Admin navigation"
-        >
-          {navigation.map((group) => {
-            const visible = group.items.filter((item) => hasCapability(context, item.capability));
-            if (visible.length === 0) return null;
-            return (
-              <section key={group.label} className="space-y-0.5">
-                <p
-                  className={cn(
-                    'px-2 pb-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/80',
-                    collapsed && 'md:hidden',
-                  )}
-                >
-                  {group.label}
-                </p>
-                {visible.map((item) => {
-                  const Icon = item.icon;
-                  const active = isNavActive(pathname, item.href);
-                  return (
-                    <Link
-                      key={item.href}
-                      aria-current={active ? 'page' : undefined}
-                      href={item.href}
-                      onClick={() => setMobileOpen(false)}
-                      title={collapsed ? item.label : undefined}
-                      className={cn(
-                        'flex items-center gap-3 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring',
-                        active
-                          ? 'bg-primary/10 text-primary font-semibold'
-                          : 'text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground',
-                        collapsed && 'md:justify-center md:px-0 md:size-9 md:mx-auto',
-                      )}
-                    >
-                      <Icon
-                        className={cn(
-                          'size-4 shrink-0 transition-colors',
-                          active
-                            ? 'text-primary'
-                            : 'text-muted-foreground group-hover:text-foreground',
-                        )}
-                        aria-hidden="true"
-                      />
-                      <span className={cn('truncate', collapsed && 'md:hidden')}>{item.label}</span>
-                    </Link>
-                  );
-                })}
-              </section>
-            );
-          })}
-        </nav>
-
-        {/* Sidebar Footer: Quick Settings & Collapse */}
-        <div className="flex flex-col gap-1 border-t border-sidebar-border p-2 shrink-0">
-          <Link
-            href="/settings"
-            onClick={() => setMobileOpen(false)}
-            aria-current={isNavActive(pathname, '/settings') ? 'page' : undefined}
-            title={collapsed ? 'Settings' : undefined}
-            className={cn(
-              'flex items-center gap-3 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring',
-              isNavActive(pathname, '/settings')
-                ? 'bg-primary/10 text-primary font-semibold'
-                : 'text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground',
-              collapsed && 'justify-center px-0 size-9 mx-auto',
-            )}
-          >
-            <Settings
-              className={cn(
-                'size-4 shrink-0 transition-colors',
-                isNavActive(pathname, '/settings')
-                  ? 'text-primary'
-                  : 'text-muted-foreground group-hover:text-foreground',
-              )}
+    <div
+      className={cn(
+        'bg-background text-foreground flex flex-col md:flex-row relative',
+        viewportLocked ? 'h-dvh overflow-hidden' : 'min-h-screen',
+      )}
+    >
+      {/* Mobile Backdrop & Slide-Over Navigation */}
+      <AnimatePresence>
+        {mobileOpen ? (
+          <React.Fragment key="mobile-nav">
+            <MotionBackdrop
+              data-shell-chrome="true"
+              className="fixed inset-0 z-40 bg-foreground/40 dark:bg-black/60 backdrop-blur-xs md:hidden touch-none print:hidden"
               aria-hidden="true"
+              onClick={() => setMobileOpen(false)}
             />
-            <span className={cn('truncate', collapsed && 'hidden')}>Settings</span>
-          </Link>
+            <motion.aside
+              data-shell-chrome="true"
+              aria-label="Mobile navigation"
+              initial={{ x: '-100%' }}
+              animate={{ x: 0 }}
+              exit={{ x: '-100%' }}
+              transition={ADMIN_MOTION.drawer}
+              className="fixed inset-y-0 left-0 z-50 flex w-72 flex-col bg-sidebar border-r border-sidebar-border shadow-2xl md:hidden select-none overflow-hidden overscroll-contain print:hidden"
+            >
+              <SidebarNavBody
+                pathname={pathname}
+                visiblePillars={visiblePillars}
+                utilityItems={utilityItems}
+                collapsed={false}
+                onToggleCollapse={() => setCollapsed((value) => !value)}
+                onCloseMobile={() => setMobileOpen(false)}
+              />
+            </motion.aside>
+          </React.Fragment>
+        ) : null}
+      </AnimatePresence>
 
-          <button
-            type="button"
-            onClick={() => setCollapsed((value) => !value)}
-            className={cn(
-              'hidden md:flex w-full items-center gap-2 px-2.5 py-1.5 rounded-lg text-xs font-medium text-muted-foreground hover:bg-sidebar-accent hover:text-foreground transition-colors cursor-pointer',
-              collapsed && 'justify-center px-0 size-9 mx-auto',
-            )}
-            title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-          >
-            {collapsed ? (
-              <ChevronRight className="size-4 shrink-0" />
-            ) : (
-              <PanelLeftClose className="size-4 shrink-0" />
-            )}
-            <span className={cn(collapsed && 'hidden')}>
-              {collapsed ? 'Expand' : 'Collapse sidebar'}
-            </span>
-          </button>
-        </div>
-      </aside>
+      {/* Desktop Sidebar Navigation */}
+      <motion.aside
+        data-shell-chrome="true"
+        initial={false}
+        animate={{ width: collapsed ? 72 : 256 }}
+        transition={ADMIN_MOTION.spring}
+        className="hidden md:flex md:sticky md:top-0 md:h-screen flex-col bg-sidebar border-r border-sidebar-border shrink-0 overflow-x-hidden select-none print:hidden"
+      >
+        <SidebarNavBody
+          pathname={pathname}
+          visiblePillars={visiblePillars}
+          utilityItems={utilityItems}
+          collapsed={collapsed}
+          onToggleCollapse={() => setCollapsed((value) => !value)}
+          onCloseMobile={() => setMobileOpen(false)}
+        />
+      </motion.aside>
 
       {/* Main Workspace Column */}
-      <div className="flex-1 flex flex-col min-w-0 pb-16 md:pb-0">
-        {/* Sticky Chrome Topbar */}
-        <header className="sticky top-0 z-30 h-14 flex items-center justify-between gap-3 px-4 sm:px-6 border-b border-border/80 bg-background/85 backdrop-blur-md transition-colors">
-          <div className="flex min-w-0 flex-1 items-center gap-2">
-            <button
-              type="button"
-              className="md:hidden p-2 text-muted-foreground hover:text-foreground rounded-lg hover:bg-muted"
-              aria-label="Open navigation"
-              onClick={() => setMobileOpen(true)}
-            >
-              <Menu className="size-5" />
-            </button>
-
-            {/* Global Search Trigger */}
-            <button
-              type="button"
-              onClick={() => setPaletteOpen(true)}
-              className="flex min-w-0 items-center gap-2 h-9 w-48 sm:w-72 lg:w-96 rounded-full border border-border/80 bg-card/60 hover:bg-card px-3.5 text-xs text-muted-foreground hover:text-foreground hover:border-primary/40 shadow-2xs transition-colors cursor-pointer"
-            >
-              <Search className="size-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
-              <span className="flex-1 text-left truncate">Search orders, customers, stock…</span>
-              <kbd className="hidden sm:inline-flex items-center px-1.5 py-0.5 text-[10px] font-mono text-muted-foreground bg-muted border border-border/70 rounded">
-                ⌘K
-              </kbd>
-            </button>
-          </div>
-
-          {/* Topbar Right Actions */}
-          <div className="flex shrink-0 items-center gap-2 sm:gap-3">
-            <NotificationBell />
-
-            <div className="hidden sm:flex flex-col items-end leading-none border-l border-border pl-3">
-              <span className="text-[10px] uppercase font-semibold text-muted-foreground">
-                Workspace
-              </span>
-              <strong className="text-xs font-semibold text-foreground">Maevelle BD</strong>
-            </div>
-
-            {/* User Profile Menu */}
-            <UserMenu context={context} onLogout={signOut} />
-          </div>
-        </header>
-
-        {/* 2FA Grace Period Notice */}
-        {context?.twoFactor.enrollmentRequired &&
-        !context.twoFactor.accessRestricted &&
-        pathname !== '/account/security' ? (
-          <div className="bg-warning/10 border-b border-warning/30 px-4 py-2.5 text-xs text-foreground flex flex-col sm:flex-row sm:items-center justify-between gap-3 shrink-0">
-            <div className="flex items-center gap-2">
-              <ShieldAlert className="size-4 text-warning shrink-0" />
-              <span>
-                <strong>Authenticator setup required:</strong> Your account must configure
-                two-factor authentication before{' '}
-                {context.twoFactor.enrollmentDeadline
-                  ? new Date(context.twoFactor.enrollmentDeadline).toLocaleDateString(undefined, {
-                      dateStyle: 'medium',
-                    })
-                  : 'the upcoming deadline'}{' '}
-                to retain administrative access.
-              </span>
-            </div>
-            <Link
-              href="/account/security"
-              className="font-semibold text-warning hover:underline underline-offset-2 shrink-0 inline-flex items-center gap-1"
-            >
-              Set up now →
-            </Link>
-          </div>
-        ) : null}
-
-        {/* Inner Content Area */}
-        <div className="flex-1 min-w-0">
-          <AdminCapabilitiesProvider capabilities={context?.capabilities ?? []} context={context}>
-            {children}
-          </AdminCapabilitiesProvider>
-        </div>
-      </div>
-
-      {/* Floating Bottom Island for Mobile Touch Usability */}
-      <nav
-        className="fixed bottom-3 inset-x-4 z-40 md:hidden flex items-center justify-around h-14 rounded-2xl bg-card/90 backdrop-blur-lg border border-border shadow-lg px-2 text-xs font-medium text-muted-foreground"
-        aria-label="Quick mobile navigation"
+      <div
+        className={cn(
+          'flex-1 flex flex-col min-w-0',
+          viewportLocked && 'min-h-0 overflow-hidden',
+        )}
       >
-        <button
-          type="button"
-          onClick={() => setMobileOpen((value) => !value)}
-          aria-label={mobileOpen ? 'Close navigation drawer' : 'Open navigation drawer'}
-          className={cn(
-            'flex flex-col items-center justify-center gap-1 py-1 px-3 rounded-lg transition-colors',
-            mobileOpen ? 'text-primary' : 'hover:text-foreground',
-          )}
-        >
-          <Menu className="size-4" aria-hidden="true" />
-          <span className="text-[10px]">Menu</span>
-        </button>
-        <button
-          type="button"
-          onClick={() => setPaletteOpen(true)}
-          aria-label="Search records"
-          className="flex flex-col items-center justify-center gap-1 py-1 px-3 rounded-lg hover:text-foreground transition-colors"
-        >
-          <Search className="size-4" aria-hidden="true" />
-          <span className="text-[10px]">Search</span>
-        </button>
-        <Link
-          href="/"
-          onClick={() => setMobileOpen(false)}
-          aria-label="Dashboard"
-          className={cn(
-            'flex flex-col items-center justify-center gap-1 py-1 px-3 rounded-lg transition-colors',
-            pathname === '/' ? 'text-primary font-semibold' : 'hover:text-foreground',
-          )}
-        >
-          <LayoutDashboard className="size-4" aria-hidden="true" />
-          <span className="text-[10px]">Home</span>
-        </Link>
-        <Link
-          href="/orders"
-          onClick={() => setMobileOpen(false)}
-          aria-label="Orders"
-          className={cn(
-            'flex flex-col items-center justify-center gap-1 py-1 px-3 rounded-lg transition-colors',
-            pathname.startsWith('/orders') ? 'text-primary font-semibold' : 'hover:text-foreground',
-          )}
-        >
-          <ShoppingBag className="size-4" aria-hidden="true" />
-          <span className="text-[10px]">Orders</span>
-        </Link>
-        <Link
-          href="/operations"
-          onClick={() => setMobileOpen(false)}
-          aria-label="Operations and Alerts"
-          className={cn(
-            'flex flex-col items-center justify-center gap-1 py-1 px-3 rounded-lg transition-colors',
-            pathname.startsWith('/operations')
-              ? 'text-primary font-semibold'
-              : 'hover:text-foreground',
-          )}
-        >
-          <Gauge className="size-4" aria-hidden="true" />
-          <span className="text-[10px]">Alerts</span>
-        </Link>
-      </nav>
+          {/* Sticky Chrome Topbar */}
+          <header
+            data-shell-chrome="true"
+            className="sticky top-0 z-30 h-14 shrink-0 flex items-center justify-between gap-3 px-4 md:px-6 border-b border-border/80 bg-background/85 backdrop-blur-md transition-colors print:hidden"
+          >
+            <div className="flex min-w-0 flex-1 items-center gap-2">
+              <button
+                type="button"
+                className="md:hidden min-h-11 min-w-11 flex items-center justify-center text-muted-foreground hover:text-foreground rounded-lg hover:bg-muted"
+                aria-label="Open navigation"
+                onClick={() => setMobileOpen(true)}
+              >
+                <Menu className="size-5" />
+              </button>
 
-      {/* Command Palette Modal */}
-      <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} context={context} />
-    </div>
-  );
+              {/* Global Search Trigger */}
+              <button
+                type="button"
+                onClick={() => setPaletteOpen(true)}
+                className="flex min-w-0 items-center gap-2 min-h-11 md:min-h-9 md:h-9 pointer-coarse:min-h-11 w-48 sm:w-72 lg:w-96 rounded-full border border-border/80 bg-card/60 hover:bg-card px-3.5 text-xs text-muted-foreground hover:text-foreground hover:border-primary/40 shadow-2xs transition-colors cursor-pointer"
+              >
+                <Search className="size-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
+                <span className="flex-1 text-left truncate">Search orders, customers, stock…</span>
+                <kbd className="hidden sm:inline-flex items-center px-1.5 py-0.5 text-[10px] font-mono text-muted-foreground bg-muted border border-border/70 rounded">
+                  ⌘K
+                </kbd>
+              </button>
+            </div>
+
+            {/* Topbar Right Actions */}
+            <div className="flex shrink-0 items-center gap-2 sm:gap-3">
+              <NotificationBell />
+
+              <div className="hidden sm:flex flex-col items-end leading-none border-l border-border pl-3">
+                <span className="text-[10px] uppercase font-semibold text-muted-foreground">
+                  Workspace
+                </span>
+                <strong className="text-xs font-semibold text-foreground">Maevelle BD</strong>
+              </div>
+
+              {/* User Profile Menu */}
+              <UserMenu context={context} onLogout={signOut} />
+            </div>
+          </header>
+
+          {/* 2FA Grace Period Notice */}
+          {context?.twoFactor.enrollmentRequired &&
+          !context.twoFactor.accessRestricted &&
+          pathname !== '/account/security' ? (
+            <div
+              data-shell-chrome="true"
+              className="bg-warning/10 border-b border-warning/30 px-4 py-2.5 text-xs text-foreground flex flex-col sm:flex-row sm:items-center justify-between gap-3 shrink-0 print:hidden"
+            >
+              <div className="flex items-center gap-2">
+                <ShieldAlert className="size-4 text-warning shrink-0" />
+                <span>
+                  <strong>Authenticator setup required:</strong> Your account must configure
+                  two-factor authentication before{' '}
+                  {context.twoFactor.enrollmentDeadline
+                    ? new Date(context.twoFactor.enrollmentDeadline).toLocaleDateString(undefined, {
+                        dateStyle: 'medium',
+                      })
+                    : 'the upcoming deadline'}{' '}
+                  to retain administrative access.
+                </span>
+              </div>
+              <Link
+                href="/account/security"
+                className="font-semibold text-warning hover:underline underline-offset-2 shrink-0 inline-flex items-center gap-1"
+              >
+                Set up now →
+              </Link>
+            </div>
+          ) : null}
+
+          {/* Inner Content Area */}
+          <div
+            className={cn(
+              'flex-1 min-w-0',
+              viewportLocked && 'flex flex-col min-h-0 overflow-hidden',
+            )}
+          >
+            <AdminCapabilitiesProvider capabilities={context?.capabilities ?? []} context={context}>
+              {children}
+            </AdminCapabilitiesProvider>
+          </div>
+        </div>
+
+        {/* Command Palette Modal */}
+        <CommandPalette
+          open={paletteOpen}
+          onClose={() => setPaletteOpen(false)}
+          context={context}
+        />
+      </div>
+    );
 }

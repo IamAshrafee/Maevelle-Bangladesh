@@ -55,7 +55,7 @@ function BaseCommandModal({ eyebrow, title, onClose, children }: BaseCommandModa
         if (!isOpen) onClose();
       }}
     >
-      <DialogContent className="max-w-lg">
+      <DialogContent className="max-h-[85vh] overflow-y-auto max-w-lg">
         <DialogHeader className="space-y-1">
           <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
             {eyebrow}
@@ -464,7 +464,6 @@ export function RefundCompletionDialog({
             name="externalReference"
             autoComplete="off"
             required
-            autoFocus
           />
         </div>
         <OperationalFeedback tone="warning">

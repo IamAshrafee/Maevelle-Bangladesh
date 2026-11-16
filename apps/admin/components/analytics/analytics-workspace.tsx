@@ -3,25 +3,12 @@
 import * as React from 'react';
 import dynamic from 'next/dynamic';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
-import {
-  Boxes,
-  Building2,
-  CreditCard,
-  Eye,
-  Heart,
-  LayoutDashboard,
-  Megaphone,
-  PackageSearch,
-  RotateCcw,
-  Settings,
-  ShoppingBag,
-  Truck,
-  Users,
-} from 'lucide-react';
 
 import { useAdminContext } from '@/components/admin-capabilities';
+import { type NavIconKey } from '@/lib/navigation/route-registry';
 import { RefreshButton } from '@/components/ui/refresh-button';
 import { AdminPage, ErrorState, LoadingState, PageHeader } from '@/components/ui/page-shell';
+import { WorkspaceTabs, type WorkspaceTabItem } from '@/components/ui/workspace-tabs';
 import { AnalyticsFilterToolbar } from './analytics-filter-toolbar';
 import { CustomersView } from './views/customers-view';
 import { DeliveryView } from './views/delivery-view';
@@ -42,7 +29,6 @@ import {
   type DateRangePreset,
   type DateRangeSelection,
 } from '@/lib/analytics/types';
-import { cn } from '@/lib/utils';
 
 const CommerceView = dynamic(
   () => import('./views/commerce-view').then((module) => module.CommerceView),
@@ -56,34 +42,34 @@ const CartView = dynamic(() => import('./views/cart-view').then((module) => modu
 const VIEW_NAVIGATION: readonly {
   readonly id: AnalyticsViewKey;
   readonly label: string;
-  readonly icon: React.ComponentType<{ className?: string }>;
+  readonly icon: NavIconKey;
   readonly capability?: string;
 }[] = [
-  { id: 'overview', label: 'Overview', icon: LayoutDashboard },
-  { id: 'sales', label: 'Sales & Orders', icon: ShoppingBag },
-  { id: 'products', label: 'Products & SKUs', icon: PackageSearch },
-  { id: 'customers', label: 'Customers & LTV', icon: Users },
-  { id: 'inventory', label: 'Inventory', icon: Boxes },
+  { id: 'overview', label: 'Overview', icon: 'layout-dashboard' },
+  { id: 'sales', label: 'Sales & Orders', icon: 'shopping-bag' },
+  { id: 'products', label: 'Products & SKUs', icon: 'package-search' },
+  { id: 'customers', label: 'Customers & LTV', icon: 'users' },
+  { id: 'inventory', label: 'Inventory', icon: 'boxes' },
   {
     id: 'finance',
     label: 'Finance & Profitability',
-    icon: CreditCard,
+    icon: 'credit-card',
     capability: 'analytics.financial.view',
   },
-  { id: 'supply', label: 'Supply & Procurement', icon: Building2 },
-  { id: 'delivery', label: 'Delivery & Logistics', icon: Truck },
-  { id: 'storefront', label: 'Storefront Funnel', icon: Eye },
+  { id: 'supply', label: 'Supply & Procurement', icon: 'building' },
+  { id: 'delivery', label: 'Delivery & Logistics', icon: 'truck' },
+  { id: 'storefront', label: 'Storefront Funnel', icon: 'activity' },
   {
     id: 'commerce',
     label: 'Commerce integrity',
-    icon: CreditCard,
+    icon: 'shield-check',
     capability: 'analytics.financial.view',
   },
-  { id: 'cart', label: 'Cart Analytics', icon: ShoppingBag, capability: 'analytics.view' },
-  { id: 'wishlist', label: 'Wishlist & Demand', icon: Heart, capability: 'analytics.view' },
-  { id: 'marketing', label: 'Marketing & UTM', icon: Megaphone },
-  { id: 'operations', label: 'Returns & Ops', icon: RotateCcw },
-  { id: 'settings', label: 'Data Status & Settings', icon: Settings },
+  { id: 'cart', label: 'Cart Analytics', icon: 'shopping-bag', capability: 'analytics.view' },
+  { id: 'wishlist', label: 'Wishlist & Demand', icon: 'sparkles', capability: 'analytics.view' },
+  { id: 'marketing', label: 'Marketing & UTM', icon: 'bar-chart' },
+  { id: 'operations', label: 'Returns & Ops', icon: 'refresh-cw' },
+  { id: 'settings', label: 'Data Status & Settings', icon: 'settings' },
 ];
 
 export function AnalyticsWorkspace() {
@@ -164,10 +150,85 @@ export function AnalyticsWorkspace() {
       if (newSelection.currency !== 'BDT') {
         params.set('currency', newSelection.currency);
       }
-      router.push(`${pathname}?${params.toString()}`, { scroll: false });
+      router.replace(`${pathname}?${params.toString()}`, { scroll: false });
     },
     [pathname, router, searchParams],
   );
+
+  type AnalyticsCategoryId = 'commerce' | 'merchandise' | 'logistics' | 'finance';
+
+  const ANALYTICS_CATEGORIES: readonly {
+    id: AnalyticsCategoryId;
+    label: string;
+    views: readonly AnalyticsViewKey[];
+  }[] = [
+    {
+      id: 'commerce',
+      label: 'Commerce & Orders',
+      views: ['overview', 'commerce', 'sales', 'customers', 'marketing'],
+    },
+    {
+      id: 'merchandise',
+      label: 'Merchandise & Demand',
+      views: ['products', 'storefront', 'cart', 'wishlist'],
+    },
+    {
+      id: 'logistics',
+      label: 'Inventory & Logistics',
+      views: ['inventory', 'supply', 'delivery'],
+    },
+    {
+      id: 'finance',
+      label: 'Finance & Integrity',
+      views: ['finance', 'operations', 'settings'],
+    },
+  ];
+
+  const permittedViews = React.useMemo(
+    () =>
+      VIEW_NAVIGATION.filter(
+        (item) => !item.capability || adminContext.capabilities.includes(item.capability),
+      ),
+    [adminContext.capabilities],
+  );
+
+  const visibleCategories: WorkspaceTabItem<AnalyticsCategoryId>[] = React.useMemo(
+    () =>
+      ANALYTICS_CATEGORIES.filter((cat) =>
+        cat.views.some((v) => permittedViews.some((item) => item.id === v)),
+      ).map((cat) => ({
+        value: cat.id,
+        label: cat.label,
+      })),
+    [permittedViews],
+  );
+
+  const activeCategory: AnalyticsCategoryId = React.useMemo(() => {
+    const matched = ANALYTICS_CATEGORIES.find((cat) => cat.views.includes(activeView));
+    return matched?.id ?? visibleCategories[0]?.value ?? 'commerce';
+  }, [activeView, visibleCategories]);
+
+  const visibleTabs: WorkspaceTabItem<AnalyticsViewKey>[] = React.useMemo(() => {
+    const currentCategory = ANALYTICS_CATEGORIES.find((cat) => cat.id === activeCategory);
+    const allowedIds = new Set(currentCategory?.views ?? []);
+    return permittedViews
+      .filter((item) => allowedIds.has(item.id))
+      .map((item) => ({
+        value: item.id,
+        label: item.label,
+        icon: item.icon,
+      }));
+  }, [activeCategory, permittedViews]);
+
+  const handleCategoryChange = (categoryId: AnalyticsCategoryId) => {
+    const category = ANALYTICS_CATEGORIES.find((cat) => cat.id === categoryId);
+    const firstPermitted = category?.views.find((v) =>
+      permittedViews.some((item) => item.id === v),
+    );
+    if (firstPermitted) {
+      updateUrl(firstPermitted, selection);
+    }
+  };
 
   const handleViewChange = (view: AnalyticsViewKey) => {
     updateUrl(view, selection);
@@ -196,31 +257,26 @@ export function AnalyticsWorkspace() {
         }
       />
 
-      {/* Local Workspace Subnavigation */}
-      <div className="flex items-center gap-1.5 overflow-x-auto pb-1 -mt-2 border-b border-border/70 scrollbar-none">
-        {VIEW_NAVIGATION.filter(
-          (item) => !item.capability || adminContext.capabilities.includes(item.capability),
-        ).map((item) => {
-          const isActive = activeView === item.id;
-          const Icon = item.icon;
-          return (
-            <button
-              key={item.id}
-              type="button"
-              onClick={() => handleViewChange(item.id)}
-              aria-current={isActive ? 'page' : undefined}
-              className={cn(
-                'inline-flex items-center gap-2 rounded-lg px-3 py-2 text-xs sm:text-sm font-medium whitespace-nowrap transition-colors duration-150 cursor-pointer select-none',
-                isActive
-                  ? 'bg-primary text-foreground dark:text-primary-foreground font-semibold shadow-2xs'
-                  : 'text-muted-foreground hover:bg-muted/60 hover:text-foreground',
-              )}
-            >
-              <Icon className="size-4 shrink-0" />
-              <span>{item.label}</span>
-            </button>
-          );
-        })}
+      {/* Two-Tier Workspace Subnavigation: Category (Tier 1) + Views (Tier 2) */}
+      <div className="-mt-2 flex flex-col gap-2.5 border-b border-border/70 pb-3">
+        {visibleCategories.length > 1 ? (
+          <WorkspaceTabs
+            items={visibleCategories}
+            value={activeCategory}
+            onValueChange={handleCategoryChange}
+            maxVisible={4}
+            variant="pill"
+            ariaLabel="Analytics categories"
+          />
+        ) : null}
+        <WorkspaceTabs
+          items={visibleTabs}
+          value={activeView}
+          onValueChange={handleViewChange}
+          maxVisible={5}
+          variant="underline"
+          ariaLabel="Analytics reporting views"
+        />
       </div>
 
       {/* Global Filter Toolbar */}

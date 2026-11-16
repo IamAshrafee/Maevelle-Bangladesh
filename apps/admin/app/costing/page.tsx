@@ -1,12 +1,11 @@
 import { Suspense } from 'react';
 
 import { CostingConsole } from '@/components/costing-console';
+import { PageSkeleton } from '@/components/ui/page-shell';
 
 export default function CostingPage() {
   return (
-    <Suspense
-      fallback={<main className="p-6 text-sm text-muted-foreground">Loading costing…</main>}
-    >
+    <Suspense fallback={<PageSkeleton variant="dashboard" widthVariant="standard" />}>
       <CostingConsole />
     </Suspense>
   );

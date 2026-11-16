@@ -24,6 +24,7 @@ import type {
 import { useAdminCapability } from '@/components/admin-capabilities';
 import { OperationalFeedback } from '@/components/operational-worklist';
 import { DetailMetric, DetailSection, DetailSkeleton } from '@/components/supply/supply-entity-ui';
+import { AdminPage } from '@/components/ui/page-shell';
 import { StatusBadge } from '@/components/status-badge';
 import { Breadcrumb } from '@/components/ui/breadcrumb';
 import { Button } from '@/components/ui/button';
@@ -141,14 +142,14 @@ export function ReceiptDetail({ receiptId }: { receiptId: string }) {
   if (loading) return <DetailSkeleton />;
   if (!receipt) {
     return (
-      <main className="space-y-5 px-4 py-5 sm:px-6 lg:px-8">
+      <AdminPage variant="wide">
         <OperationalFeedback tone="danger">
           {message || 'Receipt was not found.'}
         </OperationalFeedback>
         <Button variant="outline" render={<Link href="/receiving" />}>
           <ArrowLeft /> Back to receiving
         </Button>
-      </main>
+      </AdminPage>
     );
   }
 
@@ -159,7 +160,7 @@ export function ReceiptDetail({ receiptId }: { receiptId: string }) {
   }, {});
 
   return (
-    <main className="min-w-0 space-y-5 px-4 py-5 sm:px-6 lg:px-8">
+    <AdminPage variant="wide">
       <Breadcrumb
         mobileMode="back"
         items={[
@@ -365,7 +366,7 @@ export function ReceiptDetail({ receiptId }: { receiptId: string }) {
       {canViewUnits ? (
         <DetailSection
           title={`Individually Tracked Units (${receiptUnitTotal})`}
-          description="Physical serialized garment units registered against this receiving voucher."
+          description="Physical serialized item units registered against this receiving voucher."
         >
           <div className="p-4 space-y-3">
             <div className="flex flex-wrap items-center justify-between gap-2 border-b pb-3">
@@ -534,6 +535,6 @@ export function ReceiptDetail({ receiptId }: { receiptId: string }) {
           units={receiptUnits}
         />
       ) : null}
-    </main>
+    </AdminPage>
   );
 }

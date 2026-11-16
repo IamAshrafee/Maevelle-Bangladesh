@@ -15,6 +15,7 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select';
 import { Textarea } from '@/components/ui/textarea';
 
 import { StatusBadge } from '../status-badge';
@@ -281,16 +282,15 @@ export function TeamInvitationsList({
             <div className="space-y-4 py-2">
               <div className="space-y-1.5">
                 <Label htmlFor="resend-expiry">New expiration window</Label>
-                <select
+                <NativeSelect
                   id="resend-expiry"
-                  className="w-full h-9 rounded-md border border-input bg-background px-3 py-1 text-sm shadow-xs focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
                   value={resendHours}
                   onChange={(e) => setResendHours(Number(e.target.value))}
                 >
-                  <option value={24}>24 hours</option>
-                  <option value={72}>72 hours (Recommended)</option>
-                  <option value={168}>7 days</option>
-                </select>
+                  <NativeSelectOption value={24}>24 hours</NativeSelectOption>
+                  <NativeSelectOption value={72}>72 hours (Recommended)</NativeSelectOption>
+                  <NativeSelectOption value={168}>7 days</NativeSelectOption>
+                </NativeSelect>
               </div>
 
               <p className="text-xs text-muted-foreground">

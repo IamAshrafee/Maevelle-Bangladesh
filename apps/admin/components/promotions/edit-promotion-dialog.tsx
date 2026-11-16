@@ -4,13 +4,13 @@ import * as React from 'react';
 import { Edit3, AlertCircle, Save, Loader2, Calendar } from 'lucide-react';
 
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetFooter,
+  SheetHeader,
+  SheetTitle,
+} from '@/components/ui/sheet';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { NativeSelect } from '@/components/ui/native-select';
@@ -107,158 +107,176 @@ export function EditPromotionDialog({
   }
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-lg">
-        <DialogHeader>
+    <Sheet open={open} onOpenChange={onOpenChange}>
+      <SheetContent side="right" className="gap-0 p-0 sm:max-w-lg">
+        <SheetHeader className="shrink-0 border-b border-border px-5 py-4 pr-11 text-left">
           <div className="flex items-center gap-2">
             <div className="flex size-8 items-center justify-center rounded-lg bg-primary/10 text-primary">
               <Edit3 className="size-4" />
             </div>
             <div>
-              <DialogTitle>Edit Promotion Campaign</DialogTitle>
-              <DialogDescription>
-                Update campaign settings and schedule for <strong className="text-foreground">{promotion.name}</strong>.
-              </DialogDescription>
+              <SheetTitle>Edit Promotion Campaign</SheetTitle>
+              <SheetDescription>
+                Update campaign settings and schedule for{' '}
+                <strong className="text-foreground">{promotion.name}</strong>.
+              </SheetDescription>
             </div>
           </div>
-        </DialogHeader>
+        </SheetHeader>
 
-        <form onSubmit={handleSubmit} className="space-y-4 pt-1">
-          {error ? (
-            <div className="flex items-center gap-2 rounded-lg border border-destructive/20 bg-destructive/10 p-3 text-xs text-destructive">
-              <AlertCircle className="size-4 shrink-0" />
-              <span>{error}</span>
+        <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col">
+          <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-5 py-4">
+            {error ? (
+              <div className="flex items-center gap-2 rounded-lg border border-destructive/20 bg-destructive/10 p-3 text-xs text-destructive">
+                <AlertCircle className="size-4 shrink-0" />
+                <span>{error}</span>
+              </div>
+            ) : null}
+
+            <div className="space-y-1.5">
+              <label htmlFor="edit-name" className="text-xs font-semibold text-foreground">
+                Campaign Name <span className="text-destructive">*</span>
+              </label>
+              <Input
+                id="edit-name"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="e.g. Eid Mega Sale 15%"
+                required
+              />
             </div>
-          ) : null}
 
-          <div className="space-y-1.5">
-            <label htmlFor="edit-name" className="text-xs font-semibold text-foreground">
-              Campaign Name <span className="text-destructive">*</span>
-            </label>
-            <Input
-              id="edit-name"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="e.g. Eid Mega Sale 15%"
-              required
-            />
-          </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <label
+                    htmlFor="edit-combinability"
+                    className="text-xs font-medium text-foreground"
+                  >
+                    Combinability
+                  </label>
+                  <TooltipProvider delay={150}>
+                    <Tooltip>
+                      <TooltipTrigger
+                        render={
+                          <span className="text-[0.7rem] text-muted-foreground cursor-help underline decoration-dotted">
+                            Rules
+                          </span>
+                        }
+                      />
+                      <TooltipContent className="max-w-xs">
+                        Exclusive prevents stacking with any other promo. Stackable allows combining
+                        with other stackable offers.
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                </div>
+                <NativeSelect
+                  id="edit-combinability"
+                  value={combinability}
+                  onChange={(e) => setCombinability(e.target.value as Combinability)}
+                >
+                  <option value="EXCLUSIVE">Exclusive (Single promotion)</option>
+                  <option value="STACKABLE">Stackable (Combines with others)</option>
+                </NativeSelect>
+              </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <label htmlFor="edit-priority" className="text-xs font-medium text-foreground">
+                    Evaluation Priority
+                  </label>
+                  <TooltipProvider delay={150}>
+                    <Tooltip>
+                      <TooltipTrigger
+                        render={
+                          <span className="text-[0.7rem] text-muted-foreground cursor-help underline decoration-dotted">
+                            Ordering
+                          </span>
+                        }
+                      />
+                      <TooltipContent>
+                        Higher priority promotions are evaluated first. Useful when choosing between
+                        conflicting discounts.
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                </div>
+                <Input
+                  id="edit-priority"
+                  type="number"
+                  value={priority}
+                  onChange={(e) => setPriority(e.target.value)}
+                  className="tabular-nums"
+                />
+              </div>
+            </div>
+
             <div className="space-y-1.5">
               <div className="flex items-center justify-between">
-                <label htmlFor="edit-combinability" className="text-xs font-medium text-foreground">
-                  Combinability
+                <label htmlFor="edit-min-subtotal" className="text-xs font-medium text-foreground">
+                  Minimum Merchandise Subtotal (BDT)
                 </label>
-                <TooltipProvider delay={150}>
-                  <Tooltip>
-                    <TooltipTrigger
-                      render={
-                        <span className="text-[0.7rem] text-muted-foreground cursor-help underline decoration-dotted">
-                          Rules
-                        </span>
-                      }
-                    />
-                    <TooltipContent className="max-w-xs">
-                      Exclusive prevents stacking with any other promo. Stackable allows combining with other stackable offers.
-                    </TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
+                <span className="text-[0.7rem] text-muted-foreground">Optional threshold</span>
               </div>
-              <NativeSelect
-                id="edit-combinability"
-                value={combinability}
-                onChange={(e) => setCombinability(e.target.value as Combinability)}
-              >
-                <option value="EXCLUSIVE">Exclusive (Single promotion)</option>
-                <option value="STACKABLE">Stackable (Combines with others)</option>
-              </NativeSelect>
+              <div className="relative">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-mono text-muted-foreground select-none">
+                  ৳
+                </span>
+                <Input
+                  id="edit-min-subtotal"
+                  value={minimumSubtotal}
+                  onChange={(e) => setMinimumSubtotal(e.target.value)}
+                  placeholder="e.g. 1500 (Leave blank for no minimum)"
+                  className="pl-7 font-mono tabular-nums"
+                />
+              </div>
             </div>
 
-            <div className="space-y-1.5">
-              <div className="flex items-center justify-between">
-                <label htmlFor="edit-priority" className="text-xs font-medium text-foreground">
-                  Evaluation Priority
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+              <div className="space-y-1.5">
+                <label
+                  htmlFor="edit-starts"
+                  className="text-xs font-medium text-foreground flex items-center gap-1.5"
+                >
+                  <Calendar className="size-3.5 text-muted-foreground" />
+                  Starts At
                 </label>
-                <TooltipProvider delay={150}>
-                  <Tooltip>
-                    <TooltipTrigger
-                      render={
-                        <span className="text-[0.7rem] text-muted-foreground cursor-help underline decoration-dotted">
-                          Ordering
-                        </span>
-                      }
-                    />
-                    <TooltipContent>
-                      Higher priority promotions are evaluated first. Useful when choosing between conflicting discounts.
-                    </TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
+                <Input
+                  id="edit-starts"
+                  type="datetime-local"
+                  value={startsAt}
+                  onChange={(e) => setStartsAt(e.target.value)}
+                  className="text-xs"
+                />
+                <p className="text-[0.68rem] text-muted-foreground">
+                  Leave blank for immediate start
+                </p>
               </div>
-              <Input
-                id="edit-priority"
-                type="number"
-                value={priority}
-                onChange={(e) => setPriority(e.target.value)}
-                className="tabular-nums"
-              />
+
+              <div className="space-y-1.5">
+                <label
+                  htmlFor="edit-ends"
+                  className="text-xs font-medium text-foreground flex items-center gap-1.5"
+                >
+                  <Calendar className="size-3.5 text-muted-foreground" />
+                  Ends At
+                </label>
+                <Input
+                  id="edit-ends"
+                  type="datetime-local"
+                  value={endsAt}
+                  onChange={(e) => setEndsAt(e.target.value)}
+                  className="text-xs"
+                />
+                <p className="text-[0.68rem] text-muted-foreground">
+                  Leave blank for ongoing duration
+                </p>
+              </div>
             </div>
           </div>
 
-          <div className="space-y-1.5">
-            <div className="flex items-center justify-between">
-              <label htmlFor="edit-min-subtotal" className="text-xs font-medium text-foreground">
-                Minimum Merchandise Subtotal (BDT)
-              </label>
-              <span className="text-[0.7rem] text-muted-foreground">Optional threshold</span>
-            </div>
-            <div className="relative">
-              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-mono text-muted-foreground select-none">
-                ৳
-              </span>
-              <Input
-                id="edit-min-subtotal"
-                value={minimumSubtotal}
-                onChange={(e) => setMinimumSubtotal(e.target.value)}
-                placeholder="e.g. 1500 (Leave blank for no minimum)"
-                className="pl-7 font-mono tabular-nums"
-              />
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
-            <div className="space-y-1.5">
-              <label htmlFor="edit-starts" className="text-xs font-medium text-foreground flex items-center gap-1.5">
-                <Calendar className="size-3.5 text-muted-foreground" />
-                Starts At
-              </label>
-              <Input
-                id="edit-starts"
-                type="datetime-local"
-                value={startsAt}
-                onChange={(e) => setStartsAt(e.target.value)}
-                className="text-xs"
-              />
-              <p className="text-[0.68rem] text-muted-foreground">Leave blank for immediate start</p>
-            </div>
-
-            <div className="space-y-1.5">
-              <label htmlFor="edit-ends" className="text-xs font-medium text-foreground flex items-center gap-1.5">
-                <Calendar className="size-3.5 text-muted-foreground" />
-                Ends At
-              </label>
-              <Input
-                id="edit-ends"
-                type="datetime-local"
-                value={endsAt}
-                onChange={(e) => setEndsAt(e.target.value)}
-                className="text-xs"
-              />
-              <p className="text-[0.68rem] text-muted-foreground">Leave blank for ongoing duration</p>
-            </div>
-          </div>
-
-          <DialogFooter className="pt-3">
+          <SheetFooter className="shrink-0 flex-row items-center justify-end gap-2 border-t border-border bg-card/50 px-5 py-3">
             <Button
               type="button"
               variant="outline"
@@ -271,9 +289,9 @@ export function EditPromotionDialog({
               {busy ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />}
               Save Changes
             </Button>
-          </DialogFooter>
+          </SheetFooter>
         </form>
-      </DialogContent>
-    </Dialog>
+      </SheetContent>
+    </Sheet>
   );
 }

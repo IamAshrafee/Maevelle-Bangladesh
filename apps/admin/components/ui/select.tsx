@@ -36,6 +36,14 @@ import { Field as FieldPrimitive } from '@base-ui/react/field';
 import { cva, type VariantProps } from 'class-variance-authority';
 import { CheckIcon, ChevronDownIcon, ChevronUpIcon, Loader2Icon } from 'lucide-react';
 
+import {
+  ADMIN_MOTION,
+  AnimatePresence,
+  getSideMotionOffset,
+  motion,
+  useOverlayRootMotion,
+  type OverlayMotionContextValue,
+} from '@/components/motion/motion-primitives';
 import { cn } from '@/lib/utils';
 
 // ---------------------------------------------------------------------------
@@ -45,7 +53,7 @@ import { cn } from '@/lib/utils';
 const triggerVariants = cva(
   [
     'flex w-full items-center justify-between gap-2 rounded-lg border bg-transparent',
-    'text-sm whitespace-nowrap select-none',
+    'text-base md:text-sm pointer-coarse:text-base pointer-coarse:min-h-11 whitespace-nowrap select-none',
     // smooth colour + shadow transitions
     'transition-[colors,box-shadow] duration-150',
     // focus ring
@@ -97,6 +105,7 @@ type SelectContextValue = {
 };
 
 const SelectContext = React.createContext<SelectContextValue>({ size: 'md', status: 'default' });
+const SelectOverlayContext = React.createContext<OverlayMotionContextValue | null>(null);
 
 function useSelectContext() {
   return React.useContext(SelectContext);
@@ -170,6 +179,10 @@ function Select({
   size = 'md',
   status = 'default',
   items: explicitItems,
+  open,
+  defaultOpen,
+  onOpenChange,
+  actionsRef,
   children,
   ...props
 }: SelectRootProps) {
@@ -179,12 +192,28 @@ function Select({
     return extracted.length > 0 ? extracted : undefined;
   }, [explicitItems, children]);
 
+  const motionState = useOverlayRootMotion({
+    open,
+    defaultOpen,
+    onOpenChange,
+    actionsRef,
+  });
+
   return (
-    <SelectContext.Provider value={{ size, status }}>
-      <SelectPrimitive.Root data-slot="select" items={resolvedItems} {...props}>
-        {children}
-      </SelectPrimitive.Root>
-    </SelectContext.Provider>
+    <SelectOverlayContext.Provider value={motionState.overlayContextValue}>
+      <SelectContext.Provider value={{ size, status }}>
+        <SelectPrimitive.Root
+          data-slot="select"
+          items={resolvedItems}
+          open={motionState.open}
+          onOpenChange={motionState.onOpenChange}
+          actionsRef={motionState.actionsRef}
+          {...props}
+        >
+          {children}
+        </SelectPrimitive.Root>
+      </SelectContext.Provider>
+    </SelectOverlayContext.Provider>
   );
 }
 
@@ -217,8 +246,10 @@ function SelectTrigger({
   ...props
 }: SelectTriggerProps) {
   const ctx = useSelectContext();
+  const overlay = React.useContext(SelectOverlayContext);
   const resolvedSize = size ?? ctx.size;
   const resolvedStatus = status ?? ctx.status;
+  const isOpen = overlay?.open ?? false;
 
   return (
     <SelectPrimitive.Trigger
@@ -243,11 +274,13 @@ function SelectTrigger({
         {loading ? (
           <Loader2Icon className="size-4 animate-spin text-muted-foreground" aria-hidden="true" />
         ) : (
-          // rotate-180 when aria-expanded=true (popup is open)
-          <ChevronDownIcon
-            className="size-4 text-muted-foreground transition-transform duration-200 ease-in-out group-aria-expanded:rotate-180"
-            aria-hidden="true"
-          />
+          <motion.span
+            animate={{ rotate: isOpen ? 180 : 0 }}
+            transition={ADMIN_MOTION.fast}
+            className="inline-flex items-center"
+          >
+            <ChevronDownIcon className="size-4 text-muted-foreground" aria-hidden="true" />
+          </motion.span>
         )}
       </SelectPrimitive.Icon>
     </SelectPrimitive.Trigger>
@@ -273,49 +306,55 @@ function SelectContent({
   alignItemWithTrigger = false,
   ...props
 }: SelectContentProps) {
+  const overlay = React.useContext(SelectOverlayContext);
+  const isOpen = overlay?.open ?? true;
+  const offset = getSideMotionOffset(side, 6);
+
   return (
     <SelectPrimitive.Portal>
-      <SelectPrimitive.Positioner
-        side={side}
-        sideOffset={sideOffset}
-        align={align}
-        alignOffset={alignOffset}
-        alignItemWithTrigger={alignItemWithTrigger}
-        className="isolate z-50"
-      >
-        <SelectPrimitive.Popup
-          data-slot="select-content"
-          className={cn(
-            // layout
-            'relative z-50 min-w-[var(--anchor-width)] max-h-[var(--available-height)]',
-            'overflow-x-hidden overflow-y-auto rounded-lg',
-            // colours
-            'bg-popover text-popover-foreground shadow-xl ring-1 ring-foreground/10',
-            // transform origin driven by base-ui --transform-origin custom property
-            'origin-[var(--transform-origin)]',
-            'data-[align-trigger=true]:animate-none',
-            // open — zoom from 98% (very subtle scale) + gentle slide + fade
-            'motion-safe:data-open:animate-in motion-safe:data-open:fade-in-0',
-            'motion-safe:data-open:zoom-in-[98%]',
-            'motion-safe:data-open:data-[side=bottom]:slide-in-from-top-1.5',
-            'motion-safe:data-open:data-[side=top]:slide-in-from-bottom-1.5',
-            'motion-safe:data-open:data-[side=left]:slide-in-from-right-1.5',
-            'motion-safe:data-open:data-[side=right]:slide-in-from-left-1.5',
-            // close — snappier exit
-            'motion-safe:data-closed:animate-out motion-safe:data-closed:fade-out-0',
-            'motion-safe:data-closed:zoom-out-[98%]',
-            // timing: open feels deliberate, close feels snappy
-            'data-open:duration-200 data-closed:duration-100',
-            className,
-          )}
-          data-align-trigger={alignItemWithTrigger}
-          {...props}
-        >
-          <SelectScrollUpButton />
-          <SelectPrimitive.List className="p-1">{children}</SelectPrimitive.List>
-          <SelectScrollDownButton />
-        </SelectPrimitive.Popup>
-      </SelectPrimitive.Positioner>
+      <AnimatePresence onExitComplete={overlay?.onExitComplete}>
+        {isOpen ? (
+          <SelectPrimitive.Positioner
+            key="select-positioner"
+            side={side}
+            sideOffset={sideOffset}
+            align={align}
+            alignOffset={alignOffset}
+            alignItemWithTrigger={alignItemWithTrigger}
+            hidden={false}
+            className="isolate z-[60]"
+          >
+            <SelectPrimitive.Popup
+              data-slot="select-content"
+              hidden={false}
+              render={
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.97, x: offset.x, y: offset.y }}
+                  animate={{ opacity: 1, scale: 1, x: 0, y: 0 }}
+                  exit={{ opacity: 0, scale: 0.97, x: offset.x, y: offset.y }}
+                  transition={ADMIN_MOTION.fast}
+                />
+              }
+              className={cn(
+                // layout
+                'relative z-[60] min-w-[var(--anchor-width)] max-h-[var(--available-height)]',
+                'overflow-x-hidden overflow-y-auto rounded-lg',
+                // colours
+                'bg-popover text-popover-foreground shadow-xl ring-1 ring-foreground/10',
+                // transform origin driven by base-ui --transform-origin custom property
+                'origin-[var(--transform-origin)]',
+                className,
+              )}
+              data-align-trigger={alignItemWithTrigger}
+              {...props}
+            >
+              <SelectScrollUpButton />
+              <SelectPrimitive.List className="p-1">{children}</SelectPrimitive.List>
+              <SelectScrollDownButton />
+            </SelectPrimitive.Popup>
+          </SelectPrimitive.Positioner>
+        ) : null}
+      </AnimatePresence>
     </SelectPrimitive.Portal>
   );
 }
@@ -341,8 +380,8 @@ function SelectItem({ className, children, icon, description, label, ...props }:
       label={textLabel}
       className={cn(
         // layout
-        'relative flex w-full cursor-default items-start gap-2 rounded-md py-1.5 pr-8 pl-2',
-        'text-sm outline-hidden select-none',
+        'relative flex w-full cursor-default items-center gap-2 rounded-md py-1.5 pr-8 pl-2',
+        'text-sm pointer-coarse:text-base pointer-coarse:min-h-11 pointer-coarse:py-2.5 outline-hidden select-none',
         // smooth hover — transition covers bg + text
         'transition-colors duration-100',
         'focus:bg-accent focus:text-accent-foreground',

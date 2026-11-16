@@ -4,13 +4,13 @@ import { Check, Image as ImageIcon, Info, PackageCheck } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
-  Dialog,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
-import { SupplyTaskDialogContent } from '@/components/supply/supply-task-dialog-content';
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetFooter,
+  SheetHeader,
+  SheetTitle,
+} from '@/components/ui/sheet';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { SupplyField } from '@/components/supply/supply-field';
@@ -86,225 +86,229 @@ export function ReceiveGoodsDialog({
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <SupplyTaskDialogContent className="max-h-[92vh] max-w-4xl overflow-y-auto p-6 sm:max-w-4xl">
-        <DialogHeader>
+    <Sheet open={open} onOpenChange={onOpenChange}>
+      <SheetContent side="right" className="gap-0 p-0 sm:max-w-4xl">
+        <SheetHeader className="shrink-0 border-b border-border px-5 py-4 pr-11 text-left">
           <div className="flex flex-wrap items-center gap-2">
-            <DialogTitle className="text-xl font-bold tracking-tight">
+            <SheetTitle className="text-xl font-bold tracking-tight">
               Receive Shipment {shipment.shipmentNumber}
-            </DialogTitle>
+            </SheetTitle>
             <Badge variant="outline" className="text-xs">
               {shipment.receivingLocationName}
             </Badge>
           </div>
-          <DialogDescription className="text-sm text-muted-foreground">
+          <SheetDescription className="text-sm text-muted-foreground">
             Verify physical quantities delivered to {shipment.receivingLocationName}. Posting
             creates immutable inventory receipt transactions and updates on-hand stock.
-          </DialogDescription>
-        </DialogHeader>
+          </SheetDescription>
+        </SheetHeader>
 
-        {/* Quick Fill & Summary Bar */}
-        <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border bg-muted/30 p-3 text-xs">
-          <div className="flex flex-wrap items-center gap-3">
-            <div className="flex items-center gap-1.5">
-              <span className="text-muted-foreground">Expected Remaining:</span>
-              <strong className="font-semibold text-foreground">
-                {formatSupplyNumber(String(totalExpectedRemaining))} units
-              </strong>
-            </div>
-            <span className="text-muted-foreground/50">·</span>
-            <div className="flex items-center gap-1.5">
-              <span className="text-muted-foreground">Session Total:</span>
-              <strong
-                className={`font-semibold ${
-                  hasOvercounted
-                    ? 'text-destructive'
-                    : totalCounted > 0
-                      ? 'text-primary'
-                      : 'text-foreground'
-                }`}
-              >
-                {formatSupplyNumber(String(totalCounted))} units
-              </strong>
-            </div>
-          </div>
-
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            disabled={!remainingAllocations.length || saving}
-            onClick={receiveAllSellable}
-            className="h-8 gap-1.5 text-xs font-medium"
-          >
-            <Check className="size-3.5" />
-            Receive all remaining as sellable
-          </Button>
-        </div>
-
-        <form className="space-y-5" onSubmit={onSubmit}>
-          {/* Item Counting Rows */}
-          <div className="space-y-3">
-            <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-              Cargo Items ({remainingAllocations.length})
-            </h4>
-
-            <div className="divide-y rounded-xl border">
-              {remainingAllocations.map((allocation) => {
-                const remaining = Number(
-                  remainingSupplyQuantity(
-                    allocation.allocatedQuantity,
-                    allocation.receivedQuantity,
-                  ),
-                );
-                const counted = countFor(allocation.id);
-                const isOver = counted > remaining;
-
-                return (
-                  <div className="space-y-3 p-4 transition-colors" key={allocation.id}>
-                    {/* Item Heading */}
-                    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                      <div className="flex min-w-0 items-center gap-3">
-                        <div className="grid size-20 shrink-0 place-items-center overflow-hidden rounded-lg border bg-muted">
-                          {allocation.primaryImageUrl ? (
-                            <img
-                              src={allocation.primaryImageUrl}
-                              alt={`${allocation.productTitle} ${allocation.optionSummary || allocation.sku}`}
-                              width={120}
-                              height={120}
-                              loading="lazy"
-                              className="size-full object-cover"
-                            />
-                          ) : (
-                            <ImageIcon className="size-6 text-muted-foreground" />
-                          )}
-                        </div>
-                        <div className="min-w-0 space-y-0.5">
-                          <div className="flex flex-wrap items-center gap-2">
-                            <p className="font-medium text-foreground">{allocation.productTitle}</p>
-                            {allocation.optionSummary ? (
-                              <Badge variant="secondary" className="text-[11px] font-normal">
-                                {allocation.optionSummary}
-                              </Badge>
-                            ) : null}
-                          </div>
-                          <p className="font-mono text-xs text-muted-foreground">
-                            SKU: {allocation.sku} · PO: {allocation.purchaseNumber} (
-                            {allocation.supplierName})
-                          </p>
-                        </div>
-                      </div>
-                      <div className="shrink-0 text-right text-xs">
-                        <span className="text-muted-foreground">Remaining to receive: </span>
-                        <strong className="font-semibold text-foreground">
-                          {formatSupplyNumber(String(remaining))}
-                        </strong>
-                        {Number(allocation.receivedQuantity) > 0 ? (
-                          <span className="text-muted-foreground">
-                            {' '}
-                            ({formatSupplyNumber(allocation.receivedQuantity)} prior)
-                          </span>
-                        ) : null}
-                      </div>
-                    </div>
-
-                    {/* Condition Inputs */}
-                    <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-                      {CONDITIONS.map((cond) => (
-                        <div key={cond.key} className="space-y-1">
-                          <label
-                            htmlFor={`receive-${allocation.id}-${cond.key}`}
-                            className="text-[11px] font-medium text-muted-foreground"
-                          >
-                            {cond.label}
-                          </label>
-                          <Input
-                            id={`receive-${allocation.id}-${cond.key}`}
-                            name={`receive-${allocation.id}-${cond.key}`}
-                            type="number"
-                            min="0"
-                            step="1"
-                            placeholder="0"
-                            className={`h-9 text-xs tabular-nums ${isOver ? 'border-destructive focus-visible:ring-destructive' : ''}`}
-                            value={quantityFor(allocation.id, cond.key)}
-                            onChange={(e) =>
-                              updateQuantity(allocation.id, cond.key, e.target.value)
-                            }
-                            disabled={saving}
-                          />
-                        </div>
-                      ))}
-                    </div>
-
-                    {/* Line status info */}
-                    <div
-                      className={`flex items-center justify-between text-xs ${
-                        isOver
-                          ? 'font-medium text-destructive'
-                          : counted === remaining && counted > 0
-                            ? 'text-success'
-                            : 'text-muted-foreground'
-                      }`}
-                    >
-                      <span>
-                        {isOver
-                          ? 'Count exceeds the expected remaining shipment quantity!'
-                          : counted === remaining && counted > 0
-                            ? 'Complete count for this item'
-                            : counted > 0
-                              ? `${formatSupplyNumber(String(remaining - counted))} units will remain for later delivery`
-                              : '0 counted in this session'}
-                      </span>
-                      <span className="font-mono tabular-nums">
-                        {formatSupplyNumber(String(counted))} /{' '}
-                        {formatSupplyNumber(String(remaining))}
-                      </span>
-                    </div>
-                  </div>
-                );
-              })}
-
-              {!remainingAllocations.length ? (
-                <div className="p-8 text-center text-sm text-muted-foreground">
-                  All items in this shipment have already been fully received.
+        <form className="flex min-h-0 flex-1 flex-col" onSubmit={onSubmit}>
+          <div className="min-h-0 flex-1 space-y-5 overflow-y-auto px-5 py-4">
+            {/* Quick Fill & Summary Bar */}
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border bg-muted/30 p-3 text-xs">
+              <div className="flex flex-wrap items-center gap-3">
+                <div className="flex items-center gap-1.5">
+                  <span className="text-muted-foreground">Expected Remaining:</span>
+                  <strong className="font-semibold text-foreground">
+                    {formatSupplyNumber(String(totalExpectedRemaining))} units
+                  </strong>
                 </div>
-              ) : null}
+                <span className="text-muted-foreground/50">·</span>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-muted-foreground">Session Total:</span>
+                  <strong
+                    className={`font-semibold ${
+                      hasOvercounted
+                        ? 'text-destructive'
+                        : totalCounted > 0
+                          ? 'text-primary'
+                          : 'text-foreground'
+                    }`}
+                  >
+                    {formatSupplyNumber(String(totalCounted))} units
+                  </strong>
+                </div>
+              </div>
+
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                disabled={!remainingAllocations.length || saving}
+                onClick={receiveAllSellable}
+                className="h-8 gap-1.5 text-xs font-medium"
+              >
+                <Check className="size-3.5" />
+                Receive all remaining as sellable
+              </Button>
+            </div>
+
+            {/* Item Counting Rows */}
+            <div className="space-y-3">
+              <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                Cargo Items ({remainingAllocations.length})
+              </h4>
+
+              <div className="divide-y rounded-xl border">
+                {remainingAllocations.map((allocation) => {
+                  const remaining = Number(
+                    remainingSupplyQuantity(
+                      allocation.allocatedQuantity,
+                      allocation.receivedQuantity,
+                    ),
+                  );
+                  const counted = countFor(allocation.id);
+                  const isOver = counted > remaining;
+
+                  return (
+                    <div className="space-y-3 p-4 transition-colors" key={allocation.id}>
+                      {/* Item Heading */}
+                      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                        <div className="flex min-w-0 items-center gap-3">
+                          <div className="grid size-20 shrink-0 place-items-center overflow-hidden rounded-lg border bg-muted">
+                            {allocation.primaryImageUrl ? (
+                              <img
+                                src={allocation.primaryImageUrl}
+                                alt={`${allocation.productTitle} ${allocation.optionSummary || allocation.sku}`}
+                                width={120}
+                                height={120}
+                                loading="lazy"
+                                className="size-full object-cover"
+                              />
+                            ) : (
+                              <ImageIcon className="size-6 text-muted-foreground" />
+                            )}
+                          </div>
+                          <div className="min-w-0 space-y-0.5">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <p className="font-medium text-foreground">
+                                {allocation.productTitle}
+                              </p>
+                              {allocation.optionSummary ? (
+                                <Badge variant="secondary" className="text-[11px] font-normal">
+                                  {allocation.optionSummary}
+                                </Badge>
+                              ) : null}
+                            </div>
+                            <p className="font-mono text-xs text-muted-foreground">
+                              SKU: {allocation.sku} · PO: {allocation.purchaseNumber} (
+                              {allocation.supplierName})
+                            </p>
+                          </div>
+                        </div>
+                        <div className="shrink-0 text-right text-xs">
+                          <span className="text-muted-foreground">Remaining to receive: </span>
+                          <strong className="font-semibold text-foreground">
+                            {formatSupplyNumber(String(remaining))}
+                          </strong>
+                          {Number(allocation.receivedQuantity) > 0 ? (
+                            <span className="text-muted-foreground">
+                              {' '}
+                              ({formatSupplyNumber(allocation.receivedQuantity)} prior)
+                            </span>
+                          ) : null}
+                        </div>
+                      </div>
+
+                      {/* Condition Inputs */}
+                      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                        {CONDITIONS.map((cond) => (
+                          <div key={cond.key} className="space-y-1">
+                            <label
+                              htmlFor={`receive-${allocation.id}-${cond.key}`}
+                              className="text-[11px] font-medium text-muted-foreground"
+                            >
+                              {cond.label}
+                            </label>
+                            <Input
+                              id={`receive-${allocation.id}-${cond.key}`}
+                              name={`receive-${allocation.id}-${cond.key}`}
+                              type="number"
+                              min="0"
+                              step="1"
+                              placeholder="0"
+                              className={`h-9 text-xs tabular-nums ${isOver ? 'border-destructive focus-visible:ring-destructive' : ''}`}
+                              value={quantityFor(allocation.id, cond.key)}
+                              onChange={(e) =>
+                                updateQuantity(allocation.id, cond.key, e.target.value)
+                              }
+                              disabled={saving}
+                            />
+                          </div>
+                        ))}
+                      </div>
+
+                      {/* Line status info */}
+                      <div
+                        className={`flex items-center justify-between text-xs ${
+                          isOver
+                            ? 'font-medium text-destructive'
+                            : counted === remaining && counted > 0
+                              ? 'text-success'
+                              : 'text-muted-foreground'
+                        }`}
+                      >
+                        <span>
+                          {isOver
+                            ? 'Count exceeds the expected remaining shipment quantity!'
+                            : counted === remaining && counted > 0
+                              ? 'Complete count for this item'
+                              : counted > 0
+                                ? `${formatSupplyNumber(String(remaining - counted))} units will remain for later delivery`
+                                : '0 counted in this session'}
+                        </span>
+                        <span className="font-mono tabular-nums">
+                          {formatSupplyNumber(String(counted))} /{' '}
+                          {formatSupplyNumber(String(remaining))}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })}
+
+                {!remainingAllocations.length ? (
+                  <div className="p-8 text-center text-sm text-muted-foreground">
+                    All items in this shipment have already been fully received.
+                  </div>
+                ) : null}
+              </div>
+            </div>
+
+            {/* Session Metadata */}
+            <div className="grid gap-3 sm:grid-cols-2">
+              <SupplyField label="Packing Slip / Delivery Note #">
+                <Input
+                  name="packingSlipReference"
+                  placeholder="e.g. PK-2026-9042"
+                  className="text-xs"
+                  disabled={saving}
+                />
+              </SupplyField>
+
+              <SupplyField label="Receiving Session Notes (Optional)">
+                <Textarea
+                  name="notes"
+                  placeholder="Note any carton seal integrity, dock bay #, or container comments…"
+                  rows={2}
+                  className="text-xs"
+                  disabled={saving}
+                />
+              </SupplyField>
+            </div>
+
+            {/* Invariant Warning */}
+            <div className="flex items-start gap-2 rounded-lg bg-muted/40 p-3 text-xs text-muted-foreground">
+              <Info className="size-4 shrink-0 mt-0.5 text-primary" />
+              <p>
+                Posting this receipt automatically creates a warehouse inventory batch at{' '}
+                <strong>{shipment.receivingLocationName}</strong> with provisional cost layers tied
+                to the purchase line.
+              </p>
             </div>
           </div>
 
-          {/* Session Metadata */}
-          <div className="grid gap-3 sm:grid-cols-2">
-            <SupplyField label="Packing Slip / Delivery Note #">
-              <Input
-                name="packingSlipReference"
-                placeholder="e.g. PK-2026-9042"
-                className="text-xs"
-                disabled={saving}
-              />
-            </SupplyField>
-
-            <SupplyField label="Receiving Session Notes (Optional)">
-              <Textarea
-                name="notes"
-                placeholder="Note any carton seal integrity, dock bay #, or container comments…"
-                rows={2}
-                className="text-xs"
-                disabled={saving}
-              />
-            </SupplyField>
-          </div>
-
-          {/* Invariant Warning */}
-          <div className="flex items-start gap-2 rounded-lg bg-muted/40 p-3 text-xs text-muted-foreground">
-            <Info className="size-4 shrink-0 mt-0.5 text-primary" />
-            <p>
-              Posting this receipt automatically creates a warehouse inventory batch at{' '}
-              <strong>{shipment.receivingLocationName}</strong> with provisional cost layers tied to
-              the purchase line.
-            </p>
-          </div>
-
-          <DialogFooter className="gap-2 sm:justify-end">
+          <SheetFooter className="shrink-0 flex-row items-center justify-end gap-2 border-t border-border bg-card/50 px-5 py-3">
             <Button
               type="button"
               variant="outline"
@@ -325,9 +329,9 @@ export function ReceiveGoodsDialog({
                   : `Post Receipt (${formatSupplyNumber(String(totalCounted))} units)`}
               </span>
             </Button>
-          </DialogFooter>
+          </SheetFooter>
         </form>
-      </SupplyTaskDialogContent>
-    </Dialog>
+      </SheetContent>
+    </Sheet>
   );
 }

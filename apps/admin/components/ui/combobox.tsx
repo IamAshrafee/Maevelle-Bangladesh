@@ -45,14 +45,16 @@ import * as React from 'react';
 import { Combobox as ComboboxPrimitive } from '@base-ui/react/combobox';
 import { Field as FieldPrimitive } from '@base-ui/react/field';
 import { cva, type VariantProps } from 'class-variance-authority';
-import {
-  CheckIcon,
-  ChevronDownIcon,
-  Loader2Icon,
-  SearchIcon,
-  XIcon,
-} from 'lucide-react';
+import { CheckIcon, ChevronDownIcon, Loader2Icon, SearchIcon, XIcon } from 'lucide-react';
 
+import {
+  ADMIN_MOTION,
+  AnimatePresence,
+  getSideMotionOffset,
+  motion,
+  useOverlayRootMotion,
+  type OverlayMotionContextValue,
+} from '@/components/motion/motion-primitives';
 import { cn } from '@/lib/utils';
 
 // ---------------------------------------------------------------------------
@@ -113,6 +115,7 @@ const ComboboxContext = React.createContext<ComboboxContextValue>({
   size: 'md',
   status: 'default',
 });
+const ComboboxOverlayContext = React.createContext<OverlayMotionContextValue | null>(null);
 
 function useComboboxContext() {
   return React.useContext(ComboboxContext);
@@ -127,13 +130,37 @@ type ComboboxRootProps<T> = ComboboxPrimitive.Root.Props<T> & {
   status?: ComboboxStatusVariant;
 };
 
-function Combobox<T>({ size = 'md', status = 'default' as ComboboxStatusVariant, children, ...props }: ComboboxRootProps<T>) {
+function Combobox<T>({
+  size = 'md',
+  status = 'default' as ComboboxStatusVariant,
+  open,
+  defaultOpen,
+  onOpenChange,
+  actionsRef,
+  children,
+  ...props
+}: ComboboxRootProps<T>) {
+  const motionState = useOverlayRootMotion({
+    open,
+    defaultOpen,
+    onOpenChange,
+    actionsRef,
+  });
+
   return (
-    <ComboboxContext.Provider value={{ size, status }}>
-      <ComboboxPrimitive.Root data-slot="combobox" {...props}>
-        {children}
-      </ComboboxPrimitive.Root>
-    </ComboboxContext.Provider>
+    <ComboboxOverlayContext.Provider value={motionState.overlayContextValue}>
+      <ComboboxContext.Provider value={{ size, status }}>
+        <ComboboxPrimitive.Root
+          data-slot="combobox"
+          open={motionState.open}
+          onOpenChange={motionState.onOpenChange}
+          actionsRef={motionState.actionsRef}
+          {...props}
+        >
+          {children}
+        </ComboboxPrimitive.Root>
+      </ComboboxContext.Provider>
+    </ComboboxOverlayContext.Provider>
   );
 }
 
@@ -182,7 +209,7 @@ function ComboboxInput({ className, ...props }: ComboboxPrimitive.Input.Props) {
     <ComboboxPrimitive.Input
       data-slot="combobox-input"
       className={cn(
-        'min-w-0 flex-1 bg-transparent py-1.5 text-sm outline-none placeholder:text-muted-foreground',
+        'min-w-0 flex-1 bg-transparent py-1.5 text-base md:text-sm pointer-coarse:text-base outline-none placeholder:text-muted-foreground',
         className,
       )}
       {...props}
@@ -265,10 +292,15 @@ function ComboboxChip({ className, children, ...props }: ComboboxPrimitive.Chip.
   return (
     <ComboboxPrimitive.Chip
       data-slot="combobox-chip"
+      render={
+        <motion.div
+          initial={{ opacity: 0, scale: 0.88 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={ADMIN_MOTION.fast}
+        />
+      }
       className={cn(
         'flex items-center gap-1 rounded-md bg-secondary px-1.5 py-0.5 text-xs font-medium text-secondary-foreground',
-        // pop-in when chip is added
-        'motion-safe:animate-in motion-safe:zoom-in-75 motion-safe:fade-in-0 motion-safe:duration-150',
         className,
       )}
       {...props}
@@ -315,44 +347,51 @@ function ComboboxContent({
   alignOffset = 0,
   ...props
 }: ComboboxContentProps) {
+  const overlay = React.useContext(ComboboxOverlayContext);
+  const isOpen = overlay?.open ?? true;
+  const keepPortalMounted = overlay ? overlay.present : false;
+  const offset = getSideMotionOffset(side, 6);
+
   return (
-    <ComboboxPrimitive.Portal>
-      <ComboboxPrimitive.Positioner
-        side={side}
-        sideOffset={sideOffset}
-        align={align}
-        alignOffset={alignOffset}
-        className="isolate z-50"
-      >
-        <ComboboxPrimitive.Popup
-          data-slot="combobox-content"
-          className={cn(
-            // layout
-            'relative z-50 min-w-[var(--anchor-width)] max-h-[var(--available-height)]',
-            'overflow-hidden rounded-lg',
-            // colours
-            'bg-popover text-popover-foreground shadow-xl ring-1 ring-foreground/10',
-            // animation — spring-feel entrance, snappy exit
-            'origin-[var(--transform-origin)]',
-            // open
-            'motion-safe:data-open:animate-in motion-safe:data-open:fade-in-0',
-            'motion-safe:data-open:zoom-in-[98%]',
-            'motion-safe:data-open:data-[side=bottom]:slide-in-from-top-1.5',
-            'motion-safe:data-open:data-[side=top]:slide-in-from-bottom-1.5',
-            'motion-safe:data-open:data-[side=left]:slide-in-from-right-1.5',
-            'motion-safe:data-open:data-[side=right]:slide-in-from-left-1.5',
-            // close
-            'motion-safe:data-closed:animate-out motion-safe:data-closed:fade-out-0',
-            'motion-safe:data-closed:zoom-out-[98%]',
-            // deliberate open, snappy close
-            'data-open:duration-200 data-closed:duration-100',
-            className,
-          )}
-          {...props}
-        >
-          {children}
-        </ComboboxPrimitive.Popup>
-      </ComboboxPrimitive.Positioner>
+    <ComboboxPrimitive.Portal keepMounted={keepPortalMounted}>
+      <AnimatePresence onExitComplete={overlay?.onExitComplete}>
+        {isOpen ? (
+          <ComboboxPrimitive.Positioner
+            key="combobox-positioner"
+            side={side}
+            sideOffset={sideOffset}
+            align={align}
+            alignOffset={alignOffset}
+            hidden={false}
+            className="isolate z-50"
+          >
+            <ComboboxPrimitive.Popup
+              data-slot="combobox-content"
+              hidden={false}
+              render={
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.97, x: offset.x, y: offset.y }}
+                  animate={{ opacity: 1, scale: 1, x: 0, y: 0 }}
+                  exit={{ opacity: 0, scale: 0.97, x: offset.x, y: offset.y }}
+                  transition={ADMIN_MOTION.fast}
+                />
+              }
+              className={cn(
+                // layout
+                'relative z-50 min-w-[var(--anchor-width)] max-h-[var(--available-height)]',
+                'overflow-hidden rounded-lg',
+                // colours
+                'bg-popover text-popover-foreground shadow-xl ring-1 ring-foreground/10',
+                'origin-[var(--transform-origin)]',
+                className,
+              )}
+              {...props}
+            >
+              {children}
+            </ComboboxPrimitive.Popup>
+          </ComboboxPrimitive.Positioner>
+        ) : null}
+      </AnimatePresence>
     </ComboboxPrimitive.Portal>
   );
 }
@@ -410,10 +449,7 @@ function ComboboxStatus({
   return (
     <ComboboxPrimitive.Status
       data-slot="combobox-status"
-      className={cn(
-        'flex items-center gap-2 px-4 py-3 text-sm text-muted-foreground',
-        className,
-      )}
+      className={cn('flex items-center gap-2 px-4 py-3 text-sm text-muted-foreground', className)}
       {...props}
     >
       {children ?? (
@@ -528,7 +564,14 @@ type ComboboxFieldProps = {
   children: React.ReactNode;
 };
 
-function ComboboxField({ label, description, error, required, className, children }: ComboboxFieldProps) {
+function ComboboxField({
+  label,
+  description,
+  error,
+  required,
+  className,
+  children,
+}: ComboboxFieldProps) {
   return (
     <FieldPrimitive.Root
       data-slot="combobox-field"

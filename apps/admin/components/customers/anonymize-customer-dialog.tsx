@@ -7,6 +7,7 @@ import type { CustomerDetailDto } from '@maevelle/contracts';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select';
 import {
   Dialog,
   DialogContent,
@@ -16,6 +17,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog';
+import { useFormDialogLifecycle } from '@/hooks/use-form-dialog-lifecycle';
 import { fetchApiData } from '@/lib/api';
 
 interface AnonymizeCustomerDialogProps {
@@ -30,6 +32,17 @@ export function AnonymizeCustomerDialog({ customer, onCompleted }: AnonymizeCust
   const [reasonText, setReasonText] = useState('');
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
+
+  const isDirty = confirmation.trim().length > 0 || reasonText.trim().length > 0;
+
+  const lifecycle = useFormDialogLifecycle({
+    open,
+    onOpenChange: setOpen,
+    isDirty,
+    isSubmitting: busy,
+    title: 'Discard redaction request?',
+    description: 'You have entered confirmation text. Are you sure you want to dismiss?',
+  });
 
   async function submit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -57,7 +70,7 @@ export function AnonymizeCustomerDialog({ customer, onCompleted }: AnonymizeCust
   }
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog open={open} onOpenChange={lifecycle.handleOpenChange}>
       <DialogTrigger render={<Button variant="outline" size="sm" className="h-9 gap-1 text-muted-foreground hover:text-destructive" />}>
         <ShieldX className="size-3.5" aria-hidden="true" /> Anonymize
       </DialogTrigger>
@@ -83,17 +96,16 @@ export function AnonymizeCustomerDialog({ customer, onCompleted }: AnonymizeCust
         <form onSubmit={submit} className="space-y-4">
           <div className="space-y-1.5">
             <Label htmlFor="anonymize-reason">Legal / Business Reason</Label>
-            <select
+            <NativeSelect
               id="anonymize-reason"
-              className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               value={reasonCode}
               onChange={(e) => setReasonCode(e.target.value)}
             >
-              <option value="CUSTOMER_REQUEST">Customer Privacy / Erasure Request</option>
-              <option value="REGULATORY_REQUEST">Regulatory / Compliance Mandate</option>
-              <option value="MERCHANT_DATA_CLEANUP">Merchant Account Hygiene</option>
-              <option value="FRAUD_ENFORCEMENT">Fraud / Legal Investigation</option>
-            </select>
+              <NativeSelectOption value="CUSTOMER_REQUEST">Customer Privacy / Erasure Request</NativeSelectOption>
+              <NativeSelectOption value="REGULATORY_REQUEST">Regulatory / Compliance Mandate</NativeSelectOption>
+              <NativeSelectOption value="MERCHANT_DATA_CLEANUP">Merchant Account Hygiene</NativeSelectOption>
+              <NativeSelectOption value="FRAUD_ENFORCEMENT">Fraud / Legal Investigation</NativeSelectOption>
+            </NativeSelect>
           </div>
 
           <div className="space-y-1.5">
@@ -124,7 +136,7 @@ export function AnonymizeCustomerDialog({ customer, onCompleted }: AnonymizeCust
             <Button
               type="button"
               variant="outline"
-              onClick={() => setOpen(false)}
+              onClick={() => lifecycle.handleOpenChange(false)}
               disabled={busy}
             >
               Cancel
@@ -140,6 +152,7 @@ export function AnonymizeCustomerDialog({ customer, onCompleted }: AnonymizeCust
           </DialogFooter>
         </form>
       </DialogContent>
+      {lifecycle.discardConfirmDialog}
     </Dialog>
   );
 }

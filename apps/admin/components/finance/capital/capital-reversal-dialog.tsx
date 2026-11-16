@@ -13,6 +13,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Textarea } from '@/components/ui/textarea';
+import { useFormDialogLifecycle } from '@/hooks/use-form-dialog-lifecycle';
 import { formatMoney } from '@/lib/finance/types';
 
 export interface CapitalReversalDialogProps {
@@ -33,6 +34,15 @@ export function CapitalReversalDialog({
   onSubmit,
 }: CapitalReversalDialogProps) {
   const [reason, setReason] = useState('');
+
+  const isDirty = reason.trim().length > 0;
+  const { handleOpenChange, discardConfirmDialog } = useFormDialogLifecycle({
+    isDirty,
+    isSubmitting: busy,
+    onClose,
+    confirmTitle: 'Discard reversal reason?',
+    confirmDescription: 'You have entered a reversal audit reason. Closing now will discard it.',
+  });
 
   if (!event) return null;
 
@@ -59,58 +69,61 @@ export function CapitalReversalDialog({
   }
 
   return (
-    <Dialog open={open} onOpenChange={(val) => !val && onClose()}>
-      <DialogContent className="sm:max-w-lg">
-        <form className="grid gap-4" onSubmit={handleSubmit}>
-          <DialogHeader>
-            <div className="flex items-center gap-2 text-destructive">
-              <RotateCcw className="size-5 shrink-0" />
-              <DialogTitle>Reverse capital transaction</DialogTitle>
+    <>
+      <Dialog open={open} onOpenChange={handleOpenChange}>
+        <DialogContent className="sm:max-w-lg">
+          <form className="grid gap-4" onSubmit={handleSubmit}>
+            <DialogHeader>
+              <div className="flex items-center gap-2 text-destructive">
+                <RotateCcw className="size-5 shrink-0" />
+                <DialogTitle>Reverse capital transaction</DialogTitle>
+              </div>
+              <DialogDescription className="leading-relaxed">
+                Financial entries are never deleted or rewritten. A reversal creates an equal and opposite compensating transaction while preserving immutable history.
+              </DialogDescription>
+            </DialogHeader>
+
+            {/* Specific financial consequence notice */}
+            <div className="rounded-xl border border-destructive/30 bg-destructive/5 p-3.5 space-y-1.5 text-xs text-foreground">
+              <div className="flex items-center gap-1.5 font-semibold text-destructive">
+                <AlertTriangle className="size-4 shrink-0" />
+                <span>Financial consequence of reversing {event.transactionNumber}</span>
+              </div>
+              <p className="leading-relaxed text-muted-foreground">{getConsequenceExplanation()}</p>
             </div>
-            <DialogDescription className="leading-relaxed">
-              Financial entries are never deleted or rewritten. A reversal creates an equal and opposite compensating transaction while preserving immutable history.
-            </DialogDescription>
-          </DialogHeader>
 
-          {/* Specific financial consequence notice */}
-          <div className="rounded-xl border border-destructive/30 bg-destructive/5 p-3.5 space-y-1.5 text-xs text-foreground">
-            <div className="flex items-center gap-1.5 font-semibold text-destructive">
-              <AlertTriangle className="size-4 shrink-0" />
-              <span>Financial consequence of reversing {event.transactionNumber}</span>
-            </div>
-            <p className="leading-relaxed text-muted-foreground">{getConsequenceExplanation()}</p>
-          </div>
+            <label className="grid gap-1.5 text-sm font-medium">
+              <span>Reversal audit reason (required, minimum 4 characters)</span>
+              <Textarea
+                name="reason"
+                value={reason}
+                onChange={(e) => setReason(e.target.value)}
+                minLength={4}
+                maxLength={1000}
+                placeholder="e.g. Incorrect bank account selected by mistake; re-recording into BRAC bank."
+                disabled={busy}
+                required
+              />
+            </label>
 
-          <label className="grid gap-1.5 text-sm font-medium">
-            <span>Reversal audit reason (required, minimum 4 characters)</span>
-            <Textarea
-              name="reason"
-              value={reason}
-              onChange={(e) => setReason(e.target.value)}
-              minLength={4}
-              maxLength={1000}
-              placeholder="e.g. Incorrect bank account selected by mistake; re-recording into BRAC bank."
-              required
-              autoFocus
-            />
-          </label>
-
-          <DialogFooter className="mt-2">
-            <Button type="button" variant="outline" onClick={onClose} disabled={busy}>
-              Keep transaction
-            </Button>
-            <Button
-              type="submit"
-              variant="destructive"
-              disabled={busy || reason.trim().length < 4}
-              className="gap-1.5"
-            >
-              <RotateCcw className="size-4" />
-              <span>Confirm & reverse</span>
-            </Button>
-          </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
+            <DialogFooter className="mt-2">
+              <Button type="button" variant="outline" onClick={() => handleOpenChange(false)} disabled={busy}>
+                Keep transaction
+              </Button>
+              <Button
+                type="submit"
+                variant="destructive"
+                disabled={busy || reason.trim().length < 4}
+                className="gap-1.5"
+              >
+                <RotateCcw className="size-4" />
+                <span>Confirm & reverse</span>
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+      {discardConfirmDialog}
+    </>
   );
 }

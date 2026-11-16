@@ -18,16 +18,14 @@ import {
   Store,
   Truck,
 } from 'lucide-react';
+import { AdminPage, PageHeader } from '@/components/ui/page-shell';
 import { Button, buttonVariants } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { SettingsNav } from '@/components/settings/settings-nav';
 import { SettingStatusBadge } from '@/components/settings/setting-status-badge';
 import { fetchApiData } from '@/lib/api';
-import type {
-  ConfigurationHealthResponseDto,
-  MediaRuntimeDto,
-} from '@maevelle/contracts';
+import type { ConfigurationHealthResponseDto, MediaRuntimeDto } from '@maevelle/contracts';
 
 interface SearchableItem {
   id: string;
@@ -46,7 +44,9 @@ export function SettingsOverviewConsole() {
   const loadData = useCallback(async () => {
     try {
       const [healthRes, mediaRes] = await Promise.all([
-        fetchApiData<ConfigurationHealthResponseDto>('/admin/settings/health').catch(() => undefined),
+        fetchApiData<ConfigurationHealthResponseDto>('/admin/settings/health').catch(
+          () => undefined,
+        ),
         fetchApiData<MediaRuntimeDto>('/admin/settings/media/runtime').catch(() => undefined),
       ]);
       if (healthRes) setHealthData(healthRes);
@@ -67,7 +67,8 @@ export function SettingsOverviewConsole() {
         id: 'email-master',
         title: 'Transactional Email Dispatch',
         category: 'Email',
-        description: 'Enable or disable customer notifications for orders, payments, and shipments.',
+        description:
+          'Enable or disable customer notifications for orders, payments, and shipments.',
         href: '/email?tab=settings',
         keywords: 'email transactional orders notifications delivery resend enabled',
       },
@@ -139,15 +140,79 @@ export function SettingsOverviewConsole() {
         id: 'security-session',
         title: 'Operator Session Timeout',
         category: 'Security',
-        description: 'Inactivity duration before administrative sessions require re-authentication.',
+        description:
+          'Inactivity duration before administrative sessions require re-authentication.',
         href: '/settings/security',
         keywords: 'security session timeout idle minutes inactivity logout',
+      },
+      {
+        id: 'security-2fa',
+        title: 'Two-Factor Authentication (TOTP)',
+        category: 'Security',
+        description:
+          'Authenticator app policy enforcement, grace periods, and operator compliance.',
+        href: '/settings/security',
+        keywords: 'two factor authentication 2fa totp security policy enrollment grace period',
+      },
+      {
+        id: 'organization-profile',
+        title: 'Organization Identity & Contacts',
+        category: 'Organization',
+        description:
+          'Legal company name, support email, phone contact, and storefront announcements.',
+        href: '/settings/organization',
+        keywords: 'organization profile company legal name support email phone business identity',
+      },
+      {
+        id: 'checkout-control',
+        title: 'Storefront Order Pause / Resume',
+        category: 'Checkout',
+        description: 'Emergency pause and release controls for incoming customer checkout orders.',
+        href: '/settings/checkout',
+        keywords: 'checkout orders pause resume emergency stop store accepting release',
+      },
+      {
+        id: 'configuration-health',
+        title: 'Configuration Health & Audit',
+        category: 'Health',
+        description:
+          'Audit configuration readiness across all administrative modules and blockers.',
+        href: '/settings/health',
+        keywords: 'health audit configuration readiness issues warnings blockers validation',
+      },
+      {
+        id: 'color-catalog',
+        title: 'Product Colors & Swatches',
+        category: 'Catalog',
+        description:
+          'Standardized color names, hex codes, and visual swatches for product variants.',
+        href: '/settings/colors',
+        keywords: 'colors color swatches hex codes palette variants catalog',
+      },
+      {
+        id: 'system-vitals',
+        title: 'System Diagnostics & Latency',
+        category: 'System',
+        description:
+          'Node.js runtime vitals, memory consumption, process uptime, and database latency.',
+        href: '/settings/system',
+        keywords: 'system runtime diagnostics node version latency database ping memory uptime rss',
+      },
+      {
+        id: 'integrations-hub',
+        title: 'Third-Party Integrations Hub',
+        category: 'Integrations',
+        description:
+          'Overview of external providers including Resend email, Pathao couriers, and storage.',
+        href: '/settings/integrations',
+        keywords: 'integrations hub pathao courier resend s3 storage payment gateways',
       },
       {
         id: 'design-system',
         title: 'Design System & UI Lab',
         category: 'Interface',
-        description: 'Inspect semantic tokens, typography scales, buttons, tables, and UI primitives.',
+        description:
+          'Inspect semantic tokens, typography scales, buttons, tables, and UI primitives.',
         href: '/settings/design-system',
         keywords: 'design system ui tokens colors buttons components lab showcase typography',
       },
@@ -168,29 +233,26 @@ export function SettingsOverviewConsole() {
   }, [searchQuery, searchableIndex]);
 
   return (
-    <div className="space-y-6 pb-20 max-w-5xl">
+    <AdminPage variant="standard" className="pb-20">
       <SettingsNav />
 
-      {/* Header with Search Input */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-4 border-b">
-        <div>
-          <h1 className="text-xl font-semibold tracking-tight text-foreground">Settings Overview</h1>
-          <p className="text-xs text-muted-foreground mt-1">
-            Centralized configuration control center across business modules, integrations, and operational rules.
-          </p>
-        </div>
-
-        <div className="relative w-full sm:w-72">
-          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
-          <Input
-            type="search"
-            placeholder="Search all settings & keys..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-8 text-xs h-9"
-          />
-        </div>
-      </div>
+      <PageHeader
+        eyebrow="Platform Settings"
+        title="Settings Overview"
+        description="Centralized configuration control center across business modules, integrations, and operational rules."
+        actions={
+          <div className="relative w-full sm:w-72">
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
+            <Input
+              type="search"
+              placeholder="Search all settings & keys..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="pl-8 text-xs h-9"
+            />
+          </div>
+        }
+      />
 
       {/* Search Results Display */}
       {searchQuery.trim() && (
@@ -232,7 +294,11 @@ export function SettingsOverviewConsole() {
                   </div>
                   <Link
                     href={item.href}
-                    className={buttonVariants({ variant: 'outline', size: 'sm', className: 'text-xs h-7 shrink-0 gap-1' })}
+                    className={buttonVariants({
+                      variant: 'outline',
+                      size: 'sm',
+                      className: 'text-xs h-7 shrink-0 gap-1',
+                    })}
                   >
                     Configure
                     <ArrowRight className="size-3" />
@@ -265,7 +331,11 @@ export function SettingsOverviewConsole() {
 
         <Link
           href="/settings/health"
-          className={buttonVariants({ variant: 'outline', size: 'sm', className: 'text-xs h-8 shrink-0 gap-1.5' })}
+          className={buttonVariants({
+            variant: 'outline',
+            size: 'sm',
+            className: 'text-xs h-8 shrink-0 gap-1.5',
+          })}
         >
           Open Health Audit
           <ArrowRight className="size-3" />
@@ -388,16 +458,25 @@ export function SettingsOverviewConsole() {
                 <SettingStatusBadge status="ready" label="Ready" />
               </div>
               <p className="text-xs text-muted-foreground leading-relaxed">
-                Transactional order dispatches, Resend credentials, sender identity, and testing overrides.
+                Transactional order dispatches, Resend credentials, sender identity, and testing
+                overrides.
               </p>
               <div className="pt-2 border-t text-[11px] text-muted-foreground space-y-0.5 font-mono">
-                <div>Provider: <strong className="text-foreground">Resend</strong></div>
-                <div>Transactional Email: <strong className="text-success">Enabled</strong></div>
+                <div>
+                  Provider: <strong className="text-foreground">Resend</strong>
+                </div>
+                <div>
+                  Transactional Email: <strong className="text-success">Enabled</strong>
+                </div>
               </div>
             </div>
             <Link
               href="/email?tab=settings"
-              className={buttonVariants({ variant: 'outline', size: 'sm', className: 'w-full text-xs h-8 gap-1.5' })}
+              className={buttonVariants({
+                variant: 'outline',
+                size: 'sm',
+                className: 'w-full text-xs h-8 gap-1.5',
+              })}
             >
               Open Email Settings
               <ArrowRight className="size-3" />
@@ -418,13 +497,29 @@ export function SettingsOverviewConsole() {
                 Upload size, session duration, and the active storage backend.
               </p>
               <div className="pt-2 border-t text-[11px] text-muted-foreground space-y-0.5 font-mono">
-                <div>Deployment ceiling: <strong className="text-foreground">{mediaRuntime ? `${Number((mediaRuntime.deploymentMaxUploadBytes / (1024 * 1024)).toFixed(3))} MiB` : 'Loading…'}</strong></div>
-                <div>Storage: <strong className="text-foreground">{mediaRuntime?.storageLabel ?? 'Loading…'}</strong></div>
+                <div>
+                  Deployment ceiling:{' '}
+                  <strong className="text-foreground">
+                    {mediaRuntime
+                      ? `${Number((mediaRuntime.deploymentMaxUploadBytes / (1024 * 1024)).toFixed(3))} MiB`
+                      : 'Loading…'}
+                  </strong>
+                </div>
+                <div>
+                  Storage:{' '}
+                  <strong className="text-foreground">
+                    {mediaRuntime?.storageLabel ?? 'Loading…'}
+                  </strong>
+                </div>
               </div>
             </div>
             <Link
               href="/media/settings"
-              className={buttonVariants({ variant: 'outline', size: 'sm', className: 'w-full text-xs h-8 gap-1.5' })}
+              className={buttonVariants({
+                variant: 'outline',
+                size: 'sm',
+                className: 'w-full text-xs h-8 gap-1.5',
+              })}
             >
               Open Media Settings
               <ArrowRight className="size-3" />
@@ -442,16 +537,25 @@ export function SettingsOverviewConsole() {
                 <SettingStatusBadge status="ready" label="Configured" />
               </div>
               <p className="text-xs text-muted-foreground leading-relaxed">
-                Public storefront URL, brand identity, customer helpline, and cross-module link origins.
+                Public storefront URL, brand identity, customer helpline, and cross-module link
+                origins.
               </p>
               <div className="pt-2 border-t text-[11px] text-muted-foreground space-y-0.5 font-mono">
-                <div>Public URL: <strong className="text-foreground">maevelle.com</strong></div>
-                <div>Helpline: <strong className="text-foreground">+8801700000000</strong></div>
+                <div>
+                  Public URL: <strong className="text-foreground">maevelle.com</strong>
+                </div>
+                <div>
+                  Helpline: <strong className="text-foreground">+8801700000000</strong>
+                </div>
               </div>
             </div>
             <Link
               href="/settings/storefront"
-              className={buttonVariants({ variant: 'outline', size: 'sm', className: 'w-full text-xs h-8 gap-1.5' })}
+              className={buttonVariants({
+                variant: 'outline',
+                size: 'sm',
+                className: 'w-full text-xs h-8 gap-1.5',
+              })}
             >
               Open Storefront Settings
               <ArrowRight className="size-3" />
@@ -469,16 +573,25 @@ export function SettingsOverviewConsole() {
                 <SettingStatusBadge status="CONNECTED" label="Connected" />
               </div>
               <p className="text-xs text-muted-foreground leading-relaxed">
-                Pathao courier integration, automated consignment booking, tracking, and delivery zones.
+                Pathao courier integration, automated consignment booking, tracking, and delivery
+                zones.
               </p>
               <div className="pt-2 border-t text-[11px] text-muted-foreground space-y-0.5 font-mono">
-                <div>Primary Courier: <strong className="text-foreground">Pathao</strong></div>
-                <div>Webhook Ingestion: <strong className="text-success">Active</strong></div>
+                <div>
+                  Primary Courier: <strong className="text-foreground">Pathao</strong>
+                </div>
+                <div>
+                  Webhook Ingestion: <strong className="text-success">Active</strong>
+                </div>
               </div>
             </div>
             <Link
               href="/delivery/couriers"
-              className={buttonVariants({ variant: 'outline', size: 'sm', className: 'w-full text-xs h-8 gap-1.5' })}
+              className={buttonVariants({
+                variant: 'outline',
+                size: 'sm',
+                className: 'w-full text-xs h-8 gap-1.5',
+              })}
             >
               Configure Couriers
               <ArrowRight className="size-3" />
@@ -496,16 +609,25 @@ export function SettingsOverviewConsole() {
                 <SettingStatusBadge status="ready" label="Configured" />
               </div>
               <p className="text-xs text-muted-foreground leading-relaxed">
-                Low stock alarm thresholds, stock reservation expiration, and warehouse allocation rules.
+                Low stock alarm thresholds, stock reservation expiration, and warehouse allocation
+                rules.
               </p>
               <div className="pt-2 border-t text-[11px] text-muted-foreground space-y-0.5 font-mono">
-                <div>Low Stock Alarm: <strong className="text-foreground">5 units</strong></div>
-                <div>Reservation Hold: <strong className="text-foreground">15 mins</strong></div>
+                <div>
+                  Low Stock Alarm: <strong className="text-foreground">5 units</strong>
+                </div>
+                <div>
+                  Reservation Hold: <strong className="text-foreground">15 mins</strong>
+                </div>
               </div>
             </div>
             <Link
               href="/inventory"
-              className={buttonVariants({ variant: 'outline', size: 'sm', className: 'w-full text-xs h-8 gap-1.5' })}
+              className={buttonVariants({
+                variant: 'outline',
+                size: 'sm',
+                className: 'w-full text-xs h-8 gap-1.5',
+              })}
             >
               Open Inventory
               <ArrowRight className="size-3" />
@@ -523,16 +645,25 @@ export function SettingsOverviewConsole() {
                 <SettingStatusBadge status="ready" label="Configured" />
               </div>
               <p className="text-xs text-muted-foreground leading-relaxed">
-                Payment collection channels, merchant accounts, manual verification, and COD settlements.
+                Payment collection channels, merchant accounts, manual verification, and COD
+                settlements.
               </p>
               <div className="pt-2 border-t text-[11px] text-muted-foreground space-y-0.5 font-mono">
-                <div>Gateways: <strong className="text-foreground">bKash, Nagad, COD</strong></div>
-                <div>Currency: <strong className="text-foreground">BDT (৳)</strong></div>
+                <div>
+                  Gateways: <strong className="text-foreground">bKash, Nagad, COD</strong>
+                </div>
+                <div>
+                  Currency: <strong className="text-foreground">BDT (৳)</strong>
+                </div>
               </div>
             </div>
             <Link
               href="/payments"
-              className={buttonVariants({ variant: 'outline', size: 'sm', className: 'w-full text-xs h-8 gap-1.5' })}
+              className={buttonVariants({
+                variant: 'outline',
+                size: 'sm',
+                className: 'w-full text-xs h-8 gap-1.5',
+              })}
             >
               Open Payments
               <ArrowRight className="size-3" />
@@ -540,6 +671,6 @@ export function SettingsOverviewConsole() {
           </div>
         </div>
       </div>
-    </div>
+    </AdminPage>
   );
 }

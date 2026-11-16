@@ -22,17 +22,17 @@ import { type FormEvent, type KeyboardEvent, useEffect, useMemo, useRef, useStat
 import type { CatalogVariantChoiceDto, PurchaseDto } from '@maevelle/contracts';
 
 import { Badge } from '@/components/ui/badge';
-import { SupplyTaskDialogContent } from '@/components/supply/supply-task-dialog-content';
 import { useCatalogVariantChoices } from '@/components/supply/use-catalog-variant-choices';
 import { Button } from '@/components/ui/button';
+import { Dialog, DialogContent } from '@/components/ui/dialog';
 import {
-  Dialog,
-  DialogClose,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
+  Sheet,
+  SheetClose,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from '@/components/ui/sheet';
 import { Field, FieldDescription, FieldLabel } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
 import { formatSupplyMoney } from '@/lib/supply/api';
@@ -201,46 +201,41 @@ export function PurchaseAddLineDialog({
 
   return (
     <>
-      <Dialog
+      <Sheet
         open={open}
         onOpenChange={(next) => {
           if (!next) handleFullReset();
           onOpenChange(next);
         }}
       >
-        <SupplyTaskDialogContent
-          className={cn(
-            'fixed z-50 flex flex-col p-0 overflow-hidden bg-background shadow-xl duration-100',
-            // Mobile: Full screen adaptive viewport
-            'inset-0 top-0 left-0 w-full h-[100dvh] max-w-full rounded-none translate-x-0 translate-y-0 border-0',
-            // Tablet & Desktop: Centered responsive card
-            'sm:inset-auto sm:top-1/2 sm:left-1/2 sm:-translate-x-1/2 sm:-translate-y-1/2 sm:w-full sm:max-w-4xl lg:max-w-5xl sm:h-auto sm:max-h-[92vh] sm:rounded-2xl sm:border border-border',
-          )}
+        <SheetContent
+          side="right"
+          className="flex h-[92dvh] w-full flex-col overflow-hidden bg-background p-0 sm:h-full sm:max-w-4xl lg:max-w-5xl"
         >
           {/* Header */}
-          <DialogHeader className="border-b px-4 py-3 sm:px-6 sm:py-4 bg-card shrink-0">
+          <SheetHeader className="shrink-0 border-b bg-card px-4 py-3 sm:px-6 sm:py-4">
             <div className="flex flex-wrap items-center justify-between gap-2.5 pr-8 sm:pr-10">
               <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-2">
-                  <DialogTitle className="text-base sm:text-lg font-heading font-semibold text-foreground">
+                  <SheetTitle className="font-heading text-base font-semibold text-foreground sm:text-lg">
                     Add Purchase Item
-                  </DialogTitle>
+                  </SheetTitle>
                   <Badge
                     variant="outline"
-                    className="font-mono text-[11px] sm:text-xs tabular-nums"
+                    className="font-mono text-[11px] tabular-nums sm:text-xs"
                   >
                     PO #{purchase.id.slice(0, 8)}
                   </Badge>
                   <Badge
                     variant="secondary"
-                    className="font-mono text-[11px] sm:text-xs font-semibold"
+                    className="font-mono text-[11px] font-semibold sm:text-xs"
                   >
                     {purchase.currencyCode}
                   </Badge>
                 </div>
-                <DialogDescription className="mt-0.5 text-xs text-muted-foreground truncate">
+                <SheetDescription className="mt-0.5 truncate text-xs text-muted-foreground">
                   Search catalog variants, check stock, and set procurement cost.
-                </DialogDescription>
+                </SheetDescription>
               </div>
 
               {/* Transient feedback banner when adding sequentially */}
@@ -260,10 +255,10 @@ export function PurchaseAddLineDialog({
                 type="button"
                 onClick={() => setMobileStep('browse')}
                 className={cn(
-                  'flex-1 py-1 text-xs font-medium rounded-md text-center transition-colors',
+                  'flex-1 py-1 text-xs font-medium rounded-md border text-center transition-colors',
                   mobileStep === 'browse'
-                    ? 'bg-primary text-primary-foreground'
-                    : 'bg-muted text-muted-foreground',
+                    ? 'border-primary/25 bg-primary-subtle text-primary-hover dark:text-primary font-semibold'
+                    : 'border-transparent bg-muted text-muted-foreground',
                 )}
               >
                 1. Browse Variants ({activeVariants.length})
@@ -273,18 +268,18 @@ export function PurchaseAddLineDialog({
                 disabled={!selectedVariant}
                 onClick={() => setMobileStep('configure')}
                 className={cn(
-                  'flex-1 py-1 text-xs font-medium rounded-md text-center transition-colors',
+                  'flex-1 py-1 text-xs font-medium rounded-md border text-center transition-colors',
                   mobileStep === 'configure'
-                    ? 'bg-primary text-primary-foreground'
+                    ? 'border-primary/25 bg-primary-subtle text-primary-hover dark:text-primary font-semibold'
                     : selectedVariant
-                      ? 'bg-muted text-foreground'
-                      : 'bg-muted/40 text-muted-foreground/40 cursor-not-allowed',
+                      ? 'border-transparent bg-muted text-foreground'
+                      : 'border-transparent bg-muted/40 text-muted-foreground/40 cursor-not-allowed',
                 )}
               >
                 2. Configure Quantity & Cost {selectedVariant ? '✓' : ''}
               </button>
             </div>
-          </DialogHeader>
+          </SheetHeader>
 
           {/* Main Workspace: 2-column on desktop, adaptive step on mobile */}
           <div className="grid grid-cols-1 md:grid-cols-12 flex-1 overflow-hidden min-h-0 bg-background divide-y md:divide-y-0 md:divide-x divide-border">
@@ -523,7 +518,7 @@ export function PurchaseAddLineDialog({
                           className={cn(
                             'hidden md:flex size-5 rounded-full items-center justify-center border shrink-0 transition-colors',
                             isSelected
-                              ? 'border-primary bg-primary text-primary-foreground'
+                              ? 'border-primary-hover bg-primary-hover text-white dark:border-primary dark:bg-primary dark:text-primary-foreground'
                               : 'border-border/60 text-transparent',
                           )}
                         >
@@ -742,7 +737,12 @@ export function PurchaseAddLineDialog({
                         >
                           <Sparkles className="size-3" />
                           <span>
-                            Use Est ({formatSupplyMoney(selectedVariant.estimatedCostAmount, purchase.currencyCode)})
+                            Use Est (
+                            {formatSupplyMoney(
+                              selectedVariant.estimatedCostAmount,
+                              purchase.currencyCode,
+                            )}
+                            )
                           </span>
                         </button>
                       )}
@@ -855,16 +855,16 @@ export function PurchaseAddLineDialog({
 
               {/* Bottom Cancel Button */}
               <div className="pt-3 sm:pt-4 border-t mt-4 flex justify-end">
-                <DialogClose
+                <SheetClose
                   render={<Button variant="ghost" size="sm" type="button" disabled={busy} />}
                 >
                   Close
-                </DialogClose>
+                </SheetClose>
               </div>
             </div>
           </div>
-        </SupplyTaskDialogContent>
-      </Dialog>
+        </SheetContent>
+      </Sheet>
 
       {/* Lightbox / Zoom Dialog for high-resolution visual inspection */}
       {previewImage && (

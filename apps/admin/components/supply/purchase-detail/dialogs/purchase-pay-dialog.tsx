@@ -5,16 +5,16 @@ import { AlertCircle, CreditCard, Loader2, Sparkles, Wallet } from 'lucide-react
 import { type FormEvent, useEffect, useState } from 'react';
 
 import { Badge } from '@/components/ui/badge';
-import { SupplyTaskDialogContent } from '@/components/supply/supply-task-dialog-content';
 import { Button } from '@/components/ui/button';
 import {
-  Dialog,
-  DialogClose,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
+  Sheet,
+  SheetClose,
+  SheetContent,
+  SheetDescription,
+  SheetFooter,
+  SheetHeader,
+  SheetTitle,
+} from '@/components/ui/sheet';
 import { Field, FieldDescription, FieldLabel } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
 import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select';
@@ -97,11 +97,11 @@ export function PurchasePayDialog({
     }
   }, [invoice, accounts]);
 
-  if (!invoice) return null;
-
-  const eligibleAccounts = accounts.filter(
-    (acc) => acc.status === 'ACTIVE' && acc.currency_code === invoice.currency_code,
-  );
+  const eligibleAccounts = invoice
+    ? accounts.filter(
+        (acc) => acc.status === 'ACTIVE' && acc.currency_code === invoice.currency_code,
+      )
+    : [];
 
   const selectedAccount = eligibleAccounts.find((acc) => acc.id === accountId);
   const selectedBalance = selectedAccount ? Number(selectedAccount.ledger_balance) : 0;
@@ -110,7 +110,7 @@ export function PurchasePayDialog({
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!amount) return;
+    if (!invoice || !amount) return;
     if (paymentMethod === 'ACCOUNT') {
       if (!accountId) return;
       onPostPayment({
@@ -135,243 +135,256 @@ export function PurchasePayDialog({
   }
 
   return (
-    <Dialog open={Boolean(invoice)} onOpenChange={(open) => !open && onClose()}>
-      <SupplyTaskDialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-md">
-        <DialogHeader>
-          <div className="flex items-center gap-2">
-            <div className="flex size-8 items-center justify-center rounded-lg bg-success/10 text-success">
-              <CreditCard className="size-4" />
-            </div>
-            <div>
-              <DialogTitle className="text-base">
-                Record Payment for {invoice.expense_number}
-              </DialogTitle>
-              <DialogDescription className="text-xs">
-                Immutable cash disbursement debited from Finance cash accounts.
-              </DialogDescription>
-            </div>
-          </div>
-        </DialogHeader>
-
-        <form onSubmit={handleSubmit} className="space-y-4">
-          {/* Invoice Summary Card */}
-          <div className="rounded-xl border bg-muted/40 p-3 text-xs space-y-1.5">
-            <div className="flex items-center justify-between">
-              <span className="font-semibold text-foreground truncate max-w-[240px]">
-                {invoice.description}
-              </span>
-              {invoice.external_reference ? (
-                <Badge variant="outline" className="font-mono text-[10px]">
-                  Bill #{invoice.external_reference}
-                </Badge>
-              ) : null}
-            </div>
-            <div className="flex items-center justify-between text-muted-foreground pt-1 border-t border-border/50">
-              <span>
-                Total: <strong>{formatSupplyMoney(invoice.amount, invoice.currency_code)}</strong>
-              </span>
-              <span>
-                Due:{' '}
-                <strong className="text-warning">
-                  {formatSupplyMoney(invoice.outstanding, invoice.currency_code)}
-                </strong>
-              </span>
-            </div>
-          </div>
-
-          {/* Payment Method Selector */}
-          {canManageCapital ? (
-            <Field>
-              <FieldLabel htmlFor="pay-method">Payment Source</FieldLabel>
-              <NativeSelect
-                id="pay-method"
-                name="paymentMethod"
-                value={paymentMethod}
-                disabled={busy}
-                className="w-full"
-                onChange={(e) => setPaymentMethod(e.target.value as 'ACCOUNT' | 'OWNER_CAPITAL')}
-              >
-                <NativeSelectOption value="ACCOUNT">
-                  Disburse From Business Account
-                </NativeSelectOption>
-                <NativeSelectOption value="OWNER_CAPITAL">
-                  Paid personally (Owner / Contributor)
-                </NativeSelectOption>
-              </NativeSelect>
-            </Field>
-          ) : null}
-
-          {/* Account Selector */}
-          {paymentMethod === 'ACCOUNT' ? (
-            <Field>
-              <div className="flex items-center justify-between">
-                <FieldLabel htmlFor="pay-account">Disburse From Account</FieldLabel>
-                {selectedAccount ? (
-                  <span className="text-[11px] font-mono text-muted-foreground flex items-center gap-1">
-                    <Wallet className="size-3" />
-                    Bal:{' '}
-                    {formatSupplyMoney(
-                      selectedAccount.ledger_balance,
-                      selectedAccount.currency_code,
-                    )}
-                  </span>
-                ) : null}
+    <Sheet open={Boolean(invoice)} onOpenChange={(nextOpen) => !nextOpen && onClose()}>
+      <SheetContent side="right" className="gap-0 p-0 sm:max-w-md">
+        {invoice ? (
+          <>
+            <SheetHeader className="shrink-0 border-b border-border px-5 py-4 pr-11 text-left">
+              <div className="flex items-center gap-2">
+                <div className="flex size-8 items-center justify-center rounded-lg bg-success/10 text-success">
+                  <CreditCard className="size-4" />
+                </div>
+                <div>
+                  <SheetTitle className="text-base">
+                    Record Payment for {invoice.expense_number}
+                  </SheetTitle>
+                  <SheetDescription className="text-xs">
+                    Immutable cash disbursement debited from Finance cash accounts.
+                  </SheetDescription>
+                </div>
               </div>
-              <NativeSelect
-                id="pay-account"
-                name="accountId"
-                value={accountId}
-                required
-                disabled={busy || !eligibleAccounts.length}
-                className="w-full"
-                onChange={(e) => setAccountId(e.target.value)}
-              >
-                <NativeSelectOption value="" disabled>
-                  {eligibleAccounts.length
-                    ? `Choose an active ${invoice.currency_code} account`
-                    : `No active ${invoice.currency_code} accounts found`}
-                </NativeSelectOption>
-                {eligibleAccounts.map((acc) => (
-                  <NativeSelectOption key={acc.id} value={acc.id}>
-                    {acc.name} (Bal: {formatSupplyMoney(acc.ledger_balance, acc.currency_code)})
-                  </NativeSelectOption>
-                ))}
-              </NativeSelect>
+            </SheetHeader>
 
-              {!eligibleAccounts.length ? (
-                <p className="mt-1 text-xs text-warning">
-                  No active financial accounts found for {invoice.currency_code}. Set one up in{' '}
-                  <Link href="/finance/accounts" className="underline font-medium">
-                    Finance → Accounts
-                  </Link>
-                  .
-                </p>
-              ) : hasInsufficientFunds ? (
-                <p className="mt-1 flex items-center gap-1 text-xs text-warning">
-                  <AlertCircle className="size-3 shrink-0" />
-                  Selected account balance is lower than disbursement. Account will incur negative
-                  balance.
-                </p>
-              ) : null}
-            </Field>
-          ) : (
-            <Field>
-              <FieldLabel htmlFor="pay-contributor">Capital Contributor</FieldLabel>
-              <NativeSelect
-                id="pay-contributor"
-                name="contributorId"
-                value={contributorId}
-                required
-                disabled={busy || contributorsLoading || !activeContributors.length}
-                className="w-full"
-                onChange={(e) => setContributorId(e.target.value)}
-              >
-                <NativeSelectOption value="" disabled>
-                  {contributorsLoading
-                    ? 'Loading contributors…'
-                    : activeContributors.length
-                      ? 'Choose contributor'
-                      : 'No active capital contributors found'}
-                </NativeSelectOption>
-                {activeContributors.map((c) => (
-                  <NativeSelectOption key={c.id} value={c.id}>
-                    {c.displayName}
-                  </NativeSelectOption>
-                ))}
-              </NativeSelect>
-              <FieldDescription>
-                The owner or investor who personally paid this supplier obligation.
-              </FieldDescription>
-              {contributorsError ? (
-                <p role="alert" className="text-xs text-destructive">
-                  {contributorsError}
-                </p>
-              ) : null}
-            </Field>
-          )}
+            <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col">
+              <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-5 py-4">
+                {/* Invoice Summary Card */}
+                <div className="rounded-xl border bg-muted/40 p-3 text-xs space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <span className="font-semibold text-foreground truncate max-w-[240px]">
+                      {invoice.description}
+                    </span>
+                    {invoice.external_reference ? (
+                      <Badge variant="outline" className="font-mono text-[10px]">
+                        Bill #{invoice.external_reference}
+                      </Badge>
+                    ) : null}
+                  </div>
+                  <div className="flex items-center justify-between text-muted-foreground pt-1 border-t border-border/50">
+                    <span>
+                      Total:{' '}
+                      <strong>{formatSupplyMoney(invoice.amount, invoice.currency_code)}</strong>
+                    </span>
+                    <span>
+                      Due:{' '}
+                      <strong className="text-warning">
+                        {formatSupplyMoney(invoice.outstanding, invoice.currency_code)}
+                      </strong>
+                    </span>
+                  </div>
+                </div>
 
-          {/* Payment Amount */}
-          <Field>
-            <div className="flex items-center justify-between">
-              <FieldLabel htmlFor="pay-amount">Payment Amount ({invoice.currency_code})</FieldLabel>
-              {paymentAmount !== Number(invoice.outstanding) ? (
+                {/* Payment Method Selector */}
+                {canManageCapital ? (
+                  <Field>
+                    <FieldLabel htmlFor="pay-method">Payment Source</FieldLabel>
+                    <NativeSelect
+                      id="pay-method"
+                      name="paymentMethod"
+                      value={paymentMethod}
+                      disabled={busy}
+                      className="w-full"
+                      onChange={(e) =>
+                        setPaymentMethod(e.target.value as 'ACCOUNT' | 'OWNER_CAPITAL')
+                      }
+                    >
+                      <NativeSelectOption value="ACCOUNT">
+                        Disburse From Business Account
+                      </NativeSelectOption>
+                      <NativeSelectOption value="OWNER_CAPITAL">
+                        Paid personally (Owner / Contributor)
+                      </NativeSelectOption>
+                    </NativeSelect>
+                  </Field>
+                ) : null}
+
+                {/* Account Selector */}
+                {paymentMethod === 'ACCOUNT' ? (
+                  <Field>
+                    <div className="flex items-center justify-between">
+                      <FieldLabel htmlFor="pay-account">Disburse From Account</FieldLabel>
+                      {selectedAccount ? (
+                        <span className="text-[11px] font-mono text-muted-foreground flex items-center gap-1">
+                          <Wallet className="size-3" />
+                          Bal:{' '}
+                          {formatSupplyMoney(
+                            selectedAccount.ledger_balance,
+                            selectedAccount.currency_code,
+                          )}
+                        </span>
+                      ) : null}
+                    </div>
+                    <NativeSelect
+                      id="pay-account"
+                      name="accountId"
+                      value={accountId}
+                      required
+                      disabled={busy || !eligibleAccounts.length}
+                      className="w-full"
+                      onChange={(e) => setAccountId(e.target.value)}
+                    >
+                      <NativeSelectOption value="" disabled>
+                        {eligibleAccounts.length
+                          ? `Choose an active ${invoice.currency_code} account`
+                          : `No active ${invoice.currency_code} accounts found`}
+                      </NativeSelectOption>
+                      {eligibleAccounts.map((acc) => (
+                        <NativeSelectOption key={acc.id} value={acc.id}>
+                          {acc.name} (Bal:{' '}
+                          {formatSupplyMoney(acc.ledger_balance, acc.currency_code)})
+                        </NativeSelectOption>
+                      ))}
+                    </NativeSelect>
+
+                    {!eligibleAccounts.length ? (
+                      <p className="mt-1 text-xs text-warning">
+                        No active financial accounts found for {invoice.currency_code}. Set one up
+                        in{' '}
+                        <Link href="/finance/accounts" className="underline font-medium">
+                          Finance → Accounts
+                        </Link>
+                        .
+                      </p>
+                    ) : hasInsufficientFunds ? (
+                      <p className="mt-1 flex items-center gap-1 text-xs text-warning">
+                        <AlertCircle className="size-3 shrink-0" />
+                        Selected account balance is lower than disbursement. Account will incur
+                        negative balance.
+                      </p>
+                    ) : null}
+                  </Field>
+                ) : (
+                  <Field>
+                    <FieldLabel htmlFor="pay-contributor">Capital Contributor</FieldLabel>
+                    <NativeSelect
+                      id="pay-contributor"
+                      name="contributorId"
+                      value={contributorId}
+                      required
+                      disabled={busy || contributorsLoading || !activeContributors.length}
+                      className="w-full"
+                      onChange={(e) => setContributorId(e.target.value)}
+                    >
+                      <NativeSelectOption value="" disabled>
+                        {contributorsLoading
+                          ? 'Loading contributors…'
+                          : activeContributors.length
+                            ? 'Choose contributor'
+                            : 'No active capital contributors found'}
+                      </NativeSelectOption>
+                      {activeContributors.map((c) => (
+                        <NativeSelectOption key={c.id} value={c.id}>
+                          {c.displayName}
+                        </NativeSelectOption>
+                      ))}
+                    </NativeSelect>
+                    <FieldDescription>
+                      The owner or investor who personally paid this supplier obligation.
+                    </FieldDescription>
+                    {contributorsError ? (
+                      <p role="alert" className="text-xs text-destructive">
+                        {contributorsError}
+                      </p>
+                    ) : null}
+                  </Field>
+                )}
+
+                {/* Payment Amount */}
+                <Field>
+                  <div className="flex items-center justify-between">
+                    <FieldLabel htmlFor="pay-amount">
+                      Payment Amount ({invoice.currency_code})
+                    </FieldLabel>
+                    {paymentAmount !== Number(invoice.outstanding) ? (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="xs"
+                        className="h-5 gap-1 text-[11px] text-primary"
+                        onClick={handleSetFullOutstanding}
+                      >
+                        <Sparkles className="size-3" />
+                        <span>
+                          Pay full ({formatSupplyMoney(invoice.outstanding, invoice.currency_code)})
+                        </span>
+                      </Button>
+                    ) : null}
+                  </div>
+                  <Input
+                    id="pay-amount"
+                    name="amount"
+                    type="number"
+                    inputMode="decimal"
+                    min="0.01"
+                    max={invoice.outstanding}
+                    step="0.01"
+                    value={amount}
+                    required
+                    disabled={busy}
+                    onChange={(e) => setAmount(e.target.value)}
+                  />
+                  <FieldDescription>
+                    Maximum payment amount is{' '}
+                    {formatSupplyMoney(invoice.outstanding, invoice.currency_code)}.
+                  </FieldDescription>
+                </Field>
+
+                {/* Payment Reference */}
+                <Field>
+                  <FieldLabel htmlFor="pay-reference">
+                    Payment Reference / Voucher # (Optional)
+                  </FieldLabel>
+                  <Input
+                    id="pay-reference"
+                    name="reference"
+                    value={reference}
+                    placeholder="e.g. Bank Wire SWIFT ref, Cheque #, TrxID"
+                    maxLength={200}
+                    disabled={busy}
+                    onChange={(e) => setReference(e.target.value)}
+                  />
+                  <FieldDescription>
+                    Traceable bank transfer reference, cheque number, or payment voucher ID.
+                  </FieldDescription>
+                </Field>
+              </div>
+
+              <SheetFooter className="shrink-0 flex-row items-center justify-end gap-2 border-t border-border bg-card/50 px-5 py-3">
+                <SheetClose render={<Button variant="outline" type="button" disabled={busy} />}>
+                  Cancel
+                </SheetClose>
                 <Button
-                  type="button"
-                  variant="ghost"
-                  size="xs"
-                  className="h-5 gap-1 text-[11px] text-primary"
-                  onClick={handleSetFullOutstanding}
+                  type="submit"
+                  disabled={
+                    busy ||
+                    !amount ||
+                    paymentAmount <= 0 ||
+                    (paymentMethod === 'ACCOUNT' && (!accountId || !eligibleAccounts.length)) ||
+                    (paymentMethod === 'OWNER_CAPITAL' &&
+                      (!contributorId || !activeContributors.length))
+                  }
                 >
-                  <Sparkles className="size-3" />
-                  <span>
-                    Pay full ({formatSupplyMoney(invoice.outstanding, invoice.currency_code)})
-                  </span>
+                  {busy ? (
+                    <Loader2 className="size-4 animate-spin" />
+                  ) : (
+                    <CreditCard className="size-4" />
+                  )}
+                  <span>Post payment</span>
                 </Button>
-              ) : null}
-            </div>
-            <Input
-              id="pay-amount"
-              name="amount"
-              type="number"
-              inputMode="decimal"
-              min="0.01"
-              max={invoice.outstanding}
-              step="0.01"
-              value={amount}
-              required
-              disabled={busy}
-              onChange={(e) => setAmount(e.target.value)}
-            />
-            <FieldDescription>
-              Maximum payment amount is{' '}
-              {formatSupplyMoney(invoice.outstanding, invoice.currency_code)}.
-            </FieldDescription>
-          </Field>
-
-          {/* Payment Reference */}
-          <Field>
-            <FieldLabel htmlFor="pay-reference">
-              Payment Reference / Voucher # (Optional)
-            </FieldLabel>
-            <Input
-              id="pay-reference"
-              name="reference"
-              value={reference}
-              placeholder="e.g. Bank Wire SWIFT ref, Cheque #, TrxID"
-              maxLength={200}
-              disabled={busy}
-              onChange={(e) => setReference(e.target.value)}
-            />
-            <FieldDescription>
-              Traceable bank transfer reference, cheque number, or payment voucher ID.
-            </FieldDescription>
-          </Field>
-
-          <DialogFooter className="pt-2">
-            <DialogClose render={<Button variant="outline" type="button" disabled={busy} />}>
-              Cancel
-            </DialogClose>
-            <Button
-              type="submit"
-              disabled={
-                busy ||
-                !amount ||
-                paymentAmount <= 0 ||
-                (paymentMethod === 'ACCOUNT' && (!accountId || !eligibleAccounts.length)) ||
-                (paymentMethod === 'OWNER_CAPITAL' &&
-                  (!contributorId || !activeContributors.length))
-              }
-            >
-              {busy ? (
-                <Loader2 className="size-4 animate-spin" />
-              ) : (
-                <CreditCard className="size-4" />
-              )}
-              <span>Post payment</span>
-            </Button>
-          </DialogFooter>
-        </form>
-      </SupplyTaskDialogContent>
-    </Dialog>
+              </SheetFooter>
+            </form>
+          </>
+        ) : null}
+      </SheetContent>
+    </Sheet>
   );
 }

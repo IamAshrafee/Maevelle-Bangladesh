@@ -17,7 +17,8 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { formatInventoryDate, formatInventoryNumber } from '@/lib/inventory/api';
-import { formatCatalogMoney, productMediaUrl } from '@/lib/catalog/api';
+import { productMediaUrl } from '@/lib/catalog/api';
+import { formatSupplyUnitCost } from '@/lib/supply/api';
 
 import { InventoryEmptyState } from './inventory-page-ui';
 
@@ -137,7 +138,7 @@ export function InventoryPositionTable({
                       {position.unitAcquisitionCost && position.costCurrency ? (
                         <>
                           <span className="font-mono font-semibold tabular-nums">
-                            {formatCatalogMoney(
+                            {formatSupplyUnitCost(
                               position.unitAcquisitionCost,
                               position.costCurrency,
                             )}
@@ -196,7 +197,7 @@ export function InventoryPositionTable({
       </div>
 
       <div className="hidden rounded-lg border md:block">
-        <Table>
+        <Table stickyHeader density="compact">
           <TableHeader>
             <TableRow>
               <TableHead>Product & SKU</TableHead>
@@ -273,7 +274,7 @@ export function InventoryPositionTable({
                   {position.unitAcquisitionCost && position.costCurrency ? (
                     <div>
                       <span className="font-semibold">
-                        {formatCatalogMoney(position.unitAcquisitionCost, position.costCurrency)}
+                        {formatSupplyUnitCost(position.unitAcquisitionCost, position.costCurrency)}
                       </span>
                       <span className="block text-[10px] text-muted-foreground">
                         {position.costState === 'FINALIZED' ? 'Final landed' : 'Provisional'}

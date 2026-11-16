@@ -50,7 +50,9 @@ export function DeliveryPricingWorkspace() {
 
   // Simulator Toggle & Target
   const [showSimulator, setShowSimulator] = React.useState(false);
-  const [targetSimulatorRule, setTargetSimulatorRule] = React.useState<DeliveryPricingRule | null>(null);
+  const [targetSimulatorRule, setTargetSimulatorRule] = React.useState<DeliveryPricingRule | null>(
+    null,
+  );
 
   // Dialog State
   const [dialogOpen, setDialogOpen] = React.useState(false);
@@ -93,6 +95,7 @@ export function DeliveryPricingWorkspace() {
     currency: string;
     priority: number;
     status: 'ACTIVE' | 'INACTIVE';
+    checkoutServiceability: DeliveryPricingRule['checkout_serviceability'];
     version?: number | undefined;
   }) {
     setBusy(true);
@@ -110,6 +113,7 @@ export function DeliveryPricingWorkspace() {
             currency: formData.currency,
             priority: formData.priority,
             status: formData.status,
+            checkoutServiceability: formData.checkoutServiceability,
           }),
         });
         showNotification(`Delivery rule "${formData.name}" was updated successfully.`);
@@ -124,6 +128,7 @@ export function DeliveryPricingWorkspace() {
             flatAmount: formData.flatAmount,
             currency: formData.currency,
             priority: formData.priority,
+            checkoutServiceability: formData.checkoutServiceability,
           }),
         });
         showNotification(`Delivery rule "${formData.name}" was created successfully.`);
@@ -257,9 +262,13 @@ export function DeliveryPricingWorkspace() {
   }, [rules, activeTab, scopeFilter, query, sortOption]);
 
   return (
-    <AdminPage>
+    <AdminPage variant="wide">
       {/* Page Header */}
       <PageHeader
+        breadcrumbs={[
+          { label: 'Orders', href: '/orders' },
+          { label: 'Delivery pricing', current: true },
+        ]}
         eyebrow="Commerce Operations"
         title="Delivery pricing"
         description="Checkout calculates delivery charges from these server-owned rules. New rules take effect on the next checkout calculation while placed orders preserve immutable rate snapshots."

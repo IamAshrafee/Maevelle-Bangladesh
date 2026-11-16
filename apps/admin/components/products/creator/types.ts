@@ -153,6 +153,32 @@ export interface ProductCreatorReferences {
   readonly locations: readonly WarehouseLocationDto[];
 }
 
+export interface ReferenceLoadingStates {
+  readonly types: boolean;
+  readonly categories: boolean;
+  readonly colors: boolean;
+  readonly tags: boolean;
+  readonly occasions: boolean;
+  readonly collections: boolean;
+  readonly sizing: boolean;
+  readonly sizeGuides: boolean;
+  readonly locations: boolean;
+  readonly workspace: boolean;
+}
+
+export interface ReferenceErrors {
+  readonly types?: string | null;
+  readonly categories?: string | null;
+  readonly colors?: string | null;
+  readonly tags?: string | null;
+  readonly occasions?: string | null;
+  readonly collections?: string | null;
+  readonly sizing?: string | null;
+  readonly sizeGuides?: string | null;
+  readonly locations?: string | null;
+  readonly workspace?: string | null;
+}
+
 export interface ProductCreatorDraft {
   readonly timestamp: number;
   readonly title: string;

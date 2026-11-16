@@ -2,17 +2,7 @@
 
 import { useCallback, useEffect, useState, useTransition } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import {
-  Activity,
-  AlertTriangle,
-  Ban,
-  FlaskConical,
-  LayoutDashboard,
-  Layers,
-  MessageSquareText,
-  Settings2,
-  ShieldCheck,
-} from 'lucide-react';
+import { AlertTriangle, MessageSquareText } from 'lucide-react';
 import type {
   SmsActivityFilters,
   SmsDiagnosticsDto,
@@ -35,17 +25,20 @@ import { SmsTemplatesTab } from './sms-templates-tab';
 import { SmsTestLabTab } from './sms-test-lab-tab';
 import { Badge } from '@/components/ui/badge';
 
+import type { NavIconKey } from '@/lib/navigation/route-registry';
+import { AdminPage, PageHeader } from '@/components/ui/page-shell';
 import { RefreshButton } from '@/components/ui/refresh-button';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Tabs, TabsContent } from '@/components/ui/tabs';
+import { WorkspaceTabs, type WorkspaceTabItem } from '@/components/ui/workspace-tabs';
 
-const tabs: readonly { key: SmsTabKey; label: string; icon: typeof Activity }[] = [
-  { key: 'overview', label: 'Overview', icon: LayoutDashboard },
-  { key: 'activity', label: 'Activity', icon: Activity },
-  { key: 'templates', label: 'Templates', icon: Layers },
-  { key: 'test-lab', label: 'Test Lab', icon: FlaskConical },
-  { key: 'policies', label: 'Policies', icon: Settings2 },
-  { key: 'suppressions', label: 'Suppressions', icon: Ban },
-  { key: 'diagnostics', label: 'Provider & Diagnostics', icon: ShieldCheck },
+const tabs: readonly { key: SmsTabKey; label: string; icon: NavIconKey }[] = [
+  { key: 'overview', label: 'Overview', icon: 'layout-dashboard' },
+  { key: 'activity', label: 'Activity', icon: 'activity' },
+  { key: 'templates', label: 'Templates', icon: 'boxes' },
+  { key: 'test-lab', label: 'Test Lab', icon: 'sparkles' },
+  { key: 'policies', label: 'Policies', icon: 'settings' },
+  { key: 'suppressions', label: 'Suppressions', icon: 'shield-check' },
+  { key: 'diagnostics', label: 'Provider & Diagnostics', icon: 'plug' },
 ];
 
 const emptyFilters: SmsActivityFilters = {
@@ -185,15 +178,21 @@ export function SmsOperationsConsole() {
     [reload],
   );
 
+  const smsTabItems: WorkspaceTabItem<SmsTabKey>[] = tabs.map((tab) => ({
+    value: tab.key,
+    label: tab.label,
+    icon: tab.icon,
+    ...(tab.key === 'activity' && totalItems > 0 ? { count: totalItems } : {}),
+  }));
+
   return (
-    <main className="mx-auto flex w-full max-w-[1600px] flex-col gap-6 p-4 sm:p-6 lg:p-8">
-      <header className="flex flex-col gap-4 border-b pb-5 sm:flex-row sm:items-end sm:justify-between">
-        <div>
+    <AdminPage variant="wide">
+      <PageHeader
+        eyebrow="Communications & Dispatch"
+        title="Maevelle SMS"
+        badge={
           <div className="flex flex-wrap items-center gap-2">
-            <h1 className="flex items-center gap-2 text-2xl font-bold tracking-tight text-balance sm:text-3xl">
-              <MessageSquareText aria-hidden="true" className="size-7" />
-              Maevelle SMS
-            </h1>
+            <MessageSquareText aria-hidden="true" className="size-5 text-primary" />
             {diagnostics ? (
               <Badge variant={diagnostics.enabled ? 'default' : 'secondary'}>
                 {diagnostics.enabled ? 'Platform Enabled' : 'Sending Disabled'}
@@ -201,17 +200,16 @@ export function SmsOperationsConsole() {
             ) : null}
             {diagnostics?.mode === 'MOCK' ? <Badge variant="outline">Mock Mode</Badge> : null}
           </div>
-          <p className="mt-1 max-w-3xl text-sm text-pretty text-muted-foreground">
-            Transactional SMS operations, delivery truth, template analysis, controlled testing,
-            recipient protection, and provider readiness.
-          </p>
-        </div>
-        <RefreshButton
-          loading={loading || isPending}
-          onRefresh={() => void reload()}
-          tooltip="Refresh SMS operations"
-        />
-      </header>
+        }
+        description="Transactional SMS operations, delivery truth, template analysis, controlled testing, recipient protection, and provider readiness."
+        actions={
+          <RefreshButton
+            loading={loading || isPending}
+            onRefresh={() => void reload()}
+            tooltip="Refresh SMS operations"
+          />
+        }
+      />
       {error ? (
         <div
           role="alert"
@@ -222,19 +220,14 @@ export function SmsOperationsConsole() {
         </div>
       ) : null}
       <Tabs value={activeTab} onValueChange={changeTab}>
-        <TabsList className="grid h-auto grid-cols-2 gap-1 p-1 sm:grid-cols-4 xl:grid-cols-7">
-          {tabs.map(({ key, label, icon: Icon }) => (
-            <TabsTrigger key={key} value={key} className="min-h-10 gap-1.5 px-2 text-xs">
-              <Icon aria-hidden="true" className="size-3.5" />
-              <span>{label}</span>
-              {key === 'activity' && totalItems ? (
-                <span className="rounded-full bg-background px-1.5 text-[10px] tabular-nums">
-                  {totalItems}
-                </span>
-              ) : null}
-            </TabsTrigger>
-          ))}
-        </TabsList>
+        <WorkspaceTabs
+          items={smsTabItems}
+          value={activeTab}
+          onValueChange={(next) => changeTab(next)}
+          maxVisible={5}
+          variant="pill"
+          ariaLabel="SMS operations tabs"
+        />
         <TabsContent value="overview" className="mt-6">
           <SmsOverviewTab
             diagnostics={diagnostics}
@@ -293,6 +286,6 @@ export function SmsOperationsConsole() {
         }}
         onRefresh={refreshDetail}
       />
-    </main>
+    </AdminPage>
   );
 }

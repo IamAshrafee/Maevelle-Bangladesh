@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  formatInternalMoney,
   formatMoney,
   formatQuantity,
+  formatWholeTaka,
   normalizeDecimal,
   subtractDecimals,
 } from '../lib/format/numbers';
@@ -22,5 +24,15 @@ describe('admin numeric presentation', () => {
   it('rounds business money to two display decimals', () => {
     expect(normalizeDecimal('749.9999', 2)).toBe('750');
     expect(formatMoney('1234.5000', 'BDT', 'en-US')).toMatch(/1,234\.5/);
+  });
+
+  it('formats final payable BDT amounts in whole Taka while preserving internal decimal precision', () => {
+    expect(formatWholeTaka('1249.5000', { locale: 'en-US' })).toBe('৳1,250');
+    expect(formatWholeTaka('1249.4900', { locale: 'en-US' })).toBe('৳1,249');
+    expect(formatWholeTaka('5000.00', { prefix: 'BDT ', locale: 'en-US' })).toBe('BDT 5,000');
+
+    expect(formatInternalMoney('1250.3450', { locale: 'en-US' })).toBe('৳1,250.35');
+    expect(formatInternalMoney('1000.0000', { locale: 'en-US' })).toBe('৳1,000');
+    expect(formatInternalMoney('12.3456', { fractionDigits: 4, locale: 'en-US' })).toBe('৳12.3456');
   });
 });

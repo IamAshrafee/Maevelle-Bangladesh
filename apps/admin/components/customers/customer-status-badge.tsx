@@ -29,7 +29,7 @@ export function CustomerStatusBadge({ status, className }: CustomerStatusBadgePr
         <Badge
           variant="outline"
           className={cn(
-            'border-slate-200 bg-slate-50 text-slate-700 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-400 gap-1 font-medium',
+            'border-border bg-muted text-muted-foreground gap-1 font-medium',
             className,
           )}
         >
@@ -68,7 +68,7 @@ export function CustomerStatusBadge({ status, className }: CustomerStatusBadgePr
         <Badge
           variant="outline"
           className={cn(
-            'border-slate-300 bg-slate-100 text-slate-600 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-500 gap-1 font-medium',
+            'border-border bg-muted/70 text-muted-foreground gap-1 font-medium',
             className,
           )}
         >

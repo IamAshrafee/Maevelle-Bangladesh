@@ -25,7 +25,6 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { CrmNav } from './crm-nav';
 
 export function CrmAnalyticsConsole() {
   const [data, setData] = useState<CrmAnalyticsDto | null>(null);
@@ -61,11 +60,8 @@ export function CrmAnalyticsConsole() {
         eyebrow="Customer 360"
         title="CRM analytics"
         description="Identity coverage, lifecycle distribution, relationship workload, and profile data quality from authoritative records."
-        actions={
-          <RefreshButton onRefresh={() => void load()} tooltip="Refresh CRM analytics" />
-        }
+        actions={<RefreshButton onRefresh={() => void load()} tooltip="Refresh CRM analytics" />}
       />
-      <CrmNav />
       <form
         className="grid gap-3 rounded-xl border border-border bg-card p-4 sm:grid-cols-2 lg:grid-cols-[1fr_1fr_1fr_1fr_auto] lg:items-end"
         onSubmit={(event) => {

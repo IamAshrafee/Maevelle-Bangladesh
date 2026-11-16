@@ -68,3 +68,41 @@ export function formatMoney(value: NumericValue, currency = 'BDT', locale = 'en-
     style: 'currency',
   }).format(Number(normalized));
 }
+
+/**
+ * Displays final payable BDT totals rounded to whole Taka after approved
+ * discounts, shipping, tax, and fees. Uses exact decimal rounding prior to grouping.
+ */
+export function formatWholeTaka(
+  value: NumericValue,
+  options: { prefix?: string; locale?: string } = {},
+): string {
+  const prefix = options.prefix ?? '৳';
+  const locale = options.locale ?? 'en-BD';
+  const normalized = normalizeDecimal(value, 0);
+  const formatted = new Intl.NumberFormat(locale, {
+    maximumFractionDigits: 0,
+    minimumFractionDigits: 0,
+    useGrouping: true,
+  }).format(Number(normalized));
+  return `${prefix}${formatted}`;
+}
+
+/**
+ * Displays internal unit-cost, valuation, and ledger amounts preserving decimal precision.
+ */
+export function formatInternalMoney(
+  value: NumericValue,
+  options: { prefix?: string; fractionDigits?: number; locale?: string } = {},
+): string {
+  const prefix = options.prefix ?? '৳';
+  const digits = options.fractionDigits ?? 2;
+  const locale = options.locale ?? 'en-BD';
+  const normalized = normalizeDecimal(value, digits);
+  const formatted = new Intl.NumberFormat(locale, {
+    maximumFractionDigits: digits,
+    minimumFractionDigits: 0,
+    useGrouping: true,
+  }).format(Number(normalized));
+  return `${prefix}${formatted}`;
+}

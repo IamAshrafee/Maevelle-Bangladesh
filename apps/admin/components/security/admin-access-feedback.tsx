@@ -1,8 +1,10 @@
 'use client';
 
 import { useState } from 'react';
+import { AuthBrandMark, AuthGateCard } from '@/components/auth/auth-split-shell';
 import { Button } from '@/components/ui/button';
 import { safeAdminReturnUrl } from '@/lib/auth/access-policy';
+import { toBrowserUrl } from '@/lib/navigation/route-registry';
 
 export function AdminAccessFeedback({
   reason,
@@ -15,14 +17,12 @@ export function AdminAccessFeedback({
   const denied = reason === 'ACCESS_DENIED';
   const [signingOut, setSigningOut] = useState(false);
   const [message, setMessage] = useState<string>();
+
   return (
-    <main className="flex min-h-screen items-center justify-center bg-background p-4 sm:p-6">
-      <section
-        className="w-full max-w-md space-y-4 rounded-xl border border-border bg-card p-6 text-card-foreground"
-        aria-busy={checking}
-      >
-        <p className="text-sm font-semibold text-primary">Maevelle</p>
-        <h1 className="text-xl font-semibold">
+    <AuthGateCard className="max-w-md mx-auto">
+      <section className="space-y-4" aria-busy={checking}>
+        <AuthBrandMark subtitle="Access Control" size="sm" />
+        <h1 className="text-xl font-semibold text-foreground">
           {checking
             ? 'Checking your session…'
             : denied
@@ -37,10 +37,10 @@ export function AdminAccessFeedback({
               : 'Maevelle could not confirm your access. Please try again.'}
         </p>
         {!checking ? (
-          <div className="flex flex-wrap gap-3">
+          <div className="flex flex-wrap gap-3 pt-1">
             <Button
               onClick={() =>
-                window.location.assign(denied ? '/admin' : safeAdminReturnUrl(returnTo))
+                window.location.assign(denied ? toBrowserUrl('/') : safeAdminReturnUrl(returnTo))
               }
             >
               {denied ? 'Go to dashboard' : 'Retry'}
@@ -57,7 +57,7 @@ export function AdminAccessFeedback({
                     credentials: 'include',
                   });
                   if (!response.ok) throw new Error('Sign out unavailable');
-                  window.location.assign('/admin/login');
+                  window.location.assign(toBrowserUrl('/login'));
                 } catch {
                   setMessage('Unable to sign out. Please try again.');
                 } finally {
@@ -75,6 +75,6 @@ export function AdminAccessFeedback({
           </p>
         ) : null}
       </section>
-    </main>
+    </AuthGateCard>
   );
 }

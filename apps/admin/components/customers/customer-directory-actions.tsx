@@ -6,14 +6,14 @@ import type { CustomerTagDto } from '@maevelle/contracts';
 import { useAdminCapability } from '@/components/admin-capabilities';
 import { Button } from '@/components/ui/button';
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from '@/components/ui/dialog';
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetFooter,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+} from '@/components/ui/sheet';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select';
@@ -134,111 +134,115 @@ export function CustomerDirectoryActions({
           ))}
         </NativeSelect>
       ) : null}
-      <Dialog open={saveOpen} onOpenChange={setSaveOpen}>
-        <DialogTrigger render={<Button size="sm" variant="outline" />}>
+      <Sheet open={saveOpen} onOpenChange={setSaveOpen}>
+        <SheetTrigger render={<Button size="sm" variant="outline" />}>
           <BookmarkPlus className="size-4" /> Save view
-        </DialogTrigger>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Save current customer view</DialogTitle>
-            <DialogDescription>
+        </SheetTrigger>
+        <SheetContent side="right" className="gap-0 p-0 sm:max-w-md">
+          <SheetHeader className="shrink-0 border-b border-border px-5 py-4 pr-11 text-left">
+            <SheetTitle>Save current customer view</SheetTitle>
+            <SheetDescription>
               Preserve the current filters for repeatable operational work.
-            </DialogDescription>
-          </DialogHeader>
-          {error ? <p className="text-sm text-destructive">{error}</p> : null}
-          <form className="space-y-4" onSubmit={saveView}>
-            <div className="space-y-2">
-              <Label htmlFor="saved-view-name">Name</Label>
-              <Input
-                id="saved-view-name"
-                value={name}
-                onChange={(event) => setName(event.target.value)}
-                required
-              />
+            </SheetDescription>
+          </SheetHeader>
+          <form className="flex min-h-0 flex-1 flex-col" onSubmit={saveView}>
+            <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-5 py-4">
+              {error ? <p className="text-sm text-destructive">{error}</p> : null}
+              <div className="space-y-2">
+                <Label htmlFor="saved-view-name">Name</Label>
+                <Input
+                  id="saved-view-name"
+                  value={name}
+                  onChange={(event) => setName(event.target.value)}
+                  required
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="saved-view-visibility">Visibility</Label>
+                <NativeSelect
+                  id="saved-view-visibility"
+                  value={visibility}
+                  onChange={(event) => setVisibility(event.target.value as typeof visibility)}
+                >
+                  <NativeSelectOption value="PERSONAL">Personal</NativeSelectOption>
+                  {canManageSegments ? (
+                    <NativeSelectOption value="ORGANIZATION">Organization</NativeSelectOption>
+                  ) : null}
+                </NativeSelect>
+              </div>
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="saved-view-visibility">Visibility</Label>
-              <NativeSelect
-                id="saved-view-visibility"
-                value={visibility}
-                onChange={(event) => setVisibility(event.target.value as typeof visibility)}
-              >
-                <NativeSelectOption value="PERSONAL">Personal</NativeSelectOption>
-                {canManageSegments ? (
-                  <NativeSelectOption value="ORGANIZATION">Organization</NativeSelectOption>
-                ) : null}
-              </NativeSelect>
-            </div>
-            <DialogFooter>
+            <SheetFooter className="shrink-0 flex-row items-center justify-end gap-2 border-t border-border bg-card/50 px-5 py-3">
               <Button type="button" variant="outline" onClick={() => setSaveOpen(false)}>
                 Cancel
               </Button>
               <Button type="submit" disabled={busy || !name.trim()}>
                 {busy ? 'Saving…' : 'Save view'}
               </Button>
-            </DialogFooter>
+            </SheetFooter>
           </form>
-        </DialogContent>
-      </Dialog>
+        </SheetContent>
+      </Sheet>
       {selectedIds.length && (canManage || canManageRelationship) ? (
-        <Dialog open={bulkOpen} onOpenChange={setBulkOpen}>
-          <DialogTrigger render={<Button size="sm" variant="outline" />}>
+        <Sheet open={bulkOpen} onOpenChange={setBulkOpen}>
+          <SheetTrigger render={<Button size="sm" variant="outline" />}>
             <UsersRound className="size-4" /> Bulk action ({selectedIds.length})
-          </DialogTrigger>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Update {selectedIds.length} customers</DialogTitle>
-              <DialogDescription>
+          </SheetTrigger>
+          <SheetContent side="right" className="gap-0 p-0 sm:max-w-md">
+            <SheetHeader className="shrink-0 border-b border-border px-5 py-4 pr-11 text-left">
+              <SheetTitle>Update {selectedIds.length} customers</SheetTitle>
+              <SheetDescription>
                 Each eligible profile is locked and updated atomically; failures are reported
                 without crossing organization boundaries.
-              </DialogDescription>
-            </DialogHeader>
-            {error ? <p className="text-sm text-destructive">{error}</p> : null}
-            <form className="space-y-4" onSubmit={applyBulk}>
-              <div className="space-y-2">
-                <Label htmlFor="bulk-action">Action</Label>
-                <NativeSelect
-                  id="bulk-action"
-                  value={action}
-                  onChange={(event) => setAction(event.target.value as typeof action)}
-                >
-                  {canManage ? (
-                    <>
-                      <NativeSelectOption value="ADD_TAG">Add tag</NativeSelectOption>
-                      <NativeSelectOption value="REMOVE_TAG">Remove tag</NativeSelectOption>
-                    </>
-                  ) : null}
-                  {canManageRelationship ? (
-                    <NativeSelectOption value="ASSIGN_OWNER">Assign to me</NativeSelectOption>
-                  ) : null}
-                </NativeSelect>
-              </div>
-              {action !== 'ASSIGN_OWNER' ? (
+              </SheetDescription>
+            </SheetHeader>
+            <form className="flex min-h-0 flex-1 flex-col" onSubmit={applyBulk}>
+              <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-5 py-4">
+                {error ? <p className="text-sm text-destructive">{error}</p> : null}
                 <div className="space-y-2">
-                  <Label htmlFor="bulk-tag">Tag</Label>
+                  <Label htmlFor="bulk-action">Action</Label>
                   <NativeSelect
-                    id="bulk-tag"
-                    value={tagId}
-                    onChange={(event) => setTagId(event.target.value)}
+                    id="bulk-action"
+                    value={action}
+                    onChange={(event) => setAction(event.target.value as typeof action)}
                   >
-                    {tags.map((tag) => (
-                      <NativeSelectOption key={tag.id} value={tag.id}>
-                        {tag.label}
-                      </NativeSelectOption>
-                    ))}
+                    {canManage ? (
+                      <>
+                        <NativeSelectOption value="ADD_TAG">Add tag</NativeSelectOption>
+                        <NativeSelectOption value="REMOVE_TAG">Remove tag</NativeSelectOption>
+                      </>
+                    ) : null}
+                    {canManageRelationship ? (
+                      <NativeSelectOption value="ASSIGN_OWNER">Assign to me</NativeSelectOption>
+                    ) : null}
                   </NativeSelect>
                 </div>
-              ) : null}
-              <div className="space-y-2">
-                <Label htmlFor="bulk-reason">Auditable reason</Label>
-                <Textarea
-                  id="bulk-reason"
-                  value={reason}
-                  onChange={(event) => setReason(event.target.value)}
-                  required
-                />
+                {action !== 'ASSIGN_OWNER' ? (
+                  <div className="space-y-2">
+                    <Label htmlFor="bulk-tag">Tag</Label>
+                    <NativeSelect
+                      id="bulk-tag"
+                      value={tagId}
+                      onChange={(event) => setTagId(event.target.value)}
+                    >
+                      {tags.map((tag) => (
+                        <NativeSelectOption key={tag.id} value={tag.id}>
+                          {tag.label}
+                        </NativeSelectOption>
+                      ))}
+                    </NativeSelect>
+                  </div>
+                ) : null}
+                <div className="space-y-2">
+                  <Label htmlFor="bulk-reason">Auditable reason</Label>
+                  <Textarea
+                    id="bulk-reason"
+                    value={reason}
+                    onChange={(event) => setReason(event.target.value)}
+                    required
+                  />
+                </div>
               </div>
-              <DialogFooter>
+              <SheetFooter className="shrink-0 flex-row items-center justify-end gap-2 border-t border-border bg-card/50 px-5 py-3">
                 <Button type="button" variant="outline" onClick={() => setBulkOpen(false)}>
                   Cancel
                 </Button>
@@ -248,10 +252,10 @@ export function CustomerDirectoryActions({
                 >
                   {busy ? 'Applying…' : 'Apply action'}
                 </Button>
-              </DialogFooter>
+              </SheetFooter>
             </form>
-          </DialogContent>
-        </Dialog>
+          </SheetContent>
+        </Sheet>
       ) : null}
     </div>
   );

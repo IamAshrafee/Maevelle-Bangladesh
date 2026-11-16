@@ -4,13 +4,13 @@ import { useState, type FormEvent } from 'react';
 import type { AssetConditionDto, AssetDetailDto, AssetOptionsDto } from '@maevelle/contracts';
 import { Button } from '@/components/ui/button';
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetFooter,
+  SheetHeader,
+  SheetTitle,
+} from '@/components/ui/sheet';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { NativeSelect } from '@/components/ui/native-select';
@@ -70,15 +70,18 @@ export function AssetEditDialog({
   }
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[92vh] overflow-y-auto sm:max-w-xl">
-        <DialogHeader>
-          <DialogTitle>Edit Asset Details</DialogTitle>
-          <DialogDescription>
+    <Sheet open={open} onOpenChange={onOpenChange}>
+      <SheetContent
+        side="right"
+        className="flex w-full flex-col gap-5 overflow-y-auto p-6 sm:max-w-xl"
+      >
+        <SheetHeader className="border-b border-border/60 p-0 pb-4">
+          <SheetTitle>Edit Asset Details</SheetTitle>
+          <SheetDescription>
             Update mutable physical specifications and identifiers. Historical financial facts and
             provenance remain immutable.
-          </DialogDescription>
-        </DialogHeader>
+          </SheetDescription>
+        </SheetHeader>
 
         {error ? (
           <div className="rounded-lg bg-destructive/10 border border-destructive/20 p-2.5 text-xs text-destructive font-medium">
@@ -151,16 +154,16 @@ export function AssetEditDialog({
             <Textarea name="notes" rows={3} defaultValue={asset.notes ?? ''} />
           </Label>
 
-          <DialogFooter className="gap-2 sm:gap-0">
+          <SheetFooter className="gap-2 border-t border-border/60 p-0 pt-4 sm:flex-row sm:justify-end">
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
               Cancel
             </Button>
             <Button type="submit" disabled={busy}>
               {busy ? 'Saving Changes…' : 'Save Changes'}
             </Button>
-          </DialogFooter>
+          </SheetFooter>
         </form>
-      </DialogContent>
-    </Dialog>
+      </SheetContent>
+    </Sheet>
   );
 }

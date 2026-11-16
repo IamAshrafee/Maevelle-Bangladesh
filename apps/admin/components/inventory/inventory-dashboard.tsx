@@ -32,6 +32,9 @@ import {
   PageSection,
 } from '@/components/ui/page-shell';
 import { Stats, StatsCard, StatsDescription, StatsTitle, StatsValue } from '@/components/ui/stats';
+import { Skeleton } from '@/components/ui/skeleton';
+import { StatsValueSkeleton } from '@/components/ui/table-skeleton';
+import { cn } from '@/lib/utils';
 import { formatInventoryDate, formatInventoryNumber, inventoryRequest } from '@/lib/inventory/api';
 
 const queueCards = [
@@ -93,10 +96,88 @@ export function InventoryDashboard() {
       />
 
       {error ? <ErrorState message={error} onRetry={() => setReload((value) => value + 1)} /> : null}
-      {loading && !overview ? <LoadingState message="Loading the inventory operations snapshot…" /> : null}
+
+      {loading && !overview ? (
+        <div className="space-y-6" aria-busy="true">
+          <Stats aria-label="Inventory summary loading" className="grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+            {['On hand', 'Available to sell', 'Reserved', 'Unavailable', 'Incoming supply', 'Transfer in transit'].map((title) => (
+              <StatsCard key={title}>
+                <StatsTitle>{title}</StatsTitle>
+                <StatsValueSkeleton />
+                <Skeleton className="mt-1 h-3 w-28" />
+              </StatsCard>
+            ))}
+          </Stats>
+
+          <div className="grid gap-6 xl:grid-cols-[minmax(0,1.7fr)_minmax(20rem,1fr)]">
+            <div className="space-y-6">
+              <PageSection title="Stock attention" description="Loading stock positions...">
+                <div className="grid gap-3">
+                  {[1, 2, 3].map((i) => (
+                    <PagePanel key={i} className="flex flex-col gap-4 p-4 shadow-none sm:flex-row sm:items-center sm:justify-between">
+                      <div className="min-w-0 space-y-2 flex-1">
+                        <Skeleton className="h-5 w-48" />
+                        <Skeleton className="h-3 w-32" />
+                        <Skeleton className="h-3 w-64" />
+                      </div>
+                      <div className="flex shrink-0 items-center justify-between gap-4 sm:justify-end">
+                        <Skeleton className="h-8 w-24" />
+                        <Skeleton className="h-8 w-16" />
+                      </div>
+                    </PagePanel>
+                  ))}
+                </div>
+              </PageSection>
+
+              <PageSection title="Recent ledger movement" description="Loading movement history...">
+                <PagePanel className="divide-y p-0 shadow-none">
+                  {[1, 2, 3].map((i) => (
+                    <div key={i} className="flex items-center justify-between gap-4 p-4">
+                      <div className="min-w-0 space-y-1.5 flex-1">
+                        <Skeleton className="h-4 w-40" />
+                        <Skeleton className="h-3 w-28" />
+                        <Skeleton className="h-3 w-48" />
+                      </div>
+                      <Skeleton className="h-6 w-16" />
+                    </div>
+                  ))}
+                </PagePanel>
+              </PageSection>
+            </div>
+
+            <div className="space-y-6">
+              <PageSection title="Work queues" description="Loading exception queues...">
+                <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-1">
+                  {[1, 2, 3, 4, 5, 6].map((i) => (
+                    <div key={i} className="flex min-h-14 items-center gap-3 rounded-lg border border-border bg-card px-3 py-2.5">
+                      <Skeleton className="size-9 rounded-lg" />
+                      <Skeleton className="h-4 flex-1" />
+                      <Skeleton className="h-5 w-8" />
+                    </div>
+                  ))}
+                </div>
+              </PageSection>
+
+              <PageSection title="Location health" description="Loading location inventory...">
+                <PagePanel className="divide-y p-0 shadow-none">
+                  {[1, 2].map((i) => (
+                    <div key={i} className="flex items-center justify-between gap-3 p-4">
+                      <div className="min-w-0 space-y-1.5 flex-1">
+                        <Skeleton className="h-4 w-32" />
+                        <Skeleton className="h-3 w-20" />
+                      </div>
+                      <Skeleton className="h-4 w-24" />
+                    </div>
+                  ))}
+                </PagePanel>
+              </PageSection>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       {overview ? (
-        <>
+        <div className={cn('space-y-6', loading && 'opacity-60 transition-opacity')}>
           <Stats aria-label="Inventory summary" className="grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
             <StatsCard><StatsTitle>On hand</StatsTitle><StatsValue className="font-mono tabular-nums">{formatInventoryNumber(overview.kpis.onHand)}</StatsValue><StatsDescription>Physical ledger units</StatsDescription></StatsCard>
             <StatsCard><StatsTitle>Available to sell</StatsTitle><StatsValue className="font-mono tabular-nums">{formatInventoryNumber(overview.kpis.availableToSell)}</StatsValue><StatsDescription>Sellable after holds</StatsDescription></StatsCard>
@@ -186,7 +267,7 @@ export function InventoryDashboard() {
           </div>
 
           <p className="text-xs text-muted-foreground">Snapshot generated {formatInventoryDate(overview.generatedAt)} · Scope: {overview.scope.kind === 'ORGANIZATION' ? 'all authorized organization inventory' : `${overview.scope.locationIds.length} authorized location${overview.scope.locationIds.length === 1 ? '' : 's'}`}.</p>
-        </>
+        </div>
       ) : null}
     </AdminPage>
   );

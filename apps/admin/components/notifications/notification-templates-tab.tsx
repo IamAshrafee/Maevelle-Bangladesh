@@ -9,17 +9,10 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { NativeSelect } from '@/components/ui/native-select';
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
-import {
   Sheet,
   SheetContent,
   SheetDescription,
+  SheetFooter,
   SheetHeader,
   SheetTitle,
 } from '@/components/ui/sheet';
@@ -44,7 +37,8 @@ const standardTemplates: readonly StandardTemplateItem[] = [
     name: 'Order Placement Confirmation',
     channel: 'EMAIL',
     domain: 'Orders',
-    description: 'Sent immediately to the customer after order placement with item summary and pricing.',
+    description:
+      'Sent immediately to the customer after order placement with item summary and pricing.',
     variableKeys: ['orderNumber', 'customerName', 'totalAmount', 'items', 'orderUrl'],
   },
   {
@@ -60,7 +54,8 @@ const standardTemplates: readonly StandardTemplateItem[] = [
     name: 'Order Confirmed SMS',
     channel: 'SMS',
     domain: 'Orders',
-    description: 'Concise SMS dispatch confirming order number and cash on delivery or payment status.',
+    description:
+      'Concise SMS dispatch confirming order number and cash on delivery or payment status.',
     variableKeys: ['orderNumber', 'totalAmount'],
   },
   {
@@ -385,13 +380,21 @@ export function NotificationTemplatesTab() {
 
                 {template.channel === 'EMAIL' ? (
                   <Link href="/email?tab=templates">
-                    <Button variant="ghost" size="sm" className="h-7 text-xs text-primary hover:text-primary-hover gap-1">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 text-xs text-primary hover:text-primary-hover gap-1"
+                    >
                       Email Studio <ArrowRight className="size-3" />
                     </Button>
                   </Link>
                 ) : template.channel === 'SMS' ? (
                   <Link href="/sms?tab=templates">
-                    <Button variant="ghost" size="sm" className="h-7 text-xs text-primary hover:text-primary-hover gap-1">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 text-xs text-primary hover:text-primary-hover gap-1"
+                    >
                       SMS Studio <ArrowRight className="size-3" />
                     </Button>
                   </Link>
@@ -421,7 +424,9 @@ export function NotificationTemplatesTab() {
                     onClick={() => setPreviewDevice('desktop')}
                     className={cn(
                       'p-1 rounded text-xs transition-colors cursor-pointer',
-                      previewDevice === 'desktop' ? 'bg-card text-foreground shadow-2xs' : 'text-muted-foreground hover:text-foreground',
+                      previewDevice === 'desktop'
+                        ? 'bg-card text-foreground shadow-2xs'
+                        : 'text-muted-foreground hover:text-foreground',
                     )}
                     title="Desktop Preview"
                   >
@@ -432,7 +437,9 @@ export function NotificationTemplatesTab() {
                     onClick={() => setPreviewDevice('mobile')}
                     className={cn(
                       'p-1 rounded text-xs transition-colors cursor-pointer',
-                      previewDevice === 'mobile' ? 'bg-card text-foreground shadow-2xs' : 'text-muted-foreground hover:text-foreground',
+                      previewDevice === 'mobile'
+                        ? 'bg-card text-foreground shadow-2xs'
+                        : 'text-muted-foreground hover:text-foreground',
                     )}
                     title="Mobile Preview (375px)"
                   >
@@ -472,8 +479,10 @@ export function NotificationTemplatesTab() {
                   <div className="rounded-lg border border-border overflow-hidden bg-background">
                     <div
                       className={cn(
-                        'mx-auto transition-all',
-                        previewDevice === 'mobile' ? 'max-w-[375px] border-x border-border/80 shadow-md my-4' : 'w-full',
+                        'mx-auto transition-colors duration-150',
+                        previewDevice === 'mobile'
+                          ? 'max-w-[375px] border-x border-border/80 shadow-md my-4'
+                          : 'w-full',
                       )}
                     >
                       <iframe
@@ -494,7 +503,9 @@ export function NotificationTemplatesTab() {
                     </div>
                     <div className="text-[11px] font-mono tabular-nums text-muted-foreground flex items-center justify-between pt-1">
                       <span>Length: {previewSmsText.length} characters</span>
-                      <span>Estimated: ~{Math.ceil(previewSmsText.length / 160) || 1} SMS segment(s)</span>
+                      <span>
+                        Estimated: ~{Math.ceil(previewSmsText.length / 160) || 1} SMS segment(s)
+                      </span>
                     </div>
                   </div>
                 ) : null}
@@ -523,17 +534,20 @@ export function NotificationTemplatesTab() {
         </SheetContent>
       </Sheet>
 
-      {/* New Custom Template Dialog */}
-      <Dialog open={createDialogOpen} onOpenChange={setCreateDialogOpen}>
-        <DialogContent className="sm:max-w-md bg-card border border-border">
-          <DialogHeader>
-            <DialogTitle>Create Custom Template</DialogTitle>
-            <DialogDescription className="text-xs text-muted-foreground">
+      {/* New Custom Template Sheet */}
+      <Sheet open={createDialogOpen} onOpenChange={setCreateDialogOpen}>
+        <SheetContent
+          side="right"
+          className="w-full sm:max-w-md bg-card border-l border-border overflow-y-auto"
+        >
+          <SheetHeader>
+            <SheetTitle>Create Custom Template</SheetTitle>
+            <SheetDescription className="text-xs text-muted-foreground">
               Define a new template override in your organization repository.
-            </DialogDescription>
-          </DialogHeader>
+            </SheetDescription>
+          </SheetHeader>
 
-          <div className="space-y-3 py-2 text-xs">
+          <div className="space-y-3 px-4 py-2 text-xs">
             <div>
               <Label htmlFor="templateName" className="text-xs">
                 Template Name
@@ -587,7 +601,7 @@ export function NotificationTemplatesTab() {
             </div>
           </div>
 
-          <DialogFooter className="gap-2 sm:gap-0">
+          <SheetFooter className="sm:flex-row sm:justify-end">
             <Button
               variant="outline"
               size="sm"
@@ -606,9 +620,9 @@ export function NotificationTemplatesTab() {
               {creating ? <Loader2 className="size-3.5 animate-spin mr-1" /> : null}
               Create Template
             </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+          </SheetFooter>
+        </SheetContent>
+      </Sheet>
     </div>
   );
 }

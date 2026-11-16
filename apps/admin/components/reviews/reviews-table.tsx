@@ -95,7 +95,8 @@ export function ReviewsTable({
         <div className="space-y-1">
           <h3 className="text-sm font-semibold text-foreground">No reviews found</h3>
           <p className="text-xs text-muted-foreground max-w-sm mx-auto">
-            No reviews match the selected queue filters or search term. Try switching queues or clearing search.
+            No reviews match the selected queue filters or search term. Try switching queues or
+            clearing search.
           </p>
         </div>
       </div>
@@ -104,7 +105,7 @@ export function ReviewsTable({
 
   return (
     <div className="rounded-lg border border-border bg-card shadow-2xs overflow-hidden">
-      <Table density={density}>
+      <Table density={density} stickyHeader>
         <TableHeader>
           <TableRow>
             <TableHead className="w-[32%]">Review & Rating</TableHead>
@@ -120,7 +121,8 @@ export function ReviewsTable({
             const productId = r.productId || r.product_id || '';
             const productTitle = r.productTitle || r.product_title || 'Untitled Product';
             const customerId = r.customerId || r.customer_id;
-            const customerName = r.customerName || r.customer_name || r.publicDisplayName || r.public_display_name;
+            const customerName =
+              r.customerName || r.customer_name || r.publicDisplayName || r.public_display_name;
             const orderNumber = r.orderNumber || r.order_number;
             const orderId = r.orderId || r.order_id;
             const rating = r.rating;
@@ -168,9 +170,7 @@ export function ReviewsTable({
                     </div>
 
                     {title ? (
-                      <p className="text-xs font-semibold text-foreground line-clamp-1">
-                        {title}
-                      </p>
+                      <p className="text-xs font-semibold text-foreground line-clamp-1">{title}</p>
                     ) : null}
 
                     {body ? (
@@ -199,7 +199,8 @@ export function ReviewsTable({
                     </Link>
                     {variantLabel ? (
                       <p className="text-[11px] text-muted-foreground">
-                        Variant: <span className="font-medium text-foreground/80">{variantLabel}</span>
+                        Variant:{' '}
+                        <span className="font-medium text-foreground/80">{variantLabel}</span>
                       </p>
                     ) : null}
                   </div>
@@ -239,7 +240,9 @@ export function ReviewsTable({
                         )}
                       </div>
                     ) : (
-                      <span className="text-[11px] text-muted-foreground/60">Direct / Guest review</span>
+                      <span className="text-[11px] text-muted-foreground/60">
+                        Direct / Guest review
+                      </span>
                     )}
                   </div>
                 </TableCell>

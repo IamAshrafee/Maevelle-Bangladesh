@@ -17,9 +17,7 @@ export function DeliveryPricingStats({ rules }: DeliveryPricingStatsProps) {
   const activePct = total > 0 ? Math.round((activeCount / total) * 100) : 0;
 
   // Find standard nationwide rule (BD, no geography node, active)
-  const nationwideActive = activeRules.find(
-    (r) => r.country_code === 'BD' && !r.geography_node_id,
-  );
+  const nationwideActive = activeRules.find((r) => r.country_code === 'BD' && !r.geography_node_id);
 
   // Geographic rules
   const geographicActive = activeRules.filter((r) => Boolean(r.geography_node_id));
@@ -127,4 +125,3 @@ export function DeliveryPricingStats({ rules }: DeliveryPricingStatsProps) {
     </div>
   );
 }
-

@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { Calendar, Check, Copy, ExternalLink, GitMerge, ShoppingBag } from 'lucide-react';
 import type { CustomerDetailDto } from '@maevelle/contracts';
 
-import { Breadcrumb } from '@/components/ui/breadcrumb';
+import { PageHeader } from '@/components/ui/page-shell';
 import { Button } from '@/components/ui/button';
 import { RefreshButton } from '@/components/ui/refresh-button';
 import { Badge } from '@/components/ui/badge';
@@ -54,14 +54,6 @@ export function CustomerHeader({
 
   return (
     <div className="space-y-4">
-      <Breadcrumb
-        items={[
-          { label: 'Customers', href: '/customers' },
-          { label: customer.displayName, current: true },
-        ]}
-        className="text-xs"
-      />
-
       {isMerged && customer.canonicalCustomerId ? (
         <div
           className="flex items-center justify-between gap-3 rounded-lg border border-amber-300/80 bg-amber-50 px-4 py-3 text-sm text-amber-950 dark:border-amber-900/60 dark:bg-amber-950/40 dark:text-amber-200"
@@ -77,7 +69,7 @@ export function CustomerHeader({
           <Button
             size="sm"
             variant="outline"
-            className="border-amber-400 bg-white hover:bg-amber-100 text-amber-950 shrink-0"
+            className="border-amber-400 bg-card hover:bg-amber-100 text-amber-950 dark:text-amber-200 dark:hover:bg-amber-900/40 shrink-0"
             render={<Link href={`/customers/${customer.canonicalCustomerId}`} />}
             nativeButton={false}
           >
@@ -86,15 +78,16 @@ export function CustomerHeader({
         </div>
       ) : null}
 
-      <div className="flex flex-col gap-4 border-b pb-5 lg:flex-row lg:items-start lg:justify-between">
-        <div className="min-w-0 space-y-2">
-          <div className="flex flex-wrap items-center gap-2.5">
-            <h1 className="text-2xl font-bold tracking-tight text-foreground sm:text-3xl">
-              {customer.displayName}
-            </h1>
+      <PageHeader
+        breadcrumbs={[
+          { label: 'Customers', href: '/customers' },
+          { label: customer.displayName, current: true },
+        ]}
+        eyebrow="Customer 360 & CRM"
+        title={customer.displayName}
+        badge={
+          <div className="flex flex-wrap items-center gap-2">
             <CustomerStatusBadge status={customer.status} />
-
-            {/* Customer Number chip with copy */}
             <button
               type="button"
               onClick={copyCustomerNumber}
@@ -103,105 +96,85 @@ export function CustomerHeader({
             >
               <span>{customer.customerNumber}</span>
               {copiedCode ? (
-                <Check className="size-3 text-emerald-600" />
+                <Check className="size-3 text-success" />
               ) : (
                 <Copy className="size-3 opacity-60" />
               )}
             </button>
-
-            {/* Source Badge */}
             <Badge variant="secondary" className="text-[11px] font-normal uppercase tracking-wider">
               Source: {customer.latestSource?.replaceAll('_', ' ') ?? 'Direct'}
             </Badge>
           </div>
-
-          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
-            <span className="inline-flex items-center gap-1">
-              <Calendar className="size-3.5" aria-hidden="true" />
-              Customer since{' '}
-              {new Intl.DateTimeFormat('en-BD', { dateStyle: 'long' }).format(
-                new Date(customer.createdAt),
-              )}
-            </span>
-
-            {/* Active Restrictions list */}
-            {activeRestrictions.length > 0 ? (
-              <div className="flex flex-wrap items-center gap-1.5">
-                <span className="font-semibold text-rose-700 dark:text-rose-400">
-                  Commercial Restrictions:
-                </span>
-                {activeRestrictions.map((restriction) => (
-                  <CustomerRestrictionBadge
-                    key={restriction.id}
-                    restrictionType={restriction.restrictionType}
-                    className="text-[10px] py-0 px-1.5"
-                  />
-                ))}
-              </div>
-            ) : null}
+        }
+        actions={
+          <div className="flex flex-wrap items-center gap-2">
+            <RefreshButton
+              loading={isRefreshing}
+              onRefresh={onRefresh}
+              tooltip="Refresh customer details"
+            />
+            {!isReadOnly && (
+              <Button
+                size="sm"
+                className="h-9 font-medium"
+                render={<Link href={`/orders/new?customerId=${customer.id}`} />}
+                nativeButton={false}
+              >
+                <ShoppingBag className="mr-1.5 size-3.5" aria-hidden="true" />
+                Create Order
+              </Button>
+            )}
+            {!isReadOnly && canManage && (
+              <EditCustomerDialog customer={customer} onUpdated={onRefresh} />
+            )}
+            {!isReadOnly && canManage && (
+              <AddNoteDialog customerId={customer.id} onAdded={onRefresh} />
+            )}
+            {!isReadOnly && canManage && (
+              <ManageTagsDialog
+                customerId={customer.id}
+                assignedTags={customer.tags}
+                onUpdated={onRefresh}
+              />
+            )}
+            {!isReadOnly && canRestrict && (
+              <ApplyRestrictionDialog customerId={customer.id} onApplied={onRefresh} />
+            )}
+            {!isReadOnly && canMerge && (
+              <CustomerDuplicateMergeDialog
+                customer={customer}
+                duplicateCount={duplicateCount}
+                onMerged={onRefresh}
+              />
+            )}
+            {!isReadOnly && canAnonymize && (
+              <AnonymizeCustomerDialog customer={customer} onCompleted={onRefresh} />
+            )}
           </div>
+        }
+      >
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 pt-1 text-xs text-muted-foreground">
+          <span className="inline-flex items-center gap-1">
+            <Calendar className="size-3.5" aria-hidden="true" />
+            Customer since{' '}
+            {new Intl.DateTimeFormat('en-BD', { dateStyle: 'long' }).format(
+              new Date(customer.createdAt),
+            )}
+          </span>
+          {activeRestrictions.length > 0 ? (
+            <div className="flex flex-wrap items-center gap-1.5">
+              <span className="font-semibold text-destructive">Commercial Restrictions:</span>
+              {activeRestrictions.map((restriction) => (
+                <CustomerRestrictionBadge
+                  key={restriction.id}
+                  restrictionType={restriction.restrictionType}
+                  className="text-[10px] py-0 px-1.5"
+                />
+              ))}
+            </div>
+          ) : null}
         </div>
-
-        {/* Action Bar */}
-        <div className="flex flex-wrap items-center gap-2">
-          <RefreshButton
-            loading={isRefreshing}
-            onRefresh={onRefresh}
-            tooltip="Refresh customer details"
-          />
-
-          {/* Quick Create Manual Order Button */}
-          {!isReadOnly && (
-            <Button
-              size="sm"
-              className="h-9 font-medium"
-              render={<Link href={`/orders/new?customerId=${customer.id}`} />}
-              nativeButton={false}
-            >
-              <ShoppingBag className="mr-1.5 size-3.5" aria-hidden="true" />
-              Create Order
-            </Button>
-          )}
-
-          {/* Edit Profile */}
-          {!isReadOnly && canManage && (
-            <EditCustomerDialog customer={customer} onUpdated={onRefresh} />
-          )}
-
-          {/* Add Note */}
-          {!isReadOnly && canManage && (
-            <AddNoteDialog customerId={customer.id} onAdded={onRefresh} />
-          )}
-
-          {/* Manage Tags */}
-          {!isReadOnly && canManage && (
-            <ManageTagsDialog
-              customerId={customer.id}
-              assignedTags={customer.tags}
-              onUpdated={onRefresh}
-            />
-          )}
-
-          {/* Apply Commercial Restriction */}
-          {!isReadOnly && canRestrict && (
-            <ApplyRestrictionDialog customerId={customer.id} onApplied={onRefresh} />
-          )}
-
-          {/* Review & Merge Duplicates */}
-          {!isReadOnly && canMerge && (
-            <CustomerDuplicateMergeDialog
-              customer={customer}
-              duplicateCount={duplicateCount}
-              onMerged={onRefresh}
-            />
-          )}
-
-          {/* Anonymize PII */}
-          {!isReadOnly && canAnonymize && (
-            <AnonymizeCustomerDialog customer={customer} onCompleted={onRefresh} />
-          )}
-        </div>
-      </div>
+      </PageHeader>
     </div>
   );
 }

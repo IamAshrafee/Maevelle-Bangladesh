@@ -64,7 +64,9 @@ export function NotificationOperationsTab() {
   const [failuresError, setFailuresError] = useState<string | null>(null);
 
   // Filters
-  const [statusFilter, setStatusFilter] = useState<'ALL_ISSUES' | 'FAILED' | 'UNKNOWN_PROVIDER_OUTCOME' | 'RETRY_WAIT'>('ALL_ISSUES');
+  const [statusFilter, setStatusFilter] = useState<
+    'ALL_ISSUES' | 'FAILED' | 'UNKNOWN_PROVIDER_OUTCOME' | 'RETRY_WAIT'
+  >('ALL_ISSUES');
   const [channelFilter, setChannelFilter] = useState<string>('ALL');
   const [search, setSearch] = useState<string>('');
   const [page, setPage] = useState(1);
@@ -80,7 +82,9 @@ export function NotificationOperationsTab() {
     setLoadingDiagnostics(true);
     setDiagnosticsError(null);
     try {
-      const res = await apiRequest<{ data: OperationalDiagnostics }>('/admin/notifications/diagnostics');
+      const res = await apiRequest<{ data: OperationalDiagnostics }>(
+        '/admin/notifications/diagnostics',
+      );
       setDiagnostics(res.data);
       setLastRefreshed(new Date());
     } catch (err) {
@@ -107,17 +111,19 @@ export function NotificationOperationsTab() {
       }>(`/admin/notifications/history?${query.toString()}`);
 
       // When "ALL_ISSUES" is selected, filter items locally if the backend status filter was not applied
-      const relevant = statusFilter === 'ALL_ISSUES'
-        ? res.data.filter((item) =>
-            item.status === 'FAILED' ||
-            item.status === 'UNKNOWN_PROVIDER_OUTCOME' ||
-            item.status === 'RETRY_WAIT' ||
-            item.status === 'UNDELIVERABLE' ||
-            item.status === 'BOUNCED' ||
-            item.status === 'COMPLAINED' ||
-            item.status === 'REJECTED'
-          )
-        : res.data;
+      const relevant =
+        statusFilter === 'ALL_ISSUES'
+          ? res.data.filter(
+              (item) =>
+                item.status === 'FAILED' ||
+                item.status === 'UNKNOWN_PROVIDER_OUTCOME' ||
+                item.status === 'RETRY_WAIT' ||
+                item.status === 'UNDELIVERABLE' ||
+                item.status === 'BOUNCED' ||
+                item.status === 'COMPLAINED' ||
+                item.status === 'REJECTED',
+            )
+          : res.data;
 
       setFailures(relevant);
       setTotalItems(res.pagination.totalItems);
@@ -166,12 +172,18 @@ export function NotificationOperationsTab() {
             Operational Health & Failure Recovery
           </h2>
           <p className="text-xs text-muted-foreground mt-0.5">
-            Real-time delivery orchestrator metrics, worker queues, dead-letter monitoring, and safe failure recovery.
+            Real-time delivery orchestrator metrics, worker queues, dead-letter monitoring, and safe
+            failure recovery.
           </p>
         </div>
         <div className="flex items-center gap-2">
           <span className="text-xs text-muted-foreground hidden md:inline tabular-nums font-mono">
-            Updated {lastRefreshed.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+            Updated{' '}
+            {lastRefreshed.toLocaleTimeString([], {
+              hour: '2-digit',
+              minute: '2-digit',
+              second: '2-digit',
+            })}
           </span>
           <RefreshButton
             size="icon-sm"
@@ -192,12 +204,19 @@ export function NotificationOperationsTab() {
           </div>
           <div className="mt-2 flex items-baseline gap-2">
             <span className="text-2xl font-bold tracking-tight text-foreground tabular-nums font-mono">
-              {loadingDiagnostics ? '—' : diagnostics?.queued ?? 0}
+              {loadingDiagnostics ? '—' : (diagnostics?.queued ?? 0)}
             </span>
           </div>
           {diagnostics?.oldest_queued_at && (
-            <p className="text-[10px] text-muted-foreground mt-1 truncate" title={diagnostics.oldest_queued_at}>
-              Oldest: {new Date(diagnostics.oldest_queued_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+            <p
+              className="text-[10px] text-muted-foreground mt-1 truncate"
+              title={diagnostics.oldest_queued_at}
+            >
+              Oldest:{' '}
+              {new Date(diagnostics.oldest_queued_at).toLocaleTimeString([], {
+                hour: '2-digit',
+                minute: '2-digit',
+              })}
             </p>
           )}
         </div>
@@ -210,7 +229,7 @@ export function NotificationOperationsTab() {
           </div>
           <div className="mt-2 flex items-baseline gap-2">
             <span className="text-2xl font-bold tracking-tight text-foreground tabular-nums font-mono">
-              {loadingDiagnostics ? '—' : diagnostics?.processing ?? 0}
+              {loadingDiagnostics ? '—' : (diagnostics?.processing ?? 0)}
             </span>
           </div>
           <p className="text-[10px] text-muted-foreground mt-1">Active worker lock</p>
@@ -224,41 +243,63 @@ export function NotificationOperationsTab() {
           </div>
           <div className="mt-2 flex items-baseline gap-2">
             <span className="text-2xl font-bold tracking-tight text-foreground tabular-nums font-mono">
-              {loadingDiagnostics ? '—' : diagnostics?.retry_wait ?? 0}
+              {loadingDiagnostics ? '—' : (diagnostics?.retry_wait ?? 0)}
             </span>
           </div>
           <p className="text-[10px] text-muted-foreground mt-1">Backoff delay active</p>
         </div>
 
         {/* Unknown Outcome */}
-        <div className={cn(
-          "rounded-lg border bg-card p-3 shadow-2xs",
-          (diagnostics?.unknown_outcome ?? 0) > 0 ? "border-amber-500/40 bg-amber-500/5" : "border-border"
-        )}>
+        <div
+          className={cn(
+            'rounded-lg border bg-card p-3 shadow-2xs',
+            (diagnostics?.unknown_outcome ?? 0) > 0
+              ? 'border-amber-500/40 bg-amber-500/5'
+              : 'border-border',
+          )}
+        >
           <div className="flex items-center justify-between">
             <span className="text-xs font-medium text-muted-foreground">Unknown Outcome</span>
-            <HelpCircle className={cn("size-4", (diagnostics?.unknown_outcome ?? 0) > 0 ? "text-amber-500" : "text-muted-foreground")} />
+            <HelpCircle
+              className={cn(
+                'size-4',
+                (diagnostics?.unknown_outcome ?? 0) > 0
+                  ? 'text-amber-500'
+                  : 'text-muted-foreground',
+              )}
+            />
           </div>
           <div className="mt-2 flex items-baseline gap-2">
             <span className="text-2xl font-bold tracking-tight text-foreground tabular-nums font-mono">
-              {loadingDiagnostics ? '—' : diagnostics?.unknown_outcome ?? 0}
+              {loadingDiagnostics ? '—' : (diagnostics?.unknown_outcome ?? 0)}
             </span>
           </div>
           <p className="text-[10px] text-muted-foreground mt-1">Needs verification</p>
         </div>
 
         {/* Dead Letter */}
-        <div className={cn(
-          "rounded-lg border bg-card p-3 shadow-2xs",
-          (diagnostics?.dead_letter_events ?? 0) > 0 ? "border-destructive/40 bg-destructive/5" : "border-border"
-        )}>
+        <div
+          className={cn(
+            'rounded-lg border bg-card p-3 shadow-2xs',
+            (diagnostics?.dead_letter_events ?? 0) > 0
+              ? 'border-destructive/40 bg-destructive/5'
+              : 'border-border',
+          )}
+        >
           <div className="flex items-center justify-between">
             <span className="text-xs font-medium text-muted-foreground">Dead Letter</span>
-            <Flame className={cn("size-4", (diagnostics?.dead_letter_events ?? 0) > 0 ? "text-destructive" : "text-muted-foreground")} />
+            <Flame
+              className={cn(
+                'size-4',
+                (diagnostics?.dead_letter_events ?? 0) > 0
+                  ? 'text-destructive'
+                  : 'text-muted-foreground',
+              )}
+            />
           </div>
           <div className="mt-2 flex items-baseline gap-2">
             <span className="text-2xl font-bold tracking-tight text-foreground tabular-nums font-mono">
-              {loadingDiagnostics ? '—' : diagnostics?.dead_letter_events ?? 0}
+              {loadingDiagnostics ? '—' : (diagnostics?.dead_letter_events ?? 0)}
             </span>
           </div>
           <p className="text-[10px] text-muted-foreground mt-1">Exhausted outbox events</p>
@@ -272,7 +313,7 @@ export function NotificationOperationsTab() {
           </div>
           <div className="mt-2 flex items-baseline gap-2">
             <span className="text-2xl font-bold tracking-tight text-foreground tabular-nums font-mono">
-              {loadingDiagnostics ? '—' : diagnostics?.unmatched_provider_events ?? 0}
+              {loadingDiagnostics ? '—' : (diagnostics?.unmatched_provider_events ?? 0)}
             </span>
           </div>
           <p className="text-[10px] text-muted-foreground mt-1">Orphaned callbacks</p>
@@ -289,13 +330,16 @@ export function NotificationOperationsTab() {
               <p className="leading-relaxed opacity-90">
                 {diagnostics.unknown_outcome > 0 && (
                   <span>
-                    <strong>{diagnostics.unknown_outcome} delivery</strong> has an uncertain outcome due to provider timeout or unconfirmed state. Resending without manual verification may trigger duplicate communications.
+                    <strong>{diagnostics.unknown_outcome} delivery</strong> has an uncertain outcome
+                    due to provider timeout or unconfirmed state. Resending without manual
+                    verification may trigger duplicate communications.
                   </span>
                 )}
                 {diagnostics.unknown_outcome > 0 && diagnostics.dead_letter_events > 0 && ' '}
                 {diagnostics.dead_letter_events > 0 && (
                   <span>
-                    <strong>{diagnostics.dead_letter_events} outbox event</strong> exhausted retry limits and moved to dead-letter storage.
+                    <strong>{diagnostics.dead_letter_events} outbox event</strong> exhausted retry
+                    limits and moved to dead-letter storage.
                   </span>
                 )}
               </p>
@@ -311,7 +355,10 @@ export function NotificationOperationsTab() {
             <Server className="size-4 text-primary" />
             Channel Adapters & Integration Health
           </h3>
-          <Link href="/notifications?tab=channels" className="text-xs text-primary hover:underline flex items-center gap-1">
+          <Link
+            href="/notifications?tab=channels"
+            className="text-xs text-primary hover:underline flex items-center gap-1"
+          >
             Configure Channels
             <ArrowRight className="size-3" />
           </Link>
@@ -328,7 +375,10 @@ export function NotificationOperationsTab() {
                 <p className="text-[10px] text-muted-foreground">Transactional & Operational</p>
               </div>
             </div>
-            <Badge variant="outline" className="border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-[10px] gap-1">
+            <Badge
+              variant="outline"
+              className="border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-[10px] gap-1"
+            >
               <CheckCircle2 className="size-2.5" />
               Operational
             </Badge>
@@ -345,7 +395,10 @@ export function NotificationOperationsTab() {
                 <p className="text-[10px] text-muted-foreground">Bangladesh Mobile Operators</p>
               </div>
             </div>
-            <Badge variant="outline" className="border-border bg-muted/50 text-muted-foreground text-[10px] gap-1">
+            <Badge
+              variant="outline"
+              className="border-border bg-muted/50 text-muted-foreground text-[10px] gap-1"
+            >
               Mock / Standby
             </Badge>
           </div>
@@ -361,7 +414,10 @@ export function NotificationOperationsTab() {
                 <p className="text-[10px] text-muted-foreground">Database Outbox Stream</p>
               </div>
             </div>
-            <Badge variant="outline" className="border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-[10px] gap-1">
+            <Badge
+              variant="outline"
+              className="border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-[10px] gap-1"
+            >
               <CheckCircle2 className="size-2.5" />
               Operational
             </Badge>
@@ -438,7 +494,7 @@ export function NotificationOperationsTab() {
 
         {/* Failures Table */}
         <div className="rounded-md border border-border bg-card overflow-hidden shadow-2xs">
-          <Table density="compact">
+          <Table density="compact" stickyHeader>
             <TableHeader>
               <TableRow className="bg-muted/40 hover:bg-muted/40">
                 <TableHead className="w-[150px]">Time</TableHead>
@@ -464,7 +520,9 @@ export function NotificationOperationsTab() {
                     <div className="flex flex-col items-center justify-center text-muted-foreground space-y-1">
                       <CheckCircle2 className="size-8 text-emerald-500/80 stroke-1" />
                       <p className="text-xs font-medium text-foreground">Clean Operations Queue</p>
-                      <p className="text-[11px]">No active delivery failures or unknown outcomes matching your filter.</p>
+                      <p className="text-[11px]">
+                        No active delivery failures or unknown outcomes matching your filter.
+                      </p>
                     </div>
                   </TableCell>
                 </TableRow>
@@ -488,7 +546,10 @@ export function NotificationOperationsTab() {
                     </TableCell>
                     <TableCell>
                       <div className="flex flex-col">
-                        <span className="font-medium text-xs text-foreground truncate" title={item.notification_type}>
+                        <span
+                          className="font-medium text-xs text-foreground truncate"
+                          title={item.notification_type}
+                        >
                           {item.notification_type.replace(/_/g, ' ')}
                         </span>
                         {item.source_id && (
@@ -504,8 +565,12 @@ export function NotificationOperationsTab() {
                     <TableCell>
                       <div className="text-xs font-mono truncate text-foreground">
                         {item.recipient_type === 'CUSTOMER'
-                          ? (item.customer_id ? `Customer #${item.customer_id.slice(0, 8)}` : 'Customer')
-                          : (item.membership_id ? `Staff Member #${item.membership_id.slice(0, 8)}` : 'Staff Member')}
+                          ? item.customer_id
+                            ? `Customer #${item.customer_id.slice(0, 8)}`
+                            : 'Customer'
+                          : item.membership_id
+                            ? `Staff Member #${item.membership_id.slice(0, 8)}`
+                            : 'Staff Member'}
                       </div>
                     </TableCell>
                     <TableCell>

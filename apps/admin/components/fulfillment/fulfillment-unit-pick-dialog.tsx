@@ -3,15 +3,10 @@
 import React, { useState, useMemo } from 'react';
 import { CheckCircle2, AlertCircle, Loader2, PackageCheck, Trash2 } from 'lucide-react';
 import type { FulfillmentDto, InventoryUnitDto } from '@maevelle/contracts';
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
-} from '@/components/ui/dialog';
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetFooter } from '@/components/ui/sheet';
 import { Button } from '@/components/ui/button';
 import { UnitScannerInput } from '@/components/inventory/units/unit-scanner-input';
+import { useFormDialogLifecycle } from '@/hooks/use-form-dialog-lifecycle';
 import { lookupUnitByCode, allocateUnitsToFulfillment } from '@/lib/inventory/units';
 import { cn } from '@/lib/utils';
 
@@ -40,6 +35,17 @@ export function FulfillmentUnitPickDialog({
   const [error, setError] = useState<string | null>(null);
   const [, setSuccessMsg] = useState<string | null>(null);
 
+  const isDirty = allocations.length > 0;
+
+  const { handleOpenChange, discardConfirmDialog } = useFormDialogLifecycle({
+    isDirty,
+    isSubmitting: submitting,
+    onClose: () => onOpenChange(false),
+    confirmTitle: 'Discard scanned pick allocations?',
+    confirmDescription:
+      'You have scanned units for this fulfillment. Closing now will discard these allocations.',
+  });
+
   // Verification requirements per line
   const lineRequirements = useMemo(() => {
     return fulfillment.lines.map((line) => {
@@ -53,8 +59,6 @@ export function FulfillmentUnitPickDialog({
       };
     });
   }, [fulfillment.lines, allocations]);
-
-
 
   // Scan handler
   const handleCodeScanned = async (code: string) => {
@@ -77,7 +81,10 @@ export function FulfillmentUnitPickDialog({
       );
     }
 
-    if (unit.currentCondition === 'DAMAGED_UNSELLABLE' || unit.currentCondition === 'REPAIR_REQUIRED') {
+    if (
+      unit.currentCondition === 'DAMAGED_UNSELLABLE' ||
+      unit.currentCondition === 'REPAIR_REQUIRED'
+    ) {
       throw new Error(
         `Unit ${unit.unitCode} has condition '${unit.currentCondition}' and cannot be fulfilled to customer.`,
       );
@@ -145,19 +152,21 @@ export function FulfillmentUnitPickDialog({
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2 text-base font-semibold">
+    <>
+      <Sheet open={open} onOpenChange={handleOpenChange}>
+        <SheetContent side="right" className="gap-0 p-0 sm:max-w-2xl">
+        <SheetHeader className="shrink-0 border-b border-border px-5 py-4 pr-11 text-left">
+          <SheetTitle className="flex items-center gap-2 text-base font-semibold">
             <PackageCheck className="size-4 text-primary" />
             <span>Barcode Pick & Pack Verification — {fulfillment.fulfillmentNumber}</span>
-          </DialogTitle>
+          </SheetTitle>
           <p className="text-xs text-muted-foreground">
-            Scan physical garments before packing into shipping polybags to guarantee zero fulfillment errors.
+            Scan physical item units before packing into shipping parcels to guarantee zero
+            fulfillment errors.
           </p>
-        </DialogHeader>
+        </SheetHeader>
 
-        <div className="space-y-4 pt-2">
+        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-5 py-4">
           {error ? (
             <div className="p-3 bg-destructive/10 border border-destructive/20 rounded-lg text-xs text-destructive flex items-center gap-2">
               <AlertCircle className="size-4 shrink-0" />
@@ -168,7 +177,7 @@ export function FulfillmentUnitPickDialog({
           {/* Scanner Input */}
           <div className="bg-muted/30 p-3 rounded-xl border">
             <span className="text-xs font-semibold text-foreground block mb-1.5">
-              Scan Barcode on Garment Tag:
+              Scan Barcode on Item Tag:
             </span>
             <UnitScannerInput
               autoFocus
@@ -253,42 +262,44 @@ export function FulfillmentUnitPickDialog({
               </div>
             </div>
           ) : null}
-
-          <DialogFooter className="gap-2 sm:gap-0 pt-3 border-t">
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => onOpenChange(false)}
-              disabled={submitting}
-            >
-              Cancel
-            </Button>
-            <Button
-              type="button"
-              variant="default"
-              size="sm"
-              onClick={handleSubmitAllocations}
-              disabled={submitting || allocations.length === 0}
-              className="gap-1.5"
-            >
-              {submitting ? (
-                <>
-                  <Loader2 className="size-3.5 animate-spin" />
-                  <span>Allocating…</span>
-                </>
-              ) : (
-                <>
-                  <CheckCircle2 className="size-3.5" />
-                  <span>
-                    Confirm {allocations.length} Scanned {allocations.length === 1 ? 'Unit' : 'Units'}
-                  </span>
-                </>
-              )}
-            </Button>
-          </DialogFooter>
         </div>
-      </DialogContent>
-    </Dialog>
-  );
+
+        <SheetFooter className="shrink-0 flex-row items-center justify-end gap-2 border-t border-border bg-card/50 px-5 py-3 pb-[max(1rem,env(safe-area-inset-bottom,0px))] sm:pb-3">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => handleOpenChange(false)}
+            disabled={submitting}
+          >
+            Cancel
+          </Button>
+          <Button
+            type="button"
+            variant="default"
+            size="sm"
+            onClick={handleSubmitAllocations}
+            disabled={submitting || allocations.length === 0}
+            className="gap-1.5"
+          >
+            {submitting ? (
+              <>
+                <Loader2 className="size-3.5 animate-spin" />
+                <span>Allocating…</span>
+              </>
+            ) : (
+              <>
+                <CheckCircle2 className="size-3.5" />
+                <span>
+                  Confirm {allocations.length} Scanned {allocations.length === 1 ? 'Unit' : 'Units'}
+                </span>
+              </>
+            )}
+          </Button>
+        </SheetFooter>
+      </SheetContent>
+    </Sheet>
+    {discardConfirmDialog}
+  </>
+);
 }

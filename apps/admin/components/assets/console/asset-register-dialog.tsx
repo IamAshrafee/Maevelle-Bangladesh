@@ -10,19 +10,20 @@ import type {
 } from '@maevelle/contracts';
 import { Button } from '@/components/ui/button';
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetFooter,
+  SheetHeader,
+  SheetTitle,
+} from '@/components/ui/sheet';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { NativeSelect } from '@/components/ui/native-select';
 import { Textarea } from '@/components/ui/textarea';
 import { formatAssetMoney, humanizeAssetCode, newIdempotencyKey } from '@/lib/assets/format';
 import { fetchApiData } from '@/lib/api';
+import { useFormDialogLifecycle } from '@/hooks/use-form-dialog-lifecycle';
 import { cn } from '@/lib/utils';
 
 const conditions: readonly AssetConditionDto[] = ['GOOD', 'FAIR', 'NEEDS_REPAIR', 'DAMAGED'];
@@ -181,26 +182,43 @@ export function AssetRegisterDialog({
     return true;
   });
 
+  const isDirty =
+    name.trim() !== '' ||
+    notes.trim() !== '' ||
+    expenseId !== '' ||
+    purchaseId !== '' ||
+    acquisitionCost !== '';
+
+  const { handleOpenChange, discardConfirmDialog } = useFormDialogLifecycle({
+    open,
+    onOpenChange,
+    isDirty,
+    isSubmitting: busy,
+    title: 'Discard asset registration?',
+  });
+
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[92vh] overflow-y-auto sm:max-w-2xl">
-        <DialogHeader>
-          <DialogTitle>Register Business Asset</DialogTitle>
-          <DialogDescription>
-            Record durable property, responsibility, and location. Provenance connects directly to
-            Finance or Supply records without creating fake charges or cash movements.
-          </DialogDescription>
-        </DialogHeader>
+    <>
+      <Sheet open={open} onOpenChange={handleOpenChange}>
+        <SheetContent side="right" className="flex w-full flex-col p-0 sm:max-w-2xl">
+          <SheetHeader className="shrink-0 border-b border-border/60 px-6 py-4 pr-12 text-left">
+            <SheetTitle>Register Business Asset</SheetTitle>
+            <SheetDescription>
+              Record durable property, responsibility, and location. Provenance connects directly to
+              Finance or Supply records without creating fake charges or cash movements.
+            </SheetDescription>
+          </SheetHeader>
 
-        {error ? (
-          <div className="rounded-lg bg-destructive/10 border border-destructive/20 p-3 text-sm text-destructive font-medium">
-            {error}
-          </div>
-        ) : null}
+          <form className="flex min-h-0 flex-1 flex-col" onSubmit={handleSubmit}>
+            <div className="min-h-0 flex-1 space-y-5 overflow-y-auto px-6 py-4">
+              {error ? (
+                <div className="rounded-lg bg-destructive/10 border border-destructive/20 p-3 text-sm text-destructive font-medium">
+                  {error}
+                </div>
+              ) : null}
 
-        <form className="grid gap-5" onSubmit={handleSubmit}>
-          {/* Acquisition Provenance Selector */}
-          <div className="rounded-xl border bg-muted/30 p-4 space-y-3">
+              {/* Acquisition Provenance Selector */}
+              <div className="rounded-xl border bg-muted/30 p-4 space-y-3">
             <div className="flex items-center justify-between">
               <span className="text-sm font-semibold text-foreground">Acquisition Mode</span>
               <span className="text-xs text-muted-foreground">
@@ -227,7 +245,7 @@ export function AssetRegisterDialog({
                     }
                   }}
                   className={cn(
-                    'flex flex-col items-start p-2.5 rounded-lg border text-left transition-all',
+                    'flex flex-col items-start p-2.5 rounded-lg border text-left transition-colors duration-150',
                     acquisitionSource === mode.id
                       ? 'border-primary bg-primary/10 text-primary ring-1 ring-primary'
                       : 'border-border bg-card hover:bg-muted/60 text-muted-foreground',
@@ -283,7 +301,7 @@ export function AssetRegisterDialog({
                       className={cn(
                         'px-2 py-0.5 rounded text-[11px] font-medium border',
                         expenseFundingFilter === 'ALL'
-                          ? 'bg-primary text-primary-foreground border-primary'
+                          ? 'bg-primary-subtle text-primary-hover dark:text-primary border-primary/25 font-semibold'
                           : 'bg-background text-muted-foreground',
                       )}
                     >
@@ -295,7 +313,7 @@ export function AssetRegisterDialog({
                       className={cn(
                         'px-2 py-0.5 rounded text-[11px] font-medium border',
                         expenseFundingFilter === 'OWNER'
-                          ? 'bg-primary text-primary-foreground border-primary'
+                          ? 'bg-primary-subtle text-primary-hover dark:text-primary border-primary/25 font-semibold'
                           : 'bg-background text-muted-foreground',
                       )}
                     >
@@ -307,7 +325,7 @@ export function AssetRegisterDialog({
                       className={cn(
                         'px-2 py-0.5 rounded text-[11px] font-medium border',
                         expenseFundingFilter === 'BUSINESS'
-                          ? 'bg-primary text-primary-foreground border-primary'
+                          ? 'bg-primary-subtle text-primary-hover dark:text-primary border-primary/25 font-semibold'
                           : 'bg-background text-muted-foreground',
                       )}
                     >
@@ -537,18 +555,21 @@ export function AssetRegisterDialog({
               placeholder="Add physical identifiers, included accessories, purchase invoice number, or setup notes…"
             />
           </label>
+          </div>
 
-          <DialogFooter className="gap-2 sm:gap-0">
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+          <SheetFooter className="shrink-0 gap-2 border-t border-border/60 px-6 py-4 pb-[max(1rem,env(safe-area-inset-bottom,0px))] sm:flex-row sm:justify-end">
+            <Button type="button" variant="outline" onClick={() => handleOpenChange(false)}>
               Cancel
             </Button>
             <Button type="submit" disabled={busy}>
               {busy ? 'Registering Asset…' : 'Register Asset'}
             </Button>
-          </DialogFooter>
+          </SheetFooter>
         </form>
-      </DialogContent>
-    </Dialog>
+      </SheetContent>
+    </Sheet>
+    {discardConfirmDialog}
+  </>
   );
 }
 

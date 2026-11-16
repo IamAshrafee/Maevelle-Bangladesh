@@ -1,12 +1,14 @@
 import type { ReactNode } from 'react';
-
-import { InventoryWorkspaceNav } from '@/components/inventory/inventory-workspace-nav';
+import { ModuleLayout } from '@/components/ui/module-nav';
 
 export default function InventoryLayout({ children }: { readonly children: ReactNode }) {
   return (
-    <>
-      <InventoryWorkspaceNav />
+    <ModuleLayout
+      moduleId="inventory"
+      widthVariant="wide"
+      ariaLabel="Inventory workspace navigation"
+    >
       {children}
-    </>
+    </ModuleLayout>
   );
 }

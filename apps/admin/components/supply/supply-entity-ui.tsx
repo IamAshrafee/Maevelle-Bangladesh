@@ -1,5 +1,7 @@
 import type { ReactNode } from 'react';
 
+import type { PageWidthVariant } from '@/lib/navigation/route-registry';
+import { PageSkeleton } from '@/components/ui/page-shell';
 import { Progress, ProgressLabel } from '@/components/ui/progress';
 import { cn } from '@/lib/utils';
 import { formatSupplyNumber } from '@/lib/supply/api';
@@ -77,17 +79,10 @@ export function DetailSection({
   );
 }
 
-export function DetailSkeleton() {
-  return (
-    <main className="min-w-0 space-y-5 px-4 py-5 sm:px-6 lg:px-8" aria-busy="true">
-      <div className="h-5 w-52 animate-pulse rounded bg-muted" />
-      <div className="h-20 animate-pulse rounded-xl bg-muted" />
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        {Array.from({ length: 4 }, (_, index) => (
-          <div className="h-24 animate-pulse rounded-xl bg-muted" key={index} />
-        ))}
-      </div>
-      <div className="h-72 animate-pulse rounded-xl bg-muted" />
-    </main>
-  );
+export function DetailSkeleton({
+  widthVariant = 'wide',
+}: {
+  widthVariant?: PageWidthVariant;
+} = {}) {
+  return <PageSkeleton variant="detail" widthVariant={widthVariant} />;
 }

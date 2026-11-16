@@ -143,7 +143,8 @@ export function BalanceCheckDialog({
     <ActionDialog
       open={open}
       onOpenChange={onOpenChange}
-      size="md"
+      presentation="sheet"
+      size="lg"
       title="Compare account balance"
       description="Compare actual statement balance against Maevelle's ledger. Does not alter ledger entries."
       onSubmit={handleSubmit}

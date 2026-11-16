@@ -7,9 +7,8 @@ import { AlertTriangle, DollarSign } from 'lucide-react';
 import { ActionDialog } from '@/components/ui/action-dialog';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
-import { Field, FieldDescription, FieldError, FieldLabel } from '@/components/ui/field';
-
-import { InputGroup, InputGroupAddon, InputGroupInput } from '@/components/ui/input-group';
+import { Field, FieldDescription, FieldLabel } from '@/components/ui/field';
+import { MoneyField } from '@/components/ui/money-field';
 import { Textarea } from '@/components/ui/textarea';
 import { apiRequest } from '@/lib/api';
 import { formatMoney } from '@/lib/finance/types';
@@ -81,6 +80,8 @@ export function SetOpeningBalanceDialog({
     }
   };
 
+  const isDirty = Boolean(amount.trim() || description.trim());
+
   return (
     <ActionDialog
       open={open}
@@ -88,8 +89,12 @@ export function SetOpeningBalanceDialog({
       title="Set Initial Opening Balance"
       description={`Record the one-time starting float or initial balance for ${account.name}.`}
       icon={DollarSign}
+      presentation="sheet"
       size="md"
       busy={busy}
+      isDirty={isDirty}
+      confirmDiscardTitle="Discard opening balance entry?"
+      confirmDiscardDescription="You have entered an opening balance. Closing now will discard your entry."
       submitLabel="Record Opening Balance"
       busyLabel="Recording..."
       submitDisabled={busy || !amount.trim()}
@@ -119,38 +124,20 @@ export function SetOpeningBalanceDialog({
           </AlertDescription>
         </Alert>
 
-        <Field>
-          <FieldLabel htmlFor="opening-balance-amount">
-            Opening balance amount ({account.currency_code})
-          </FieldLabel>
-          <InputGroup>
-            <InputGroupAddon>
-              <span className="text-xs font-medium text-muted-foreground">
-                {account.currency_code}
-              </span>
-            </InputGroupAddon>
-            <InputGroupInput
-              id="opening-balance-amount"
-              type="text"
-              inputMode="decimal"
-              placeholder="e.g. 15,000.00"
-              value={amount}
-              onChange={(e) => {
-                setAmount(e.target.value);
-                setValidationError(null);
-              }}
-              autoFocus
-              required
-            />
-          </InputGroup>
-          {validationError ? (
-            <FieldError>{validationError}</FieldError>
-          ) : (
-            <FieldDescription>
-              Enter the starting funds or cash float deposited into this account.
-            </FieldDescription>
-          )}
-        </Field>
+        <MoneyField
+          id="opening-balance-amount"
+          label={`Opening balance amount (${account.currency_code})`}
+          currencySymbol={account.currency_code === 'BDT' ? '৳' : account.currency_code}
+          placeholder="15,000.00"
+          value={amount}
+          onChange={(val) => {
+            setAmount(val);
+            setValidationError(null);
+          }}
+          error={validationError}
+          description="Enter the starting funds or cash float deposited into this account."
+          required
+        />
 
         <Field>
           <FieldLabel htmlFor="opening-balance-description">

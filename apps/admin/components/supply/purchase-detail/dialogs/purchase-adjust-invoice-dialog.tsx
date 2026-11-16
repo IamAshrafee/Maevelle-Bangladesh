@@ -6,14 +6,14 @@ import { type FormEvent, useEffect, useState } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
-  Dialog,
-  DialogClose,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
+  Sheet,
+  SheetClose,
+  SheetContent,
+  SheetDescription,
+  SheetFooter,
+  SheetHeader,
+  SheetTitle,
+} from '@/components/ui/sheet';
 import { Field, FieldDescription, FieldLabel } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
 import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select';
@@ -80,138 +80,140 @@ export function PurchaseAdjustInvoiceDialog({
   }
 
   return (
-    <Dialog open={Boolean(invoice)} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="sm:max-w-md">
-        <DialogHeader>
+    <Sheet open={Boolean(invoice)} onOpenChange={(open) => !open && onClose()}>
+      <SheetContent side="right" className="gap-0 p-0 sm:max-w-md">
+        <SheetHeader className="shrink-0 border-b border-border px-5 py-4 pr-11 text-left">
           <div className="flex items-center gap-2">
             <div className="flex size-8 items-center justify-center rounded-lg bg-info/10 text-info">
               <FileEdit className="size-4" />
             </div>
             <div>
-              <DialogTitle className="text-base">
+              <SheetTitle className="text-base">
                 Record Adjustment for {invoice.expense_number}
-              </DialogTitle>
-              <DialogDescription className="text-xs">
+              </SheetTitle>
+              <SheetDescription className="text-xs">
                 Keep the original supplier bill intact while recording a traceable credit note or
                 correction.
-              </DialogDescription>
+              </SheetDescription>
             </div>
           </div>
-        </DialogHeader>
+        </SheetHeader>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
-          {/* Invoice Summary */}
-          <div className="rounded-xl border bg-muted/40 p-3 text-xs space-y-1">
-            <div className="flex items-center justify-between">
-              <span className="font-semibold text-foreground truncate max-w-[240px]">
-                {invoice.description}
-              </span>
-              <Badge variant="outline" className="font-mono text-[10px]">
-                Due: {formatSupplyMoney(invoice.outstanding, invoice.currency_code)}
-              </Badge>
+        <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col">
+          <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-5 py-4">
+            {/* Invoice Summary */}
+            <div className="rounded-xl border bg-muted/40 p-3 text-xs space-y-1">
+              <div className="flex items-center justify-between">
+                <span className="font-semibold text-foreground truncate max-w-[240px]">
+                  {invoice.description}
+                </span>
+                <Badge variant="outline" className="font-mono text-[10px]">
+                  Due: {formatSupplyMoney(invoice.outstanding, invoice.currency_code)}
+                </Badge>
+              </div>
+              <p className="text-muted-foreground">
+                Original Total: {formatSupplyMoney(invoice.amount, invoice.currency_code)} ·
+                Previously Adjusted: {formatSupplyMoney(invoice.adjustments, invoice.currency_code)}
+              </p>
             </div>
-            <p className="text-muted-foreground">
-              Original Total: {formatSupplyMoney(invoice.amount, invoice.currency_code)} ·
-              Previously Adjusted: {formatSupplyMoney(invoice.adjustments, invoice.currency_code)}
-            </p>
+
+            {/* Adjustment Type */}
+            <Field>
+              <div className="flex items-center justify-between">
+                <FieldLabel htmlFor="adjust-type">Adjustment Classification</FieldLabel>
+                <Tooltip>
+                  <TooltipTrigger
+                    render={<span className="inline-flex cursor-help text-muted-foreground" />}
+                  >
+                    <HelpCircle className="size-3.5" />
+                  </TooltipTrigger>
+                  <TooltipContent side="top" className="max-w-xs text-xs">
+                    Credit Notes reduce the balance due (e.g. damaged goods rebate). Corrections
+                    adjust billing errors.
+                  </TooltipContent>
+                </Tooltip>
+              </div>
+              <NativeSelect
+                id="adjust-type"
+                name="adjustmentType"
+                value={adjustmentType}
+                required
+                disabled={busy}
+                className="w-full"
+                onChange={(e) => setAdjustmentType(e.target.value as typeof adjustmentType)}
+              >
+                <NativeSelectOption value="CREDIT">
+                  Credit Note / Supplier Rebate (Reduces invoice balance)
+                </NativeSelectOption>
+                <NativeSelectOption value="CORRECTION">
+                  Billing Correction (Adjust up or down)
+                </NativeSelectOption>
+                <NativeSelectOption value="REVERSAL">
+                  Adjustment Reversal (Cancels prior adjustment)
+                </NativeSelectOption>
+              </NativeSelect>
+            </Field>
+
+            {/* Adjustment Amount */}
+            <Field>
+              <FieldLabel htmlFor="adjust-amount">
+                Adjustment Amount ({invoice.currency_code})
+              </FieldLabel>
+              <Input
+                id="adjust-amount"
+                name="amount"
+                type="number"
+                inputMode="decimal"
+                step="0.01"
+                placeholder={adjustmentType === 'CORRECTION' ? 'e.g. -500 or 500' : 'e.g. 500'}
+                value={rawAmount}
+                required
+                disabled={busy}
+                onChange={(e) => setRawAmount(e.target.value)}
+              />
+              <FieldDescription>
+                {adjustmentType === 'CREDIT' ? (
+                  <span className="font-medium text-success">
+                    {numericInput > 0
+                      ? `Will reduce payable balance by ${formatSupplyMoney(String(numericInput), invoice.currency_code)}.`
+                      : 'Enter the credit note value. It will be recorded as a balance reduction.'}
+                  </span>
+                ) : adjustmentType === 'REVERSAL' ? (
+                  <span className="font-medium text-warning">
+                    Will record a negative adjustment reversal.
+                  </span>
+                ) : (
+                  'Use a negative number to reduce payable, or positive number to increase.'
+                )}
+              </FieldDescription>
+            </Field>
+
+            {/* Reason */}
+            <Field>
+              <FieldLabel htmlFor="adjust-reason">Reason & Credit Note Reference</FieldLabel>
+              <Textarea
+                id="adjust-reason"
+                name="reason"
+                placeholder="e.g. Credit note CN-4021 issued for 12 short-shipped items…"
+                value={reason}
+                required
+                minLength={4}
+                maxLength={1000}
+                rows={3}
+                disabled={busy}
+                onChange={(e) => setReason(e.target.value)}
+              />
+              <FieldDescription>
+                Provide clear details for the supplier credit note or accounting correction (min 4
+                chars).
+              </FieldDescription>
+            </Field>
           </div>
 
-          {/* Adjustment Type */}
-          <Field>
-            <div className="flex items-center justify-between">
-              <FieldLabel htmlFor="adjust-type">Adjustment Classification</FieldLabel>
-              <Tooltip>
-                <TooltipTrigger
-                  render={<span className="inline-flex cursor-help text-muted-foreground" />}
-                >
-                  <HelpCircle className="size-3.5" />
-                </TooltipTrigger>
-                <TooltipContent side="top" className="max-w-xs text-xs">
-                  Credit Notes reduce the balance due (e.g. damaged goods rebate). Corrections
-                  adjust billing errors.
-                </TooltipContent>
-              </Tooltip>
-            </div>
-            <NativeSelect
-              id="adjust-type"
-              name="adjustmentType"
-              value={adjustmentType}
-              required
-              disabled={busy}
-              className="w-full"
-              onChange={(e) => setAdjustmentType(e.target.value as typeof adjustmentType)}
-            >
-              <NativeSelectOption value="CREDIT">
-                Credit Note / Supplier Rebate (Reduces invoice balance)
-              </NativeSelectOption>
-              <NativeSelectOption value="CORRECTION">
-                Billing Correction (Adjust up or down)
-              </NativeSelectOption>
-              <NativeSelectOption value="REVERSAL">
-                Adjustment Reversal (Cancels prior adjustment)
-              </NativeSelectOption>
-            </NativeSelect>
-          </Field>
-
-          {/* Adjustment Amount */}
-          <Field>
-            <FieldLabel htmlFor="adjust-amount">
-              Adjustment Amount ({invoice.currency_code})
-            </FieldLabel>
-            <Input
-              id="adjust-amount"
-              name="amount"
-              type="number"
-              inputMode="decimal"
-              step="0.01"
-              placeholder={adjustmentType === 'CORRECTION' ? 'e.g. -500 or 500' : 'e.g. 500'}
-              value={rawAmount}
-              required
-              disabled={busy}
-              onChange={(e) => setRawAmount(e.target.value)}
-            />
-            <FieldDescription>
-              {adjustmentType === 'CREDIT' ? (
-                <span className="font-medium text-success">
-                  {numericInput > 0
-                    ? `Will reduce payable balance by ${formatSupplyMoney(String(numericInput), invoice.currency_code)}.`
-                    : 'Enter the credit note value. It will be recorded as a balance reduction.'}
-                </span>
-              ) : adjustmentType === 'REVERSAL' ? (
-                <span className="font-medium text-warning">
-                  Will record a negative adjustment reversal.
-                </span>
-              ) : (
-                'Use a negative number to reduce payable, or positive number to increase.'
-              )}
-            </FieldDescription>
-          </Field>
-
-          {/* Reason */}
-          <Field>
-            <FieldLabel htmlFor="adjust-reason">Reason & Credit Note Reference</FieldLabel>
-            <Textarea
-              id="adjust-reason"
-              name="reason"
-              placeholder="e.g. Credit note CN-4021 issued for 12 short-shipped items…"
-              value={reason}
-              required
-              minLength={4}
-              maxLength={1000}
-              rows={3}
-              disabled={busy}
-              onChange={(e) => setReason(e.target.value)}
-            />
-            <FieldDescription>
-              Provide clear details for the supplier credit note or accounting correction (min 4
-              chars).
-            </FieldDescription>
-          </Field>
-
-          <DialogFooter className="pt-2">
-            <DialogClose render={<Button variant="outline" type="button" disabled={busy} />}>
+          <SheetFooter className="shrink-0 flex-row items-center justify-end gap-2 border-t border-border bg-card/50 px-5 py-3">
+            <SheetClose render={<Button variant="outline" type="button" disabled={busy} />}>
               Cancel
-            </DialogClose>
+            </SheetClose>
             <Button type="submit" disabled={busy || !isAmountValid || !isReasonValid}>
               {busy ? (
                 <Loader2 className="size-4 animate-spin" />
@@ -220,9 +222,9 @@ export function PurchaseAdjustInvoiceDialog({
               )}
               <span>Post adjustment</span>
             </Button>
-          </DialogFooter>
+          </SheetFooter>
         </form>
-      </DialogContent>
-    </Dialog>
+      </SheetContent>
+    </Sheet>
   );
 }

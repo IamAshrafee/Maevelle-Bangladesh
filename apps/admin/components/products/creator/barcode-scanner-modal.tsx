@@ -166,7 +166,8 @@ export function BarcodeScannerModal({
             <span>{title}</span>
           </DialogTitle>
           <DialogDescription className="text-xs text-muted-foreground">
-            Point your device camera at an EAN-13, Code 128, or UPC barcode on the physical garment tag.
+            Point your device camera at an EAN-13, Code 128, or UPC barcode on the physical product
+            or item tag.
           </DialogDescription>
         </DialogHeader>
 
@@ -179,13 +180,7 @@ export function BarcodeScannerModal({
             </div>
           ) : (
             <>
-              <video
-                ref={videoRef}
-                autoPlay
-                playsInline
-                muted
-                className="size-full object-cover"
-              />
+              <video ref={videoRef} autoPlay playsInline muted className="size-full object-cover" />
               {/* Reticle Overlay */}
               <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
                 <div className="size-48 rounded-lg border-2 border-primary/80 shadow-[0_0_0_9999px_rgba(0,0,0,0.4)]" />
@@ -196,7 +191,8 @@ export function BarcodeScannerModal({
 
         {detectorSupported === false && (
           <p className="text-[11px] text-warning">
-            Real-time automatic barcode recognition is not enabled in this browser. Enter the code below.
+            Real-time automatic barcode recognition is not enabled in this browser. Enter the code
+            below.
           </p>
         )}
 

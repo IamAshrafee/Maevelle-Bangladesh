@@ -2,9 +2,11 @@
 
 import { useEffect } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { AlertCircle, CheckCircle2, LoaderCircle } from 'lucide-react';
+import { AlertCircle, CheckCircle2 } from 'lucide-react';
 
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { AdminPage, PageSkeleton } from '@/components/ui/page-shell';
+import { useUnsavedChangesGuard } from '@/hooks/use-unsaved-changes-guard';
 
 import { BasicInfoCard } from './creator/basic-info-card';
 import { CreatorHeader } from './creator/creator-header';
@@ -28,6 +30,9 @@ export function ProductCreator({ productId }: ProductCreatorProps = {}) {
   const searchParams = useSearchParams();
   const sectionParam = searchParams.get('section');
   const state = useProductCreatorState({ productId });
+  const { guardDialog } = useUnsavedChangesGuard({
+    when: state.isDirty && !state.saving,
+  });
 
   useEffect(() => {
     if (!state.loading && sectionParam) {
@@ -45,36 +50,33 @@ export function ProductCreator({ productId }: ProductCreatorProps = {}) {
   }, [state.loading, sectionParam]);
 
   if (state.loading) {
-    return (
-      <div className="flex h-96 flex-col items-center justify-center gap-3">
-        <LoaderCircle className="size-8 animate-spin text-primary" />
-        <p className="text-sm font-medium text-muted-foreground">
-          {productId
-            ? 'Loading product workspace & catalog data…'
-            : 'Loading catalog configuration and taxonomies…'}
-        </p>
-      </div>
-    );
+    return <PageSkeleton variant="form" widthVariant="standard" />;
   }
 
   return (
     <div className="relative min-h-screen bg-muted/10 pb-20">
-      {/* Sticky Top Action Bar */}
-      <CreatorHeader
-        isEditMode={state.isEditMode}
-        productId={state.productId}
-        productTitle={state.title}
-        status={state.publicationStatus}
-        saving={state.saving}
-        isDirty={state.isDirty}
-        onSaveDraft={() => void state.handleSubmit(undefined, 'DRAFT')}
-        onPublish={() => void state.handleSubmit(undefined, 'ACTIVE')}
-      />
+      {guardDialog}
+      {/* Unified Sticky Editor Dock: Action Bar + Section Jump Strip */}
+      <div
+        data-shell-chrome="true"
+        className="sticky top-[var(--shell-topbar-h,3.5rem)] z-20 bg-background/90 backdrop-blur-md print:hidden"
+      >
+        <CreatorHeader
+          sticky={false}
+          isEditMode={state.isEditMode}
+          productId={state.productId}
+          productTitle={state.title}
+          status={state.publicationStatus}
+          saving={state.saving}
+          isDirty={state.isDirty}
+          onSaveDraft={() => void state.handleSubmit(undefined, 'DRAFT')}
+          onPublish={() => void state.handleSubmit(undefined, 'ACTIVE')}
+        />
 
-      {/* Sticky Section Navigation Strip */}
-      <SectionNavStrip />
+        <SectionNavStrip />
+      </div>
 
-      <main className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8 space-y-6">
+      <AdminPage variant="standard" className="pb-6">
         {/* Unsaved Draft Recovery Alert */}
         {state.draftTimestamp && (
           <DraftRecoveryAlert
@@ -109,7 +111,11 @@ export function ProductCreator({ productId }: ProductCreatorProps = {}) {
           {/* LEFT COLUMN: Core Product Attributes, Media, Pricing, Matrix, Shipping, Content */}
           <div className="space-y-6 lg:col-span-8">
             {/* Card 1: Basic Information */}
-            <section id="section-overview" className="scroll-mt-28" aria-label="Product Overview">
+            <section
+              id="section-overview"
+              className="scroll-mt-44 sm:scroll-mt-36"
+              aria-label="Product Overview"
+            >
               <BasicInfoCard
                 title={state.title}
                 handle={state.handle}
@@ -117,6 +123,9 @@ export function ProductCreator({ productId }: ProductCreatorProps = {}) {
                 productTypeId={state.productTypeId}
                 description={state.description}
                 types={state.references.types}
+                typesLoading={state.referenceLoading.types}
+                typesError={state.referenceErrors.types}
+                onRetryTypes={state.retryTypes}
                 selectedProductType={state.selectedProductType}
                 activeAttributes={state.activeAttributes}
                 attributeValues={state.attributeValues}
@@ -137,7 +146,11 @@ export function ProductCreator({ productId }: ProductCreatorProps = {}) {
             </section>
 
             {/* Card 2: Product Media & Gallery */}
-            <section id="section-media" className="scroll-mt-28" aria-label="Product Media">
+            <section
+              id="section-media"
+              className="scroll-mt-44 sm:scroll-mt-36"
+              aria-label="Product Media"
+            >
               <MediaCard
                 mediaItems={state.mediaItems}
                 isDraggingOver={state.isDraggingOver}
@@ -157,7 +170,11 @@ export function ProductCreator({ productId }: ProductCreatorProps = {}) {
             </section>
 
             {/* Card 3: Pricing & Margins */}
-            <section id="section-pricing" className="scroll-mt-28" aria-label="Pricing and Margins">
+            <section
+              id="section-pricing"
+              className="scroll-mt-44 sm:scroll-mt-36"
+              aria-label="Pricing and Margins"
+            >
               <PricingCard
                 variantMode={state.variantMode}
                 priceAmount={state.priceAmount}
@@ -184,7 +201,7 @@ export function ProductCreator({ productId }: ProductCreatorProps = {}) {
             {/* Card 4: Variants & Multi-Variant Matrix */}
             <section
               id="section-variants"
-              className="scroll-mt-28"
+              className="scroll-mt-44 sm:scroll-mt-36"
               aria-label="Variants and Matrix"
             >
               <VariantsCard
@@ -245,7 +262,7 @@ export function ProductCreator({ productId }: ProductCreatorProps = {}) {
             {/* Card 5: Shipping & Logistics */}
             <section
               id="section-shipping"
-              className="scroll-mt-28"
+              className="scroll-mt-44 sm:scroll-mt-36"
               aria-label="Shipping and Logistics"
             >
               <ShippingCard
@@ -285,7 +302,7 @@ export function ProductCreator({ productId }: ProductCreatorProps = {}) {
             {/* Customer-facing grouped information and FAQs */}
             <section
               id="section-content"
-              className="scroll-mt-28"
+              className="scroll-mt-44 sm:scroll-mt-36"
               aria-label="Customer Information and FAQs"
             >
               <CustomerDetailsCard
@@ -309,7 +326,7 @@ export function ProductCreator({ productId }: ProductCreatorProps = {}) {
             {/* Optional search metadata */}
             <section
               id="section-seo"
-              className="scroll-mt-28"
+              className="scroll-mt-44 sm:scroll-mt-36"
               aria-label="Search Engine Optimization"
             >
               <SeoContentCard
@@ -332,7 +349,11 @@ export function ProductCreator({ productId }: ProductCreatorProps = {}) {
                 }}
               />
             </section>
-            <section id="section-recommendations" className="scroll-mt-28" aria-label="Product recommendations">
+            <section
+              id="section-recommendations"
+              className="scroll-mt-44 sm:scroll-mt-36"
+              aria-label="Product recommendations"
+            >
               <ProductRecommendations productId={state.productId || undefined} />
             </section>
           </div>
@@ -341,22 +362,29 @@ export function ProductCreator({ productId }: ProductCreatorProps = {}) {
           <div className="space-y-6 lg:col-span-4">
             <section
               id="section-merchandising"
-              className="scroll-mt-28"
+              className="scroll-mt-44 sm:scroll-mt-36"
               aria-label="Merchandising and Organization"
             >
               <OrganizationSidebar
                 categories={state.references.categories}
+                categoriesLoading={state.referenceLoading.categories}
+                categoriesError={state.referenceErrors.categories}
+                onRetryCategories={state.retryCategories}
                 selectedCategoryIds={state.selectedCategoryIds}
                 primaryCategoryId={state.primaryCategoryId}
                 recommendedCategoryId={state.selectedProductType?.primaryCategoryId}
                 tags={state.references.tags}
+                tagsLoading={state.referenceLoading.tags}
                 selectedTagIds={state.selectedTagIds}
                 occasions={state.references.occasions}
+                occasionsLoading={state.referenceLoading.occasions}
                 selectedOccasionIds={state.selectedOccasionIds}
                 collections={state.references.collections}
+                collectionsLoading={state.referenceLoading.collections}
                 selectedCollectionIds={state.selectedCollectionIds}
                 sizingData={state.references.sizingData}
                 sizeGuides={state.references.sizeGuides}
+                sizingLoading={state.referenceLoading.sizing || state.referenceLoading.sizeGuides}
                 sizeSystemId={state.sizeSystemId}
                 sizeGuideId={state.sizeGuideId}
                 sizingGuideSource={state.sizingGuideSource}
@@ -419,7 +447,7 @@ export function ProductCreator({ productId }: ProductCreatorProps = {}) {
             </section>
           </div>
         </div>
-      </main>
+      </AdminPage>
     </div>
   );
 }

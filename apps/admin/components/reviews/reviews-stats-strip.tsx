@@ -22,11 +22,7 @@ interface ReviewsStatsStripProps {
   onSelectQueue: (queue: string) => void;
 }
 
-export function ReviewsStatsStrip({
-  counts,
-  activeQueue,
-  onSelectQueue,
-}: ReviewsStatsStripProps) {
+export function ReviewsStatsStrip({ counts, activeQueue, onSelectQueue }: ReviewsStatsStripProps) {
   const needsResponseCount = counts?.needsResponse ?? counts?.needs_response ?? 0;
   const withMediaCount = counts?.withMedia ?? counts?.with_media ?? 0;
 
@@ -90,8 +86,8 @@ export function ReviewsStatsStrip({
       label: 'Hidden Content',
       count: safeCounts.hidden,
       icon: EyeOff,
-      accent: 'text-slate-500 dark:text-slate-400',
-      activeBorder: 'border-slate-500 ring-1 ring-slate-500/20 bg-slate-500/5',
+      accent: 'text-muted-foreground',
+      activeBorder: 'border-muted-foreground/60 ring-1 ring-muted-foreground/20 bg-muted/40',
     },
   ];
 

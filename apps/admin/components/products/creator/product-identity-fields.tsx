@@ -58,10 +58,9 @@ export function ProductIdentityFields({
             id="product-handle"
             aria-label="Custom product URL slug"
             aria-invalid={Boolean(handleError)}
-            autoFocus
             value={handle}
             onChange={(event) => onHandleChange(event.target.value)}
-            className="h-8 min-w-0 flex-1 bg-transparent font-mono tabular-nums text-foreground outline-none placeholder:text-muted-foreground"
+            className="h-8 min-w-0 flex-1 bg-transparent font-mono tabular-nums text-base md:text-sm pointer-coarse:text-base text-foreground outline-none placeholder:text-muted-foreground"
             placeholder="custom-product-url"
           />
         )}

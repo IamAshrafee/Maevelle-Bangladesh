@@ -22,7 +22,7 @@ import type { InboundShipmentDto, SupplyOverviewDto } from '@maevelle/contracts'
 import { useAdminCapability } from '@/components/admin-capabilities';
 import { OperationalFeedback } from '@/components/operational-worklist';
 import { StatusBadge } from '@/components/status-badge';
-import { SupplyWorkspaceNav } from '@/components/supply/supply-workspace-nav';
+import { AdminPage } from '@/components/ui/page-shell';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -175,7 +175,7 @@ export function ShipmentsList() {
   ] as const;
 
   return (
-    <main className="min-w-0 space-y-5 px-4 py-5 sm:px-6 lg:px-8">
+    <AdminPage variant="wide">
       <header className="flex flex-col gap-3 border-b pb-5 sm:flex-row sm:items-end sm:justify-between">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
@@ -202,8 +202,6 @@ export function ShipmentsList() {
           </Button>
         ) : null}
       </header>
-
-      <SupplyWorkspaceNav />
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         {metrics.map(([label, value, description, Icon]) => (
@@ -389,7 +387,7 @@ export function ShipmentsList() {
             </div>
 
             <div className="hidden md:block">
-              <Table>
+              <Table density="compact" stickyHeader>
                 <TableHeader>
                   <TableRow>
                     <TableHead>Shipment</TableHead>
@@ -507,6 +505,6 @@ export function ShipmentsList() {
           if (created?.id) router.push(`/inbound-shipments/${created.id}`);
         }}
       />
-    </main>
+    </AdminPage>
   );
 }

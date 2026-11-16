@@ -109,11 +109,12 @@ const actorBadges: Record<string, { label: string; className: string }> = {
   },
   ADMIN: {
     label: 'Admin',
-    className: 'bg-purple-50 text-purple-800 border-purple-200 dark:bg-purple-950 dark:text-purple-300',
+    className:
+      'bg-purple-50 text-purple-800 border-purple-200 dark:bg-purple-950 dark:text-purple-300',
   },
   SYSTEM: {
     label: 'System',
-    className: 'bg-slate-100 text-slate-700 border-slate-200 dark:bg-slate-900 dark:text-slate-300',
+    className: 'bg-muted text-muted-foreground border-border',
   },
   COURIER: {
     label: 'Courier',
@@ -129,7 +130,9 @@ export function OrderTimelineCard({ timeline }: OrderTimelineCardProps) {
           <Clock className="size-4 text-muted-foreground" aria-hidden="true" />
           <h2 className="text-base font-semibold text-foreground">Timeline & Audit</h2>
         </div>
-        <span className="text-xs text-muted-foreground">{timeline.length} event{timeline.length === 1 ? '' : 's'}</span>
+        <span className="text-xs text-muted-foreground">
+          {timeline.length} event{timeline.length === 1 ? '' : 's'}
+        </span>
       </div>
 
       <div className="p-6">
@@ -149,15 +152,18 @@ export function OrderTimelineCard({ timeline }: OrderTimelineCardProps) {
                 const { relative, full } = formatTimelineDate(event.occurredAt);
 
                 const actorInfo = event.actorType
-                  ? actorBadges[event.actorType] ?? {
+                  ? (actorBadges[event.actorType] ?? {
                       label: event.actorType,
-                      className: 'bg-slate-100 text-slate-700',
-                    }
+                      className: 'bg-muted text-muted-foreground',
+                    })
                   : null;
 
                 const displayTitle =
                   event.title ??
-                  event.eventType.replaceAll('_', ' ').toLowerCase().replace(/^\w/, (c) => c.toUpperCase());
+                  event.eventType
+                    .replaceAll('_', ' ')
+                    .toLowerCase()
+                    .replace(/^\w/, (c) => c.toUpperCase());
 
                 return (
                   <div key={event.id} className="relative flex items-start gap-3">

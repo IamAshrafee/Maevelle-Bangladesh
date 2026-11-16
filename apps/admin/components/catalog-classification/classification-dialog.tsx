@@ -12,13 +12,13 @@ import type {
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetFooter,
+  SheetHeader,
+  SheetTitle,
+} from '@/components/ui/sheet';
 import { Field, FieldDescription, FieldLabel } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
 import {
@@ -29,6 +29,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
+import { useFormDialogLifecycle } from '@/hooks/use-form-dialog-lifecycle';
 
 import { slugify } from './classification-api';
 
@@ -86,6 +87,24 @@ export function ClassificationDialog(props: {
 
   const noun = props.categoryMode ? 'category' : kindNames[props.kind];
   const editedCategory = props.item && 'path' in props.item ? props.item : undefined;
+  const editedVocabulary = props.item && 'kind' in props.item ? props.item : undefined;
+
+  const isDirty = props.item
+    ? name !== props.item.name ||
+      handle !== props.item.handle ||
+      description !== (editedVocabulary?.description ?? '') ||
+      status !== props.item.status ||
+      (editedCategory && parentCategoryId !== (editedCategory.parentCategoryId ?? 'NONE'))
+    : Boolean(name.trim() || handle.trim() || description.trim() || parentCategoryId !== 'NONE');
+
+  const { handleOpenChange, discardConfirmDialog } = useFormDialogLifecycle({
+    isDirty,
+    isSubmitting: props.saving,
+    onClose: () => props.onOpenChange(false),
+    confirmTitle: props.item ? `Discard changes to ${noun}?` : `Discard new ${noun}?`,
+    confirmDescription: `You have unsaved changes in this ${noun} form. Closing now will discard them.`,
+  });
+
   const invalidParentIds = new Set(
     editedCategory
       ? props.categories
@@ -112,11 +131,12 @@ export function ClassificationDialog(props: {
   }
 
   return (
-    <Dialog open={props.open} onOpenChange={(open) => !props.saving && props.onOpenChange(open)}>
-      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-xl">
-        <DialogHeader>
-          <DialogTitle>{props.item ? `Edit ${noun}` : `Create ${noun}`}</DialogTitle>
-          <DialogDescription>
+    <>
+      <Sheet open={props.open} onOpenChange={handleOpenChange}>
+        <SheetContent side="right" className="gap-0 p-0 sm:max-w-xl">
+        <SheetHeader className="shrink-0 border-b border-border px-5 py-4 pr-11 text-left">
+          <SheetTitle>{props.item ? `Edit ${noun}` : `Create ${noun}`}</SheetTitle>
+          <SheetDescription>
             {props.categoryMode
               ? 'Categories build the store browsing tree. A child category appears below its parent.'
               : props.kind === 'OCCASION'
@@ -124,158 +144,162 @@ export function ClassificationDialog(props: {
                 : props.kind === 'COLLECTION'
                   ? 'Collections group products for merchandising, campaigns, or seasonal events.'
                   : 'Tags are flexible internal labels that help teams find and group products.'}
-          </DialogDescription>
-        </DialogHeader>
-        <form className="grid gap-5" id="classification-form" onSubmit={submit}>
-          {props.error ? (
-            <Alert variant="destructive">
-              <AlertDescription>{props.error}</AlertDescription>
-            </Alert>
-          ) : null}
-          <Field>
-            <FieldLabel htmlFor="classification-name">Name</FieldLabel>
-            <Input
-              autoFocus
-              id="classification-name"
-              maxLength={160}
-              placeholder={props.categoryMode ? 'Example: Evening Dresses' : `Example: ${noun}`}
-              required
-              value={name}
-              onChange={(event) => {
-                const next = event.target.value;
-                setName(next);
-                if (!handleEdited) setHandle(slugify(next));
-              }}
-            />
-          </Field>
-          <Field>
-            <FieldLabel htmlFor="classification-handle">Slug</FieldLabel>
-            <Input
-              id="classification-handle"
-              maxLength={160}
-              placeholder="example-name"
-              required
-              value={handle}
-              onChange={(event) => {
-                setHandleEdited(true);
-                setHandle(slugify(event.target.value));
-              }}
-            />
-            <FieldDescription>A unique, URL-safe identifier for this item.</FieldDescription>
-          </Field>
-          {!props.categoryMode ? (
+          </SheetDescription>
+        </SheetHeader>
+        <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
+          <form className="grid gap-5" id="classification-form" onSubmit={submit}>
+            {props.error ? (
+              <Alert variant="destructive">
+                <AlertDescription>{props.error}</AlertDescription>
+              </Alert>
+            ) : null}
             <Field>
-              <FieldLabel htmlFor="classification-description">Description</FieldLabel>
-              <Textarea
-                id="classification-description"
-                maxLength={1000}
-                placeholder={`A helpful description for this ${noun}…`}
-                rows={3}
-                value={description}
-                onChange={(event) => setDescription(event.target.value)}
+              <FieldLabel htmlFor="classification-name">Name</FieldLabel>
+              <Input
+                id="classification-name"
+                maxLength={160}
+                placeholder={props.categoryMode ? 'Example: Evening Dresses' : `Example: ${noun}`}
+                required
+                value={name}
+                onChange={(event) => {
+                  const next = event.target.value;
+                  setName(next);
+                  if (!handleEdited) setHandle(slugify(next));
+                }}
               />
-              <FieldDescription>
-                Visible to buyers when browsing collections or used by merchandisers internally.
-              </FieldDescription>
             </Field>
-          ) : null}
-          {props.categoryMode ? (
-            <>
-              <Field>
-                <FieldLabel htmlFor="classification-parent">Parent category</FieldLabel>
-                <Select
-                  value={parentCategoryId}
-                  onValueChange={(value) => setParentCategoryId(value ?? 'NONE')}
-                >
-                  <SelectTrigger id="classification-parent">
-                    <SelectValue placeholder="Select parent category" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="NONE">No parent — top level</SelectItem>
-                    {props.categories
-                      .filter((category) => !invalidParentIds.has(category.id))
-                      .map((category) => (
-                        <SelectItem key={category.id} value={category.id} label={category.path}>
-                          {category.path}
-                        </SelectItem>
-                      ))}
-                  </SelectContent>
-                </Select>
-                <FieldDescription>
-                  Select a parent category to nest under, or leave as top-level.
-                </FieldDescription>
-              </Field>
-              <Field>
-                <FieldLabel htmlFor="classification-size-guide">Default Size Guide</FieldLabel>
-                <Select
-                  value={defaultSizeGuideId}
-                  onValueChange={(value) => setDefaultSizeGuideId(value ?? 'NONE')}
-                >
-                  <SelectTrigger id="classification-size-guide">
-                    <SelectValue placeholder="No default size guide" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="NONE">None / Inherit from parent</SelectItem>
-                    {props.sizeGuides?.map((guide) => (
-                      <SelectItem key={guide.id} value={guide.id} label={guide.name}>
-                        {guide.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <FieldDescription>
-                  Products in this category inherit this size guide unless specifically overridden.
-                </FieldDescription>
-              </Field>
-            </>
-          ) : null}
-          <div className="grid gap-4 sm:grid-cols-2">
             <Field>
-              <FieldLabel htmlFor="classification-status">Status</FieldLabel>
-              <Select
-                value={status}
-                onValueChange={(value) => setStatus(value as CatalogCategoryStatusDto)}
-              >
-                <SelectTrigger id="classification-status">
-                  <SelectValue placeholder="Select status" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="ACTIVE">Active</SelectItem>
-                  <SelectItem value="INACTIVE">Inactive</SelectItem>
-                  <SelectItem value="ARCHIVED">Archived</SelectItem>
-                </SelectContent>
-              </Select>
+              <FieldLabel htmlFor="classification-handle">Slug</FieldLabel>
+              <Input
+                id="classification-handle"
+                maxLength={160}
+                placeholder="example-name"
+                required
+                value={handle}
+                onChange={(event) => {
+                  setHandleEdited(true);
+                  setHandle(slugify(event.target.value));
+                }}
+              />
+              <FieldDescription>A unique, URL-safe identifier for this item.</FieldDescription>
             </Field>
-            {props.categoryMode || props.kind === 'COLLECTION' ? (
+            {!props.categoryMode ? (
               <Field>
-                <FieldLabel htmlFor="classification-position">Display order</FieldLabel>
-                <Input
-                  id="classification-position"
-                  min={0}
-                  required
-                  type="number"
-                  value={position}
-                  onChange={(event) => setPosition(Math.max(0, Number(event.target.value) || 0))}
+                <FieldLabel htmlFor="classification-description">Description</FieldLabel>
+                <Textarea
+                  id="classification-description"
+                  maxLength={1000}
+                  placeholder={`A helpful description for this ${noun}…`}
+                  rows={3}
+                  value={description}
+                  onChange={(event) => setDescription(event.target.value)}
                 />
-                <FieldDescription>Smaller numbers appear first.</FieldDescription>
+                <FieldDescription>
+                  Visible to buyers when browsing collections or used by merchandisers internally.
+                </FieldDescription>
               </Field>
             ) : null}
-          </div>
-        </form>
-        <DialogFooter>
+            {props.categoryMode ? (
+              <>
+                <Field>
+                  <FieldLabel htmlFor="classification-parent">Parent category</FieldLabel>
+                  <Select
+                    value={parentCategoryId}
+                    onValueChange={(value) => setParentCategoryId(value ?? 'NONE')}
+                  >
+                    <SelectTrigger id="classification-parent">
+                      <SelectValue placeholder="Select parent category" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="NONE">No parent — top level</SelectItem>
+                      {props.categories
+                        .filter((category) => !invalidParentIds.has(category.id))
+                        .map((category) => (
+                          <SelectItem key={category.id} value={category.id} label={category.path}>
+                            {category.path}
+                          </SelectItem>
+                        ))}
+                    </SelectContent>
+                  </Select>
+                  <FieldDescription>
+                    Select a parent category to nest under, or leave as top-level.
+                  </FieldDescription>
+                </Field>
+                <Field>
+                  <FieldLabel htmlFor="classification-size-guide">Default Size Guide</FieldLabel>
+                  <Select
+                    value={defaultSizeGuideId}
+                    onValueChange={(value) => setDefaultSizeGuideId(value ?? 'NONE')}
+                  >
+                    <SelectTrigger id="classification-size-guide">
+                      <SelectValue placeholder="No default size guide" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="NONE">None / Inherit from parent</SelectItem>
+                      {props.sizeGuides?.map((guide) => (
+                        <SelectItem key={guide.id} value={guide.id} label={guide.name}>
+                          {guide.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <FieldDescription>
+                    Products in this category inherit this size guide unless specifically
+                    overridden.
+                  </FieldDescription>
+                </Field>
+              </>
+            ) : null}
+            <div className="grid gap-4 sm:grid-cols-2">
+              <Field>
+                <FieldLabel htmlFor="classification-status">Status</FieldLabel>
+                <Select
+                  value={status}
+                  onValueChange={(value) => setStatus(value as CatalogCategoryStatusDto)}
+                >
+                  <SelectTrigger id="classification-status">
+                    <SelectValue placeholder="Select status" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="ACTIVE">Active</SelectItem>
+                    <SelectItem value="INACTIVE">Inactive</SelectItem>
+                    <SelectItem value="ARCHIVED">Archived</SelectItem>
+                  </SelectContent>
+                </Select>
+              </Field>
+              {props.categoryMode || props.kind === 'COLLECTION' ? (
+                <Field>
+                  <FieldLabel htmlFor="classification-position">Display order</FieldLabel>
+                  <Input
+                    id="classification-position"
+                    min={0}
+                    required
+                    type="number"
+                    value={position}
+                    onChange={(event) => setPosition(Math.max(0, Number(event.target.value) || 0))}
+                  />
+                  <FieldDescription>Smaller numbers appear first.</FieldDescription>
+                </Field>
+              ) : null}
+            </div>
+          </form>
+        </div>
+        <SheetFooter className="shrink-0 flex-row items-center justify-end gap-2 border-t border-border bg-card/50 px-5 py-3 pb-[max(1rem,env(safe-area-inset-bottom,0px))] sm:pb-3">
           <Button
             disabled={props.saving}
             type="button"
             variant="outline"
-            onClick={() => props.onOpenChange(false)}
+            onClick={() => handleOpenChange(false)}
           >
             Cancel
           </Button>
           <Button disabled={props.saving} form="classification-form" type="submit">
             {props.saving ? 'Saving…' : props.item ? 'Save changes' : `Create ${noun}`}
           </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  );
+        </SheetFooter>
+      </SheetContent>
+    </Sheet>
+    {discardConfirmDialog}
+  </>
+);
 }

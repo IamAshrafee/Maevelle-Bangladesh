@@ -78,7 +78,7 @@ export function AssetStats({ summary, activeStatus, onSelectStatus }: AssetStats
             onClick={interactive ? () => onSelectStatus(id as AssetStatusDto | 'ALL') : undefined}
             className={cn(
               interactive &&
-                'cursor-pointer transition-all hover:border-primary/50 hover:shadow-xs',
+                'cursor-pointer transition-[border-color,box-shadow] duration-150 hover:border-primary/50 hover:shadow-xs',
               isSelected && 'border-primary ring-2 ring-primary/20 bg-primary/5',
               highlight && !isSelected && 'border-amber-500/40 bg-amber-500/5',
             )}

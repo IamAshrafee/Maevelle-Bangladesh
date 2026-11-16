@@ -119,7 +119,7 @@ export function ConversationPane({ onOpenContext }: { onOpenContext: () => void 
         <Button
           variant="ghost"
           size="icon"
-          className="lg:hidden"
+          className="min-h-11 min-w-11 lg:hidden"
           onClick={() => messaging.selectConversation(null)}
           aria-label="Back to inbox"
         >

@@ -1,11 +1,13 @@
 'use client';
 
 import { useEffect, useState, type FormEvent } from 'react';
-import type { CheckoutOrderControlDto, PauseCheckoutOrdersDto } from '@maevelle/contracts';
+import Link from 'next/link';
+import { ExternalLink, ShieldAlert } from 'lucide-react';
+import type { CheckoutOrderControlDto, ChangeCheckoutOrderPauseDto } from '@maevelle/contracts';
 import { useAdminContext } from '@/components/admin-capabilities';
 import { SettingsCard } from '@/components/settings/settings-card';
 import { StatusBadge } from '@/components/status-badge';
-import { Button } from '@/components/ui/button';
+import { Button, buttonVariants } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { fetchApiData } from '@/lib/api';
@@ -14,7 +16,47 @@ const path = '/admin/settings/checkout';
 
 export function CheckoutControlPanel() {
   const { actorId, organizationId, isOwner } = useAdminContext();
-  if (!isOwner || !organizationId) return null;
+  if (!organizationId) return null;
+
+  if (!isOwner) {
+    return (
+      <SettingsCard
+        title="Storefront Order Controls"
+        description="Operational release controls for storefront orders."
+      >
+        <div className="space-y-4 py-2">
+          <div className="flex items-start gap-3 rounded-lg border border-warning/30 bg-warning/10 p-4 text-xs text-warning-foreground">
+            <ShieldAlert className="size-4 shrink-0 text-warning mt-0.5" />
+            <div className="space-y-1">
+              <p className="font-semibold text-foreground">Organization Owner Access Required</p>
+              <p className="text-muted-foreground">
+                Emergency pause and resume controls for storefront customer checkout are restricted
+                to Organization Owners. Administrative operators can review serviceability, delivery
+                pricing, and payment accounts below.
+              </p>
+            </div>
+          </div>
+          <div className="flex flex-wrap items-center gap-3 pt-1">
+            <Link
+              href="/orders/delivery-pricing"
+              className={buttonVariants({ variant: 'outline', size: 'sm', className: 'gap-1.5' })}
+            >
+              <ExternalLink className="size-3.5" />
+              Delivery Pricing Rules
+            </Link>
+            <Link
+              href="/payments?tab=settings&subtab=wallets"
+              className={buttonVariants({ variant: 'outline', size: 'sm', className: 'gap-1.5' })}
+            >
+              <ExternalLink className="size-3.5" />
+              Receiving Wallets
+            </Link>
+          </div>
+        </div>
+      </SettingsCard>
+    );
+  }
+
   return <CheckoutControl key={`${actorId}:${organizationId}`} organizationId={organizationId} />;
 }
 
@@ -42,26 +84,28 @@ function CheckoutControl({ organizationId }: { organizationId: string }) {
     return () => controller.abort();
   }, [organizationId, attempt]);
 
-  async function pauseOrders(event: FormEvent<HTMLFormElement>) {
+  const canChange = control && (!control.paused || control.releaseStatus === 'READY');
+  const action = control?.paused ? 'resume' : 'pause';
+
+  async function changeOrders(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!control || control.paused || saving || !reason.trim()) return;
+    if (!canChange || saving || !reason.trim()) return;
 
     setSaving(true);
     setSaveError('');
     try {
-      const body: PauseCheckoutOrdersDto = { reason: reason.trim() };
-      const status = await fetchApiData<CheckoutOrderControlDto>(`${path}/pause`, {
+      const body: ChangeCheckoutOrderPauseDto = { reason: reason.trim() };
+      const status = await fetchApiData<CheckoutOrderControlDto>(`${path}/${action}`, {
         method: 'POST',
         headers: { 'x-organization-id': organizationId },
         body: JSON.stringify(body),
       });
-      if (!status?.paused) throw new Error('Pause was not confirmed.');
+      if (!status || status.paused !== (action === 'pause'))
+        throw new Error('Change was not confirmed.');
       setControl(status);
       setReason('');
     } catch {
-      setSaveError(
-        'The pause request could not be confirmed. Check the current status before retrying.',
-      );
+      setSaveError('The change could not be confirmed. Check the current status before retrying.');
       setControl(undefined);
       setAttempt((previous) => previous + 1);
     } finally {
@@ -72,7 +116,7 @@ function CheckoutControl({ organizationId }: { organizationId: string }) {
   return (
     <SettingsCard
       title="New storefront orders"
-      badge={control && <StatusBadge status={control.releaseStatus} />}
+      badge={control && <StatusBadge status={control.paused ? 'ON_HOLD' : control.releaseStatus} />}
     >
       <div className="space-y-4">
         {loadError ? (
@@ -82,7 +126,7 @@ function CheckoutControl({ organizationId }: { organizationId: string }) {
             </p>
             <Button
               type="button"
-              size="lg"
+              size="default"
               variant="outline"
               onClick={() => {
                 setLoadError('');
@@ -99,21 +143,21 @@ function CheckoutControl({ organizationId }: { organizationId: string }) {
         ) : (
           <>
             <p className="text-sm text-muted-foreground">
-              New orders are blocked pending end-to-end Checkout verification and release approval.
-              Payment collection is managed separately.
+              {control.paused
+                ? 'New orders are paused.'
+                : control.releaseStatus === 'READY'
+                  ? 'The storefront is accepting new orders.'
+                  : 'New orders are unavailable. Check the delivery rates and payment methods.'}
             </p>
-            {control.paused ? (
-              <p role="status" className="text-sm font-medium">
-                An operational pause is in place.
+            {control.paused && control.releaseStatus === 'BLOCKED' && (
+              <p className="text-sm text-muted-foreground">
+                Checkout needs an eligible delivery rate and payment method before it can resume.
               </p>
-            ) : (
-              <form className="space-y-3" onSubmit={pauseOrders}>
-                <p className="text-sm text-muted-foreground">
-                  You can record a pause now. It keeps new orders paused even after release
-                  approval.
-                </p>
+            )}
+            {canChange && (
+              <form className="space-y-3" onSubmit={changeOrders}>
                 <div className="space-y-2">
-                  <Label htmlFor="checkout-pause-reason">Reason for pausing</Label>
+                  <Label htmlFor="checkout-pause-reason">Reason for change</Label>
                   <Textarea
                     id="checkout-pause-reason"
                     value={reason}
@@ -126,17 +170,21 @@ function CheckoutControl({ organizationId }: { organizationId: string }) {
                 </div>
                 <Button
                   type="submit"
-                  size="lg"
+                  size="default"
                   variant="outline"
                   disabled={saving || !reason.trim()}
                 >
-                  {saving ? 'Pausing…' : 'Pause new orders'}
+                  {saving
+                    ? 'Saving…'
+                    : action === 'pause'
+                      ? 'Pause new orders'
+                      : 'Resume new orders'}
                 </Button>
               </form>
             )}
           </>
         )}
-        {saveError && !control?.paused && (
+        {saveError && (
           <p role="alert" className="text-sm text-destructive">
             {saveError}
           </p>

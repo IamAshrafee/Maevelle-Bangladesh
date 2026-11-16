@@ -25,18 +25,14 @@ describe('Two-Factor Authentication Frontend Components', () => {
     it('renders unconfigured 2FA with neutral tone and text', () => {
       const html = renderToStaticMarkup(<StatusBadge status="Not enabled" tone="neutral" />);
       expect(html).toContain('not enabled');
-      expect(html).toContain('bg-slate');
+      expect(html).toContain('bg-muted');
     });
   });
 
   describe('TotpCodeInput', () => {
     it('renders 6 OTP slots with separator', () => {
       const html = renderToStaticMarkup(
-        <TotpCodeInput
-          value="123"
-          onChange={() => {}}
-          autoFocus={false}
-        />,
+        <TotpCodeInput value="123" onChange={() => {}} autoFocus={false} />,
       );
       expect(html).toContain('input-otp');
       // Contains two groups of 3 slots
@@ -85,9 +81,7 @@ describe('Two-Factor Authentication Frontend Components', () => {
     };
 
     it('renders blocking gate when access is restricted', () => {
-      const html = renderToStaticMarkup(
-        <TwoFactorRequiredGate context={mockRestrictedContext} />,
-      );
+      const html = renderToStaticMarkup(<TwoFactorRequiredGate context={mockRestrictedContext} />);
 
       expect(html).toContain('Two-factor authentication is required');
       expect(html).toContain('Set up authenticator now');

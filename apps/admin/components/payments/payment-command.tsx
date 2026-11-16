@@ -6,8 +6,10 @@ import {
   DialogHeader,
   DialogTitle,
   DialogDescription,
+  DialogFooter,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
+import { toast } from '@/components/ui/toast';
 import { useAdminContext } from '../admin-capabilities';
 import {
   paymentIntent,
@@ -48,15 +50,18 @@ export function PaymentCommand({
   const [error, setError] = useState(''),
     [summary, setSummary] = useState<readonly [string, string][]>([]);
   const inFlight = useRef(false);
+
   function close() {
     if (stage === 'unknown') window.location.reload();
     else onClose();
   }
+
   const changed = initialOwner.current !== paymentOwnerKey(owner);
   const canReplay =
     /\/(?:verify|complete|refunds|reversal|reverse|posting|cod-collections|operating-policies)$/.test(
       path,
     );
+
   async function submit() {
     if (!intent.current || changed || inFlight.current) return;
     inFlight.current = true;
@@ -67,6 +72,7 @@ export function PaymentCommand({
       if (paymentOwnerKey(currentOwner.current) !== initialOwner.current) return;
       setStage('success');
       intent.current = null;
+      toast.add({ title: 'Changes saved', type: 'success' });
       onSuccess(result);
     } catch (e) {
       if (paymentOwnerKey(currentOwner.current) !== initialOwner.current) return;
@@ -78,6 +84,7 @@ export function PaymentCommand({
       inFlight.current = false;
     }
   }
+
   function review(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (stage !== 'edit') return;
@@ -115,6 +122,7 @@ export function PaymentCommand({
       setError('Check the required fields, amount and timestamp.');
     }
   }
+
   return (
     <Dialog
       open
@@ -128,48 +136,58 @@ export function PaymentCommand({
           <DialogDescription>{consequence}</DialogDescription>
         </DialogHeader>
         {changed ? (
-          <PaymentNotice>
+          <PaymentNotice tone="warning">
             Organization or account changed. Close this dialog and reload the authorized record.
           </PaymentNotice>
         ) : (
           <>
             {context}
             {error ? (
-              <p role="alert" className="text-sm text-destructive">
+              <p role="alert" className="text-xs text-destructive bg-destructive/10 border border-destructive/20 p-2.5 rounded-lg">
                 {error}
               </p>
             ) : null}
             {stage === 'success' ? (
-              <PaymentNotice>
-                Saved. Refresh the authoritative record before another action.
-              </PaymentNotice>
+              <div className="space-y-4">
+                <PaymentNotice tone="info">
+                  Saved successfully. Refresh the authoritative record before another action.
+                </PaymentNotice>
+                <DialogFooter>
+                  <Button variant="default" onClick={close}>
+                    Close
+                  </Button>
+                </DialogFooter>
+              </div>
             ) : (
               <form onSubmit={review} className="grid gap-4">
                 <fieldset
                   disabled={stage !== 'edit'}
-                  className={stage === 'edit' ? 'grid gap-4 sm:grid-cols-2' : 'hidden'}
+                  className={stage === 'edit' ? 'grid gap-3.5 sm:grid-cols-2' : 'hidden'}
                 >
                   {children}
                 </fieldset>
                 {stage !== 'edit' ? (
-                  <>
-                    <dl className="grid gap-3 rounded-lg border border-border p-4">
-                      {summary.map(([label, value], i) => (
-                        <div key={i} className="min-w-0">
-                          <dt className="text-xs text-muted-foreground">{label}</dt>
-                          <dd className="break-words text-sm font-mono tabular-nums">
-                            {value || 'Not supplied'}
-                          </dd>
-                        </div>
-                      ))}
-                    </dl>
-                    <PaymentNotice>
-                      {consequence} The backend determines the actual allocation, outstanding
-                      balance and liability.
-                    </PaymentNotice>
-                  </>
+                  <dl className="grid gap-2.5 rounded-lg border border-border bg-muted/20 p-4">
+                    {summary.map(([label, value], i) => (
+                      <div key={i} className="min-w-0 flex flex-col sm:flex-row sm:items-baseline sm:justify-between gap-1 border-b border-border/40 pb-1.5 last:border-0 last:pb-0">
+                        <dt className="text-xs text-muted-foreground">{label}</dt>
+                        <dd className="break-words text-xs sm:text-sm font-mono font-medium tabular-nums text-foreground">
+                          {value || 'Not supplied'}
+                        </dd>
+                      </div>
+                    ))}
+                  </dl>
                 ) : null}
-                <div className="flex flex-wrap justify-end gap-2">
+                <DialogFooter className="gap-2 sm:gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    disabled={stage === 'sending'}
+                    onClick={close}
+                  >
+                    Cancel{stage === 'unknown' ? ' and reload' : ''}
+                  </Button>
+
                   {stage === 'edit' ? (
                     <Button type="submit">Review details</Button>
                   ) : (
@@ -194,21 +212,18 @@ export function PaymentCommand({
                         {stage === 'unknown'
                           ? canReplay
                             ? 'Retry exact request'
-                            : 'Reconcile the server record before retry'
+                            : 'Reconcile server record'
                           : stage === 'sending'
                             ? 'Saving…'
-                            : 'Confirm checked details'}
+                            : 'Confirm & save'}
                       </Button>
                     </>
                   )}
-                </div>
+                </DialogFooter>
               </form>
             )}
           </>
         )}
-        <Button variant="outline" disabled={stage === 'sending'} onClick={close}>
-          Close{stage === 'unknown' ? ' and reload authoritative records' : ''}
-        </Button>
       </DialogContent>
     </Dialog>
   );

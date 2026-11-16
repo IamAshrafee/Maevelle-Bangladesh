@@ -45,13 +45,7 @@ import {
 } from '@/components/ui/empty';
 import { NativeSelect } from '@/components/ui/native-select';
 import { SearchInput } from '@/components/ui/search-input';
-import {
-  Stats,
-  StatsCard,
-  StatsDescription,
-  StatsTitle,
-  StatsValue,
-} from '@/components/ui/stats';
+import { Stats, StatsCard, StatsDescription, StatsTitle, StatsValue } from '@/components/ui/stats';
 import {
   Table,
   TableBody,
@@ -83,8 +77,7 @@ function getAccountVisual(type: string) {
         icon: Landmark,
         iconBoxClass:
           'bg-blue-50 text-blue-600 dark:bg-blue-950/50 dark:text-blue-400 ring-1 ring-blue-500/20',
-        badgeClass:
-          'bg-blue-500/10 text-blue-700 dark:text-blue-300 border-blue-500/20',
+        badgeClass: 'bg-blue-500/10 text-blue-700 dark:text-blue-300 border-blue-500/20',
         label: 'Bank Account',
       };
     case 'MOBILE_WALLET':
@@ -92,8 +85,7 @@ function getAccountVisual(type: string) {
         icon: Smartphone,
         iconBoxClass:
           'bg-purple-50 text-purple-600 dark:bg-purple-950/50 dark:text-purple-400 ring-1 ring-purple-500/20',
-        badgeClass:
-          'bg-purple-500/10 text-purple-700 dark:text-purple-300 border-purple-500/20',
+        badgeClass: 'bg-purple-500/10 text-purple-700 dark:text-purple-300 border-purple-500/20',
         label: 'Mobile Wallet',
       };
     case 'CASH':
@@ -110,14 +102,15 @@ function getAccountVisual(type: string) {
         icon: Layers,
         iconBoxClass:
           'bg-amber-50 text-amber-600 dark:bg-amber-950/50 dark:text-amber-400 ring-1 ring-amber-500/20',
-        badgeClass:
-          'bg-muted text-muted-foreground border-border',
+        badgeClass: 'bg-muted text-muted-foreground border-border',
         label: humanizeFinanceCode(type),
       };
   }
 }
 
-function formatMovementTime(isoDate: string | null | undefined): { date: string; time: string } | null {
+function formatMovementTime(
+  isoDate: string | null | undefined,
+): { date: string; time: string } | null {
   if (!isoDate) return null;
   const d = new Date(isoDate);
   if (Number.isNaN(d.getTime())) return null;
@@ -348,8 +341,8 @@ export function AccountsTable({
 
         <div className="flex items-center justify-between gap-2.5 border-t pt-2 lg:border-t-0 lg:pt-0">
           <span className="text-[11px] text-muted-foreground whitespace-nowrap">
-            Showing <strong className="text-foreground">{filteredAndSortedAccounts.length}</strong> of{' '}
-            {accounts.length}
+            Showing <strong className="text-foreground">{filteredAndSortedAccounts.length}</strong>{' '}
+            of {accounts.length}
           </span>
 
           <div className="flex items-center gap-1.5">
@@ -401,26 +394,58 @@ export function AccountsTable({
         </Empty>
       ) : (
         <div className="overflow-hidden rounded-xl border bg-card shadow-2xs">
-          <div className="overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <TableRow className="bg-muted/40 hover:bg-muted/40">
-                  <TableHead className="min-w-[220px] py-2 px-3.5">
+          <Table stickyHeader density="compact">
+            <TableHeader>
+              <TableRow className="bg-muted/40 hover:bg-muted/40">
+                <TableHead className="min-w-[220px] py-2 px-3.5">
+                  <Button
+                    variant="ghost"
+                    size="xs"
+                    onClick={() => {
+                      if (sortField === 'name') {
+                        setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
+                      } else {
+                        setSortField('name');
+                        setSortOrder('asc');
+                      }
+                    }}
+                    className="-ml-2 h-7 px-2 text-[11px] font-semibold tracking-wider uppercase text-muted-foreground hover:text-foreground hover:bg-muted/70 gap-1.5"
+                  >
+                    <span>Account</span>
+                    {sortField === 'name' ? (
+                      sortOrder === 'asc' ? (
+                        <ArrowUp className="size-3 text-primary" />
+                      ) : (
+                        <ArrowDown className="size-3 text-primary" />
+                      )
+                    ) : (
+                      <ArrowUpDown className="size-3 text-muted-foreground/40" />
+                    )}
+                  </Button>
+                </TableHead>
+                <TableHead className="w-[140px] hidden sm:table-cell py-2 px-3 text-[11px] font-semibold tracking-wider uppercase text-muted-foreground">
+                  Type
+                </TableHead>
+                <TableHead className="w-[100px] py-2 px-3 text-[11px] font-semibold tracking-wider uppercase text-muted-foreground">
+                  Status
+                </TableHead>
+                <TableHead className="min-w-[150px] text-right py-2 px-3.5">
+                  <div className="flex justify-end">
                     <Button
                       variant="ghost"
                       size="xs"
                       onClick={() => {
-                        if (sortField === 'name') {
+                        if (sortField === 'balance') {
                           setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
                         } else {
-                          setSortField('name');
-                          setSortOrder('asc');
+                          setSortField('balance');
+                          setSortOrder('desc');
                         }
                       }}
-                      className="-ml-2 h-7 px-2 text-[11px] font-semibold tracking-wider uppercase text-muted-foreground hover:text-foreground hover:bg-muted/70 gap-1.5"
+                      className="-mr-2 h-7 px-2 text-[11px] font-semibold tracking-wider uppercase text-muted-foreground hover:text-foreground hover:bg-muted/70 gap-1.5"
                     >
-                      <span>Account</span>
-                      {sortField === 'name' ? (
+                      <span>Ledger balance</span>
+                      {sortField === 'balance' ? (
                         sortOrder === 'asc' ? (
                           <ArrowUp className="size-3 text-primary" />
                         ) : (
@@ -430,259 +455,233 @@ export function AccountsTable({
                         <ArrowUpDown className="size-3 text-muted-foreground/40" />
                       )}
                     </Button>
-                  </TableHead>
-                  <TableHead className="w-[140px] hidden sm:table-cell py-2 px-3 text-[11px] font-semibold tracking-wider uppercase text-muted-foreground">
-                    Type
-                  </TableHead>
-                  <TableHead className="w-[100px] py-2 px-3 text-[11px] font-semibold tracking-wider uppercase text-muted-foreground">
-                    Status
-                  </TableHead>
-                  <TableHead className="min-w-[150px] text-right py-2 px-3.5">
-                    <div className="flex justify-end">
-                      <Button
-                        variant="ghost"
-                        size="xs"
-                        onClick={() => {
-                          if (sortField === 'balance') {
-                            setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
-                          } else {
-                            setSortField('balance');
-                            setSortOrder('desc');
-                          }
-                        }}
-                        className="-mr-2 h-7 px-2 text-[11px] font-semibold tracking-wider uppercase text-muted-foreground hover:text-foreground hover:bg-muted/70 gap-1.5"
-                      >
-                        <span>Ledger balance</span>
-                        {sortField === 'balance' ? (
-                          sortOrder === 'asc' ? (
-                            <ArrowUp className="size-3 text-primary" />
-                          ) : (
-                            <ArrowDown className="size-3 text-primary" />
-                          )
-                        ) : (
-                          <ArrowUpDown className="size-3 text-muted-foreground/40" />
-                        )}
-                      </Button>
-                    </div>
-                  </TableHead>
-                  <TableHead className="min-w-[130px] hidden md:table-cell py-2 px-3 text-[11px] font-semibold tracking-wider uppercase text-muted-foreground">
-                    Last movement
-                  </TableHead>
-                  <TableHead className="w-[160px] text-right py-2 px-3.5 text-[11px] font-semibold tracking-wider uppercase text-muted-foreground">
-                    Actions
-                  </TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filteredAndSortedAccounts.map((account) => {
-                  const visual = getAccountVisual(account.account_type);
-                  const Icon = visual.icon;
-                  const balanceNumber = Number(account.ledger_balance) || 0;
-                  const isNegative = balanceNumber < 0;
-                  const isCopied = copiedId === account.id;
-                  const movement = formatMovementTime(account.last_movement_at);
+                  </div>
+                </TableHead>
+                <TableHead className="min-w-[130px] hidden md:table-cell py-2 px-3 text-[11px] font-semibold tracking-wider uppercase text-muted-foreground">
+                  Last movement
+                </TableHead>
+                <TableHead className="w-[160px] text-right py-2 px-3.5 text-[11px] font-semibold tracking-wider uppercase text-muted-foreground">
+                  Actions
+                </TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {filteredAndSortedAccounts.map((account) => {
+                const visual = getAccountVisual(account.account_type);
+                const Icon = visual.icon;
+                const balanceNumber = Number(account.ledger_balance) || 0;
+                const isNegative = balanceNumber < 0;
+                const isCopied = copiedId === account.id;
+                const movement = formatMovementTime(account.last_movement_at);
 
-                  return (
-                    <TableRow
-                      key={account.id}
-                      className="group/row hover:bg-muted/40 transition-colors border-b border-border/70"
-                    >
-                      {/* 1. Account details */}
-                      <TableCell className="py-2.5 px-3.5">
-                        <div className="flex items-center gap-3">
-                          <div
-                            className={cn(
-                              'flex size-8 shrink-0 items-center justify-center rounded-lg transition-transform group-hover/row:scale-105',
-                              visual.iconBoxClass,
-                            )}
-                          >
-                            <Icon className="size-4" />
-                          </div>
-                          <div className="min-w-0">
-                            <Link
-                              href={`/finance/accounts/${account.id}`}
-                              className="block truncate text-xs sm:text-sm font-semibold text-foreground hover:text-primary transition-colors"
-                            >
-                              {account.name}
-                            </Link>
-                            <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground mt-0.5">
-                              <span className="font-mono tracking-tight font-medium text-foreground/80">
-                                {account.account_number}
-                              </span>
-                              <button
-                                type="button"
-                                data-slot="button"
-                                onClick={() => handleCopyCode(account.account_number, account.id)}
-                                title="Copy account number"
-                                className="inline-flex size-4 items-center justify-center rounded text-muted-foreground/60 hover:text-foreground hover:bg-muted transition"
-                              >
-                                {isCopied ? (
-                                  <Check className="size-3 text-emerald-600 animate-in zoom-in-50 duration-150" />
-                                ) : (
-                                  <Copy className="size-2.5 opacity-0 group-hover/row:opacity-100 transition-opacity" />
-                                )}
-                              </button>
-                              {account.reference_label ? (
-                                <>
-                                  <span className="text-muted-foreground/40">·</span>
-                                  <span className="truncate max-w-[130px] text-[10px] text-muted-foreground">
-                                    {account.reference_label}
-                                  </span>
-                                </>
-                              ) : null}
-                            </div>
-                            {/* Mobile-only type inline badge */}
-                            <div className="mt-1 sm:hidden">
-                              <span
-                                className={cn(
-                                  'inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[9px] font-medium border',
-                                  visual.badgeClass,
-                                )}
-                              >
-                                <Icon className="size-2.5" />
-                                {visual.label}
-                              </span>
-                            </div>
-                          </div>
-                        </div>
-                      </TableCell>
-
-                      {/* 2. Account Type (Tablet & Desktop) */}
-                      <TableCell className="hidden sm:table-cell py-2.5 px-3">
-                        <span
+                return (
+                  <TableRow
+                    key={account.id}
+                    className="group/row hover:bg-muted/40 transition-colors border-b border-border/70"
+                  >
+                    {/* 1. Account details */}
+                    <TableCell className="py-2.5 px-3.5">
+                      <div className="flex items-center gap-3">
+                        <div
                           className={cn(
-                            'inline-flex items-center gap-1.5 rounded-md border px-2 py-0.5 text-[11px] font-medium',
-                            visual.badgeClass,
+                            'flex size-8 shrink-0 items-center justify-center rounded-lg transition-transform group-hover/row:scale-105',
+                            visual.iconBoxClass,
                           )}
                         >
-                          <Icon className="size-3 shrink-0 opacity-80" />
-                          <span>{visual.label}</span>
-                        </span>
-                      </TableCell>
-
-                      {/* 3. Status */}
-                      <TableCell className="py-2.5 px-3">
-                        <StatusBadge status={account.status} className="text-[11px] px-2 py-0" />
-                      </TableCell>
-
-                      {/* 4. Ledger Balance */}
-                      <TableCell className="py-2.5 px-3.5 text-right">
-                        <div className="flex flex-col items-end">
-                          <span
-                            className={cn(
-                              'font-mono text-xs sm:text-sm font-semibold tabular-nums',
-                              isNegative ? 'text-destructive flex items-center gap-1' : 'text-foreground',
-                            )}
-                          >
-                            {isNegative ? <AlertCircle className="size-3.5 inline text-destructive" /> : null}
-                            {formatMoney(account.ledger_balance, account.currency_code)}
-                          </span>
-                          <span className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground/70">
-                            {account.currency_code || 'BDT'}
-                          </span>
+                          <Icon className="size-4" />
                         </div>
-                      </TableCell>
-
-                      {/* 5. Last Movement (Desktop) */}
-                      <TableCell className="hidden md:table-cell py-2.5 px-3">
-                        {movement ? (
-                          <div className="flex flex-col">
-                            <span className="text-xs font-medium text-foreground">
-                              {movement.date}
+                        <div className="min-w-0">
+                          <Link
+                            href={`/finance/accounts/${account.id}`}
+                            className="block truncate text-xs sm:text-sm font-semibold text-foreground hover:text-primary transition-colors"
+                          >
+                            {account.name}
+                          </Link>
+                          <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground mt-0.5">
+                            <span className="font-mono tracking-tight font-medium text-foreground/80">
+                              {account.account_number}
                             </span>
-                            <span className="text-[10px] text-muted-foreground font-mono">
-                              {movement.time}
+                            <button
+                              type="button"
+                              data-slot="button"
+                              onClick={() => handleCopyCode(account.account_number, account.id)}
+                              title="Copy account number"
+                              className="inline-flex size-4 items-center justify-center rounded text-muted-foreground/60 hover:text-foreground hover:bg-muted transition"
+                            >
+                              {isCopied ? (
+                                <Check className="size-3 text-emerald-600 animate-in zoom-in-50 duration-150" />
+                              ) : (
+                                <Copy className="size-2.5 opacity-0 group-hover/row:opacity-100 transition-opacity" />
+                              )}
+                            </button>
+                            {account.reference_label ? (
+                              <>
+                                <span className="text-muted-foreground/40">·</span>
+                                <span className="truncate max-w-[130px] text-[10px] text-muted-foreground">
+                                  {account.reference_label}
+                                </span>
+                              </>
+                            ) : null}
+                          </div>
+                          {/* Mobile-only type inline badge */}
+                          <div className="mt-1 sm:hidden">
+                            <span
+                              className={cn(
+                                'inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[9px] font-medium border',
+                                visual.badgeClass,
+                              )}
+                            >
+                              <Icon className="size-2.5" />
+                              {visual.label}
                             </span>
                           </div>
-                        ) : (
-                          <span className="text-[11px] italic text-muted-foreground">No movements</span>
-                        )}
-                      </TableCell>
-
-                      {/* 6. Single-line Actions (No wrapping) */}
-                      <TableCell className="py-2.5 px-3.5 text-right">
-                        <div className="flex items-center justify-end gap-1.5 whitespace-nowrap">
-                          {onTransfer ? (
-                            <Button
-                              size="xs"
-                              variant="outline"
-                              className="h-7 gap-1.5 px-2.5 text-xs font-medium text-foreground hover:bg-muted shadow-2xs"
-                              onClick={() => onTransfer(account.id)}
-                            >
-                              <ArrowLeftRight className="size-3 text-muted-foreground" />
-                              <span>Transfer</span>
-                            </Button>
-                          ) : null}
-
-                          {onViewActivity ? (
-                            <Button
-                              size="xs"
-                              variant="ghost"
-                              className="hidden xl:inline-flex h-7 gap-1 px-2 text-xs font-medium text-muted-foreground hover:text-foreground"
-                              onClick={() => onViewActivity(account.id)}
-                            >
-                              <Activity className="size-3" />
-                              <span>Activity</span>
-                            </Button>
-                          ) : null}
-
-                          <DropdownMenu>
-                            <DropdownMenuTrigger
-                              render={
-                                <Button
-                                  size="icon-xs"
-                                  variant="ghost"
-                                  className="size-7 text-muted-foreground hover:text-foreground"
-                                  title="More account actions"
-                                />
-                              }
-                            >
-                              <MoreHorizontal className="size-3.5" />
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end" className="w-48">
-                              {onViewActivity ? (
-                                <DropdownMenuItem onClick={() => onViewActivity(account.id)}>
-                                  <Activity className="size-3.5 mr-2 text-muted-foreground" />
-                                  <span>View activity</span>
-                                </DropdownMenuItem>
-                              ) : null}
-                              {onReconcile ? (
-                                <DropdownMenuItem onClick={() => onReconcile(account.id)}>
-                                  <Scale className="size-3.5 mr-2 text-muted-foreground" />
-                                  <span>Reconcile balance</span>
-                                </DropdownMenuItem>
-                              ) : null}
-                              <DropdownMenuItem
-                                onClick={() => handleCopyCode(account.account_number, account.id)}
-                              >
-                                <Copy className="size-3.5 mr-2 text-muted-foreground" />
-                                <span>Copy account code</span>
-                              </DropdownMenuItem>
-                              <DropdownMenuSeparator />
-                              <DropdownMenuItem render={<Link href={`/finance/accounts/${account.id}`} />}>
-                                <ExternalLink className="size-3.5 mr-2 text-muted-foreground" />
-                                <span>Account details</span>
-                              </DropdownMenuItem>
-                            </DropdownMenuContent>
-                          </DropdownMenu>
-
-                          <Button
-                            size="icon-xs"
-                            variant="ghost"
-                            className="size-7 text-muted-foreground/60 hover:text-foreground"
-                            render={<Link href={`/finance/accounts/${account.id}`} />}
-                            title="View Account Details & Provenance"
-                          >
-                            <ChevronRight className="size-3.5" />
-                          </Button>
                         </div>
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
-              </TableBody>
-            </Table>
-          </div>
+                      </div>
+                    </TableCell>
+
+                    {/* 2. Account Type (Tablet & Desktop) */}
+                    <TableCell className="hidden sm:table-cell py-2.5 px-3">
+                      <span
+                        className={cn(
+                          'inline-flex items-center gap-1.5 rounded-md border px-2 py-0.5 text-[11px] font-medium',
+                          visual.badgeClass,
+                        )}
+                      >
+                        <Icon className="size-3 shrink-0 opacity-80" />
+                        <span>{visual.label}</span>
+                      </span>
+                    </TableCell>
+
+                    {/* 3. Status */}
+                    <TableCell className="py-2.5 px-3">
+                      <StatusBadge status={account.status} className="text-[11px] px-2 py-0" />
+                    </TableCell>
+
+                    {/* 4. Ledger Balance */}
+                    <TableCell className="py-2.5 px-3.5 text-right">
+                      <div className="flex flex-col items-end">
+                        <span
+                          className={cn(
+                            'font-mono text-xs sm:text-sm font-semibold tabular-nums',
+                            isNegative
+                              ? 'text-destructive flex items-center gap-1'
+                              : 'text-foreground',
+                          )}
+                        >
+                          {isNegative ? (
+                            <AlertCircle className="size-3.5 inline text-destructive" />
+                          ) : null}
+                          {formatMoney(account.ledger_balance, account.currency_code)}
+                        </span>
+                        <span className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground/70">
+                          {account.currency_code || 'BDT'}
+                        </span>
+                      </div>
+                    </TableCell>
+
+                    {/* 5. Last Movement (Desktop) */}
+                    <TableCell className="hidden md:table-cell py-2.5 px-3">
+                      {movement ? (
+                        <div className="flex flex-col">
+                          <span className="text-xs font-medium text-foreground">
+                            {movement.date}
+                          </span>
+                          <span className="text-[10px] text-muted-foreground font-mono">
+                            {movement.time}
+                          </span>
+                        </div>
+                      ) : (
+                        <span className="text-[11px] italic text-muted-foreground">
+                          No movements
+                        </span>
+                      )}
+                    </TableCell>
+
+                    {/* 6. Single-line Actions (No wrapping) */}
+                    <TableCell className="py-2.5 px-3.5 text-right">
+                      <div className="flex items-center justify-end gap-1.5 whitespace-nowrap">
+                        {onTransfer ? (
+                          <Button
+                            size="xs"
+                            variant="outline"
+                            className="h-7 gap-1.5 px-2.5 text-xs font-medium text-foreground hover:bg-muted shadow-2xs"
+                            onClick={() => onTransfer(account.id)}
+                          >
+                            <ArrowLeftRight className="size-3 text-muted-foreground" />
+                            <span>Transfer</span>
+                          </Button>
+                        ) : null}
+
+                        {onViewActivity ? (
+                          <Button
+                            size="xs"
+                            variant="ghost"
+                            className="hidden xl:inline-flex h-7 gap-1 px-2 text-xs font-medium text-muted-foreground hover:text-foreground"
+                            onClick={() => onViewActivity(account.id)}
+                          >
+                            <Activity className="size-3" />
+                            <span>Activity</span>
+                          </Button>
+                        ) : null}
+
+                        <DropdownMenu>
+                          <DropdownMenuTrigger
+                            render={
+                              <Button
+                                size="icon-xs"
+                                variant="ghost"
+                                className="size-7 text-muted-foreground hover:text-foreground"
+                                title="More account actions"
+                              />
+                            }
+                          >
+                            <MoreHorizontal className="size-3.5" />
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end" className="w-48">
+                            {onViewActivity ? (
+                              <DropdownMenuItem onClick={() => onViewActivity(account.id)}>
+                                <Activity className="size-3.5 mr-2 text-muted-foreground" />
+                                <span>View activity</span>
+                              </DropdownMenuItem>
+                            ) : null}
+                            {onReconcile ? (
+                              <DropdownMenuItem onClick={() => onReconcile(account.id)}>
+                                <Scale className="size-3.5 mr-2 text-muted-foreground" />
+                                <span>Reconcile balance</span>
+                              </DropdownMenuItem>
+                            ) : null}
+                            <DropdownMenuItem
+                              onClick={() => handleCopyCode(account.account_number, account.id)}
+                            >
+                              <Copy className="size-3.5 mr-2 text-muted-foreground" />
+                              <span>Copy account code</span>
+                            </DropdownMenuItem>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem
+                              render={<Link href={`/finance/accounts/${account.id}`} />}
+                            >
+                              <ExternalLink className="size-3.5 mr-2 text-muted-foreground" />
+                              <span>Account details</span>
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+
+                        <Button
+                          size="icon-xs"
+                          variant="ghost"
+                          className="size-7 text-muted-foreground/60 hover:text-foreground"
+                          render={<Link href={`/finance/accounts/${account.id}`} />}
+                          title="View Account Details & Provenance"
+                        >
+                          <ChevronRight className="size-3.5" />
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
+            </TableBody>
+          </Table>
         </div>
       )}
     </div>

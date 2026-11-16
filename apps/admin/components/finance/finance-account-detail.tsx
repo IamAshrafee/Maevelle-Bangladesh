@@ -2,15 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
-import {
-  ArrowLeft,
-  Coins,
-  History,
-  Info,
-  Scale,
-  ShieldAlert,
-  XCircle,
-} from 'lucide-react';
+import { ArrowLeft, Coins, History, Info, Scale, ShieldAlert } from 'lucide-react';
 import type {
   FinanceAccountDetailDto,
   FinanceLedgerEntryDto,
@@ -25,7 +17,7 @@ import { SetOpeningBalanceDialog } from '@/components/finance/set-opening-balanc
 import { TransferFundsDialog } from '@/components/finance/transfer-dialog';
 import { OperationalFeedback } from '@/components/operational-worklist';
 import { Button } from '@/components/ui/button';
-import { Skeleton } from '@/components/ui/skeleton';
+import { AdminPage, ErrorState, PageSkeleton } from '@/components/ui/page-shell';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { fetchApiData } from '@/lib/api';
 
@@ -38,10 +30,7 @@ import { AccountStatusDialog } from './account-detail/account-status-dialog';
 import { EditAccountDialog } from './account-detail/edit-account-dialog';
 import { ReopenReconciliationDialog } from './account-detail/reopen-reconciliation-dialog';
 import { ResolveReconciliationDialog } from './account-detail/resolve-reconciliation-dialog';
-import type {
-  AccountLedgerData,
-  LedgerFilterState,
-} from './account-detail/types';
+import type { AccountLedgerData, LedgerFilterState } from './account-detail/types';
 
 export function FinanceAccountDetail({ accountId }: { readonly accountId: string }) {
   // Authorization capabilities
@@ -251,34 +240,22 @@ export function FinanceAccountDetail({ accountId }: { readonly accountId: string
   // Loading & Error states
   // ---------------------------------------------------------------------------
   if (state === 'loading') {
-    return (
-      <main className="grid gap-5 px-4 py-6 sm:px-6 lg:px-8 max-w-[1500px] mx-auto">
-        <Skeleton className="h-28 rounded-xl" />
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3.5">
-          <Skeleton className="h-24 rounded-xl" />
-          <Skeleton className="h-24 rounded-xl" />
-          <Skeleton className="h-24 rounded-xl" />
-          <Skeleton className="h-24 rounded-xl" />
-          <Skeleton className="h-24 rounded-xl" />
-        </div>
-        <Skeleton className="h-96 rounded-xl" />
-      </main>
-    );
+    return <PageSkeleton variant="detail" widthVariant="wide" />;
   }
 
   if (state === 'error' || !account) {
     return (
-      <main className="grid gap-4 px-4 py-12 text-sm sm:px-6 lg:px-8 max-w-[1500px] mx-auto">
-        <div className="flex items-center gap-2 text-destructive font-medium">
-          <XCircle className="size-5 shrink-0" />
-          <span>{errorMessage || 'Financial account could not be found.'}</span>
-        </div>
+      <AdminPage variant="wide">
+        <ErrorState
+          title="Financial account unavailable"
+          message={errorMessage || 'Financial account could not be found.'}
+        />
         <div>
           <Button render={<Link href="/finance/accounts" />} variant="outline">
             <ArrowLeft className="mr-1.5 size-4" /> Back to financial accounts
           </Button>
         </div>
-      </main>
+      </AdminPage>
     );
   }
 
@@ -288,8 +265,8 @@ export function FinanceAccountDetail({ accountId }: { readonly accountId: string
   ).length;
 
   return (
-    <main className="min-w-0 px-4 py-5 sm:px-6 lg:px-8">
-      <div className="mx-auto grid max-w-[1500px] gap-6">
+    <AdminPage variant="wide">
+      <div className="grid gap-6">
         {/* User Operational Feedback Banner */}
         {feedbackMessage ? (
           <OperationalFeedback tone={feedbackTone}>{feedbackMessage}</OperationalFeedback>
@@ -301,11 +278,10 @@ export function FinanceAccountDetail({ accountId }: { readonly accountId: string
             <div className="flex items-start gap-2.5">
               <ShieldAlert className="size-5 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
               <div>
-                <p className="text-sm font-semibold text-foreground">
-                  Financial Account Inactive
-                </p>
+                <p className="text-sm font-semibold text-foreground">Financial Account Inactive</p>
                 <p className="text-xs sm:text-sm text-muted-foreground">
-                  This account has been deactivated. It cannot be used as a payment source, transfer destination, or expense payment method until reactivated.
+                  This account has been deactivated. It cannot be used as a payment source, transfer
+                  destination, or expense payment method until reactivated.
                 </p>
               </div>
             </div>
@@ -334,7 +310,8 @@ export function FinanceAccountDetail({ accountId }: { readonly accountId: string
                   Initial Opening Float Available
                 </p>
                 <p className="text-xs sm:text-sm text-muted-foreground">
-                  This newly created account currently has zero recorded movements. Record an opening balance to establish its starting cash float.
+                  This newly created account currently has zero recorded movements. Record an
+                  opening balance to establish its starting cash float.
                 </p>
               </div>
             </div>
@@ -533,6 +510,6 @@ export function FinanceAccountDetail({ accountId }: { readonly accountId: string
           void handleRefresh();
         }}
       />
-    </main>
+    </AdminPage>
   );
 }

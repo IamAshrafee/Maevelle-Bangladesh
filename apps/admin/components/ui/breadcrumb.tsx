@@ -176,18 +176,17 @@ function BreadcrumbLink({
   const { size } = useBreadcrumbContext();
   const Component = as ?? (href && !disabled ? Link : 'span');
 
-  const inner =
-    maxLabelWidth ? (
-      <span
-        className="truncate"
-        style={{ maxWidth: maxLabelWidth }}
-        title={typeof children === 'string' ? children : undefined}
-      >
-        {children}
-      </span>
-    ) : (
-      children
-    );
+  const inner = maxLabelWidth ? (
+    <span
+      className="truncate"
+      style={{ maxWidth: maxLabelWidth }}
+      title={typeof children === 'string' ? children : undefined}
+    >
+      {children}
+    </span>
+  ) : (
+    children
+  );
 
   return (
     <Component
@@ -220,18 +219,17 @@ function BreadcrumbCurrent({
 }: BreadcrumbCurrentProps) {
   const { size } = useBreadcrumbContext();
 
-  const inner =
-    maxLabelWidth ? (
-      <span
-        className="truncate"
-        style={{ maxWidth: maxLabelWidth }}
-        title={typeof children === 'string' ? children : undefined}
-      >
-        {children}
-      </span>
-    ) : (
-      children
-    );
+  const inner = maxLabelWidth ? (
+    <span
+      className="truncate"
+      style={{ maxWidth: maxLabelWidth }}
+      title={typeof children === 'string' ? children : undefined}
+    >
+      {children}
+    </span>
+  ) : (
+    children
+  );
 
   return (
     <span
@@ -249,11 +247,7 @@ function BreadcrumbCurrent({
 // Breadcrumb.Separator
 // ---------------------------------------------------------------------------
 
-function BreadcrumbSeparator({
-  className,
-  children,
-  ...props
-}: React.ComponentProps<'span'>) {
+function BreadcrumbSeparator({ className, children, ...props }: React.ComponentProps<'span'>) {
   const { size, separator } = useBreadcrumbContext();
   return (
     <span
@@ -579,17 +573,15 @@ function Breadcrumb({
 
   return (
     <BreadcrumbContext.Provider value={contextValue}>
-      <nav
-        data-slot="breadcrumb"
-        aria-label={ariaLabel}
-        className={cn('min-w-0', className)}
-      >
+      <nav data-slot="breadcrumb" aria-label={ariaLabel} className={cn('min-w-0', className)}>
         {isMobileBack && mobileBackParent && (
           <div className="flex items-center md:hidden">
             <BreadcrumbLink
               {...(mobileBackParent.href !== undefined ? { href: mobileBackParent.href } : {})}
-              {...(mobileBackParent.onClick !== undefined ? { onClick: mobileBackParent.onClick } : {})}
-              className="gap-1 text-muted-foreground hover:text-foreground"
+              {...(mobileBackParent.onClick !== undefined
+                ? { onClick: mobileBackParent.onClick }
+                : {})}
+              className="min-h-11 -ml-2 gap-1.5 px-2 py-2 text-muted-foreground hover:text-foreground pointer-coarse:min-h-11"
             >
               <ChevronRight
                 className="size-3 shrink-0 rotate-180 rtl:rotate-0"
@@ -603,7 +595,7 @@ function Breadcrumb({
         <BreadcrumbList
           className={cn(
             isMobileBack && mobileBackParent && 'hidden md:flex',
-            isMobileScroll && 'flex-nowrap overflow-x-auto scrollbar-none',
+            isMobileScroll && 'flex-nowrap overflow-x-auto overscroll-x-contain scrollbar-none',
           )}
         >
           {buildList(visibleItems)}

@@ -16,23 +16,31 @@ import { Textarea } from '@/components/ui/textarea';
 import { Separator } from '@/components/ui/separator';
 import { Switch } from '@/components/ui/switch';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+import { Skeleton } from '@/components/ui/skeleton';
 
 import { HierarchicalCategoryPicker } from './hierarchical-category-picker';
 import type { ReadinessChecklistItem, SizingReferenceData } from './types';
 
 interface OrganizationSidebarProps {
   readonly categories: readonly CatalogCategoryChoiceDto[];
+  readonly categoriesLoading?: boolean | undefined;
+  readonly categoriesError?: string | null | undefined;
+  readonly onRetryCategories?: (() => void) | undefined;
   readonly selectedCategoryIds: readonly string[];
   readonly primaryCategoryId: string;
   readonly recommendedCategoryId?: string | null | undefined;
   readonly tags: readonly CatalogVocabularyItemDto[];
+  readonly tagsLoading?: boolean | undefined;
   readonly selectedTagIds: readonly string[];
   readonly occasions: readonly CatalogVocabularyItemDto[];
+  readonly occasionsLoading?: boolean | undefined;
   readonly selectedOccasionIds: readonly string[];
   readonly collections: readonly CatalogVocabularyItemDto[];
+  readonly collectionsLoading?: boolean | undefined;
   readonly selectedCollectionIds: readonly string[];
   readonly sizingData: SizingReferenceData;
   readonly sizeGuides: readonly SizeGuideSummaryDto[];
+  readonly sizingLoading?: boolean | undefined;
   readonly sizeSystemId: string;
   readonly sizeGuideId: string;
   readonly sizingGuideSource: 'CATEGORY' | 'DIRECT' | 'NONE';
@@ -57,17 +65,24 @@ interface OrganizationSidebarProps {
 
 export function OrganizationSidebar({
   categories,
+  categoriesLoading = false,
+  categoriesError = null,
+  onRetryCategories,
   selectedCategoryIds,
   primaryCategoryId,
   recommendedCategoryId,
   tags,
+  tagsLoading = false,
   selectedTagIds,
   occasions,
+  occasionsLoading = false,
   selectedOccasionIds,
   collections,
+  collectionsLoading = false,
   selectedCollectionIds,
   sizingData,
   sizeGuides,
+  sizingLoading = false,
   sizeSystemId,
   sizeGuideId,
   sizingGuideSource,
@@ -149,6 +164,9 @@ export function OrganizationSidebar({
         primaryCategoryId={primaryCategoryId}
         onSelectPrimaryCategory={onSelectPrimaryCategory}
         recommendedCategoryId={recommendedCategoryId}
+        isLoading={categoriesLoading}
+        error={categoriesError}
+        onRetry={onRetryCategories}
       />
 
       {/* Sidebar Card 3: Sizing System & Size Guide */}
@@ -191,6 +209,7 @@ export function OrganizationSidebar({
             </div>
             <NativeSelect
               id="size-guide-source-select"
+              disabled={sizingLoading}
               value={sizingGuideSource === 'DIRECT' ? sizeGuideId : sizingGuideSource}
               onChange={(event) => {
                 if (event.target.value === 'CATEGORY' || event.target.value === 'NONE') {
@@ -202,7 +221,9 @@ export function OrganizationSidebar({
               }}
               className="text-xs"
             >
-              <NativeSelectOption value="CATEGORY">Use primary Category guide</NativeSelectOption>
+              <NativeSelectOption value="CATEGORY">
+                {sizingLoading ? 'Loading sizing guides…' : 'Use primary Category guide'}
+              </NativeSelectOption>
               {sizeGuides
                 .filter((guide) => guide.status === 'ACTIVE' && guide.hasPublishedRevision)
                 .map((guide) => (
@@ -310,24 +331,32 @@ export function OrganizationSidebar({
           <div className="space-y-2">
             <Label className="text-xs font-medium">Marketing Tags</Label>
             <div className="flex flex-wrap gap-1">
-              {tags.map((tag) => {
-                const isSelected = selectedTagIds.includes(tag.id);
-                return (
-                  <button
-                    key={tag.id}
-                    type="button"
-                    className={`rounded-md border px-2 py-0.5 text-xs transition-colors duration-150 ${
-                      isSelected
-                        ? 'border-primary bg-primary text-primary-foreground font-medium'
-                        : 'border-input bg-background hover:bg-muted text-foreground'
-                    }`}
-                    onClick={() => onToggleTag(tag.id)}
-                  >
-                    {tag.name}
-                  </button>
-                );
-              })}
-              {tags.length === 0 && (
+              {tagsLoading ? (
+                <>
+                  <Skeleton className="h-6 w-16 rounded-md" />
+                  <Skeleton className="h-6 w-20 rounded-md" />
+                  <Skeleton className="h-6 w-14 rounded-md" />
+                </>
+              ) : (
+                tags.map((tag) => {
+                  const isSelected = selectedTagIds.includes(tag.id);
+                  return (
+                    <button
+                      key={tag.id}
+                      type="button"
+                      className={`rounded-md border px-2 py-0.5 text-xs transition-colors duration-150 ${
+                        isSelected
+                          ? 'border-primary bg-primary-subtle text-primary-hover dark:text-primary font-medium'
+                          : 'border-input bg-background hover:bg-muted text-foreground'
+                      }`}
+                      onClick={() => onToggleTag(tag.id)}
+                    >
+                      {tag.name}
+                    </button>
+                  );
+                })
+              )}
+              {!tagsLoading && tags.length === 0 && (
                 <span className="text-[11px] text-muted-foreground italic">
                   No active tags configured
                 </span>
@@ -339,24 +368,32 @@ export function OrganizationSidebar({
           <div className="space-y-2">
             <Label className="text-xs font-medium">Occasions</Label>
             <div className="flex flex-wrap gap-1">
-              {occasions.map((occ) => {
-                const isSelected = selectedOccasionIds.includes(occ.id);
-                return (
-                  <button
-                    key={occ.id}
-                    type="button"
-                    className={`rounded-md border px-2 py-0.5 text-xs transition-colors duration-150 ${
-                      isSelected
-                        ? 'border-primary bg-primary text-primary-foreground font-medium'
-                        : 'border-input bg-background hover:bg-muted text-foreground'
-                    }`}
-                    onClick={() => onToggleOccasion(occ.id)}
-                  >
-                    {occ.name}
-                  </button>
-                );
-              })}
-              {occasions.length === 0 && (
+              {occasionsLoading ? (
+                <>
+                  <Skeleton className="h-6 w-16 rounded-md" />
+                  <Skeleton className="h-6 w-20 rounded-md" />
+                  <Skeleton className="h-6 w-14 rounded-md" />
+                </>
+              ) : (
+                occasions.map((occ) => {
+                  const isSelected = selectedOccasionIds.includes(occ.id);
+                  return (
+                    <button
+                      key={occ.id}
+                      type="button"
+                      className={`rounded-md border px-2 py-0.5 text-xs transition-colors duration-150 ${
+                        isSelected
+                          ? 'border-primary bg-primary-subtle text-primary-hover dark:text-primary font-medium'
+                          : 'border-input bg-background hover:bg-muted text-foreground'
+                      }`}
+                      onClick={() => onToggleOccasion(occ.id)}
+                    >
+                      {occ.name}
+                    </button>
+                  );
+                })
+              )}
+              {!occasionsLoading && occasions.length === 0 && (
                 <span className="text-[11px] text-muted-foreground italic">
                   No active occasions configured
                 </span>
@@ -368,24 +405,32 @@ export function OrganizationSidebar({
           <div className="space-y-2">
             <Label className="text-xs font-medium">Collections</Label>
             <div className="flex flex-wrap gap-1">
-              {collections.map((coll) => {
-                const isSelected = selectedCollectionIds.includes(coll.id);
-                return (
-                  <button
-                    key={coll.id}
-                    type="button"
-                    className={`rounded-md border px-2 py-0.5 text-xs transition-colors duration-150 ${
-                      isSelected
-                        ? 'border-primary bg-primary text-primary-foreground font-medium'
-                        : 'border-input bg-background hover:bg-muted text-foreground'
-                    }`}
-                    onClick={() => onToggleCollection(coll.id)}
-                  >
-                    {coll.name}
-                  </button>
-                );
-              })}
-              {collections.length === 0 && (
+              {collectionsLoading ? (
+                <>
+                  <Skeleton className="h-6 w-16 rounded-md" />
+                  <Skeleton className="h-6 w-20 rounded-md" />
+                  <Skeleton className="h-6 w-14 rounded-md" />
+                </>
+              ) : (
+                collections.map((coll) => {
+                  const isSelected = selectedCollectionIds.includes(coll.id);
+                  return (
+                    <button
+                      key={coll.id}
+                      type="button"
+                      className={`rounded-md border px-2 py-0.5 text-xs transition-colors duration-150 ${
+                        isSelected
+                          ? 'border-primary bg-primary-subtle text-primary-hover dark:text-primary font-medium'
+                          : 'border-input bg-background hover:bg-muted text-foreground'
+                      }`}
+                      onClick={() => onToggleCollection(coll.id)}
+                    >
+                      {coll.name}
+                    </button>
+                  );
+                })
+              )}
+              {!collectionsLoading && collections.length === 0 && (
                 <span className="text-[11px] text-muted-foreground italic">
                   No active collections configured
                 </span>

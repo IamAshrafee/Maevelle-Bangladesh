@@ -529,7 +529,7 @@ export function QCInspectionWorkspace({
                   No inventory units found for this session.
                 </div>
               ) : (
-                <Table>
+                <Table density="compact" stickyHeader>
                   <TableHeader>
                     <TableRow>
                       <TableHead className="w-8 p-2"></TableHead>

@@ -7,13 +7,13 @@ import type { FinancialAccountDto, OutstandingCodSettlementPaymentDto } from '@m
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetFooter,
+  SheetHeader,
+  SheetTitle,
+} from '@/components/ui/sheet';
 import { Input } from '@/components/ui/input';
 import { NativeSelect } from '@/components/ui/native-select';
 import { Textarea } from '@/components/ui/textarea';
@@ -85,17 +85,20 @@ export function CodSettlementDialog({
   );
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-2xl">
+    <Sheet open={open} onOpenChange={onOpenChange}>
+      <SheetContent
+        side="right"
+        className="flex w-full flex-col gap-5 overflow-y-auto p-6 sm:max-w-2xl"
+      >
         <form className="grid gap-5" onSubmit={submit}>
-          <DialogHeader>
-            <DialogTitle>Record courier COD settlement</DialogTitle>
-            <DialogDescription>
+          <SheetHeader className="border-b border-border/60 p-0 pb-4">
+            <SheetTitle>Record courier COD settlement</SheetTitle>
+            <SheetDescription>
               Match a courier remittance to collected COD Payments. The holding-account reduction,
               bank receipt, deduction, allocations, audit event, and remittance reference are saved
               together.
-            </DialogDescription>
-          </DialogHeader>
+            </SheetDescription>
+          </SheetHeader>
 
           <fieldset className="grid gap-2">
             <legend className="mb-2 text-sm font-medium">Payments included</legend>
@@ -192,7 +195,7 @@ export function CodSettlementDialog({
             <span>{selected.size} Payments selected</span>
             <strong>Gross allocation {formatMoney(gross, anchor?.currency ?? 'BDT')}</strong>
           </div>
-          <DialogFooter>
+          <SheetFooter className="border-t border-border/60 p-0 pt-4 sm:flex-row sm:justify-end">
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
               Cancel
             </Button>
@@ -204,9 +207,9 @@ export function CodSettlementDialog({
             >
               Record settlement
             </Button>
-          </DialogFooter>
+          </SheetFooter>
         </form>
-      </DialogContent>
-    </Dialog>
+      </SheetContent>
+    </Sheet>
   );
 }

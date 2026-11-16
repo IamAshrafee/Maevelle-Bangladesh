@@ -1,14 +1,6 @@
 'use client';
 
-import {
-  Boxes,
-  CalendarHeart,
-  CircleHelp,
-  FolderTree,
-  Pencil,
-  Plus,
-  Tags,
-} from 'lucide-react';
+import { Boxes, CalendarHeart, CircleHelp, FolderTree, Pencil, Plus, Tags } from 'lucide-react';
 import { useDeferredValue, useEffect, useState } from 'react';
 
 import type {
@@ -23,6 +15,7 @@ import type {
 
 import { fetchSizeGuides } from '@/lib/sizing/api';
 
+import { AdminPage, PageHeader } from '@/components/ui/page-shell';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -105,6 +98,7 @@ export function CatalogClassificationConsole() {
   const [totalPages, setTotalPages] = useState(1);
   const [totalItems, setTotalItems] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
   const [message, setMessage] = useState('');
   const [dialogOpen, setDialogOpen] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
@@ -135,6 +129,7 @@ export function CatalogClassificationConsole() {
         setTotalPages(result.pagination.totalPages);
         setTotalItems(result.pagination.totalItems);
       }
+      setHasLoadedOnce(true);
     } catch (error) {
       if (!(error instanceof DOMException && error.name === 'AbortError')) {
         setMessage(error instanceof Error ? error.message : 'Unable to load product organization.');
@@ -161,15 +156,14 @@ export function CatalogClassificationConsole() {
         ),
       ),
     );
-    setCategoryOptions([
-      ...firstPage.items,
-      ...remainingPages.flatMap((result) => result.items),
-    ]);
+    setCategoryOptions([...firstPage.items, ...remainingPages.flatMap((result) => result.items)]);
   }
 
   useEffect(() => {
     void refreshCategoryOptions().catch(() => undefined);
-    void fetchSizeGuides().then((result) => setSizeGuides(result.items)).catch(() => undefined);
+    void fetchSizeGuides()
+      .then((result) => setSizeGuides(result.items))
+      .catch(() => undefined);
   }, []);
 
   function switchTab(next: TabKey) {
@@ -253,29 +247,26 @@ export function CatalogClassificationConsole() {
   const rows: readonly EditableItem[] = tab === 'CATEGORY' ? categories : vocabulary;
 
   return (
-    <main className="mx-auto grid w-full max-w-[1500px] gap-6 p-4 md:p-6">
-      <header className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-        <div>
-          <p className="text-sm font-medium text-primary">Catalog setup</p>
-          <h1 className="text-2xl font-semibold tracking-tight">Product organization</h1>
-          <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
-            Manage categories, tags, occasions, and collections in one place. Products use these
-            values for browsing, merchandising, and fast internal workflows.
-          </p>
-        </div>
-        <div className="flex gap-2">
-          <Button
-            title="See examples and learn which type to use"
-            variant="outline"
-            onClick={() => setHelpOpen(true)}
-          >
-            <CircleHelp /> How it works
-          </Button>
-          <Button onClick={openCreate}>
-            <Plus /> Create {currentTab.label.slice(0, -1)}
-          </Button>
-        </div>
-      </header>
+    <AdminPage variant="wide">
+      <PageHeader
+        eyebrow="Catalog setup"
+        title="Product organization"
+        description="Manage categories, tags, occasions, and collections in one place. Products use these values for browsing, merchandising, and fast internal workflows."
+        actions={
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              title="See examples and learn which type to use"
+              variant="outline"
+              onClick={() => setHelpOpen(true)}
+            >
+              <CircleHelp /> How it works
+            </Button>
+            <Button onClick={openCreate}>
+              <Plus /> Create {currentTab.label.slice(0, -1)}
+            </Button>
+          </div>
+        }
+      />
 
       <Tabs value={tab} onValueChange={(value) => switchTab(value as TabKey)}>
         <TabsList className="h-auto w-full justify-start overflow-x-auto" variant="line">
@@ -298,7 +289,9 @@ export function CatalogClassificationConsole() {
         ).map(([label, value]) => (
           <StatsCard key={label}>
             <StatsTitle>{label}</StatsTitle>
-            <StatsValue>{value}</StatsValue>
+            <StatsValue className={loading && hasLoadedOnce ? 'opacity-60 transition-opacity' : undefined}>
+              {!hasLoadedOnce ? <Skeleton className="h-7 w-12" /> : value}
+            </StatsValue>
           </StatsCard>
         ))}
       </Stats>
@@ -349,11 +342,16 @@ export function CatalogClassificationConsole() {
           {message ? (
             <div className="m-4">
               <Alert variant="destructive">
-                <AlertDescription>{message}</AlertDescription>
+                <AlertDescription className="flex items-center justify-between">
+                  <span>{message}</span>
+                  <Button size="sm" variant="outline" onClick={() => void load()}>
+                    Try Again
+                  </Button>
+                </AlertDescription>
               </Alert>
             </div>
           ) : null}
-          <Table>
+          <Table stickyHeader>
             <TableHeader>
               <TableRow>
                 <TableHead>Name</TableHead>
@@ -376,113 +374,8 @@ export function CatalogClassificationConsole() {
                 </TableHead>
               </TableRow>
             </TableHeader>
-            <TableBody>
-              {rows.map((item) => {
-                const category = 'path' in item ? item : undefined;
-                const vocabularyItem = 'kind' in item ? item : undefined;
-                return (
-                  <TableRow key={item.id}>
-                    <TableCell>
-                      <div className="grid min-w-56">
-                        <strong>{item.name}</strong>
-                        <span className="text-xs text-muted-foreground">
-                          {category?.path ??
-                            (vocabularyItem?.kind === 'OCCASION'
-                              ? 'Occasion or event'
-                              : vocabularyItem?.kind.toLowerCase())}
-                        </span>
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <code>{item.handle}</code>
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex flex-wrap gap-1">
-                        <Badge variant={item.status === 'ACTIVE' ? 'secondary' : 'outline'}>
-                          {item.status}
-                        </Badge>
-                        {category?.effectiveStatusReason === 'ANCESTOR_INACTIVE' ? (
-                          <Badge title="A parent category is inactive" variant="outline">
-                            Parent inactive
-                          </Badge>
-                        ) : null}
-                      </div>
-                    </TableCell>
-                    {category ? (
-                      <>
-                        <TableCell>{category.childCount}</TableCell>
-                        <TableCell>{category.productCount}</TableCell>
-                        <TableCell>
-                          {category.defaultSizeGuideName ? (
-                            <Badge className="font-normal text-xs" variant="outline">
-                              {category.defaultSizeGuideName}
-                            </Badge>
-                          ) : (
-                            <span className="text-xs text-muted-foreground">—</span>
-                          )}
-                        </TableCell>
-                      </>
-                    ) : (
-                      <>
-                        <TableCell className="max-w-80 truncate text-muted-foreground">
-                          {vocabularyItem?.description || '—'}
-                        </TableCell>
-                        <TableCell>{vocabularyItem?.productCount ?? 0}</TableCell>
-                      </>
-                    )}
-                    <TableCell className="text-right">
-                      <Button
-                        aria-label={`Edit ${item.name}`}
-                        size="icon-sm"
-                        title={`Edit ${item.name}`}
-                        variant="ghost"
-                        onClick={() => openEdit(item)}
-                      >
-                        <Pencil />
-                      </Button>
-                    </TableCell>
-                  </TableRow>
-                );
-              })}
-              {!loading && rows.length === 0 ? (
-                <TableRow>
-                  <TableCell className="py-12" colSpan={7}>
-                    <Empty className="py-4">
-                      <EmptyMedia variant="icon">
-                        <currentTab.icon />
-                      </EmptyMedia>
-                      <EmptyHeader>
-                        <EmptyTitle>No {currentTab.label.toLowerCase()} found</EmptyTitle>
-                        <EmptyDescription>
-                          {query || status !== 'ALL'
-                            ? 'No records match your active filters. Try searching with different terms or resetting filters.'
-                            : `Get started by creating your first ${currentTab.label.slice(0, -1).toLowerCase()}.`}
-                        </EmptyDescription>
-                      </EmptyHeader>
-                      <EmptyContent>
-                        {query || status !== 'ALL' ? (
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => {
-                              setQuery('');
-                              setStatus('ALL');
-                              setPage(1);
-                            }}
-                          >
-                            Reset filters
-                          </Button>
-                        ) : (
-                          <Button size="sm" onClick={openCreate}>
-                            <Plus /> Create {currentTab.label.slice(0, -1)}
-                          </Button>
-                        )}
-                      </EmptyContent>
-                    </Empty>
-                  </TableCell>
-                </TableRow>
-              ) : null}
-              {loading ? (
+            <TableBody className={loading && hasLoadedOnce ? 'opacity-60 transition-opacity' : undefined}>
+              {!hasLoadedOnce ? (
                 Array.from({ length: 5 }).map((_, index) => (
                   <TableRow key={`skeleton-${index}`}>
                     <TableCell>
@@ -524,7 +417,115 @@ export function CatalogClassificationConsole() {
                     </TableCell>
                   </TableRow>
                 ))
-              ) : null}
+              ) : (
+                <>
+                  {rows.map((item) => {
+                    const category = 'path' in item ? item : undefined;
+                    const vocabularyItem = 'kind' in item ? item : undefined;
+                    return (
+                      <TableRow key={item.id}>
+                        <TableCell>
+                          <div className="grid min-w-56">
+                            <strong>{item.name}</strong>
+                            <span className="text-xs text-muted-foreground">
+                              {category?.path ??
+                                (vocabularyItem?.kind === 'OCCASION'
+                                  ? 'Occasion or event'
+                                  : vocabularyItem?.kind.toLowerCase())}
+                            </span>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <code>{item.handle}</code>
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex flex-wrap gap-1">
+                            <Badge variant={item.status === 'ACTIVE' ? 'secondary' : 'outline'}>
+                              {item.status}
+                            </Badge>
+                            {category?.effectiveStatusReason === 'ANCESTOR_INACTIVE' ? (
+                              <Badge title="A parent category is inactive" variant="outline">
+                                Parent inactive
+                              </Badge>
+                            ) : null}
+                          </div>
+                        </TableCell>
+                        {category ? (
+                          <>
+                            <TableCell>{category.childCount}</TableCell>
+                            <TableCell>{category.productCount}</TableCell>
+                            <TableCell>
+                              {category.defaultSizeGuideName ? (
+                                <Badge className="font-normal text-xs" variant="outline">
+                                  {category.defaultSizeGuideName}
+                                </Badge>
+                              ) : (
+                                <span className="text-xs text-muted-foreground">—</span>
+                              )}
+                            </TableCell>
+                          </>
+                        ) : (
+                          <>
+                            <TableCell className="max-w-80 truncate text-muted-foreground">
+                              {vocabularyItem?.description || '—'}
+                            </TableCell>
+                            <TableCell>{vocabularyItem?.productCount ?? 0}</TableCell>
+                          </>
+                        )}
+                        <TableCell className="text-right">
+                          <Button
+                            aria-label={`Edit ${item.name}`}
+                            size="icon-sm"
+                            title={`Edit ${item.name}`}
+                            variant="ghost"
+                            onClick={() => openEdit(item)}
+                          >
+                            <Pencil />
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                  {!loading && rows.length === 0 ? (
+                    <TableRow>
+                      <TableCell className="py-12" colSpan={7}>
+                        <Empty className="py-4">
+                          <EmptyMedia variant="icon">
+                            <currentTab.icon />
+                          </EmptyMedia>
+                          <EmptyHeader>
+                            <EmptyTitle>No {currentTab.label.toLowerCase()} found</EmptyTitle>
+                            <EmptyDescription>
+                              {query || status !== 'ALL'
+                                ? 'No records match your active filters. Try searching with different terms or resetting filters.'
+                                : `Get started by creating your first ${currentTab.label.slice(0, -1).toLowerCase()}.`}
+                            </EmptyDescription>
+                          </EmptyHeader>
+                          <EmptyContent>
+                            {query || status !== 'ALL' ? (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => {
+                                  setQuery('');
+                                  setStatus('ALL');
+                                  setPage(1);
+                                }}
+                              >
+                                Reset filters
+                              </Button>
+                            ) : (
+                              <Button size="sm" onClick={openCreate}>
+                                <Plus /> Create {currentTab.label.slice(0, -1)}
+                              </Button>
+                            )}
+                          </EmptyContent>
+                        </Empty>
+                      </TableCell>
+                    </TableRow>
+                  ) : null}
+                </>
+              )}
             </TableBody>
           </Table>
         </CardContent>
@@ -566,6 +567,6 @@ export function CatalogClassificationConsole() {
         onSave={save}
       />
       <ClassificationHelp open={helpOpen} onOpenChange={setHelpOpen} />
-    </main>
+    </AdminPage>
   );
 }

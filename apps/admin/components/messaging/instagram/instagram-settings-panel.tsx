@@ -1,8 +1,8 @@
 'use client';
 
 import { Activity, AlertCircle, History, Instagram, Lock, Plus, ShieldCheck } from 'lucide-react';
-import { useSearchParams } from 'next/navigation';
 import { useCallback, useEffect, useState } from 'react';
+import { useQueryParamsSync } from '@/lib/navigation/use-query-params-sync';
 
 import type {
   InstagramConnectionView,
@@ -24,7 +24,7 @@ import { InstagramSyncCard } from './instagram-sync-card';
 type Section = 'overview' | 'diagnostics' | 'sync';
 
 export function InstagramSettingsPanel() {
-  const searchParams = useSearchParams();
+  const { searchParams, setParams } = useQueryParamsSync();
   const canView = useAdminCapability('messaging.connections.view');
   const canManage = useAdminCapability('messaging.connections.manage');
   const [connections, setConnections] = useState<readonly InstagramConnectionView[]>([]);
@@ -82,12 +82,8 @@ export function InstagramSettingsPanel() {
     } else {
       return;
     }
-    const url = new URL(window.location.href);
-    url.searchParams.delete('instagram');
-    url.searchParams.delete('attemptId');
-    url.searchParams.delete('error');
-    window.history.replaceState({}, '', url.toString());
-  }, [searchParams]);
+    setParams({ instagram: null, attemptId: null, error: null });
+  }, [searchParams, setParams]);
 
   const activeConnection = connections.find((connection) => connection.id === selectedId) ?? null;
 

@@ -22,6 +22,7 @@ import { CustomerDeliveryRiskCard } from '@/components/delivery/customer-deliver
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button, buttonVariants } from '@/components/ui/button';
+import { AdminPage, PageHeader } from '@/components/ui/page-shell';
 import { RefreshButton } from '@/components/ui/refresh-button';
 import {
   Card,
@@ -101,9 +102,9 @@ export function DeliveryOperationsConsole() {
         fetchApiData<{ items?: readonly DeliverySummaryItem[] } | readonly DeliverySummaryItem[]>(
           '/admin/deliveries?pageSize=100',
         ).catch(() => []),
-        fetchApiData<{ items?: readonly FulfillmentSummaryItem[] } | readonly FulfillmentSummaryItem[]>(
-          '/admin/fulfillments?pageSize=100',
-        ).catch(() => []),
+        fetchApiData<
+          { items?: readonly FulfillmentSummaryItem[] } | readonly FulfillmentSummaryItem[]
+        >('/admin/fulfillments?pageSize=100').catch(() => []),
         fetchApiData<{ items?: readonly ReturnSummaryItem[] }>('/admin/returns?pageSize=100').catch(
           () => ({ items: [] }),
         ),
@@ -112,10 +113,10 @@ export function DeliveryOperationsConsole() {
 
       const delList = Array.isArray(delRes)
         ? delRes
-        : (delRes as { items?: readonly DeliverySummaryItem[] })?.items ?? [];
+        : ((delRes as { items?: readonly DeliverySummaryItem[] })?.items ?? []);
       const fulList = Array.isArray(fulRes)
         ? fulRes
-        : (fulRes as { items?: readonly FulfillmentSummaryItem[] })?.items ?? [];
+        : ((fulRes as { items?: readonly FulfillmentSummaryItem[] })?.items ?? []);
       const retList = retRes?.items ?? [];
 
       setDeliveries(delList);
@@ -205,40 +206,34 @@ export function DeliveryOperationsConsole() {
   };
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-2">
-            <h1 className="text-2xl font-bold tracking-tight text-foreground">
-              Delivery Operations
-            </h1>
-            <Badge variant="outline" className="font-mono text-xs">
-              COMMAND CENTER
-            </Badge>
-          </div>
-          <p className="text-sm text-muted-foreground mt-1">
-            Real-time fulfillment, dispatch, in-transit parcels, failed deliveries, RTO queues, and
-            warehouse return receiving.
-          </p>
-        </div>
+    <AdminPage variant="wide">
+      <PageHeader
+        eyebrow="Operations / Delivery"
+        title="Delivery Operations"
+        badge={
+          <Badge variant="outline" className="font-mono text-xs">
+            COMMAND CENTER
+          </Badge>
+        }
+        description="Real-time fulfillment, dispatch, in-transit parcels, failed deliveries, RTO queues, and warehouse return receiving."
+        actions={
+          <>
+            <RefreshButton
+              loading={loading}
+              onRefresh={() => void loadOperations()}
+              tooltip="Refresh delivery operations"
+            />
 
-        <div className="flex items-center gap-2">
-          <RefreshButton
-            loading={loading}
-            onRefresh={() => void loadOperations()}
-            tooltip="Refresh delivery operations"
-          />
-
-          <Link
-            href="/fulfillments"
-            className={cn(buttonVariants({ variant: 'default', size: 'sm' }), 'h-9')}
-          >
-            <PackageCheck className="h-4 w-4 mr-1.5" />
-            Go to Fulfillments
-          </Link>
-        </div>
-      </div>
+            <Link
+              href="/fulfillments"
+              className={cn(buttonVariants({ variant: 'default', size: 'sm' }), 'h-9')}
+            >
+              <PackageCheck className="h-4 w-4 mr-1.5" />
+              Go to Fulfillments
+            </Link>
+          </>
+        }
+      />
 
       {error && (
         <Alert variant="destructive">
@@ -291,7 +286,7 @@ export function DeliveryOperationsConsole() {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {/* Queue 1: Unknown Outcome Courier Bookings */}
           <Card
-            className={`border transition-all ${
+            className={`border transition-colors duration-150 ${
               unknownOutcomeDeliveries.length > 0
                 ? 'border-amber-500/50 bg-amber-500/5 dark:bg-amber-950/20'
                 : 'border-border'
@@ -321,7 +316,10 @@ export function DeliveryOperationsConsole() {
             <CardFooter className="p-4 pt-2">
               <Link
                 href="/deliveries"
-                className={cn(buttonVariants({ variant: 'outline', size: 'sm' }), 'w-full text-xs h-8')}
+                className={cn(
+                  buttonVariants({ variant: 'outline', size: 'sm' }),
+                  'w-full text-xs h-8',
+                )}
               >
                 Reconcile Bookings
                 <ChevronRight className="h-3.5 w-3.5 ml-1" />
@@ -331,7 +329,7 @@ export function DeliveryOperationsConsole() {
 
           {/* Queue 2: Delivery Failures & Exceptions */}
           <Card
-            className={`border transition-all ${
+            className={`border transition-colors duration-150 ${
               deliveryFailures.length > 0
                 ? 'border-red-500/50 bg-red-500/5 dark:bg-red-950/20'
                 : 'border-border'
@@ -357,7 +355,10 @@ export function DeliveryOperationsConsole() {
             <CardFooter className="p-4 pt-2">
               <Link
                 href="/deliveries"
-                className={cn(buttonVariants({ variant: 'outline', size: 'sm' }), 'w-full text-xs h-8')}
+                className={cn(
+                  buttonVariants({ variant: 'outline', size: 'sm' }),
+                  'w-full text-xs h-8',
+                )}
               >
                 Review Failed Shipments
                 <ChevronRight className="h-3.5 w-3.5 ml-1" />
@@ -367,7 +368,7 @@ export function DeliveryOperationsConsole() {
 
           {/* Queue 3: RTO Awaiting Physical Receipt */}
           <Card
-            className={`border transition-all ${
+            className={`border transition-colors duration-150 ${
               rtoArrivedAwaitingReceipt.length > 0
                 ? 'border-blue-500/50 bg-blue-500/5 dark:bg-blue-950/20'
                 : 'border-border'
@@ -397,7 +398,10 @@ export function DeliveryOperationsConsole() {
             <CardFooter className="p-4 pt-2">
               <Link
                 href="/returns?tab=rto"
-                className={cn(buttonVariants({ variant: 'outline', size: 'sm' }), 'w-full text-xs h-8')}
+                className={cn(
+                  buttonVariants({ variant: 'outline', size: 'sm' }),
+                  'w-full text-xs h-8',
+                )}
               >
                 Post Warehouse Receipt
                 <ChevronRight className="h-3.5 w-3.5 ml-1" />
@@ -407,7 +411,7 @@ export function DeliveryOperationsConsole() {
 
           {/* Queue 4: Returns Stock Awaiting Condition Inspection */}
           <Card
-            className={`border transition-all ${
+            className={`border transition-colors duration-150 ${
               returnsAwaitingInspection.length > 0
                 ? 'border-purple-500/50 bg-purple-500/5 dark:bg-purple-950/20'
                 : 'border-border'
@@ -438,7 +442,10 @@ export function DeliveryOperationsConsole() {
             <CardFooter className="p-4 pt-2">
               <Link
                 href="/returns"
-                className={cn(buttonVariants({ variant: 'outline', size: 'sm' }), 'w-full text-xs h-8')}
+                className={cn(
+                  buttonVariants({ variant: 'outline', size: 'sm' }),
+                  'w-full text-xs h-8',
+                )}
               >
                 Inspect Stock
                 <ChevronRight className="h-3.5 w-3.5 ml-1" />
@@ -466,7 +473,10 @@ export function DeliveryOperationsConsole() {
             <CardFooter className="p-4 pt-2">
               <Link
                 href="/returns?tab=customer"
-                className={cn(buttonVariants({ variant: 'outline', size: 'sm' }), 'w-full text-xs h-8')}
+                className={cn(
+                  buttonVariants({ variant: 'outline', size: 'sm' }),
+                  'w-full text-xs h-8',
+                )}
               >
                 Authorize Requests
                 <ChevronRight className="h-3.5 w-3.5 ml-1" />
@@ -494,7 +504,10 @@ export function DeliveryOperationsConsole() {
             <CardFooter className="p-4 pt-2">
               <Link
                 href="/fulfillments"
-                className={cn(buttonVariants({ variant: 'outline', size: 'sm' }), 'w-full text-xs h-8')}
+                className={cn(
+                  buttonVariants({ variant: 'outline', size: 'sm' }),
+                  'w-full text-xs h-8',
+                )}
               >
                 Book Couriers
                 <ChevronRight className="h-3.5 w-3.5 ml-1" />
@@ -578,7 +591,10 @@ export function DeliveryOperationsConsole() {
 
               <Link
                 href="/delivery/couriers"
-                className={cn(buttonVariants({ variant: 'ghost', size: 'sm' }), 'h-7 text-xs text-primary')}
+                className={cn(
+                  buttonVariants({ variant: 'ghost', size: 'sm' }),
+                  'h-7 text-xs text-primary',
+                )}
               >
                 Manage
                 <ChevronRight className="h-3.5 w-3.5 ml-0.5" />
@@ -671,6 +687,6 @@ export function DeliveryOperationsConsole() {
           </Card>
         </div>
       </div>
-    </div>
+    </AdminPage>
   );
 }

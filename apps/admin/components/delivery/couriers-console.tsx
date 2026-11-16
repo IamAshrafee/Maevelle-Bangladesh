@@ -24,16 +24,17 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { AdminPage, PageHeader } from '@/components/ui/page-shell';
 import { RefreshButton } from '@/components/ui/refresh-button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetFooter,
+  SheetHeader,
+  SheetTitle,
+} from '@/components/ui/sheet';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import {
@@ -279,30 +280,24 @@ export function CouriersConsole() {
   };
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-2">
-            <h1 className="text-2xl font-bold tracking-tight text-foreground">
-              Courier Integrations
-            </h1>
-            <Badge variant="outline" className="font-mono text-xs">
-              CARRIER MANAGEMENT
-            </Badge>
-          </div>
-          <p className="text-sm text-muted-foreground mt-1">
-            Configure automated courier booking, OAuth credentials, live quoting, and warehouse
-            pickup store mappings.
-          </p>
-        </div>
-
-        <RefreshButton
-          loading={loading}
-          onRefresh={() => void loadData()}
-          tooltip="Refresh couriers"
-        />
-      </div>
+    <AdminPage variant="wide">
+      <PageHeader
+        eyebrow="Operations / Delivery"
+        title="Courier Integrations"
+        badge={
+          <Badge variant="outline" className="font-mono text-xs">
+            CARRIER MANAGEMENT
+          </Badge>
+        }
+        description="Configure automated courier booking, OAuth credentials, live quoting, and warehouse pickup store mappings."
+        actions={
+          <RefreshButton
+            loading={loading}
+            onRefresh={() => void loadData()}
+            tooltip="Refresh couriers"
+          />
+        }
+      />
 
       {/* Notifications */}
       {success && (
@@ -618,8 +613,8 @@ export function CouriersConsole() {
                         <Store className="h-6 w-6 mx-auto opacity-40" />
                         <p className="font-medium">No stores synced yet</p>
                         <p className="text-[11px] max-w-xs mx-auto">
-                          Click &quot;Sync Stores&quot; to fetch your merchant pickup addresses
-                          from Pathao.
+                          Click &quot;Sync Stores&quot; to fetch your merchant pickup addresses from
+                          Pathao.
                         </p>
                       </div>
                     ) : (
@@ -685,7 +680,8 @@ export function CouriersConsole() {
             <CardContent className="p-6 text-sm text-muted-foreground space-y-4">
               <p>
                 The Maevelle backend includes native support for Steadfast Courier alongside Pathao.
-                You can configure API credentials, webhook tokens, and automated consignment booking.
+                You can configure API credentials, webhook tokens, and automated consignment
+                booking.
               </p>
               <Alert className="bg-muted">
                 <Info className="h-4 w-4" />
@@ -710,7 +706,8 @@ export function CouriersConsole() {
                 In-House Delivery &amp; Cash Runners
               </CardTitle>
               <CardDescription className="text-xs mt-1">
-                For merchants operating their own delivery vans, motorbikes, or retail pickup points.
+                For merchants operating their own delivery vans, motorbikes, or retail pickup
+                points.
               </CardDescription>
             </CardHeader>
             <CardContent className="p-6 text-sm text-muted-foreground space-y-4">
@@ -745,22 +742,22 @@ export function CouriersConsole() {
       </Tabs>
 
       {/* ------------------------------------------------------------------ */}
-      {/* PATHAO CREDENTIALS CONFIGURATION MODAL                             */}
+      {/* PATHAO CREDENTIALS CONFIGURATION SHEET                              */}
       {/* ------------------------------------------------------------------ */}
-      <Dialog open={configDialogOpen} onOpenChange={setConfigDialogOpen}>
-        <DialogContent className="max-w-xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
+      <Sheet open={configDialogOpen} onOpenChange={setConfigDialogOpen}>
+        <SheetContent side="right" className="w-full sm:max-w-xl overflow-y-auto">
+          <SheetHeader>
+            <SheetTitle className="flex items-center gap-2">
               <Key className="h-5 w-5 text-primary" />
               Configure Pathao Courier Integration
-            </DialogTitle>
-            <DialogDescription>
+            </SheetTitle>
+            <SheetDescription>
               Enter your official Pathao Merchant developer credentials. All secrets are encrypted
               with AES-256-GCM and never returned in API responses.
-            </DialogDescription>
-          </DialogHeader>
+            </SheetDescription>
+          </SheetHeader>
 
-          <form onSubmit={handleSaveConfig} className="space-y-4 pt-2">
+          <form onSubmit={handleSaveConfig} className="space-y-4 px-4 pb-4">
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
                 <Label htmlFor="cfg-name">Account Name</Label>
@@ -840,7 +837,9 @@ export function CouriersConsole() {
                 id="cfg-client-secret"
                 type="password"
                 placeholder={
-                  activeAccount ? '•••••••••••••••• (Leave blank to keep existing)' : 'Client Secret'
+                  activeAccount
+                    ? '•••••••••••••••• (Leave blank to keep existing)'
+                    : 'Client Secret'
                 }
                 value={formClientSecret}
                 onChange={(e) => setFormClientSecret(e.target.value)}
@@ -885,7 +884,7 @@ export function CouriersConsole() {
               />
             </div>
 
-            <DialogFooter className="gap-2 sm:gap-0 pt-2">
+            <SheetFooter className="px-0 sm:flex-row sm:justify-end">
               <Button
                 type="button"
                 variant="outline"
@@ -904,10 +903,10 @@ export function CouriersConsole() {
                   'Save Configuration'
                 )}
               </Button>
-            </DialogFooter>
+            </SheetFooter>
           </form>
-        </DialogContent>
-      </Dialog>
-    </div>
+        </SheetContent>
+      </Sheet>
+    </AdminPage>
   );
 }

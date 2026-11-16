@@ -7,6 +7,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { RefreshButton } from '@/components/ui/refresh-button';
 import { Input } from '@/components/ui/input';
+import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select';
 
 import { useTeam } from './team-context';
 import { formatAuditAction, type TeamAuditItemDto } from './team-types';
@@ -98,20 +99,20 @@ export function TeamAuditTimeline({
         </div>
 
         <div className="flex items-center gap-2">
-          <select
-            className="h-9 rounded-md border border-input bg-background px-3 py-1 text-xs shadow-xs focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+          <NativeSelect
             value={selectedAction}
             onChange={(e) => {
               setSelectedAction(e.target.value);
               setPage(1);
             }}
+            className="w-auto"
           >
             {actionFilterOptions.map((opt) => (
-              <option key={opt.value} value={opt.value}>
+              <NativeSelectOption key={opt.value} value={opt.value}>
                 {opt.label}
-              </option>
+              </NativeSelectOption>
             ))}
-          </select>
+          </NativeSelect>
 
           <RefreshButton
             loading={loading}

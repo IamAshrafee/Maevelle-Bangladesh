@@ -5,16 +5,18 @@ import { CheckCircle2, Loader2, PhoneCall } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from '@/components/ui/dialog';
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetFooter,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+} from '@/components/ui/sheet';
 import { Label } from '@/components/ui/label';
+import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select';
 import { Textarea } from '@/components/ui/textarea';
+import { useFormDialogLifecycle } from '@/hooks/use-form-dialog-lifecycle';
 import { fetchApiData } from '@/lib/api';
 
 interface RecordVerificationDialogProps {
@@ -22,7 +24,7 @@ interface RecordVerificationDialogProps {
   readonly orderNumber: string;
   readonly customerPhone?: string | null | undefined;
   readonly onCompleted?: (() => void) | undefined;
-  readonly trigger?: React.ComponentProps<typeof DialogTrigger>['render'];
+  readonly trigger?: React.ComponentProps<typeof SheetTrigger>['render'];
 }
 
 const verificationTypes = [
@@ -43,9 +45,6 @@ const outcomes = [
   { value: 'APPROVED_OVERRIDE', label: 'Approved via Risk Override' },
 ] as const;
 
-const selectClassName =
-  'flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50';
-
 export function RecordVerificationDialog({
   orderId,
   orderNumber,
@@ -60,6 +59,18 @@ export function RecordVerificationDialog({
   const [verificationType, setVerificationType] = useState<string>('PHONE_CALL');
   const [outcome, setOutcome] = useState<string>('CONFIRMED');
   const [notes, setNotes] = useState<string>('');
+
+  const isDirty =
+    notes.trim().length > 0 || outcome !== 'CONFIRMED' || verificationType !== 'PHONE_CALL';
+
+  const lifecycle = useFormDialogLifecycle({
+    open,
+    onOpenChange: setOpen,
+    isDirty,
+    isSubmitting: busy,
+    title: 'Discard verification record?',
+    description: 'You have entered verification details. Are you sure you want to dismiss?',
+  });
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -88,64 +99,62 @@ export function RecordVerificationDialog({
   }
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger render={trigger}>
+    <Sheet open={open} onOpenChange={lifecycle.handleOpenChange}>
+      <SheetTrigger render={trigger}>
         {!trigger && (
           <Button variant="outline" size="sm">
             <PhoneCall className="mr-1.5 size-3.5" aria-hidden="true" />
             Verify Customer
           </Button>
         )}
-      </DialogTrigger>
-      <DialogContent className="sm:max-w-md">
-        <DialogHeader>
-          <DialogTitle>Record Customer Verification</DialogTitle>
-          <DialogDescription>
+      </SheetTrigger>
+      <SheetContent side="right" className="w-full sm:max-w-md overflow-y-auto">
+        <SheetHeader>
+          <SheetTitle>Record Customer Verification</SheetTitle>
+          <SheetDescription>
             Record telephone, WhatsApp, or operational contact for Order{' '}
             <strong className="text-foreground">{orderNumber}</strong>
             {customerPhone ? ` (${customerPhone})` : ''}.
-          </DialogDescription>
-        </DialogHeader>
+          </SheetDescription>
+        </SheetHeader>
 
         {error && (
-          <div className="rounded-md border border-destructive/20 bg-destructive/10 p-3 text-xs text-destructive">
+          <div className="mx-4 rounded-md border border-destructive/20 bg-destructive/10 p-3 text-xs text-destructive">
             {error}
           </div>
         )}
 
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={handleSubmit} className="space-y-4 px-4 pb-4">
           <div className="space-y-1.5">
             <Label htmlFor="verificationType">Channel / Method</Label>
-            <select
+            <NativeSelect
               id="verificationType"
               value={verificationType}
               onChange={(e) => setVerificationType(e.target.value)}
-              className={selectClassName}
               disabled={busy}
             >
               {verificationTypes.map((t) => (
-                <option key={t.value} value={t.value}>
+                <NativeSelectOption key={t.value} value={t.value}>
                   {t.label}
-                </option>
+                </NativeSelectOption>
               ))}
-            </select>
+            </NativeSelect>
           </div>
 
           <div className="space-y-1.5">
             <Label htmlFor="outcome">Contact Outcome</Label>
-            <select
+            <NativeSelect
               id="outcome"
               value={outcome}
               onChange={(e) => setOutcome(e.target.value)}
-              className={selectClassName}
               disabled={busy}
             >
               {outcomes.map((o) => (
-                <option key={o.value} value={o.value}>
+                <NativeSelectOption key={o.value} value={o.value}>
                   {o.label}
-                </option>
+                </NativeSelectOption>
               ))}
-            </select>
+            </NativeSelect>
           </div>
 
           <div className="space-y-1.5">
@@ -160,11 +169,11 @@ export function RecordVerificationDialog({
             />
           </div>
 
-          <DialogFooter className="gap-2 sm:gap-0">
+          <SheetFooter className="px-0 sm:flex-row sm:justify-end">
             <Button
               type="button"
               variant="outline"
-              onClick={() => setOpen(false)}
+              onClick={() => lifecycle.handleOpenChange(false)}
               disabled={busy}
             >
               Cancel
@@ -182,9 +191,10 @@ export function RecordVerificationDialog({
                 </>
               )}
             </Button>
-          </DialogFooter>
+          </SheetFooter>
         </form>
-      </DialogContent>
-    </Dialog>
+      </SheetContent>
+      {lifecycle.discardConfirmDialog}
+    </Sheet>
   );
 }

@@ -20,12 +20,7 @@ import { StatusBadge } from '@/components/status-badge';
 import { Breadcrumb } from '@/components/ui/breadcrumb';
 import { Button } from '@/components/ui/button';
 import { RefreshButton } from '@/components/ui/refresh-button';
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from '@/components/ui/tooltip';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
 interface AccountDetailHeaderProps {
   readonly account: FinanceAccountDetailDto;
@@ -46,10 +41,8 @@ function getAccountVisual(type: string) {
     case 'BANK':
       return {
         icon: Landmark,
-        iconBoxClass:
-          'bg-blue-500/10 text-blue-600 dark:text-blue-400 ring-1 ring-blue-500/20',
-        badgeClass:
-          'bg-blue-500/10 text-blue-700 dark:text-blue-300 border-blue-500/20',
+        iconBoxClass: 'bg-blue-500/10 text-blue-600 dark:text-blue-400 ring-1 ring-blue-500/20',
+        badgeClass: 'bg-blue-500/10 text-blue-700 dark:text-blue-300 border-blue-500/20',
         label: 'Bank Account',
       };
     case 'MOBILE_WALLET':
@@ -57,8 +50,7 @@ function getAccountVisual(type: string) {
         icon: Smartphone,
         iconBoxClass:
           'bg-purple-500/10 text-purple-600 dark:text-purple-400 ring-1 ring-purple-500/20',
-        badgeClass:
-          'bg-purple-500/10 text-purple-700 dark:text-purple-300 border-purple-500/20',
+        badgeClass: 'bg-purple-500/10 text-purple-700 dark:text-purple-300 border-purple-500/20',
         label: 'Mobile Wallet',
       };
     case 'CASH':
@@ -73,10 +65,8 @@ function getAccountVisual(type: string) {
     default:
       return {
         icon: Layers,
-        iconBoxClass:
-          'bg-slate-500/10 text-slate-600 dark:text-slate-400 ring-1 ring-slate-500/20',
-        badgeClass:
-          'bg-slate-500/10 text-slate-700 dark:text-slate-300 border-slate-500/20',
+        iconBoxClass: 'bg-muted text-muted-foreground ring-1 ring-border',
+        badgeClass: 'bg-muted text-muted-foreground border-border',
         label: 'Other Account',
       };
   }
@@ -164,7 +154,10 @@ export function AccountDetailHeader({
                 {account.reference_label ? (
                   <>
                     <span>·</span>
-                    <span className="truncate max-w-[280px] sm:max-w-[400px] text-foreground/75" title={account.reference_label}>
+                    <span
+                      className="truncate max-w-[280px] sm:max-w-[400px] text-foreground/75"
+                      title={account.reference_label}
+                    >
                       {account.reference_label}
                     </span>
                   </>
@@ -176,24 +169,14 @@ export function AccountDetailHeader({
           {/* Action Toolbar */}
           <div className="flex flex-wrap items-center gap-2 sm:self-center">
             {canTransfer && isAccountActive ? (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={onOpenTransfer}
-                className="gap-1.5"
-              >
+              <Button variant="outline" size="sm" onClick={onOpenTransfer} className="gap-1.5">
                 <ArrowLeftRight className="size-3.5" />
                 <span>Transfer funds</span>
               </Button>
             ) : null}
 
             {canReconcile && isAccountActive ? (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={onOpenBalanceCheck}
-                className="gap-1.5"
-              >
+              <Button variant="outline" size="sm" onClick={onOpenBalanceCheck} className="gap-1.5">
                 <Scale className="size-3.5" />
                 <span>Check balance</span>
               </Button>
@@ -215,18 +198,15 @@ export function AccountDetailHeader({
               <Tooltip>
                 <TooltipTrigger
                   render={
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={onOpenEdit}
-                      className="gap-1.5"
-                    >
+                    <Button variant="outline" size="sm" onClick={onOpenEdit} className="gap-1.5">
                       <Pencil className="size-3.5" />
                       <span className="hidden sm:inline">Edit</span>
                     </Button>
                   }
                 />
-                <TooltipContent side="bottom">Edit account display name and reference notes</TooltipContent>
+                <TooltipContent side="bottom">
+                  Edit account display name and reference notes
+                </TooltipContent>
               </Tooltip>
             ) : null}
 
@@ -238,7 +218,9 @@ export function AccountDetailHeader({
                       variant={isAccountActive ? 'outline' : 'default'}
                       size="sm"
                       onClick={onOpenStatus}
-                      className={isAccountActive ? 'text-muted-foreground hover:text-destructive' : ''}
+                      className={
+                        isAccountActive ? 'text-muted-foreground hover:text-destructive' : ''
+                      }
                     >
                       <Power className="size-3.5" />
                       <span className="sr-only sm:not-sr-only sm:inline">
@@ -248,7 +230,9 @@ export function AccountDetailHeader({
                   }
                 />
                 <TooltipContent side="bottom">
-                  {isAccountActive ? 'Deactivate account to prevent new usage' : 'Activate account for operations'}
+                  {isAccountActive
+                    ? 'Deactivate account to prevent new usage'
+                    : 'Activate account for operations'}
                 </TooltipContent>
               </Tooltip>
             ) : null}

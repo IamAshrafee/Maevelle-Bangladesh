@@ -5,14 +5,27 @@ import { cn } from '@/lib/utils';
 
 interface TableProps extends React.ComponentProps<'table'> {
   density?: 'compact' | 'comfortable';
+  stickyHeader?: boolean;
+  containerClassName?: string;
 }
 
-function Table({ className, density = 'comfortable', ...props }: TableProps) {
+function Table({
+  className,
+  density = 'comfortable',
+  stickyHeader = false,
+  containerClassName,
+  ...props
+}: TableProps) {
   return (
     <div
       data-slot="table-container"
       data-density={density}
-      className="relative w-full overflow-x-auto rounded-lg border border-border bg-card shadow-2xs"
+      data-sticky-header={stickyHeader ? 'true' : undefined}
+      className={cn(
+        'relative w-full overflow-x-auto overscroll-x-contain rounded-lg border border-border bg-card shadow-2xs',
+        stickyHeader && 'max-h-[72vh] overflow-y-auto overscroll-y-contain',
+        containerClassName,
+      )}
     >
       <table
         data-slot="table"
@@ -24,11 +37,21 @@ function Table({ className, density = 'comfortable', ...props }: TableProps) {
   );
 }
 
-function TableHeader({ className, ...props }: React.ComponentProps<'thead'>) {
+interface TableHeaderProps extends React.ComponentProps<'thead'> {
+  sticky?: boolean;
+}
+
+function TableHeader({ className, sticky, ...props }: TableHeaderProps) {
   return (
     <thead
       data-slot="table-header"
-      className={cn('border-b border-border bg-muted/40 font-medium text-xs text-muted-foreground', className)}
+      className={cn(
+        'border-b border-border bg-muted/40 font-medium text-xs text-muted-foreground',
+        (sticky || undefined) !== undefined && sticky
+          ? 'sticky top-0 z-10 bg-muted'
+          : 'in-data-[sticky-header=true]:sticky in-data-[sticky-header=true]:top-0 in-data-[sticky-header=true]:z-10 in-data-[sticky-header=true]:bg-muted',
+        className,
+      )}
       {...props}
     />
   );
@@ -48,7 +71,10 @@ function TableFooter({ className, ...props }: React.ComponentProps<'tfoot'>) {
   return (
     <tfoot
       data-slot="table-footer"
-      className={cn('border-t border-border bg-muted/50 font-medium [&>tr]:last:border-b-0', className)}
+      className={cn(
+        'border-t border-border bg-muted/50 font-medium [&>tr]:last:border-b-0',
+        className,
+      )}
       {...props}
     />
   );

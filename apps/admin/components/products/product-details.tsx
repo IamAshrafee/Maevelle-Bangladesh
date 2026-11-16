@@ -36,6 +36,7 @@ import { storefrontProductHref } from '@/components/products/product-workspace-l
 import { StatusBadge } from '@/components/status-badge';
 import { Breadcrumb } from '@/components/ui/breadcrumb';
 import { Button } from '@/components/ui/button';
+import { AdminPage, PageSkeleton } from '@/components/ui/page-shell';
 import { Stats, StatsCard, StatsTitle, StatsValue, StatsDescription } from '@/components/ui/stats';
 import { cn } from '@/lib/utils';
 import { catalogData, formatCatalogMoney, productMediaUrl } from '@/lib/catalog/api';
@@ -230,14 +231,10 @@ export function ProductDetails({ productId }: { productId: string }) {
   }
 
   if (state === 'loading' || !workspace)
-    return (
-      <main className="px-5 py-14 text-center text-sm text-muted-foreground" aria-busy="true">
-        Loading Product details…
-      </main>
-    );
+    return <PageSkeleton variant="detail" widthVariant="wide" />;
 
   return (
-    <main className="min-w-0 space-y-5 px-4 py-5 sm:px-6 lg:px-8">
+    <AdminPage variant="wide" className="gap-5">
       <Breadcrumb
         items={[
           { label: 'Products', href: '/products' },
@@ -273,7 +270,7 @@ export function ProductDetails({ productId }: { productId: string }) {
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <Button variant="outline" render={<Link href="/products" />}>
+          <Button variant="outline" render={<Link href="/products" />} nativeButton={false}>
             <ArrowLeft aria-hidden="true" /> Products
           </Button>
           {workspace.status === 'ARCHIVED' ? (
@@ -1153,6 +1150,6 @@ export function ProductDetails({ productId }: { productId: string }) {
         onOpenChange={setShowGuideAssignment}
         onApplied={() => load()}
       />
-    </main>
+    </AdminPage>
   );
 }

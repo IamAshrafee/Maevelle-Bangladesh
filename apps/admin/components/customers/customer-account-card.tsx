@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select';
 import {
   Dialog,
   DialogContent,
@@ -16,6 +17,14 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetFooter,
+  SheetHeader,
+  SheetTitle,
+} from '@/components/ui/sheet';
 import { useAdminCapability } from '@/components/admin-capabilities';
 import { fetchApiData } from '@/lib/api';
 
@@ -100,7 +109,10 @@ export function CustomerAccountCard({
           <h2 className="text-base font-semibold text-foreground">User Account Link</h2>
         </div>
         {isLinked ? (
-          <Badge variant="outline" className="border-emerald-300 bg-emerald-50 text-emerald-800 text-[10px] font-semibold gap-1">
+          <Badge
+            variant="outline"
+            className="border-emerald-300 bg-emerald-50 text-emerald-800 text-[10px] font-semibold gap-1"
+          >
             <CheckCircle className="size-2.5" /> Account Linked
           </Badge>
         ) : (
@@ -150,9 +162,9 @@ export function CustomerAccountCard({
         ) : (
           <div className="space-y-3">
             <p className="text-xs text-muted-foreground leading-relaxed">
-              This profile currently operates as a verified guest identity. All past and future guest
-              orders are retained continuously. When the customer completes storefront registration,
-              their historical data will bind to their authenticated account.
+              This profile currently operates as a verified guest identity. All past and future
+              guest orders are retained continuously. When the customer completes storefront
+              registration, their historical data will bind to their authenticated account.
             </p>
 
             {canManage && (
@@ -206,7 +218,11 @@ export function CustomerAccountCard({
               >
                 Cancel
               </Button>
-              <Button type="submit" variant="destructive" disabled={unlinkBusy || !unlinkReason.trim()}>
+              <Button
+                type="submit"
+                variant="destructive"
+                disabled={unlinkBusy || !unlinkReason.trim()}
+              >
                 {unlinkBusy && <Loader2 className="mr-2 size-4 animate-spin" />}
                 Unlink Account
               </Button>
@@ -215,47 +231,48 @@ export function CustomerAccountCard({
         </DialogContent>
       </Dialog>
 
-      {/* Link Dialog */}
-      <Dialog open={linkOpen} onOpenChange={setLinkOpen}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Link Customer Account</DialogTitle>
-            <DialogDescription>
+      {/* Link Customer Account Sheet */}
+      <Sheet open={linkOpen} onOpenChange={setLinkOpen}>
+        <SheetContent side="right" className="flex w-full flex-col gap-0 p-0 sm:max-w-md">
+          <SheetHeader className="border-b border-border px-6 py-4">
+            <SheetTitle>Link Customer Account</SheetTitle>
+            <SheetDescription>
               Associate this customer profile with an existing authenticated IAM user record.
-            </DialogDescription>
-          </DialogHeader>
-          {linkError && (
-            <div className="rounded-md border border-rose-200 bg-rose-50 p-2 text-xs text-rose-800">
-              {linkError}
+            </SheetDescription>
+          </SheetHeader>
+          <form onSubmit={handleLink} className="flex min-h-0 flex-1 flex-col">
+            <div className="flex-1 space-y-4 overflow-y-auto px-6 py-4">
+              {linkError && (
+                <div className="rounded-md border border-rose-200 bg-rose-50 p-2 text-xs text-rose-800 dark:border-rose-800 dark:bg-rose-950/50 dark:text-rose-200">
+                  {linkError}
+                </div>
+              )}
+              <div className="space-y-1.5">
+                <Label htmlFor="link-user-id">IAM User ID *</Label>
+                <Input
+                  id="link-user-id"
+                  value={userId}
+                  onChange={(e) => setUserId(e.target.value)}
+                  placeholder="UUID of iam.users record"
+                  required
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="link-type">Linkage Method</Label>
+                <NativeSelect
+                  id="link-type"
+                  value={linkType}
+                  onChange={(e) => setLinkType(e.target.value)}
+                >
+                  <NativeSelectOption value="MANUAL_CLAIM">Manual Operator Claim</NativeSelectOption>
+                  <NativeSelectOption value="VERIFIED_PHONE">Verified Phone Link</NativeSelectOption>
+                  <NativeSelectOption value="VERIFIED_EMAIL">Verified Email Link</NativeSelectOption>
+                  <NativeSelectOption value="INVITATION">Merchant Invitation</NativeSelectOption>
+                  <NativeSelectOption value="GUEST_CONVERSION">Guest Checkout Conversion</NativeSelectOption>
+                </NativeSelect>
+              </div>
             </div>
-          )}
-          <form onSubmit={handleLink} className="space-y-4">
-            <div className="space-y-1.5">
-              <Label htmlFor="link-user-id">IAM User ID *</Label>
-              <Input
-                id="link-user-id"
-                value={userId}
-                onChange={(e) => setUserId(e.target.value)}
-                placeholder="UUID of iam.users record"
-                required
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="link-type">Linkage Method</Label>
-              <select
-                id="link-type"
-                value={linkType}
-                onChange={(e) => setLinkType(e.target.value)}
-                className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-xs"
-              >
-                <option value="MANUAL_CLAIM">Manual Operator Claim</option>
-                <option value="VERIFIED_PHONE">Verified Phone Link</option>
-                <option value="VERIFIED_EMAIL">Verified Email Link</option>
-                <option value="INVITATION">Merchant Invitation</option>
-                <option value="GUEST_CONVERSION">Guest Checkout Conversion</option>
-              </select>
-            </div>
-            <DialogFooter>
+            <SheetFooter className="border-t border-border px-6 py-4 sm:flex-row sm:justify-end">
               <Button
                 type="button"
                 variant="outline"
@@ -268,10 +285,10 @@ export function CustomerAccountCard({
                 {linkBusy && <Loader2 className="mr-2 size-4 animate-spin" />}
                 Link Account
               </Button>
-            </DialogFooter>
+            </SheetFooter>
           </form>
-        </DialogContent>
-      </Dialog>
+        </SheetContent>
+      </Sheet>
     </section>
   );
 }

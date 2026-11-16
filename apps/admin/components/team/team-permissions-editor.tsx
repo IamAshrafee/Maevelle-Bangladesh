@@ -7,6 +7,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
+import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select';
 import { cn } from '@/lib/utils';
 
 import { useTeam } from './team-context';
@@ -148,8 +149,7 @@ export function TeamPermissionsEditor({
             <span className="text-xs font-medium text-muted-foreground whitespace-nowrap">
               Apply profile:
             </span>
-            <select
-              className="h-9 rounded-md border border-input bg-background px-3 py-1 text-xs sm:text-sm shadow-xs focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+            <NativeSelect
               defaultValue=""
               onChange={(e) => {
                 if (e.target.value) {
@@ -157,16 +157,17 @@ export function TeamPermissionsEditor({
                   e.target.value = '';
                 }
               }}
+              className="w-auto"
             >
-              <option value="" disabled>
+              <NativeSelectOption value="" disabled>
                 Select preset…
-              </option>
+              </NativeSelectOption>
               {presets.map((preset) => (
-                <option key={preset.id} value={preset.id}>
+                <NativeSelectOption key={preset.id} value={preset.id}>
                   {preset.name} ({preset.capability_codes.length} caps)
-                </option>
+                </NativeSelectOption>
               ))}
-            </select>
+            </NativeSelect>
           </div>
         ) : null}
       </div>

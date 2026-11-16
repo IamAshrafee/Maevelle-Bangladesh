@@ -1,16 +1,11 @@
 import { Suspense } from 'react';
 
 import { DeliveryConsole } from '@/components/delivery/delivery-console';
+import { PageSkeleton } from '@/components/ui/page-shell';
 
 export default function DeliveriesPage() {
   return (
-    <Suspense
-      fallback={
-        <main className="p-8 text-center text-sm text-muted-foreground">
-          Loading delivery workspace…
-        </main>
-      }
-    >
+    <Suspense fallback={<PageSkeleton variant="table" widthVariant="wide" />}>
       <DeliveryConsole />
     </Suspense>
   );

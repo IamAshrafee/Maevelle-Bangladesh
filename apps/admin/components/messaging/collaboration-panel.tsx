@@ -38,13 +38,13 @@ import {
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetFooter,
+  SheetHeader,
+  SheetTitle,
+} from '@/components/ui/sheet';
 import { Input } from '@/components/ui/input';
 import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select';
 import { Textarea } from '@/components/ui/textarea';
@@ -774,48 +774,53 @@ function CustomerLinkDialog({
     };
   }, [query]);
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[90dvh] overflow-y-auto sm:max-w-lg">
-        <DialogHeader>
-          <DialogTitle>Link verified customer</DialogTitle>
-          <DialogDescription>
+    <Sheet open={open} onOpenChange={onOpenChange}>
+      <SheetContent side="right" className="w-full overflow-y-auto sm:max-w-lg">
+        <SheetHeader>
+          <SheetTitle>Link verified customer</SheetTitle>
+          <SheetDescription>
             Search the customer directory and record a reviewed association. This changes the
             commerce context visible to agents.
-          </DialogDescription>
-        </DialogHeader>
-        <Input
-          value={query}
-          onChange={(event) => setQuery(event.target.value)}
-          placeholder="Name, phone, email, or customer number"
-          autoComplete="off"
-          name="customer-search"
-        />
-        <div className="max-h-64 space-y-1 overflow-y-auto">
-          {results.map((customer) => (
-            <button
-              key={customer.id}
-              onClick={() => setSelected(customer)}
-              className={cn(
-                'w-full rounded-lg border p-3 text-left text-sm transition-colors duration-150',
-                selected?.id === customer.id
-                  ? 'border-primary bg-primary-subtle'
-                  : 'border-border hover:bg-muted',
-              )}
-            >
-              <p className="font-medium">{customer.displayName}</p>
-              <p className="text-xs text-muted-foreground">
-                {customer.customerNumber} ·{' '}
-                {customer.primaryPhone ?? customer.primaryEmail ?? 'No primary contact'}
-              </p>
-            </button>
-          ))}
+          </SheetDescription>
+        </SheetHeader>
+        <div className="space-y-4 px-4">
+          <Input
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="Name, phone, email, or customer number"
+            autoComplete="off"
+            name="customer-search"
+          />
+          <div className="max-h-64 space-y-1 overflow-y-auto">
+            {results.map((customer) => (
+              <button
+                key={customer.id}
+                onClick={() => setSelected(customer)}
+                className={cn(
+                  'w-full rounded-lg border p-3 text-left text-sm transition-colors duration-150',
+                  selected?.id === customer.id
+                    ? 'border-primary bg-primary-subtle'
+                    : 'border-border hover:bg-muted',
+                )}
+              >
+                <p className="font-medium">{customer.displayName}</p>
+                <p className="text-xs text-muted-foreground">
+                  {customer.customerNumber} ·{' '}
+                  {customer.primaryPhone ?? customer.primaryEmail ?? 'No primary contact'}
+                </p>
+              </button>
+            ))}
+          </div>
+          <Textarea
+            value={reason}
+            onChange={(event) => setReason(event.target.value)}
+            aria-label="Link reason"
+          />
         </div>
-        <Textarea
-          value={reason}
-          onChange={(event) => setReason(event.target.value)}
-          aria-label="Link reason"
-        />
-        <DialogFooter showCloseButton>
+        <SheetFooter className="sm:flex-row sm:justify-end">
+          <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+            Close
+          </Button>
           <Button
             disabled={!selected || !reason.trim() || busy}
             onClick={async () => {
@@ -838,9 +843,9 @@ function CustomerLinkDialog({
           >
             <Link2 className="size-4" /> Link customer
           </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+        </SheetFooter>
+      </SheetContent>
+    </Sheet>
   );
 }
 
@@ -864,35 +869,40 @@ function FollowUpDialog({
       setAgentId(messaging.conversation?.assignee?.membershipId ?? agents[0]?.membershipId ?? '');
   }, [open, agents, messaging.conversation?.assignee?.membershipId]);
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>Schedule follow-up</DialogTitle>
-          <DialogDescription>Assign a dated reminder with clear ownership.</DialogDescription>
-        </DialogHeader>
-        <label className="space-y-1 text-sm font-medium">
-          Responsible agent
-          <NativeSelect value={agentId} onChange={(event) => setAgentId(event.target.value)}>
-            {agents.map((agent) => (
-              <NativeSelectOption key={agent.membershipId} value={agent.membershipId}>
-                {agent.displayName}
-              </NativeSelectOption>
-            ))}
-          </NativeSelect>
-        </label>
-        <label className="space-y-1 text-sm font-medium">
-          Due date and time
-          <Input
-            type="datetime-local"
-            value={dueAt}
-            onChange={(event) => setDueAt(event.target.value)}
-          />
-        </label>
-        <label className="space-y-1 text-sm font-medium">
-          Note
-          <Textarea value={note} onChange={(event) => setNote(event.target.value)} />
-        </label>
-        <DialogFooter showCloseButton>
+    <Sheet open={open} onOpenChange={onOpenChange}>
+      <SheetContent side="right" className="w-full sm:max-w-md overflow-y-auto">
+        <SheetHeader>
+          <SheetTitle>Schedule follow-up</SheetTitle>
+          <SheetDescription>Assign a dated reminder with clear ownership.</SheetDescription>
+        </SheetHeader>
+        <div className="space-y-4 px-4">
+          <label className="block space-y-1 text-sm font-medium">
+            Responsible agent
+            <NativeSelect value={agentId} onChange={(event) => setAgentId(event.target.value)}>
+              {agents.map((agent) => (
+                <NativeSelectOption key={agent.membershipId} value={agent.membershipId}>
+                  {agent.displayName}
+                </NativeSelectOption>
+              ))}
+            </NativeSelect>
+          </label>
+          <label className="block space-y-1 text-sm font-medium">
+            Due date and time
+            <Input
+              type="datetime-local"
+              value={dueAt}
+              onChange={(event) => setDueAt(event.target.value)}
+            />
+          </label>
+          <label className="block space-y-1 text-sm font-medium">
+            Note
+            <Textarea value={note} onChange={(event) => setNote(event.target.value)} />
+          </label>
+        </div>
+        <SheetFooter className="sm:flex-row sm:justify-end">
+          <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+            Close
+          </Button>
           <Button
             disabled={!agentId || !dueAt}
             onClick={async () => {
@@ -909,9 +919,9 @@ function FollowUpDialog({
           >
             <CalendarClock className="size-4" /> Schedule
           </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+        </SheetFooter>
+      </SheetContent>
+    </Sheet>
   );
 }
 

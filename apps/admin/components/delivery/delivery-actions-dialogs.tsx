@@ -13,15 +13,16 @@ import React, { useState } from 'react';
 
 import { Button } from '@/components/ui/button';
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetFooter,
+  SheetHeader,
+  SheetTitle,
+} from '@/components/ui/sheet';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select';
 import { Textarea } from '@/components/ui/textarea';
 import { fetchApiData } from '@/lib/api';
 import type { DeliveryAttemptOutcomeDto, DeliveryClaimDto } from '@maevelle/contracts';
@@ -82,56 +83,72 @@ export function RecordDeliveryAttemptDialog({
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-md">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
+    <Sheet open={open} onOpenChange={onOpenChange}>
+      <SheetContent side="right" className="w-full sm:max-w-md overflow-y-auto">
+        <SheetHeader>
+          <SheetTitle className="flex items-center gap-2">
             <Clock className="size-5 text-amber-600" /> Record Delivery Attempt
-          </DialogTitle>
-          <DialogDescription>
-            Log an attempt outcome for <strong className="text-foreground">{deliveryNumber}</strong> without immediately failing the order if a retry is planned.
-          </DialogDescription>
-        </DialogHeader>
+          </SheetTitle>
+          <SheetDescription>
+            Log an attempt outcome for <strong className="text-foreground">{deliveryNumber}</strong>{' '}
+            without immediately failing the order if a retry is planned.
+          </SheetDescription>
+        </SheetHeader>
 
         {error ? (
-          <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-xs text-destructive flex items-start gap-2">
+          <div className="mx-4 rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-xs text-destructive flex items-start gap-2">
             <AlertCircle className="size-4 shrink-0 mt-0.5" />
             <p>{error}</p>
           </div>
         ) : null}
 
-        <form onSubmit={handleSubmit} className="space-y-3.5 text-xs">
+        <form onSubmit={handleSubmit} className="space-y-3.5 px-4 pb-4 text-xs">
           <div className="space-y-1.5">
-            <Label htmlFor="outcomeSelect" className="text-xs font-medium">Attempt Result</Label>
-            <select
+            <Label htmlFor="outcomeSelect" className="text-xs font-medium">
+              Attempt Result
+            </Label>
+            <NativeSelect
               id="outcomeSelect"
-              className="w-full rounded-md border bg-background px-3 py-2 text-xs focus:ring-2 focus:ring-primary"
               value={outcome}
               onChange={(e) => setOutcome(e.target.value as DeliveryAttemptOutcomeDto)}
             >
-              <option value="CUSTOMER_UNAVAILABLE">Customer Unavailable (Not home / unanswered)</option>
-              <option value="CUSTOMER_REFUSED">Customer Refused (Buyer refused delivery)</option>
-              <option value="ADDRESS_NOT_FOUND">Address Not Found (Incorrect or unlocatable address)</option>
-              <option value="RESCHEDULE_REQUESTED">Reschedule Requested (Customer requested later time)</option>
-              <option value="PHONE_UNREACHABLE">Phone Unreachable (Switched off / out of network)</option>
-              <option value="PROVIDER_FAILURE">Provider Failure (Rider accident, delay, vehicle issue)</option>
-              <option value="OTHER_FAILED">Other Delivery Issue</option>
-            </select>
+              <NativeSelectOption value="CUSTOMER_UNAVAILABLE">
+                Customer Unavailable (Not home / unanswered)
+              </NativeSelectOption>
+              <NativeSelectOption value="CUSTOMER_REFUSED">Customer Refused (Buyer refused delivery)</NativeSelectOption>
+              <NativeSelectOption value="ADDRESS_NOT_FOUND">
+                Address Not Found (Incorrect or unlocatable address)
+              </NativeSelectOption>
+              <NativeSelectOption value="RESCHEDULE_REQUESTED">
+                Reschedule Requested (Customer requested later time)
+              </NativeSelectOption>
+              <NativeSelectOption value="PHONE_UNREACHABLE">
+                Phone Unreachable (Switched off / out of network)
+              </NativeSelectOption>
+              <NativeSelectOption value="PROVIDER_FAILURE">
+                Provider Failure (Rider accident, delay, vehicle issue)
+              </NativeSelectOption>
+              <NativeSelectOption value="OTHER_FAILED">Other Delivery Issue</NativeSelectOption>
+            </NativeSelect>
           </div>
 
           <div className="space-y-1.5">
-            <Label htmlFor="reasonInput" className="text-xs font-medium">Operational Reason Code</Label>
+            <Label htmlFor="reasonInput" className="text-xs font-medium">
+              Operational Reason Code
+            </Label>
             <Input
               id="reasonInput"
               value={reasonCode}
               onChange={(e) => setReasonCode(e.target.value)}
               placeholder="e.g. DOOR_LOCKED, PHONE_SWITCHED_OFF"
-              className="text-xs h-8"
             />
           </div>
 
           <div className="space-y-1.5">
-            <Label htmlFor="nextAttemptInput" className="text-xs font-medium flex items-center justify-between">
+            <Label
+              htmlFor="nextAttemptInput"
+              className="text-xs font-medium flex items-center justify-between"
+            >
               <span>Next Scheduled Attempt (Optional)</span>
               <span className="text-[10px] text-muted-foreground">Sets buyer expectations</span>
             </Label>
@@ -145,7 +162,9 @@ export function RecordDeliveryAttemptDialog({
           </div>
 
           <div className="space-y-1.5">
-            <Label htmlFor="noteInput" className="text-xs font-medium">Attempt Note (Optional)</Label>
+            <Label htmlFor="noteInput" className="text-xs font-medium">
+              Attempt Note (Optional)
+            </Label>
             <Textarea
               id="noteInput"
               placeholder="Rider contacted customer at 3:15 PM, customer requested retry tomorrow morning."
@@ -164,12 +183,15 @@ export function RecordDeliveryAttemptDialog({
               onChange={(e) => setIsFinal(e.target.checked)}
               className="rounded border text-primary size-4"
             />
-            <Label htmlFor="isFinalCheckbox" className="text-xs font-normal text-muted-foreground cursor-pointer">
+            <Label
+              htmlFor="isFinalCheckbox"
+              className="text-xs font-normal text-muted-foreground cursor-pointer"
+            >
               This is the final attempt. Mark delivery ready for failure / RTO if this fails.
             </Label>
           </div>
 
-          <DialogFooter className="pt-2">
+          <SheetFooter className="px-0 sm:flex-row sm:justify-end">
             <Button
               type="button"
               variant="outline"
@@ -187,10 +209,10 @@ export function RecordDeliveryAttemptDialog({
                 'Save Attempt'
               )}
             </Button>
-          </DialogFooter>
+          </SheetFooter>
         </form>
-      </DialogContent>
-    </Dialog>
+      </SheetContent>
+    </Sheet>
   );
 }
 
@@ -260,33 +282,34 @@ export function ReconcileUnknownBookingDialog({
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-md">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2 text-amber-700 dark:text-amber-400">
+    <Sheet open={open} onOpenChange={onOpenChange}>
+      <SheetContent side="right" className="w-full sm:max-w-md overflow-y-auto">
+        <SheetHeader>
+          <SheetTitle className="flex items-center gap-2 text-amber-700 dark:text-amber-400">
             <HelpCircle className="size-5" /> Reconcile Unknown Courier Outcome
-          </DialogTitle>
-          <DialogDescription>
-            The booking request for <strong className="text-foreground">{deliveryNumber}</strong> had an ambiguous outcome (network timeout or provider uncertainty).
-            Check the courier dashboard before confirming to prevent duplicate consignments.
-          </DialogDescription>
-        </DialogHeader>
+          </SheetTitle>
+          <SheetDescription>
+            The booking request for <strong className="text-foreground">{deliveryNumber}</strong>{' '}
+            had an ambiguous outcome (network timeout or provider uncertainty). Check the courier
+            dashboard before confirming to prevent duplicate consignments.
+          </SheetDescription>
+        </SheetHeader>
 
         {error ? (
-          <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-xs text-destructive flex items-start gap-2">
+          <div className="mx-4 rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-xs text-destructive flex items-start gap-2">
             <AlertCircle className="size-4 shrink-0 mt-0.5" />
             <p>{error}</p>
           </div>
         ) : null}
 
-        <form onSubmit={handleSubmit} className="space-y-4 text-xs">
+        <form onSubmit={handleSubmit} className="space-y-4 px-4 pb-4 text-xs">
           <div className="space-y-1.5">
             <Label className="text-xs font-medium">Reconciled Verification Result</Label>
             <div className="grid grid-cols-2 gap-2">
               <button
                 type="button"
                 onClick={() => setOutcome('BOOKED')}
-                className={`p-2.5 rounded-lg border text-left flex flex-col gap-1 transition-all ${
+                className={`p-2.5 rounded-lg border text-left flex flex-col gap-1 transition-colors duration-150 ${
                   outcome === 'BOOKED'
                     ? 'border-primary bg-primary/10 text-primary font-semibold'
                     : 'hover:bg-muted text-muted-foreground'
@@ -302,7 +325,7 @@ export function ReconcileUnknownBookingDialog({
               <button
                 type="button"
                 onClick={() => setOutcome('NOT_CREATED')}
-                className={`p-2.5 rounded-lg border text-left flex flex-col gap-1 transition-all ${
+                className={`p-2.5 rounded-lg border text-left flex flex-col gap-1 transition-colors duration-150 ${
                   outcome === 'NOT_CREATED'
                     ? 'border-destructive bg-destructive/10 text-destructive font-semibold'
                     : 'hover:bg-muted text-muted-foreground'
@@ -360,12 +383,13 @@ export function ReconcileUnknownBookingDialog({
                 className="text-xs h-8"
               />
               <p className="text-[11px] text-muted-foreground">
-                Confirming as Not Created resets this Delivery so another courier booking can be attempted safely.
+                Confirming as Not Created resets this Delivery so another courier booking can be
+                attempted safely.
               </p>
             </div>
           )}
 
-          <DialogFooter className="pt-2">
+          <SheetFooter className="px-0 sm:flex-row sm:justify-end">
             <Button
               type="button"
               variant="outline"
@@ -386,10 +410,10 @@ export function ReconcileUnknownBookingDialog({
                 'Save Reconciliation'
               )}
             </Button>
-          </DialogFooter>
+          </SheetFooter>
         </form>
-      </DialogContent>
-    </Dialog>
+      </SheetContent>
+    </Sheet>
   );
 }
 
@@ -446,40 +470,43 @@ export function ResolveExceptionDialog({
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-md">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
+    <Sheet open={open} onOpenChange={onOpenChange}>
+      <SheetContent side="right" className="w-full sm:max-w-md overflow-y-auto">
+        <SheetHeader>
+          <SheetTitle className="flex items-center gap-2">
             <CheckCircle2 className="size-5 text-emerald-600" /> Resolve Exception
-          </DialogTitle>
-          <DialogDescription>
-            {exceptionSummary}
-          </DialogDescription>
-        </DialogHeader>
+          </SheetTitle>
+          <SheetDescription>{exceptionSummary}</SheetDescription>
+        </SheetHeader>
 
         {error ? (
-          <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-xs text-destructive flex items-start gap-2">
+          <div className="mx-4 rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-xs text-destructive flex items-start gap-2">
             <AlertCircle className="size-4 shrink-0 mt-0.5" />
             <p>{error}</p>
           </div>
         ) : null}
 
-        <form onSubmit={handleSubmit} className="space-y-3.5 text-xs">
+        <form onSubmit={handleSubmit} className="space-y-3.5 px-4 pb-4 text-xs">
           <div className="space-y-1.5">
-            <Label htmlFor="resolutionSelect" className="text-xs font-medium">Resolution Outcome</Label>
-            <select
+            <Label htmlFor="resolutionSelect" className="text-xs font-medium">
+              Resolution Outcome
+            </Label>
+            <NativeSelect
               id="resolutionSelect"
-              className="w-full rounded-md border bg-background px-3 py-2 text-xs focus:ring-2 focus:ring-primary"
               value={resolution}
               onChange={(e) => setResolution(e.target.value as 'RESOLVED' | 'IGNORED_WITH_REASON')}
             >
-              <option value="RESOLVED">Resolved (Issue investigated and cleared)</option>
-              <option value="IGNORED_WITH_REASON">Ignored with Reason (Stale or non-critical exception)</option>
-            </select>
+              <NativeSelectOption value="RESOLVED">Resolved (Issue investigated and cleared)</NativeSelectOption>
+              <NativeSelectOption value="IGNORED_WITH_REASON">
+                Ignored with Reason (Stale or non-critical exception)
+              </NativeSelectOption>
+            </NativeSelect>
           </div>
 
           <div className="space-y-1.5">
-            <Label htmlFor="noteArea" className="text-xs font-medium">Resolution Notes (Required)</Label>
+            <Label htmlFor="noteArea" className="text-xs font-medium">
+              Resolution Notes (Required)
+            </Label>
             <Textarea
               id="noteArea"
               placeholder="e.g. Contacted Pathao hub; parcel was verified intact and back on vehicle for re-attempt."
@@ -490,7 +517,7 @@ export function ResolveExceptionDialog({
             />
           </div>
 
-          <DialogFooter className="pt-2">
+          <SheetFooter className="px-0 sm:flex-row sm:justify-end">
             <Button
               type="button"
               variant="outline"
@@ -508,10 +535,10 @@ export function ResolveExceptionDialog({
                 'Resolve Exception'
               )}
             </Button>
-          </DialogFooter>
+          </SheetFooter>
         </form>
-      </DialogContent>
-    </Dialog>
+      </SheetContent>
+    </Sheet>
   );
 }
 
@@ -538,7 +565,9 @@ export function OpenClaimDialog({
   defaultCurrency = 'BDT',
   onSuccess,
 }: OpenClaimDialogProps) {
-  const [reason, setReason] = useState<'LOST' | 'DAMAGED' | 'COD_MISMATCH' | 'OVERCHARGE' | 'OTHER'>('LOST');
+  const [reason, setReason] = useState<
+    'LOST' | 'DAMAGED' | 'COD_MISMATCH' | 'OVERCHARGE' | 'OTHER'
+  >('LOST');
   const [claimedAmount, setClaimedAmount] = useState('');
   const [notes, setNotes] = useState('');
   const [loading, setLoading] = useState(false);
@@ -570,43 +599,53 @@ export function OpenClaimDialog({
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-md">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
+    <Sheet open={open} onOpenChange={onOpenChange}>
+      <SheetContent side="right" className="w-full sm:max-w-md overflow-y-auto">
+        <SheetHeader>
+          <SheetTitle className="flex items-center gap-2">
             <ShieldAlert className="size-5 text-rose-600" /> Open Courier Claim
-          </DialogTitle>
-          <DialogDescription>
-            Open a traceable insurance or dispute claim against the carrier for <strong className="text-foreground">{deliveryNumber}</strong>.
-          </DialogDescription>
-        </DialogHeader>
+          </SheetTitle>
+          <SheetDescription>
+            Open a traceable insurance or dispute claim against the carrier for{' '}
+            <strong className="text-foreground">{deliveryNumber}</strong>.
+          </SheetDescription>
+        </SheetHeader>
 
         {error ? (
-          <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-xs text-destructive flex items-start gap-2">
+          <div className="mx-4 rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-xs text-destructive flex items-start gap-2">
             <AlertCircle className="size-4 shrink-0 mt-0.5" />
             <p>{error}</p>
           </div>
         ) : null}
 
-        <form onSubmit={handleSubmit} className="space-y-3.5 text-xs">
+        <form onSubmit={handleSubmit} className="space-y-3.5 px-4 pb-4 text-xs">
           <div className="space-y-1.5">
-            <Label htmlFor="claimReason" className="text-xs font-medium">Claim Reason</Label>
-            <select
+            <Label htmlFor="claimReason" className="text-xs font-medium">
+              Claim Reason
+            </Label>
+            <NativeSelect
               id="claimReason"
-              className="w-full rounded-md border bg-background px-3 py-2 text-xs focus:ring-2 focus:ring-primary"
               value={reason}
               onChange={(e) => setReason(e.target.value as typeof reason)}
             >
-              <option value="LOST">Lost in Transit (Courier confirmed parcel missing)</option>
-              <option value="DAMAGED">Damaged in Transit (Goods damaged while in courier custody)</option>
-              <option value="COD_MISMATCH">COD Amount Mismatch (Courier collected different amount)</option>
-              <option value="OVERCHARGE">Courier Overcharge (Incorrect delivery or weight fee)</option>
-              <option value="OTHER">Other Operational Dispute</option>
-            </select>
+              <NativeSelectOption value="LOST">Lost in Transit (Courier confirmed parcel missing)</NativeSelectOption>
+              <NativeSelectOption value="DAMAGED">
+                Damaged in Transit (Goods damaged while in courier custody)
+              </NativeSelectOption>
+              <NativeSelectOption value="COD_MISMATCH">
+                COD Amount Mismatch (Courier collected different amount)
+              </NativeSelectOption>
+              <NativeSelectOption value="OVERCHARGE">
+                Courier Overcharge (Incorrect delivery or weight fee)
+              </NativeSelectOption>
+              <NativeSelectOption value="OTHER">Other Operational Dispute</NativeSelectOption>
+            </NativeSelect>
           </div>
 
           <div className="space-y-1.5">
-            <Label htmlFor="claimedAmountInput" className="text-xs font-medium">Claimed Amount ({defaultCurrency})</Label>
+            <Label htmlFor="claimedAmountInput" className="text-xs font-medium">
+              Claimed Amount ({defaultCurrency})
+            </Label>
             <Input
               id="claimedAmountInput"
               type="number"
@@ -615,12 +654,13 @@ export function OpenClaimDialog({
               placeholder="e.g. 2400.00"
               value={claimedAmount}
               onChange={(e) => setClaimedAmount(e.target.value)}
-              className="text-xs h-8"
             />
           </div>
 
           <div className="space-y-1.5">
-            <Label htmlFor="claimNotes" className="text-xs font-medium">Claim Details & Provider Reference (Optional)</Label>
+            <Label htmlFor="claimNotes" className="text-xs font-medium">
+              Claim Details & Provider Reference (Optional)
+            </Label>
             <Textarea
               id="claimNotes"
               placeholder="Dispute ticket #9482 filed with Pathao partner support on 2026-09-30."
@@ -630,7 +670,7 @@ export function OpenClaimDialog({
             />
           </div>
 
-          <DialogFooter className="pt-2">
+          <SheetFooter className="px-0 sm:flex-row sm:justify-end">
             <Button
               type="button"
               variant="outline"
@@ -648,10 +688,10 @@ export function OpenClaimDialog({
                 'Open Claim'
               )}
             </Button>
-          </DialogFooter>
+          </SheetFooter>
         </form>
-      </DialogContent>
-    </Dialog>
+      </SheetContent>
+    </Sheet>
   );
 }
 
@@ -674,8 +714,12 @@ export function TransitionClaimDialog({
   claim,
   onSuccess,
 }: TransitionClaimDialogProps) {
-  const [nextStatus, setNextStatus] = useState<'SUBMITTED' | 'APPROVED' | 'REJECTED' | 'PAID' | 'CLOSED'>('SUBMITTED');
-  const [approvedAmount, setApprovedAmount] = useState(claim.approvedAmount ?? claim.claimedAmount ?? '');
+  const [nextStatus, setNextStatus] = useState<
+    'SUBMITTED' | 'APPROVED' | 'REJECTED' | 'PAID' | 'CLOSED'
+  >('SUBMITTED');
+  const [approvedAmount, setApprovedAmount] = useState(
+    claim.approvedAmount ?? claim.claimedAmount ?? '',
+  );
   const [providerReference, setProviderReference] = useState('');
   const [notes, setNotes] = useState('');
   const [loading, setLoading] = useState(false);
@@ -707,44 +751,48 @@ export function TransitionClaimDialog({
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-md">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
+    <Sheet open={open} onOpenChange={onOpenChange}>
+      <SheetContent side="right" className="w-full sm:max-w-md overflow-y-auto">
+        <SheetHeader>
+          <SheetTitle className="flex items-center gap-2">
             Update Courier Claim: {claim.claimNumber}
-          </DialogTitle>
-          <DialogDescription>
-            Current status: <strong className="text-foreground">{claim.status}</strong> · Reason: {claim.reason}
-          </DialogDescription>
-        </DialogHeader>
+          </SheetTitle>
+          <SheetDescription>
+            Current status: <strong className="text-foreground">{claim.status}</strong> · Reason:{' '}
+            {claim.reason}
+          </SheetDescription>
+        </SheetHeader>
 
         {error ? (
-          <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-xs text-destructive flex items-start gap-2">
+          <div className="mx-4 rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-xs text-destructive flex items-start gap-2">
             <AlertCircle className="size-4 shrink-0 mt-0.5" />
             <p>{error}</p>
           </div>
         ) : null}
 
-        <form onSubmit={handleSubmit} className="space-y-3.5 text-xs">
+        <form onSubmit={handleSubmit} className="space-y-3.5 px-4 pb-4 text-xs">
           <div className="space-y-1.5">
-            <Label htmlFor="nextStatusSelect" className="text-xs font-medium">Next Claim Status</Label>
-            <select
+            <Label htmlFor="nextStatusSelect" className="text-xs font-medium">
+              Next Claim Status
+            </Label>
+            <NativeSelect
               id="nextStatusSelect"
-              className="w-full rounded-md border bg-background px-3 py-2 text-xs focus:ring-2 focus:ring-primary"
               value={nextStatus}
               onChange={(e) => setNextStatus(e.target.value as typeof nextStatus)}
             >
-              <option value="SUBMITTED">SUBMITTED (Claim sent to courier)</option>
-              <option value="APPROVED">APPROVED (Courier accepted liability)</option>
-              <option value="REJECTED">REJECTED (Courier denied compensation)</option>
-              <option value="PAID">PAID (Compensation disbursed / settled)</option>
-              <option value="CLOSED">CLOSED (Resolved and completed)</option>
-            </select>
+              <NativeSelectOption value="SUBMITTED">SUBMITTED (Claim sent to courier)</NativeSelectOption>
+              <NativeSelectOption value="APPROVED">APPROVED (Courier accepted liability)</NativeSelectOption>
+              <NativeSelectOption value="REJECTED">REJECTED (Courier denied compensation)</NativeSelectOption>
+              <NativeSelectOption value="PAID">PAID (Compensation disbursed / settled)</NativeSelectOption>
+              <NativeSelectOption value="CLOSED">CLOSED (Resolved and completed)</NativeSelectOption>
+            </NativeSelect>
           </div>
 
           {(nextStatus === 'APPROVED' || nextStatus === 'PAID') && (
             <div className="space-y-1.5">
-              <Label htmlFor="approvedAmtInput" className="text-xs font-medium">Approved Amount ({claim.currency})</Label>
+              <Label htmlFor="approvedAmtInput" className="text-xs font-medium">
+                Approved Amount ({claim.currency})
+              </Label>
               <Input
                 id="approvedAmtInput"
                 type="number"
@@ -752,13 +800,14 @@ export function TransitionClaimDialog({
                 min="0"
                 value={approvedAmount}
                 onChange={(e) => setApprovedAmount(e.target.value)}
-                className="text-xs h-8"
               />
             </div>
           )}
 
           <div className="space-y-1.5">
-            <Label htmlFor="providerRefInput" className="text-xs font-medium">Provider Reference / Ticket #</Label>
+            <Label htmlFor="providerRefInput" className="text-xs font-medium">
+              Provider Reference / Ticket #
+            </Label>
             <Input
               id="providerRefInput"
               placeholder="e.g. CR-908234"
@@ -769,7 +818,9 @@ export function TransitionClaimDialog({
           </div>
 
           <div className="space-y-1.5">
-            <Label htmlFor="claimNotesArea" className="text-xs font-medium">Update Note</Label>
+            <Label htmlFor="claimNotesArea" className="text-xs font-medium">
+              Update Note
+            </Label>
             <Textarea
               id="claimNotesArea"
               placeholder="Courier credit memo issued on monthly statement."
@@ -779,7 +830,7 @@ export function TransitionClaimDialog({
             />
           </div>
 
-          <DialogFooter className="pt-2">
+          <SheetFooter className="px-0 sm:flex-row sm:justify-end">
             <Button
               type="button"
               variant="outline"
@@ -797,9 +848,9 @@ export function TransitionClaimDialog({
                 'Update Claim Status'
               )}
             </Button>
-          </DialogFooter>
+          </SheetFooter>
         </form>
-      </DialogContent>
-    </Dialog>
+      </SheetContent>
+    </Sheet>
   );
 }

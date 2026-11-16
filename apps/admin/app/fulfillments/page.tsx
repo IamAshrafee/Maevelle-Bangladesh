@@ -1,16 +1,11 @@
 import { Suspense } from 'react';
 
 import { FulfillmentConsole } from '@/components/fulfillment/fulfillment-console';
+import { PageSkeleton } from '@/components/ui/page-shell';
 
 export default function FulfillmentsPage() {
   return (
-    <Suspense
-      fallback={
-        <main className="p-8 text-center text-sm text-muted-foreground">
-          Loading fulfillment workspace…
-        </main>
-      }
-    >
+    <Suspense fallback={<PageSkeleton variant="table" widthVariant="wide" />}>
       <FulfillmentConsole />
     </Suspense>
   );

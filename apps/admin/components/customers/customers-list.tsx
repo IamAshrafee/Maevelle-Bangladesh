@@ -1,7 +1,6 @@
 'use client';
 
 import {
-  Ban,
   Check,
   CircleAlert,
   Copy,
@@ -11,8 +10,6 @@ import {
   Plus,
   RefreshCw,
   Search,
-  ShoppingBag,
-  UserCheck,
   UserPlus,
   Users,
   X,
@@ -37,9 +34,14 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { fetchApiData } from '@/lib/api';
+import { PageHeader } from '@/components/ui/page-shell';
+import { WorkspaceTabs, type WorkspaceTabItem } from '@/components/ui/workspace-tabs';
+import { ListWorkspace } from '@/components/workspaces/list-workspace';
+import { formatWholeTaka } from '@/lib/format/numbers';
+import { cn } from '@/lib/utils';
+import { TableSkeletonRows, CardSkeletonStack } from '@/components/ui/table-skeleton';
 import { CustomerStatusBadge } from './customer-status-badge';
 import { CustomerRestrictionBadge } from './customer-restriction-badge';
-import { CrmNav } from './crm-nav';
 import { useAdminCapability } from '@/components/admin-capabilities';
 import { CustomerDirectoryActions } from './customer-directory-actions';
 
@@ -256,147 +258,125 @@ export function CustomersList() {
     }
   }
 
-  function formatBdt(amount: string | number | null | undefined): string {
-    return new Intl.NumberFormat('en-BD', {
-      style: 'currency',
-      currency: 'BDT',
-      maximumFractionDigits: 2,
-    }).format(Number(amount ?? 0));
-  }
+  const customerQueueTabs: readonly WorkspaceTabItem<QueueTab>[] = [
+    { value: 'ALL', label: 'All Customers' },
+    { value: 'REPEAT', label: 'Repeat Buyers (2+ Orders)' },
+    { value: 'HIGH_SPEND', label: 'High Value / VIP' },
+    { value: 'RESTRICTED', label: 'Restricted & Blocked' },
+    { value: 'RECENT', label: 'Recently Active' },
+  ];
 
   return (
-    <main className="min-w-0 space-y-5 px-4 py-5 sm:px-6 lg:px-8">
-      {/* Header */}
-      <header className="flex flex-col gap-4 border-b pb-5 lg:flex-row lg:items-end lg:justify-between">
-        <div className="min-w-0">
-          <p className="text-sm font-medium text-primary">Commerce & Identity</p>
-          <h1 className="text-2xl font-bold tracking-tight text-foreground sm:text-3xl">
-            Customers
-          </h1>
-          <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
-            Manage your verified customer base, inspect purchase history and delivery risk, and
-            resolve duplicate identities.
-          </p>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <Button variant="outline" disabled={state === 'loading'} onClick={() => void load()}>
-            <RefreshCw
-              className={`size-3.5 mr-1.5 ${state === 'loading' ? 'animate-spin' : ''}`}
-              aria-hidden="true"
-            />
-            Refresh
-          </Button>
-          {canExport ? (
-            <Button variant="outline" disabled={exporting} onClick={() => void exportCsv()}>
-              <Download className="size-3.5 mr-1.5" aria-hidden="true" />
-              {exporting ? 'Exporting…' : 'Export CSV'}
-            </Button>
-          ) : null}
-          <Button render={<Link href="/customers/new" />} nativeButton={false}>
-            <UserPlus className="size-3.5 mr-1.5" aria-hidden="true" />
-            Create Customer
-          </Button>
-        </div>
-      </header>
-
-      <CrmNav />
-      <CustomerDirectoryActions
-        filters={savedViewFilters}
-        selectedIds={[...selectedIds]}
-        onApplyView={(viewFilters) => {
-          const next = new URLSearchParams();
-          for (const [key, value] of Object.entries(viewFilters)) {
-            if (typeof value === 'string' && value) next.set(key, value);
+    <ListWorkspace
+      widthVariant="wide"
+      header={
+        <PageHeader
+          eyebrow="Commerce & Identity"
+          title="Customers"
+          description="Manage your verified customer base, inspect purchase history and delivery risk, and resolve duplicate identities."
+          actions={
+            <div className="flex flex-wrap items-center gap-2">
+              <Button variant="outline" disabled={state === 'loading'} onClick={() => void load()}>
+                <RefreshCw
+                  className={`size-3.5 mr-1.5 ${state === 'loading' ? 'animate-spin' : ''}`}
+                  aria-hidden="true"
+                />
+                Refresh
+              </Button>
+              {canExport ? (
+                <Button variant="outline" disabled={exporting} onClick={() => void exportCsv()}>
+                  <Download className="size-3.5 mr-1.5" aria-hidden="true" />
+                  {exporting ? 'Exporting…' : 'Export CSV'}
+                </Button>
+              ) : null}
+              <Button render={<Link href="/customers/new" />} nativeButton={false}>
+                <UserPlus className="size-3.5 mr-1.5" aria-hidden="true" />
+                Create Customer
+              </Button>
+            </div>
           }
-          setQuery(typeof viewFilters.q === 'string' ? viewFilters.q : '');
-          router.replace(next.size ? `/customers?${next.toString()}` : '/customers', {
-            scroll: false,
-          });
-        }}
-        onBulkComplete={() => {
-          setSelectedIds(new Set());
-          void load();
-        }}
-      />
-
-      {message && (
-        <div
-          className="flex items-start gap-2 rounded-lg border border-amber-300/70 bg-amber-50 px-3 py-2 text-sm text-amber-950 dark:border-amber-900/60 dark:bg-amber-950/40 dark:text-amber-200"
-          role="status"
-          aria-live="polite"
-        >
-          <CircleAlert className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
-          <p className="leading-tight">{message}</p>
-        </div>
-      )}
-
-      {/* Operational Queue Tabs */}
-      <div className="flex overflow-x-auto border-b pb-px gap-2">
-        <button
-          type="button"
-          onClick={() => handleQueueChange('ALL')}
-          className={`flex items-center gap-1.5 border-b-2 px-3 py-2 text-xs font-medium transition-colors whitespace-nowrap ${
-            queue === 'ALL'
-              ? 'border-primary text-primary font-semibold'
-              : 'border-transparent text-muted-foreground hover:text-foreground'
-          }`}
-        >
-          <Users className="size-3.5" aria-hidden="true" />
-          All Customers
-        </button>
-
-        <button
-          type="button"
-          onClick={() => handleQueueChange('REPEAT')}
-          className={`flex items-center gap-1.5 border-b-2 px-3 py-2 text-xs font-medium transition-colors whitespace-nowrap ${
-            queue === 'REPEAT'
-              ? 'border-primary text-primary font-semibold'
-              : 'border-transparent text-muted-foreground hover:text-foreground'
-          }`}
-        >
-          <UserCheck className="size-3.5" aria-hidden="true" />
-          Repeat Buyers (2+ Orders)
-        </button>
-
-        <button
-          type="button"
-          onClick={() => handleQueueChange('HIGH_SPEND')}
-          className={`flex items-center gap-1.5 border-b-2 px-3 py-2 text-xs font-medium transition-colors whitespace-nowrap ${
-            queue === 'HIGH_SPEND'
-              ? 'border-primary text-primary font-semibold'
-              : 'border-transparent text-muted-foreground hover:text-foreground'
-          }`}
-        >
-          <ShoppingBag className="size-3.5 text-emerald-600" aria-hidden="true" />
-          High Value / VIP
-        </button>
-
-        <button
-          type="button"
-          onClick={() => handleQueueChange('RESTRICTED')}
-          className={`flex items-center gap-1.5 border-b-2 px-3 py-2 text-xs font-medium transition-colors whitespace-nowrap ${
-            queue === 'RESTRICTED'
-              ? 'border-rose-600 text-rose-700 font-semibold'
-              : 'border-transparent text-muted-foreground hover:text-foreground'
-          }`}
-        >
-          <Ban className="size-3.5 text-rose-600" aria-hidden="true" />
-          Restricted & Blocked
-        </button>
-
-        <button
-          type="button"
-          onClick={() => handleQueueChange('RECENT')}
-          className={`flex items-center gap-1.5 border-b-2 px-3 py-2 text-xs font-medium transition-colors whitespace-nowrap ${
-            queue === 'RECENT'
-              ? 'border-primary text-primary font-semibold'
-              : 'border-transparent text-muted-foreground hover:text-foreground'
-          }`}
-        >
-          Recently Active
-        </button>
-      </div>
-
+        />
+      }
+      banner={
+        <>
+          <CustomerDirectoryActions
+            filters={savedViewFilters}
+            selectedIds={[...selectedIds]}
+            onApplyView={(viewFilters) => {
+              const next = new URLSearchParams();
+              for (const [key, value] of Object.entries(viewFilters)) {
+                if (typeof value === 'string' && value) next.set(key, value);
+              }
+              setQuery(typeof viewFilters.q === 'string' ? viewFilters.q : '');
+              router.replace(next.size ? `/customers?${next.toString()}` : '/customers', {
+                scroll: false,
+              });
+            }}
+            onBulkComplete={() => {
+              setSelectedIds(new Set());
+              void load();
+            }}
+          />
+          {message && (
+            <div
+              className="flex items-start gap-2 rounded-lg border border-amber-300/70 bg-amber-50 px-3 py-2 text-sm text-amber-950 dark:border-amber-900/60 dark:bg-amber-950/40 dark:text-amber-200"
+              role="status"
+              aria-live="polite"
+            >
+              <CircleAlert className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+              <p className="leading-tight">{message}</p>
+            </div>
+          )}
+        </>
+      }
+      tabs={
+        <WorkspaceTabs
+          items={customerQueueTabs}
+          value={queue}
+          onValueChange={handleQueueChange}
+          maxVisible={5}
+          variant="underline"
+          ariaLabel="Customer operational queues"
+        />
+      }
+      pagination={
+        customers && customers.totalCount > 25 ? (
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 py-4 border-t">
+            <p className="text-xs text-muted-foreground">
+              Showing <span className="font-medium text-foreground">{(page - 1) * 25 + 1}</span> to{' '}
+              <span className="font-medium text-foreground">
+                {Math.min(page * 25, customers.totalCount)}
+              </span>{' '}
+              of <span className="font-medium text-foreground">{customers.totalCount}</span>{' '}
+              customers
+            </p>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={page === 1}
+                onClick={() => replaceQuery({ page: String(page - 1) })}
+                className="text-xs"
+              >
+                Previous
+              </Button>
+              <span className="text-xs text-muted-foreground font-mono px-1">
+                Page {page} of {Math.max(1, Math.ceil(customers.totalCount / 25))}
+              </span>
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={page >= Math.max(1, Math.ceil(customers.totalCount / 25))}
+                onClick={() => replaceQuery({ page: String(page + 1) })}
+                className="text-xs"
+              >
+                Next
+              </Button>
+            </div>
+          </div>
+        ) : null
+      }
+    >
       {/* Filter Section */}
       <section className="space-y-4 border-b pb-4" aria-label="Customer filters">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -578,8 +558,8 @@ export function CustomersList() {
       </section>
 
       {/* Desktop Table View (Hidden on small mobile) */}
-      <div className="hidden md:block overflow-x-auto rounded-lg border bg-card">
-        <Table>
+      <div className="hidden md:block rounded-lg border bg-card overflow-hidden">
+        <Table stickyHeader>
           <TableHeader>
             <TableRow>
               <TableHead className="w-10">
@@ -609,8 +589,27 @@ export function CustomersList() {
               <TableHead className="text-right">Actions</TableHead>
             </TableRow>
           </TableHeader>
-          <TableBody>
-            {customers?.items.length === 0 ? (
+          <TableBody
+            className={cn(
+              state === 'loading' && customers && 'opacity-60 transition-opacity',
+            )}
+          >
+            {state === 'loading' && !customers ? (
+              <TableSkeletonRows
+                columns={8}
+                rows={6}
+                columnWidths={[
+                  'w-4',
+                  'w-36',
+                  'w-32',
+                  'w-24',
+                  'w-20',
+                  'w-28',
+                  'w-20',
+                  'w-16 ml-auto',
+                ]}
+              />
+            ) : customers?.items.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={8} className="h-32 text-center text-muted-foreground">
                   <Users className="mx-auto mb-2 size-8 opacity-20" aria-hidden="true" />
@@ -699,7 +698,9 @@ export function CustomersList() {
                   {/* Orders & Value */}
                   <TableCell>
                     <div className="space-y-0.5 text-xs">
-                      <p className="font-bold text-foreground">{formatBdt(customer.totalSpend)}</p>
+                      <p className="font-mono font-bold tabular-nums text-foreground">
+                        {formatWholeTaka(customer.totalSpend)}
+                      </p>
                       <p className="text-muted-foreground">{customer.orderCount ?? 0} order(s)</p>
                     </div>
                   </TableCell>
@@ -781,8 +782,15 @@ export function CustomersList() {
       </div>
 
       {/* Responsive Mobile Cards Layout (Visible only on small screens) */}
-      <div className="block md:hidden space-y-3">
-        {customers?.items.length === 0 ? (
+      <div
+        className={cn(
+          'block md:hidden space-y-3',
+          state === 'loading' && customers && 'opacity-60 transition-opacity',
+        )}
+      >
+        {state === 'loading' && !customers ? (
+          <CardSkeletonStack count={4} />
+        ) : customers?.items.length === 0 ? (
           <div className="rounded-lg border bg-card p-8 text-center text-muted-foreground">
             <Users className="mx-auto mb-2 size-8 opacity-20" aria-hidden="true" />
             <p className="text-sm font-medium">No customers found.</p>
@@ -829,8 +837,8 @@ export function CustomersList() {
                 </div>
                 <div>
                   <span className="text-[11px] text-muted-foreground">Total Spend</span>
-                  <p className="mt-0.5 font-bold text-foreground">
-                    {formatBdt(customer.totalSpend)} ({customer.orderCount ?? 0} orders)
+                  <p className="mt-0.5 font-mono font-bold tabular-nums text-foreground">
+                    {formatWholeTaka(customer.totalSpend)} ({customer.orderCount ?? 0} orders)
                   </p>
                 </div>
               </div>
@@ -848,42 +856,6 @@ export function CustomersList() {
           ))
         )}
       </div>
-
-      {/* Pagination Footer */}
-      {customers && customers.totalCount > 25 && (
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 py-4 border-t">
-          <p className="text-xs text-muted-foreground">
-            Showing <span className="font-medium text-foreground">{(page - 1) * 25 + 1}</span> to{' '}
-            <span className="font-medium text-foreground">
-              {Math.min(page * 25, customers.totalCount)}
-            </span>{' '}
-            of <span className="font-medium text-foreground">{customers.totalCount}</span> customers
-          </p>
-          <div className="flex items-center gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={page === 1}
-              onClick={() => replaceQuery({ page: String(page - 1) })}
-              className="text-xs"
-            >
-              Previous
-            </Button>
-            <span className="text-xs text-muted-foreground font-mono px-1">
-              Page {page} of {Math.max(1, Math.ceil(customers.totalCount / 25))}
-            </span>
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={page >= Math.max(1, Math.ceil(customers.totalCount / 25))}
-              onClick={() => replaceQuery({ page: String(page + 1) })}
-              className="text-xs"
-            >
-              Next
-            </Button>
-          </div>
-        </div>
-      )}
-    </main>
+    </ListWorkspace>
   );
 }

@@ -6,18 +6,19 @@ import { Pencil } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from '@/components/ui/dialog';
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetFooter,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+} from '@/components/ui/sheet';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select';
 import { fetchApiData } from '@/lib/api';
+import { useFormDialogLifecycle } from '@/hooks/use-form-dialog-lifecycle';
 
 export function CustomerCrmProfileDialog({
   customerId,
@@ -37,6 +38,7 @@ export function CustomerCrmProfileDialog({
   const [relationshipStatus, setRelationshipStatus] = useState(profile.relationshipStatus);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+
   useEffect(() => {
     if (!open) return;
     setFirstName(profile.firstName ?? '');
@@ -45,6 +47,21 @@ export function CustomerCrmProfileDialog({
     setRelationshipStatus(profile.relationshipStatus);
     setError('');
   }, [open, profile]);
+
+  const isDirty =
+    firstName !== (profile.firstName ?? '') ||
+    lastName !== (profile.lastName ?? '') ||
+    language !== (profile.preferredLanguage ?? '') ||
+    relationshipStatus !== profile.relationshipStatus;
+
+  const { handleOpenChange, discardConfirmDialog } = useFormDialogLifecycle({
+    open,
+    onOpenChange: setOpen,
+    isDirty,
+    isSubmitting: busy,
+    title: 'Discard relationship profile changes?',
+  });
+
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setBusy(true);
@@ -60,7 +77,7 @@ export function CustomerCrmProfileDialog({
           relationshipStatus,
         }),
       });
-      setOpen(false);
+      handleOpenChange(false);
       onUpdated();
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'CRM profile could not be updated.');
@@ -68,75 +85,81 @@ export function CustomerCrmProfileDialog({
       setBusy(false);
     }
   }
+
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger render={<Button size="sm" variant="outline" />}>
-        <Pencil className="size-4" /> Edit profile
-      </DialogTrigger>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>Edit relationship profile</DialogTitle>
-          <DialogDescription>
-            Maintain structured names, locale, and the current relationship state. Changes are
-            version checked and audited.
-          </DialogDescription>
-        </DialogHeader>
-        {error ? <p className="text-sm text-destructive">{error}</p> : null}
-        <form className="space-y-4" onSubmit={submit}>
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div className="space-y-2">
-              <Label htmlFor="crm-first-name">First name</Label>
-              <Input
-                id="crm-first-name"
-                value={firstName}
-                onChange={(event) => setFirstName(event.target.value)}
-              />
+    <>
+      <Sheet open={open} onOpenChange={handleOpenChange}>
+        <SheetTrigger render={<Button size="sm" variant="outline" />}>
+          <Pencil className="size-4" /> Edit profile
+        </SheetTrigger>
+        <SheetContent side="right" className="flex w-full flex-col p-0 sm:max-w-lg">
+          <SheetHeader className="shrink-0 border-b border-border/60 px-6 py-4 pr-12 text-left">
+            <SheetTitle>Edit relationship profile</SheetTitle>
+            <SheetDescription>
+              Maintain structured names, locale, and the current relationship state. Changes are
+              version checked and audited.
+            </SheetDescription>
+          </SheetHeader>
+          <form className="flex min-h-0 flex-1 flex-col" onSubmit={submit}>
+            <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-6 py-4">
+              {error ? <p className="text-sm text-destructive">{error}</p> : null}
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="space-y-2">
+                  <Label htmlFor="crm-first-name">First name</Label>
+                  <Input
+                    id="crm-first-name"
+                    value={firstName}
+                    onChange={(event) => setFirstName(event.target.value)}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="crm-last-name">Last name</Label>
+                  <Input
+                    id="crm-last-name"
+                    value={lastName}
+                    onChange={(event) => setLastName(event.target.value)}
+                  />
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="crm-language">Preferred language</Label>
+                <Input
+                  id="crm-language"
+                  value={language}
+                  onChange={(event) => setLanguage(event.target.value)}
+                  placeholder="bn or en-BD"
+                  pattern="[a-z]{2,3}(-[A-Z]{2})?"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="crm-relationship-status">Relationship status</Label>
+                <NativeSelect
+                  id="crm-relationship-status"
+                  value={relationshipStatus}
+                  onChange={(event) =>
+                    setRelationshipStatus(event.target.value as CustomerRelationshipStatusDto)
+                  }
+                >
+                  {['UNASSIGNED', 'ACTIVE', 'FOLLOW_UP', 'AT_RISK', 'DORMANT'].map((value) => (
+                    <NativeSelectOption key={value} value={value}>
+                      {value.replaceAll('_', ' ')}
+                    </NativeSelectOption>
+                  ))}
+                </NativeSelect>
+              </div>
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="crm-last-name">Last name</Label>
-              <Input
-                id="crm-last-name"
-                value={lastName}
-                onChange={(event) => setLastName(event.target.value)}
-              />
-            </div>
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="crm-language">Preferred language</Label>
-            <Input
-              id="crm-language"
-              value={language}
-              onChange={(event) => setLanguage(event.target.value)}
-              placeholder="bn or en-BD"
-              pattern="[a-z]{2,3}(-[A-Z]{2})?"
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="crm-relationship-status">Relationship status</Label>
-            <NativeSelect
-              id="crm-relationship-status"
-              value={relationshipStatus}
-              onChange={(event) =>
-                setRelationshipStatus(event.target.value as CustomerRelationshipStatusDto)
-              }
-            >
-              {['UNASSIGNED', 'ACTIVE', 'FOLLOW_UP', 'AT_RISK', 'DORMANT'].map((value) => (
-                <NativeSelectOption key={value} value={value}>
-                  {value.replaceAll('_', ' ')}
-                </NativeSelectOption>
-              ))}
-            </NativeSelect>
-          </div>
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => setOpen(false)}>
-              Cancel
-            </Button>
-            <Button type="submit" disabled={busy}>
-              {busy ? 'Saving…' : 'Save profile'}
-            </Button>
-          </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
+            <SheetFooter className="shrink-0 border-t border-border/60 px-6 py-4 pb-[max(1rem,env(safe-area-inset-bottom,0px))] sm:flex-row sm:justify-end">
+              <Button type="button" variant="outline" onClick={() => handleOpenChange(false)}>
+                Cancel
+              </Button>
+              <Button type="submit" disabled={busy}>
+                {busy ? 'Saving…' : 'Save profile'}
+              </Button>
+            </SheetFooter>
+          </form>
+        </SheetContent>
+      </Sheet>
+      {discardConfirmDialog}
+    </>
   );
 }

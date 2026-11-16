@@ -1,29 +1,22 @@
 'use client';
 
 import { useState, type FormEvent } from 'react';
-import {
-  ArrowDownToLine,
-  ArrowUpFromLine,
-  AlertCircle,
-  Landmark,
-  User,
-} from 'lucide-react';
-import type {
-  CapitalContributorDto,
-  FinancialAccountDto,
-} from '@maevelle/contracts';
+import { ArrowDownToLine, ArrowUpFromLine, AlertCircle, Landmark, User } from 'lucide-react';
+import type { CapitalContributorDto, FinancialAccountDto } from '@maevelle/contracts';
 import { Button } from '@/components/ui/button';
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetFooter,
+  SheetHeader,
+  SheetTitle,
+} from '@/components/ui/sheet';
 import { Input } from '@/components/ui/input';
 import { NativeSelect } from '@/components/ui/native-select';
 import { Textarea } from '@/components/ui/textarea';
+import { MoneyField } from '@/components/ui/money-field';
+import { useFormDialogLifecycle } from '@/hooks/use-form-dialog-lifecycle';
 import { formatMoney } from '@/lib/finance/types';
 import { localDateTime } from './types';
 
@@ -63,6 +56,19 @@ export function CapitalMovementDialog({
   const [accountId, setAccountId] = useState('');
   const [amount, setAmount] = useState('');
 
+  const isDirty = Boolean(
+    amount.trim() || contributorId !== (preselectedContributorId || '') || accountId,
+  );
+
+  const { handleOpenChange, discardConfirmDialog } = useFormDialogLifecycle({
+    isDirty,
+    isSubmitting: busy,
+    onClose,
+    confirmTitle: 'Discard capital entry?',
+    confirmDescription:
+      'You have entered capital movement details. Closing now will discard this entry.',
+  });
+
   const activeContributors = contributors.filter((c) => c.status === 'ACTIVE');
   const activeAccounts = accounts.filter(
     (a) => a.status === 'ACTIVE' && a.currency_code === defaultCurrency,
@@ -94,28 +100,34 @@ export function CapitalMovementDialog({
   }
 
   return (
-    <Dialog open={open} onOpenChange={(val) => !val && onClose()}>
-      <DialogContent className="sm:max-w-lg">
-        <form className="grid gap-4" onSubmit={handleSubmit}>
-          <DialogHeader>
+    <>
+      <Sheet open={open} onOpenChange={handleOpenChange}>
+        <SheetContent
+          side="right"
+          className="flex w-full flex-col gap-0 p-0 sm:max-w-lg"
+        >
+          <SheetHeader className="shrink-0 border-b border-border/60 px-6 py-4 text-left">
             <div className="flex items-center gap-2">
               {movementType === 'CONTRIBUTION' ? (
                 <ArrowDownToLine className="size-5 text-emerald-600 shrink-0" />
               ) : (
                 <ArrowUpFromLine className="size-5 text-rose-600 shrink-0" />
               )}
-              <DialogTitle>
+              <SheetTitle>
                 {movementType === 'CONTRIBUTION'
                   ? 'Record capital contribution'
                   : 'Record capital withdrawal'}
-              </DialogTitle>
+              </SheetTitle>
             </div>
-            <DialogDescription className="leading-relaxed">
+            <SheetDescription className="leading-relaxed">
               {movementType === 'CONTRIBUTION'
                 ? 'Records permanent funds deposited into a business financial account. Increases business cash and owner equity; does not count as customer revenue.'
                 : 'Returns permanent capital from a business financial account to an owner. Reduces business cash and owner equity; does not count as an operational expense.'}
-            </DialogDescription>
-          </DialogHeader>
+            </SheetDescription>
+          </SheetHeader>
+
+          <form className="flex min-h-0 flex-1 flex-col" onSubmit={handleSubmit}>
+            <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-6 py-4">
 
           <label className="grid gap-1.5 text-sm font-medium">
             <span className="flex items-center gap-1.5">
@@ -159,24 +171,23 @@ export function CapitalMovementDialog({
               </option>
               {activeAccounts.map((acc) => (
                 <option key={acc.id} value={acc.id}>
-                  {acc.name} · Available balance {formatMoney(acc.ledger_balance, acc.currency_code)}
+                  {acc.name} · Available balance{' '}
+                  {formatMoney(acc.ledger_balance, acc.currency_code)}
                 </option>
               ))}
             </NativeSelect>
           </label>
 
           <div className="grid gap-4 sm:grid-cols-2">
-            <label className="grid gap-1.5 text-sm font-medium">
-              <span>Amount ({defaultCurrency})</span>
-              <Input
-                name="amount"
-                inputMode="decimal"
-                placeholder="0.00"
-                value={amount}
-                onChange={(e) => setAmount(e.target.value)}
-                required
-              />
-            </label>
+            <MoneyField
+              label={`Amount (${defaultCurrency})`}
+              currencySymbol={defaultCurrency === 'BDT' ? '৳' : defaultCurrency}
+              placeholder="0.00"
+              value={amount}
+              onChange={setAmount}
+              disabled={busy}
+              required
+            />
 
             <label className="grid gap-1.5 text-sm font-medium">
               <span>Date and time</span>
@@ -184,6 +195,7 @@ export function CapitalMovementDialog({
                 name="occurredAt"
                 type="datetime-local"
                 defaultValue={localDateTime()}
+                disabled={busy}
                 required
               />
             </label>
@@ -196,7 +208,9 @@ export function CapitalMovementDialog({
               <div>
                 <strong className="block font-semibold">Insufficient account balance</strong>
                 <span>
-                  The account has {formatMoney(selectedBalance, defaultCurrency)}, which is less than the requested withdrawal of {formatMoney(inputAmount, defaultCurrency)}. Maevelle prevents negative account balances.
+                  The account has {formatMoney(selectedBalance, defaultCurrency)}, which is less
+                  than the requested withdrawal of {formatMoney(inputAmount, defaultCurrency)}.
+                  Maevelle prevents negative account balances.
                 </span>
               </div>
             </div>
@@ -208,6 +222,7 @@ export function CapitalMovementDialog({
               name="reference"
               maxLength={200}
               placeholder="Bank transfer #, deposit slip, cheque #, or voucher"
+              disabled={busy}
             />
           </label>
 
@@ -217,57 +232,63 @@ export function CapitalMovementDialog({
               name="note"
               maxLength={2000}
               placeholder="Background context, purpose of funds, or commercial remarks..."
+              disabled={busy}
             />
           </label>
+        </div>
 
-          <DialogFooter className="mt-2 flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-            <div>
-              {movementType === 'CONTRIBUTION' ? (
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  className="gap-1.5 text-xs text-muted-foreground hover:text-foreground"
-                  onClick={() => setMovementType('WITHDRAWAL')}
-                >
-                  <ArrowUpFromLine className="size-3.5" />
-                  <span>Switch to withdrawal</span>
-                </Button>
-              ) : (
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  className="gap-1.5 text-xs text-muted-foreground hover:text-foreground"
-                  onClick={() => setMovementType('CONTRIBUTION')}
-                >
-                  <ArrowDownToLine className="size-3.5" />
-                  <span>Switch to contribution</span>
-                </Button>
-              )}
-            </div>
-
-            <div className="flex items-center gap-2">
-              <Button type="button" variant="outline" onClick={onClose} disabled={busy}>
-                Cancel
-              </Button>
+        <SheetFooter className="shrink-0 flex-col gap-2 border-t border-border/60 bg-card/50 px-6 py-3 pb-[max(1rem,env(safe-area-inset-bottom,0px))] sm:flex-row sm:items-center sm:justify-between sm:pb-3">
+          <div>
+            {movementType === 'CONTRIBUTION' ? (
               <Button
-                type="submit"
-                disabled={
-                  busy ||
-                  !activeContributors.length ||
-                  !activeAccounts.length ||
-                  isWithdrawalOverdraft ||
-                  !amount ||
-                  Number(amount) <= 0
-                }
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="gap-1.5 text-xs text-muted-foreground hover:text-foreground"
+                onClick={() => setMovementType('WITHDRAWAL')}
+                disabled={busy}
               >
-                {movementType === 'CONTRIBUTION' ? 'Record contribution' : 'Record withdrawal'}
+                <ArrowUpFromLine className="size-3.5" />
+                <span>Switch to withdrawal</span>
               </Button>
-            </div>
-          </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
+            ) : (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="gap-1.5 text-xs text-muted-foreground hover:text-foreground"
+                onClick={() => setMovementType('CONTRIBUTION')}
+                disabled={busy}
+              >
+                <ArrowDownToLine className="size-3.5" />
+                <span>Switch to contribution</span>
+              </Button>
+            )}
+          </div>
+
+          <div className="flex items-center gap-2">
+            <Button type="button" variant="outline" onClick={() => handleOpenChange(false)} disabled={busy}>
+              Cancel
+            </Button>
+            <Button
+              type="submit"
+              disabled={
+                busy ||
+                !activeContributors.length ||
+                !activeAccounts.length ||
+                isWithdrawalOverdraft ||
+                !amount ||
+                Number(amount) <= 0
+              }
+            >
+              {movementType === 'CONTRIBUTION' ? 'Record contribution' : 'Record withdrawal'}
+            </Button>
+          </div>
+        </SheetFooter>
+      </form>
+    </SheetContent>
+  </Sheet>
+  {discardConfirmDialog}
+</>
   );
 }

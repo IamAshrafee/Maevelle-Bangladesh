@@ -63,7 +63,7 @@ export function AssetTable({
       {/* Desktop Table View */}
       <Card className="hidden md:flex">
         <CardContent className="p-0 overflow-x-auto">
-          <Table>
+          <Table stickyHeader>
             <TableHeader>
               <TableRow>
                 <TableHead className="w-[30%]">Asset</TableHead>
@@ -217,7 +217,7 @@ export function AssetTable({
           <Link
             key={item.id}
             href={`/assets/${item.id}`}
-            className="rounded-xl border bg-card p-4 hover:border-primary/50 transition-all flex flex-col gap-3"
+            className="rounded-xl border bg-card p-4 hover:border-primary/50 transition-colors duration-150 flex flex-col gap-3"
           >
             <div className="flex items-start justify-between gap-2">
               <div>

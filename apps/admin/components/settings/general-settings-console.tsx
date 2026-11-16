@@ -10,6 +10,7 @@ import {
   RotateCcw,
   SlidersHorizontal,
 } from 'lucide-react';
+import { AdminPage, PageHeader } from '@/components/ui/page-shell';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
@@ -40,7 +41,9 @@ export function GeneralSettingsConsole() {
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+  const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(
+    null,
+  );
 
   const [resetConfirmOpen, setResetConfirmOpen] = useState(false);
   const [auditDrawerOpen, setAuditDrawerOpen] = useState(false);
@@ -49,9 +52,10 @@ export function GeneralSettingsConsole() {
     setLoading(true);
     setFeedback(null);
     try {
-      const res = await fetchApiData<ModuleSettingsResponseDto<GeneralSettingsDto>>(
-        '/admin/settings/general',
-      );
+      const res =
+        await fetchApiData<ModuleSettingsResponseDto<GeneralSettingsDto>>(
+          '/admin/settings/general',
+        );
       if (res) {
         setInitialData(res);
         setStoreName(res.settings.storeName || 'Maevelle Bangladesh');
@@ -77,11 +81,11 @@ export function GeneralSettingsConsole() {
 
   const isDirty = Boolean(
     initialData &&
-      (storeName !== initialData.settings.storeName ||
-        supportEmail !== initialData.settings.supportEmail ||
-        timezone !== initialData.settings.timezone ||
-        lowStockThreshold !== initialData.settings.lowStockThreshold ||
-        sessionTimeoutMinutes !== initialData.settings.sessionTimeoutMinutes),
+    (storeName !== initialData.settings.storeName ||
+      supportEmail !== initialData.settings.supportEmail ||
+      timezone !== initialData.settings.timezone ||
+      lowStockThreshold !== initialData.settings.lowStockThreshold ||
+      sessionTimeoutMinutes !== initialData.settings.sessionTimeoutMinutes),
   );
 
   const handleDiscard = () => {
@@ -175,54 +179,55 @@ export function GeneralSettingsConsole() {
 
   if (loading && !initialData) {
     return (
-      <div className="flex flex-col items-center justify-center h-64 gap-2 text-muted-foreground text-xs">
-        <RefreshCw className="size-5 animate-spin text-primary" />
-        <span>Loading General Settings...</span>
-      </div>
+      <AdminPage variant="narrow">
+        <div className="flex flex-col items-center justify-center h-64 gap-2 text-muted-foreground text-xs">
+          <RefreshCw className="size-5 animate-spin text-primary" />
+          <span>Loading General Settings...</span>
+        </div>
+      </AdminPage>
     );
   }
 
   return (
-    <div className="space-y-6 pb-20 max-w-4xl">
+    <AdminPage variant="narrow" className="pb-20">
       <SettingsNav />
 
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-4 border-b">
-        <div>
-          <div className="flex flex-wrap items-center gap-2.5">
-            <h1 className="text-xl font-semibold tracking-tight text-foreground">General Settings</h1>
+      <PageHeader
+        eyebrow="Platform Settings"
+        title="General Settings"
+        badge={
+          <>
             <SettingStatusBadge status="ready" label="Configured" />
             <RuntimeEffectBadge runtimeMutable requiresRestart={false} />
-          </div>
-          <p className="text-xs text-muted-foreground mt-1">
-            Global application profile, primary timezone, inventory alert defaults, and operator session security.
-          </p>
-        </div>
+          </>
+        }
+        description="Global application profile, primary timezone, inventory alert defaults, and operator session security."
+        actions={
+          <>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setAuditDrawerOpen(true)}
+              className="text-xs h-8 gap-1.5"
+            >
+              <History className="size-3.5 text-muted-foreground" />
+              History
+            </Button>
 
-        <div className="flex items-center gap-2">
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={() => setAuditDrawerOpen(true)}
-            className="text-xs h-8 gap-1.5"
-          >
-            <History className="size-3.5 text-muted-foreground" />
-            History
-          </Button>
-
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            onClick={() => setResetConfirmOpen(true)}
-            className="text-xs h-8 text-muted-foreground hover:text-foreground"
-          >
-            <RotateCcw className="size-3.5 mr-1" />
-            Reset to default
-          </Button>
-        </div>
-      </div>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={() => setResetConfirmOpen(true)}
+              className="text-xs h-8 text-muted-foreground hover:text-foreground"
+            >
+              <RotateCcw className="size-3.5 mr-1" />
+              Reset to default
+            </Button>
+          </>
+        }
+      />
 
       {feedback && (
         <div
@@ -296,7 +301,12 @@ export function GeneralSettingsConsole() {
               description="Canonical timezone used for day boundaries, scheduling, and analytics reports."
               required
             >
-              <Select value={timezone} onValueChange={(val) => { if (val) setTimezone(val); }}>
+              <Select
+                value={timezone}
+                onValueChange={(val) => {
+                  if (val) setTimezone(val);
+                }}
+              >
                 <SelectTrigger id="timezone-select" className="text-xs h-9">
                   <SelectValue placeholder="Select timezone" />
                 </SelectTrigger>
@@ -422,6 +432,6 @@ export function GeneralSettingsConsole() {
         module="general"
         title="General Settings History"
       />
-    </div>
+    </AdminPage>
   );
 }

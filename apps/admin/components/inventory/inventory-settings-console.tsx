@@ -1,16 +1,8 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import Link from 'next/link';
-import {
-  AlertCircle,
-  Boxes,
-  CheckCircle2,
-  History,
-  Package,
-  RefreshCw,
-  RotateCcw,
-} from 'lucide-react';
+import { AlertCircle, CheckCircle2, History, Package, RefreshCw, RotateCcw } from 'lucide-react';
+import { AdminPage, PageHeader } from '@/components/ui/page-shell';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { SettingsCard, SettingsSection } from '@/components/settings/settings-card';
@@ -32,7 +24,9 @@ export function InventorySettingsConsole() {
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+  const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(
+    null,
+  );
 
   const [resetConfirmOpen, setResetConfirmOpen] = useState(false);
   const [auditDrawerOpen, setAuditDrawerOpen] = useState(false);
@@ -76,7 +70,10 @@ export function InventorySettingsConsole() {
     setFeedback(null);
 
     if (threshold < 0 || threshold > 1000) {
-      setFeedback({ type: 'error', message: 'Low stock threshold must be between 0 and 1000 units.' });
+      setFeedback({
+        type: 'error',
+        message: 'Low stock threshold must be between 0 and 1000 units.',
+      });
       setSaving(false);
       return;
     }
@@ -127,7 +124,10 @@ export function InventorySettingsConsole() {
         setInitialData(resetRes);
         setThreshold(resetRes.settings.lowStockThreshold);
         setResetConfirmOpen(false);
-        setFeedback({ type: 'success', message: 'Inventory settings restored to defaults (5 units).' });
+        setFeedback({
+          type: 'success',
+          message: 'Inventory settings restored to defaults (5 units).',
+        });
       }
     } catch (err) {
       setFeedback({
@@ -141,60 +141,56 @@ export function InventorySettingsConsole() {
 
   if (loading && !initialData) {
     return (
-      <div className="flex flex-col items-center justify-center h-64 gap-2 text-muted-foreground text-xs">
-        <RefreshCw className="size-5 animate-spin text-primary" />
-        <span>Loading Inventory Settings...</span>
-      </div>
+      <AdminPage variant="narrow">
+        <div className="flex flex-col items-center justify-center h-64 gap-2 text-muted-foreground text-xs">
+          <RefreshCw className="size-5 animate-spin text-primary" />
+          <span>Loading Inventory Settings...</span>
+        </div>
+      </AdminPage>
     );
   }
 
   return (
-    <div className="space-y-6 pb-20 max-w-4xl">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-4 border-b">
-        <div>
-          <div className="flex items-center gap-2 text-xs text-muted-foreground mb-1">
-            <Link href="/inventory" className="hover:text-foreground flex items-center gap-1">
-              <Boxes className="size-3.5" />
-              Inventory
-            </Link>
-            <span>/</span>
-            <span className="text-foreground font-medium">Settings</span>
-          </div>
-          <div className="flex flex-wrap items-center gap-2.5">
-            <h1 className="text-xl font-semibold tracking-tight text-foreground">Inventory Settings</h1>
+    <AdminPage variant="narrow" className="pb-20">
+      <PageHeader
+        breadcrumbs={[
+          { label: 'Inventory', href: '/inventory' },
+          { label: 'Settings', current: true },
+        ]}
+        title="Inventory Settings"
+        badge={
+          <>
             <SettingStatusBadge status="ready" label="Configured" />
             <RuntimeEffectBadge runtimeMutable requiresRestart={false} />
-          </div>
-          <p className="text-xs text-muted-foreground mt-1">
-            Operational thresholds for inventory reorder alerts, low stock indicators, and variant allocation rules.
-          </p>
-        </div>
+          </>
+        }
+        description="Operational thresholds for inventory reorder alerts, low stock indicators, and variant allocation rules."
+        actions={
+          <>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setAuditDrawerOpen(true)}
+              className="text-xs h-8 gap-1.5"
+            >
+              <History className="size-3.5 text-muted-foreground" />
+              History
+            </Button>
 
-        <div className="flex items-center gap-2">
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={() => setAuditDrawerOpen(true)}
-            className="text-xs h-8 gap-1.5"
-          >
-            <History className="size-3.5 text-muted-foreground" />
-            History
-          </Button>
-
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            onClick={() => setResetConfirmOpen(true)}
-            className="text-xs h-8 text-muted-foreground hover:text-foreground"
-          >
-            <RotateCcw className="size-3.5 mr-1" />
-            Reset to default
-          </Button>
-        </div>
-      </div>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={() => setResetConfirmOpen(true)}
+              className="text-xs h-8 text-muted-foreground hover:text-foreground"
+            >
+              <RotateCcw className="size-3.5 mr-1" />
+              Reset to default
+            </Button>
+          </>
+        }
+      />
 
       {feedback && (
         <div
@@ -282,6 +278,6 @@ export function InventorySettingsConsole() {
         module="inventory"
         title="Inventory Settings History"
       />
-    </div>
+    </AdminPage>
   );
 }

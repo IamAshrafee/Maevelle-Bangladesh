@@ -13,16 +13,17 @@ import React, { useCallback, useEffect, useState } from 'react';
 
 import { Button } from '@/components/ui/button';
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from '@/components/ui/dialog';
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetFooter,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+} from '@/components/ui/sheet';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select';
 import { fetchApiData } from '@/lib/api';
 import { formatMoney } from '@/lib/format/numbers';
 import type { OrderDetailDto, WarehouseLocationDto } from '@maevelle/contracts';
@@ -214,19 +215,19 @@ export function FulfillmentCreateDialog({
   const activeLines = orderDetail?.lines.filter((l) => l.status === 'ACTIVE') ?? [];
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger render={<Button className="gap-1.5" />}>
+    <Sheet open={open} onOpenChange={setOpen}>
+      <SheetTrigger render={<Button className="gap-1.5" />}>
         <PackagePlus className="size-4" /> Create Fulfillment
-      </DialogTrigger>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2 text-lg">
+      </SheetTrigger>
+      <SheetContent side="right" className="w-full sm:max-w-2xl overflow-y-auto p-6">
+        <SheetHeader className="p-0 pb-4 border-b border-border/60">
+          <SheetTitle className="flex items-center gap-2 text-lg">
             <Boxes className="size-5 text-primary" /> Create Order Fulfillment
-          </DialogTitle>
-          <DialogDescription>
+          </SheetTitle>
+          <SheetDescription>
             Allocate stock from a warehouse location for pick, pack, and delivery preparation.
-          </DialogDescription>
-        </DialogHeader>
+          </SheetDescription>
+        </SheetHeader>
 
         {error ? (
           <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-xs text-destructive flex items-start gap-2">
@@ -252,7 +253,8 @@ export function FulfillmentCreateDialog({
 
               {ordersLoading ? (
                 <div className="flex items-center justify-center p-4 text-muted-foreground">
-                  <Loader2 className="size-4 animate-spin mr-2" /> Loading orders awaiting fulfillment…
+                  <Loader2 className="size-4 animate-spin mr-2" /> Loading orders awaiting
+                  fulfillment…
                 </div>
               ) : filteredOrders.length > 0 ? (
                 <div className="max-h-36 overflow-y-auto rounded-lg border divide-y">
@@ -266,7 +268,8 @@ export function FulfillmentCreateDialog({
                       }`}
                     >
                       <div>
-                        <span>{ord.orderNumber}</span> · <span className="text-muted-foreground">{ord.customerName}</span>
+                        <span>{ord.orderNumber}</span> ·{' '}
+                        <span className="text-muted-foreground">{ord.customerName}</span>
                       </div>
                       <div className="flex items-center gap-2">
                         <span className="font-mono text-[11px] tabular-nums text-muted-foreground">
@@ -278,34 +281,39 @@ export function FulfillmentCreateDialog({
                   ))}
                 </div>
               ) : (
-                <p className="text-xs text-muted-foreground italic py-1">No unfulfilled orders found matching your search.</p>
+                <p className="text-xs text-muted-foreground italic py-1">
+                  No unfulfilled orders found matching your search.
+                </p>
               )}
             </div>
           ) : null}
 
           {/* Step 2: Location Selection */}
           <div className="space-y-1.5">
-            <Label htmlFor="locationSelect" className="text-xs font-medium flex items-center gap-1.5">
+            <Label
+              htmlFor="locationSelect"
+              className="text-xs font-medium flex items-center gap-1.5"
+            >
               <Warehouse className="size-3.5 text-primary" /> Source Warehouse Location
             </Label>
             {locations.length === 0 ? (
               <p className="text-xs text-destructive bg-destructive/10 p-2.5 rounded border border-destructive/20">
-                No active stock-holding warehouses available. Create an eligible warehouse in Inventory first.
+                No active stock-holding warehouses available. Create an eligible warehouse in
+                Inventory first.
               </p>
             ) : (
-              <select
+              <NativeSelect
                 id="locationSelect"
-                className="w-full rounded-md border bg-background px-3 py-2 text-xs focus:ring-2 focus:ring-primary"
                 value={selectedLocationId}
                 onChange={(e) => setSelectedLocationId(e.target.value)}
                 required
               >
                 {locations.map((loc) => (
-                  <option key={loc.id} value={loc.id}>
+                  <NativeSelectOption key={loc.id} value={loc.id}>
                     {loc.name} ({loc.code})
-                  </option>
+                  </NativeSelectOption>
                 ))}
-              </select>
+              </NativeSelect>
             )}
           </div>
 
@@ -322,7 +330,8 @@ export function FulfillmentCreateDialog({
                     Order Lines for {orderDetail.orderNumber}
                   </h4>
                   <p className="text-[11px] text-muted-foreground">
-                    Specify quantity to fulfill. Remaining quantities remain available for subsequent fulfillments.
+                    Specify quantity to fulfill. Remaining quantities remain available for
+                    subsequent fulfillments.
                   </p>
                 </div>
                 <div className="flex gap-2">
@@ -359,17 +368,23 @@ export function FulfillmentCreateDialog({
                     {activeLines.map((line) => {
                       const orderedQty = Number(line.quantity);
                       const fulfilledQty = Number(line.fulfilledQuantity ?? 0);
-                      const remainingQty = Number(line.remainingFulfillableQuantity ?? (orderedQty - fulfilledQty));
+                      const remainingQty = Number(
+                        line.remainingFulfillableQuantity ?? orderedQty - fulfilledQty,
+                      );
                       const currentVal = lineQuantities[line.id] ?? 0;
 
                       return (
                         <tr key={line.id} className="hover:bg-muted/20">
                           <td className="p-2.5">
                             <p className="font-medium text-foreground">{line.productTitle}</p>
-                            <p className="text-[10px] font-mono text-muted-foreground">{line.sku}</p>
+                            <p className="text-[10px] font-mono text-muted-foreground">
+                              {line.sku}
+                            </p>
                           </td>
                           <td className="p-2.5 text-center text-muted-foreground">{orderedQty}</td>
-                          <td className="p-2.5 text-center text-muted-foreground">{fulfilledQty}</td>
+                          <td className="p-2.5 text-center text-muted-foreground">
+                            {fulfilledQty}
+                          </td>
                           <td className="p-2.5 text-center font-semibold text-foreground">
                             {remainingQty}
                           </td>
@@ -382,7 +397,10 @@ export function FulfillmentCreateDialog({
                               value={currentVal}
                               disabled={remainingQty <= 0}
                               onChange={(e) => {
-                                const val = Math.max(0, Math.min(remainingQty, Number(e.target.value)));
+                                const val = Math.max(
+                                  0,
+                                  Math.min(remainingQty, Number(e.target.value)),
+                                );
                                 setLineQuantities((prev) => ({ ...prev, [line.id]: val }));
                               }}
                               className="w-20 text-right text-xs h-7 ml-auto"
@@ -397,13 +415,8 @@ export function FulfillmentCreateDialog({
             </div>
           ) : null}
 
-          <DialogFooter className="pt-2 gap-2 sm:gap-0">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => setOpen(false)}
-              disabled={busy}
-            >
+          <SheetFooter className="p-0 pt-2 sm:flex-row sm:justify-end">
+            <Button type="button" variant="outline" onClick={() => setOpen(false)} disabled={busy}>
               Cancel
             </Button>
             <Button
@@ -421,9 +434,9 @@ export function FulfillmentCreateDialog({
                 </>
               )}
             </Button>
-          </DialogFooter>
+          </SheetFooter>
         </form>
-      </DialogContent>
-    </Dialog>
+      </SheetContent>
+    </Sheet>
   );
 }

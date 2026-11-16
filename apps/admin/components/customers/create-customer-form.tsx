@@ -9,11 +9,14 @@ import type { CustomerSummaryDto, PaginatedEnvelope } from '@maevelle/contracts'
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select';
 import { fetchApiData } from '@/lib/api';
+import { useUnsavedChangesGuard } from '@/hooks/use-unsaved-changes-guard';
 
 export function CreateCustomerForm() {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
+  const [dirty, setDirty] = useState(false);
   const [message, setMessage] = useState('');
 
   // Form fields
@@ -28,7 +31,8 @@ export function CreateCustomerForm() {
   useEffect(() => {
     const trimmedPhone = phone.trim();
     const trimmedEmail = email.trim();
-    const query = trimmedPhone.length >= 10 ? trimmedPhone : trimmedEmail.length >= 5 ? trimmedEmail : '';
+    const query =
+      trimmedPhone.length >= 10 ? trimmedPhone : trimmedEmail.length >= 5 ? trimmedEmail : '';
 
     if (!query) {
       setDuplicateMatches([]);
@@ -112,6 +116,7 @@ export function CreateCustomerForm() {
         }
       }
 
+      setDirty(false);
       router.push(`/customers/${data.id}`);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Customer could not be created.');
@@ -119,8 +124,14 @@ export function CreateCustomerForm() {
     }
   }
 
+  const { guardDialog } = useUnsavedChangesGuard({
+    when: dirty && !busy,
+    message: 'You have unsaved customer registration details. Leave without saving?',
+  });
+
   return (
-    <form onSubmit={submit} className="space-y-6">
+    <form onSubmit={submit} onChange={() => setDirty(true)} className="space-y-6">
+      {guardDialog}
       <div className="space-y-4">
         <div className="space-y-2">
           <Label htmlFor="displayName">Customer / Display Name *</Label>
@@ -181,13 +192,14 @@ export function CreateCustomerForm() {
                     <span className="font-medium text-foreground">{match.displayName}</span>
                     <span className="font-mono text-[11px] opacity-75">{match.customerNumber}</span>
                     <span className="opacity-75">
-                      ({match.primaryPhone ?? match.primaryEmail ?? 'No contact'} · {match.orderCount} orders)
+                      ({match.primaryPhone ?? match.primaryEmail ?? 'No contact'} ·{' '}
+                      {match.orderCount} orders)
                     </span>
                     <Button
                       type="button"
                       size="sm"
                       variant="outline"
-                      className="h-6 px-2 text-[11px] border-amber-400 bg-white hover:bg-amber-100 text-amber-950 dark:bg-amber-900 dark:text-white"
+                      className="h-6 px-2 text-[11px] border-amber-400 bg-card hover:bg-amber-100 text-amber-950 dark:bg-amber-900 dark:text-amber-50"
                       render={<Link href={`/customers/${match.id}`} target="_blank" />}
                       nativeButton={false}
                     >
@@ -196,7 +208,8 @@ export function CreateCustomerForm() {
                   </div>
                 ))}
                 <p className="text-[11px] opacity-75 pt-1">
-                  You can proceed to create a separate profile if this is a distinct customer, or open the existing record.
+                  You can proceed to create a separate profile if this is a distinct customer, or
+                  open the existing record.
                 </p>
               </div>
             </div>
@@ -205,21 +218,20 @@ export function CreateCustomerForm() {
 
         <div className="space-y-2">
           <Label htmlFor="source">Acquisition Source</Label>
-          <select
+          <NativeSelect
             id="source"
             name="source"
             defaultValue="ADMIN_CREATED"
             disabled={busy}
-            className="flex min-h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
-            <option value="ADMIN_CREATED">Admin Created (Manual Entry)</option>
-            <option value="FACEBOOK">Facebook Campaign / Inbox</option>
-            <option value="INSTAGRAM">Instagram Direct Message</option>
-            <option value="WHATSAPP">WhatsApp Conversation</option>
-            <option value="PHONE">Phone Call / Hotline</option>
-            <option value="IMPORT">CSV / Database Import</option>
-            <option value="EXTERNAL_API">External Partner API</option>
-          </select>
+            <NativeSelectOption value="ADMIN_CREATED">Admin Created (Manual Entry)</NativeSelectOption>
+            <NativeSelectOption value="FACEBOOK">Facebook Campaign / Inbox</NativeSelectOption>
+            <NativeSelectOption value="INSTAGRAM">Instagram Direct Message</NativeSelectOption>
+            <NativeSelectOption value="WHATSAPP">WhatsApp Conversation</NativeSelectOption>
+            <NativeSelectOption value="PHONE">Phone Call / Hotline</NativeSelectOption>
+            <NativeSelectOption value="IMPORT">CSV / Database Import</NativeSelectOption>
+            <NativeSelectOption value="EXTERNAL_API">External Partner API</NativeSelectOption>
+          </NativeSelect>
         </div>
 
         {/* Optional Initial Address Section */}
@@ -253,7 +265,9 @@ export function CreateCustomerForm() {
 
               <div className="space-y-3">
                 <div className="space-y-1.5">
-                  <Label htmlFor="addressLine1" className="text-xs">Address Line 1 *</Label>
+                  <Label htmlFor="addressLine1" className="text-xs">
+                    Address Line 1 *
+                  </Label>
                   <Input
                     id="addressLine1"
                     name="addressLine1"
@@ -262,7 +276,9 @@ export function CreateCustomerForm() {
                   />
                 </div>
                 <div className="space-y-1.5">
-                  <Label htmlFor="addressLine2" className="text-xs">Address Line 2 (Optional)</Label>
+                  <Label htmlFor="addressLine2" className="text-xs">
+                    Address Line 2 (Optional)
+                  </Label>
                   <Input
                     id="addressLine2"
                     name="addressLine2"
@@ -272,22 +288,35 @@ export function CreateCustomerForm() {
                 </div>
                 <div className="grid gap-3 sm:grid-cols-2">
                   <div className="space-y-1.5">
-                    <Label htmlFor="area" className="text-xs">Area / Thana</Label>
+                    <Label htmlFor="area" className="text-xs">
+                      Area / Thana
+                    </Label>
                     <Input id="area" name="area" placeholder="e.g. Banani" disabled={busy} />
                   </div>
                   <div className="space-y-1.5">
-                    <Label htmlFor="city" className="text-xs">City</Label>
+                    <Label htmlFor="city" className="text-xs">
+                      City
+                    </Label>
                     <Input id="city" name="city" placeholder="e.g. Dhaka" disabled={busy} />
                   </div>
                 </div>
                 <div className="grid gap-3 sm:grid-cols-2">
                   <div className="space-y-1.5">
-                    <Label htmlFor="district" className="text-xs">District</Label>
+                    <Label htmlFor="district" className="text-xs">
+                      District
+                    </Label>
                     <Input id="district" name="district" placeholder="e.g. Dhaka" disabled={busy} />
                   </div>
                   <div className="space-y-1.5">
-                    <Label htmlFor="postalCode" className="text-xs">Postal Code</Label>
-                    <Input id="postalCode" name="postalCode" placeholder="e.g. 1213" disabled={busy} />
+                    <Label htmlFor="postalCode" className="text-xs">
+                      Postal Code
+                    </Label>
+                    <Input
+                      id="postalCode"
+                      name="postalCode"
+                      placeholder="e.g. 1213"
+                      disabled={busy}
+                    />
                   </div>
                 </div>
               </div>

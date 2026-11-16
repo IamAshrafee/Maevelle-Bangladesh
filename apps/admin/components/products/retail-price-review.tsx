@@ -19,8 +19,13 @@ export function RetailPriceReview() {
     allowed ? `/admin/pricing/fractional-retail-prices?page=${page}&pageSize=20` : null,
   );
   return (
-    <AdminPage>
+    <AdminPage variant="wide">
       <PageHeader
+        breadcrumbs={[
+          { label: 'Products', href: '/products' },
+          { label: 'Price Review', current: true },
+        ]}
+        eyebrow="Catalog Pricing"
         title="Fractional retail price review"
         description="Read-only exact prices. Review business pricing before changing current records."
         actions={

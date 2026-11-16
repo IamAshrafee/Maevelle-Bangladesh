@@ -2,15 +2,8 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
-import {
-  ArrowRight,
-  CreditCard,
-  HardDrive,
-  Lock,
-  Mail,
-  RefreshCw,
-  Truck,
-} from 'lucide-react';
+import { ArrowRight, CreditCard, HardDrive, Lock, Mail, RefreshCw, Truck } from 'lucide-react';
+import { AdminPage, PageHeader } from '@/components/ui/page-shell';
 import { Button, buttonVariants } from '@/components/ui/button';
 import { SettingsNav } from '@/components/settings/settings-nav';
 import { SettingStatusBadge } from '@/components/settings/setting-status-badge';
@@ -46,10 +39,12 @@ export function IntegrationsHub() {
 
   if (loading && integrations.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center h-64 gap-2 text-muted-foreground text-xs">
-        <RefreshCw className="size-5 animate-spin text-primary" />
-        <span>Loading Integrations...</span>
-      </div>
+      <AdminPage variant="standard">
+        <div className="flex flex-col items-center justify-center h-64 gap-2 text-muted-foreground text-xs">
+          <RefreshCw className="size-5 animate-spin text-primary" />
+          <span>Loading Integrations...</span>
+        </div>
+      </AdminPage>
     );
   }
 
@@ -57,30 +52,27 @@ export function IntegrationsHub() {
   const pathao = integrations.find((i) => i.providerCode === 'PATHAO');
 
   return (
-    <div className="space-y-6 pb-20 max-w-5xl">
+    <AdminPage variant="standard" className="pb-20">
       <SettingsNav />
 
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-4 border-b">
-        <div>
-          <h1 className="text-xl font-semibold tracking-tight text-foreground">Integrations</h1>
-          <p className="text-xs text-muted-foreground mt-1">
-            External provider configuration and the active media storage backend.
-          </p>
-        </div>
-
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          onClick={loadData}
-          disabled={loading}
-          className="text-xs h-8 gap-1.5"
-        >
-          <RefreshCw className={`size-3.5 ${loading ? 'animate-spin' : ''}`} />
-          Refresh Status
-        </Button>
-      </div>
+      <PageHeader
+        eyebrow="Platform Settings"
+        title="Integrations"
+        description="External provider configuration and the active media storage backend."
+        actions={
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={loadData}
+            disabled={loading}
+            className="text-xs h-8 gap-1.5"
+          >
+            <RefreshCw className={`size-3.5 ${loading ? 'animate-spin' : ''}`} />
+            Refresh Status
+          </Button>
+        }
+      />
 
       {error && (
         <div className="p-3 text-xs rounded-lg bg-destructive/10 text-destructive border border-destructive/20">
@@ -107,7 +99,8 @@ export function IntegrationsHub() {
             </div>
 
             <p className="text-xs text-muted-foreground leading-relaxed">
-              Automated transactional email notifications, delivery tracking webhooks, and deliverability protection.
+              Automated transactional email notifications, delivery tracking webhooks, and
+              deliverability protection.
             </p>
 
             <div className="pt-2 border-t space-y-1 text-xs">
@@ -118,7 +111,8 @@ export function IntegrationsHub() {
               <div className="flex items-center justify-between text-[11px] text-muted-foreground">
                 <span>Credentials:</span>
                 <span className="font-mono text-foreground">
-                  {resend?.secrets.filter((s) => s.configured).length ?? 0} of {resend?.secrets.length ?? 2} configured
+                  {resend?.secrets.filter((s) => s.configured).length ?? 0} of{' '}
+                  {resend?.secrets.length ?? 2} configured
                 </span>
               </div>
             </div>
@@ -126,7 +120,10 @@ export function IntegrationsHub() {
 
           <Link
             href="/settings/integrations/resend"
-            className={buttonVariants({ size: 'sm', className: 'w-full text-xs h-8 gap-1.5 font-medium mt-2' })}
+            className={buttonVariants({
+              size: 'sm',
+              className: 'w-full text-xs h-8 gap-1.5 font-medium mt-2',
+            })}
           >
             Manage Integration
             <ArrowRight className="size-3.5" />
@@ -143,14 +140,17 @@ export function IntegrationsHub() {
                 </div>
                 <div>
                   <h2 className="text-sm font-semibold text-foreground">Pathao Courier</h2>
-                  <span className="text-[11px] text-muted-foreground">Logistics & Parcel Dispatch</span>
+                  <span className="text-[11px] text-muted-foreground">
+                    Logistics & Parcel Dispatch
+                  </span>
                 </div>
               </div>
               <SettingStatusBadge status={pathao?.status ?? 'CONNECTED'} />
             </div>
 
             <p className="text-xs text-muted-foreground leading-relaxed">
-              Nationwide doorstep delivery, instant parcel consignment, tracking webhooks, and COD settlements.
+              Nationwide doorstep delivery, instant parcel consignment, tracking webhooks, and COD
+              settlements.
             </p>
 
             <div className="pt-2 border-t space-y-1 text-xs">
@@ -167,7 +167,11 @@ export function IntegrationsHub() {
 
           <Link
             href="/delivery/couriers"
-            className={buttonVariants({ variant: 'outline', size: 'sm', className: 'w-full text-xs h-8 gap-1.5 font-medium mt-2' })}
+            className={buttonVariants({
+              variant: 'outline',
+              size: 'sm',
+              className: 'w-full text-xs h-8 gap-1.5 font-medium mt-2',
+            })}
           >
             Configure Couriers
             <ArrowRight className="size-3.5" />
@@ -183,7 +187,9 @@ export function IntegrationsHub() {
                   <HardDrive className="size-5" />
                 </div>
                 <div>
-                  <h2 className="text-sm font-semibold text-foreground">{mediaRuntime?.storageLabel ?? 'Storage backend'}</h2>
+                  <h2 className="text-sm font-semibold text-foreground">
+                    {mediaRuntime?.storageLabel ?? 'Storage backend'}
+                  </h2>
                   <span className="text-[11px] text-muted-foreground">Object Storage</span>
                 </div>
               </div>
@@ -194,7 +200,8 @@ export function IntegrationsHub() {
             </div>
 
             <p className="text-xs text-muted-foreground leading-relaxed">
-              Active media storage backend selected by deployment configuration. Live connectivity is checked in the Media Library.
+              Active media storage backend selected by deployment configuration. Live connectivity
+              is checked in the Media Library.
             </p>
 
             <div className="pt-2 border-t space-y-1 text-xs">
@@ -204,14 +211,20 @@ export function IntegrationsHub() {
               </div>
               <div className="flex items-center justify-between text-[11px] text-muted-foreground">
                 <span>Backend:</span>
-                <span className="font-mono text-foreground font-medium">{mediaRuntime?.storageProvider === 'local' ? 'Local volume' : 'S3-compatible'}</span>
+                <span className="font-mono text-foreground font-medium">
+                  {mediaRuntime?.storageProvider === 'local' ? 'Local volume' : 'S3-compatible'}
+                </span>
               </div>
             </div>
           </div>
 
           <Link
             href="/media/settings"
-            className={buttonVariants({ variant: 'outline', size: 'sm', className: 'w-full text-xs h-8 gap-1.5 font-medium mt-2' })}
+            className={buttonVariants({
+              variant: 'outline',
+              size: 'sm',
+              className: 'w-full text-xs h-8 gap-1.5 font-medium mt-2',
+            })}
           >
             Media Settings
             <ArrowRight className="size-3.5" />
@@ -235,7 +248,8 @@ export function IntegrationsHub() {
             </div>
 
             <p className="text-xs text-muted-foreground leading-relaxed">
-              Customer payment collection methods, transaction reconciliation, refunds, and Cash on Delivery.
+              Customer payment collection methods, transaction reconciliation, refunds, and Cash on
+              Delivery.
             </p>
 
             <div className="pt-2 border-t space-y-1 text-xs">
@@ -252,13 +266,17 @@ export function IntegrationsHub() {
 
           <Link
             href="/payments"
-            className={buttonVariants({ variant: 'outline', size: 'sm', className: 'w-full text-xs h-8 gap-1.5 font-medium mt-2' })}
+            className={buttonVariants({
+              variant: 'outline',
+              size: 'sm',
+              className: 'w-full text-xs h-8 gap-1.5 font-medium mt-2',
+            })}
           >
             Payments Console
             <ArrowRight className="size-3.5" />
           </Link>
         </div>
       </div>
-    </div>
+    </AdminPage>
   );
 }

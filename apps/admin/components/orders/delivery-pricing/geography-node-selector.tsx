@@ -3,7 +3,6 @@
 import * as React from 'react';
 import { Check, ChevronsUpDown, Loader2, MapPin, Search, X } from 'lucide-react';
 
-
 import { Badge } from '@/components/ui/badge';
 import { fetchApiData } from '@/lib/api';
 import type { GeographyNodeOption } from './types';
@@ -152,11 +151,10 @@ export function GeographyNodeSelector({
             <Search className="size-3.5 text-muted-foreground shrink-0" />
             <input
               type="text"
-              autoFocus
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               placeholder="Type division, district, or thana name…"
-              className="w-full bg-transparent text-xs text-foreground placeholder:text-muted-foreground outline-none"
+              className="w-full bg-transparent text-base md:text-xs pointer-coarse:text-base text-foreground placeholder:text-muted-foreground outline-none"
             />
             {loading && <Loader2 className="size-3.5 animate-spin text-primary shrink-0" />}
           </div>
@@ -185,7 +183,10 @@ export function GeographyNodeSelector({
                             ({node.localName})
                           </span>
                         )}
-                        <Badge variant="outline" className="text-[10px] h-4 px-1 uppercase tracking-tight">
+                        <Badge
+                          variant="outline"
+                          className="text-[10px] h-4 px-1 uppercase tracking-tight"
+                        >
                           {node.nodeType.replace(/_/g, ' ')}
                         </Badge>
                       </div>
@@ -210,4 +211,3 @@ export function GeographyNodeSelector({
     </div>
   );
 }
-

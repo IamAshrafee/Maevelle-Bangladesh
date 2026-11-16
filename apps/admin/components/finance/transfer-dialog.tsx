@@ -136,7 +136,9 @@ export function TransferFundsDialog({
 
   const isAmountInvalid = useMemo(() => {
     if (!cleanAmount) return false;
-    return Number.isNaN(parsedAmount) || parsedAmount <= 0 || !/^\d+(\.\d{1,4})?$/.test(cleanAmount);
+    return (
+      Number.isNaN(parsedAmount) || parsedAmount <= 0 || !/^\d+(\.\d{1,4})?$/.test(cleanAmount)
+    );
   }, [cleanAmount, parsedAmount]);
 
   const isInsufficientBalance = useMemo(() => {
@@ -205,16 +207,22 @@ export function TransferFundsDialog({
     !isAmountInvalid &&
     !isInsufficientBalance;
 
+  const isDirty = Boolean(amount.trim() || reference.trim());
+
   return (
     <ActionDialog
       open={open}
       onOpenChange={onOpenChange}
-      size="md"
+      presentation="sheet"
+      size="lg"
       title="Transfer between accounts"
       description="Internal transfers move money without recording revenue or expenses."
       onSubmit={handleSubmit}
       error={inDialogError}
       busy={isFormBusy}
+      isDirty={isDirty}
+      confirmDiscardTitle="Discard transfer?"
+      confirmDiscardDescription="You have entered transfer details. Closing now will discard them."
       submitLabel="Transfer funds"
       busyLabel="Transferring…"
       submitDisabled={!canSubmit}
@@ -279,10 +287,7 @@ export function TransferFundsDialog({
               <span className="text-[11px] text-muted-foreground">
                 Current:{' '}
                 <strong className="text-foreground">
-                  {formatMoney(
-                    destinationAccount.ledger_balance,
-                    destinationAccount.currency_code,
-                  )}
+                  {formatMoney(destinationAccount.ledger_balance, destinationAccount.currency_code)}
                 </strong>
               </span>
             ) : null}
@@ -357,8 +362,7 @@ export function TransferFundsDialog({
               New balances: {sourceAccount.name} (
               {formatMoney(sourceBalanceNum - parsedAmount, currencyCode)}) →{' '}
               {destinationAccount.name} (
-              {formatMoney(Number(destinationAccount.ledger_balance) + parsedAmount, currencyCode)}
-              )
+              {formatMoney(Number(destinationAccount.ledger_balance) + parsedAmount, currencyCode)})
             </FieldDescription>
           ) : null}
         </Field>

@@ -26,11 +26,13 @@ import type {
   InventoryBalanceDto,
 } from '@maevelle/contracts';
 import { Button } from '@/components/ui/button';
+import { AdminPage } from '@/components/ui/page-shell';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Breadcrumb } from '@/components/ui/breadcrumb';
 import { OperationalFeedback } from '@/components/operational-worklist';
+import { useUnsavedChangesGuard } from '@/hooks/use-unsaved-changes-guard';
 import {
   Select,
   SelectContent,
@@ -145,9 +147,7 @@ export function StocktakeForm() {
       .then((res) => {
         if (!active) return;
         const sessions = res.data?.items || [];
-        const ongoing = sessions.find(
-          (s) => s.status === 'COUNTING' || s.status === 'REVIEW',
-        );
+        const ongoing = sessions.find((s) => s.status === 'COUNTING' || s.status === 'REVIEW');
         setActiveConflict(ongoing ?? null);
       })
       .catch((err) => {
@@ -198,8 +198,14 @@ export function StocktakeForm() {
     }
   };
 
+  const { guardDialog } = useUnsavedChangesGuard({
+    when: form.formState.isDirty && !form.formState.isSubmitting,
+    message: 'This stocktake draft has unsaved changes. Leave without starting it?',
+  });
+
   return (
-    <main className="mx-auto min-w-0 max-w-3xl space-y-6 px-4 py-6 sm:px-6">
+    <AdminPage variant="narrow">
+      {guardDialog}
       <Breadcrumb
         mobileMode="back"
         items={[
@@ -225,7 +231,8 @@ export function StocktakeForm() {
           <div>
             <h1 className="text-xl font-bold tracking-tight">Start Physical Stocktake</h1>
             <p className="text-xs text-muted-foreground mt-0.5">
-              Initialize a physical cycle count and capture a baseline snapshot of facility balances.
+              Initialize a physical cycle count and capture a baseline snapshot of facility
+              balances.
             </p>
           </div>
         </div>
@@ -271,8 +278,8 @@ export function StocktakeForm() {
             <p className="font-semibold leading-none">No Stock-Holding Warehouses Available</p>
             <p className="mt-1 text-muted-foreground leading-relaxed">
               Stocktakes require an active warehouse location configured with the{' '}
-              <strong className="text-foreground font-mono text-[11px]">STOCK_HOLDING</strong> capability.
-              Visit{' '}
+              <strong className="text-foreground font-mono text-[11px]">STOCK_HOLDING</strong>{' '}
+              capability. Visit{' '}
               <Link href="/inventory/warehouses" className="text-primary underline font-medium">
                 Warehouse Locations
               </Link>{' '}
@@ -290,15 +297,20 @@ export function StocktakeForm() {
             <div className="space-y-1">
               <p className="font-semibold text-sm leading-none">Active Stocktake in Progress</p>
               <p className="text-muted-foreground leading-relaxed">
-                Facility <strong className="text-foreground">{selectedLocation?.name}</strong> already has an active
-                stocktake session (<span className="font-mono font-semibold text-foreground">{activeConflict.stocktakeNumber}</span>) in{' '}
+                Facility <strong className="text-foreground">{selectedLocation?.name}</strong>{' '}
+                already has an active stocktake session (
+                <span className="font-mono font-semibold text-foreground">
+                  {activeConflict.stocktakeNumber}
+                </span>
+                ) in{' '}
                 <Badge variant="secondary" className="text-[10px] uppercase font-mono px-1.5 py-0">
                   {activeConflict.status}
                 </Badge>{' '}
                 status.
               </p>
               <p className="text-[11px] text-muted-foreground">
-                To prevent duplicate physical count sheets, it is recommended to resume the existing session.
+                To prevent duplicate physical count sheets, it is recommended to resume the existing
+                session.
               </p>
             </div>
           </div>
@@ -313,7 +325,12 @@ export function StocktakeForm() {
         </div>
       ) : null}
 
-      <form id="stocktake-form" onSubmit={form.handleSubmit(onSubmit)} className="space-y-5" noValidate>
+      <form
+        id="stocktake-form"
+        onSubmit={form.handleSubmit(onSubmit)}
+        className="space-y-5"
+        noValidate
+      >
         <Card className="shadow-xs">
           <CardHeader className="p-4 sm:p-5 pb-3 sm:pb-3">
             <CardTitle className="text-base font-semibold">Counting Facility Scope</CardTitle>
@@ -418,9 +435,9 @@ export function StocktakeForm() {
                 <div className="rounded-md border border-primary/20 bg-primary/5 p-2.5 text-[11px] text-muted-foreground leading-relaxed flex items-start gap-2">
                   <Info className="size-3.5 shrink-0 text-primary mt-0.5" />
                   <span>
-                    Starting a stocktake freezes an instantaneous snapshot of system expected balances.
-                    Any movements or order dispatches that occur during counting will be reconciled
-                    against this baseline during the review phase.
+                    Starting a stocktake freezes an instantaneous snapshot of system expected
+                    balances. Any movements or order dispatches that occur during counting will be
+                    reconciled against this baseline during the review phase.
                   </span>
                 </div>
               </div>
@@ -463,6 +480,6 @@ export function StocktakeForm() {
           </div>
         </div>
       </form>
-    </main>
+    </AdminPage>
   );
 }

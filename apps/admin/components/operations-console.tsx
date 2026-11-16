@@ -5,11 +5,13 @@ import Link from 'next/link';
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import type { ApiEnvelope } from '@maevelle/contracts';
 
-import { OperationalFeedback, OperationalPageHeader } from './operational-worklist';
+import { OperationalFeedback } from './operational-worklist';
+import { AdminPage, PageHeader } from '@/components/ui/page-shell';
 import { StatusBadge } from './status-badge';
+import { Input } from '@/components/ui/input';
+import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select';
 
 import { RefreshButton } from '@/components/ui/refresh-button';
-
 
 type Attention = { domain: string; reason: string; severity: string; count: string; href: string };
 type SearchResult = { kind: string; label: string; detail: string; href: string };
@@ -234,280 +236,296 @@ export function OperationsConsole() {
     }
   };
   return (
-    <main className="flex flex-col gap-6 p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto w-full min-w-0">
-        <OperationalPageHeader
-          eyebrow="Maevelle / Operations"
-          title="Operations center"
-          description="Review action queues, search business records, manage personal views, and run permission-safe data tools."
-          actions={
-            <RefreshButton onRefresh={() => void reload()} tooltip="Refresh operations" />
-          }
-        />
-        {message ? <OperationalFeedback tone={tone}>{message}</OperationalFeedback> : null}
-        <section className="rounded-xl border border-border bg-card p-5 text-card-foreground shadow-2xs space-y-4">
-          <div className="flex items-center justify-between border-b border-border/60 pb-3">
+    <AdminPage variant="wide">
+      <PageHeader
+        eyebrow="Maevelle / Operations"
+        title="Operations center"
+        description="Review action queues, search business records, manage personal views, and run permission-safe data tools."
+        actions={<RefreshButton onRefresh={() => void reload()} tooltip="Refresh operations" />}
+      />
+      {message ? <OperationalFeedback tone={tone}>{message}</OperationalFeedback> : null}
+      <section className="rounded-xl border border-border bg-card p-5 text-card-foreground shadow-2xs space-y-4">
+        <div className="flex items-center justify-between border-b border-border/60 pb-3">
+          <div>
+            <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+              Action queue
+            </p>
+            <h2 className="text-base font-semibold tracking-tight text-foreground">
+              Attention center
+            </h2>
+          </div>
+          <span className="px-2.5 py-0.5 rounded-full bg-muted text-xs font-semibold tabular-nums text-foreground">
+            {attention.length}
+          </span>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+          {attention.map((item) => (
+            <Link
+              className="flex items-center gap-3 p-3.5 rounded-lg border border-border/70 bg-card hover:bg-muted/40 transition-colors shadow-2xs"
+              href={item.href}
+              key={`${item.domain}-${item.reason}`}
+            >
+              <strong>{item.count}</strong>
+              <span>
+                {item.domain}: {item.reason}
+              </span>
+              <StatusBadge status={item.severity} />
+            </Link>
+          ))}
+          {attention.length === 0 ? <p>No current operational attention items.</p> : null}
+        </div>
+      </section>
+      <section className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="rounded-xl border border-border bg-card p-5 text-card-foreground shadow-2xs space-y-4">
+          <div className="flex items-center justify-between pb-2 border-b border-border/60">
             <div>
-              <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Action queue</p>
-              <h2 className="text-base font-semibold tracking-tight text-foreground">Attention center</h2>
+              <p className="eyebrow">Cross-domain lookup</p>
+              <h2>Global search</h2>
             </div>
-            <span className="px-2.5 py-0.5 rounded-full bg-muted text-xs font-semibold tabular-nums text-foreground">{attention.length}</span>
           </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-            {attention.map((item) => (
-              <Link
-                className="flex items-center gap-3 p-3.5 rounded-lg border border-border/70 bg-card hover:bg-muted/40 transition-colors shadow-2xs"
-                href={item.href}
-                key={`${item.domain}-${item.reason}`}
-              >
-                <strong>{item.count}</strong>
-                <span>
-                  {item.domain}: {item.reason}
-                </span>
-                <StatusBadge status={item.severity} />
-              </Link>
-            ))}
-            {attention.length === 0 ? <p>No current operational attention items.</p> : null}
-          </div>
-        </section>
-        <section className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <div className="rounded-xl border border-border bg-card p-5 text-card-foreground shadow-2xs space-y-4">
-            <div className="flex items-center justify-between pb-2 border-b border-border/60">
-              <div>
-                <p className="eyebrow">Cross-domain lookup</p>
-                <h2>Global search</h2>
-              </div>
+          <form
+            className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3"
+            onSubmit={(event) => void search(event)}
+          >
+            <label className="flex-1 text-xs font-medium text-muted-foreground">
+              Search
+              <input
+                minLength={2}
+                name="q"
+                type="search"
+                placeholder="Order, customer, Product, or Delivery"
+                required
+              />
+            </label>
+            <button
+              className="h-9 px-4 rounded-lg bg-primary-hover text-white dark:bg-primary dark:text-primary-foreground font-medium text-xs hover:bg-primary dark:hover:bg-primary-hover transition-colors shadow-2xs cursor-pointer inline-flex items-center justify-center"
+              type="submit"
+            >
+              Search
+            </button>
+          </form>
+          {results.length ? (
+            <div className="divide-y divide-border border border-border rounded-lg overflow-hidden bg-muted/10">
+              {results.map((result) => (
+                <Link href={result.href} key={`${result.kind}-${result.label}`}>
+                  <StatusBadge status={result.kind} />
+                  <span>
+                    <strong>{result.label}</strong>
+                    <small>{result.detail}</small>
+                  </span>
+                </Link>
+              ))}
             </div>
-            <form className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3" onSubmit={(event) => void search(event)}>
-              <label className="flex-1 text-xs font-medium text-muted-foreground">
-                Search
-                <input
-                  minLength={2}
-                  name="q"
-                  type="search"
-                  placeholder="Order, customer, Product, or Delivery"
-                  required
-                />
-              </label>
-              <button className="h-9 px-4 rounded-lg bg-primary text-primary-foreground font-medium text-xs hover:bg-primary-hover transition-colors shadow-2xs cursor-pointer inline-flex items-center justify-center" type="submit">
-                Search
-              </button>
-            </form>
-            {results.length ? (
-              <div className="divide-y divide-border border border-border rounded-lg overflow-hidden bg-muted/10">
-                {results.map((result) => (
-                  <Link href={result.href} key={`${result.kind}-${result.label}`}>
-                    <StatusBadge status={result.kind} />
-                    <span>
-                      <strong>{result.label}</strong>
-                      <small>{result.detail}</small>
-                    </span>
-                  </Link>
-                ))}
-              </div>
-            ) : (
-              <p>Search results open their authoritative workspace.</p>
-            )}
-          </div>
-          <div className="rounded-xl border border-border bg-card p-5 text-card-foreground shadow-2xs space-y-4">
-            <div className="flex items-center justify-between pb-2 border-b border-border/60">
-              <div>
-                <p className="eyebrow">Personal productivity</p>
-                <h2>Saved views</h2>
-              </div>
+          ) : (
+            <p>Search results open their authoritative workspace.</p>
+          )}
+        </div>
+        <div className="rounded-xl border border-border bg-card p-5 text-card-foreground shadow-2xs space-y-4">
+          <div className="flex items-center justify-between pb-2 border-b border-border/60">
+            <div>
+              <p className="eyebrow">Personal productivity</p>
+              <h2>Saved views</h2>
             </div>
-            <form className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3" onSubmit={(event) => void save(event)}>
-              <select name="resourceKey" defaultValue="orders">
-                <option value="orders">Orders</option>
-                <option value="inventory">Inventory</option>
-                <option value="customers">Customers</option>
-                <option value="payments">Payments</option>
-                <option value="deliveries">Deliveries</option>
-                <option value="returns">Returns</option>
-                <option value="purchases">Purchases</option>
-                <option value="shipments">Shipments</option>
-              </select>
-              <input name="name" placeholder="View name" required maxLength={100} />
-              <button className="h-9 px-3 rounded-lg border border-border bg-card text-foreground font-medium text-xs hover:bg-muted transition-colors shadow-2xs cursor-pointer inline-flex items-center justify-center" type="submit">
-                Save view
-              </button>
-            </form>
-            {savedViews.length ? (
-              <ul className="divide-y divide-border border border-border rounded-lg overflow-hidden bg-muted/10">
-                {savedViews.map((view) => (
-                  <li key={view.id}>
-                    {view.resource_key}: {view.name} {view.is_default ? '(default)' : ''}{' '}
-                    <button
-                      className="h-9 px-3 rounded-lg border border-border bg-card text-foreground font-medium text-xs hover:bg-muted transition-colors shadow-2xs cursor-pointer inline-flex items-center justify-center"
-                      type="button"
-                      onClick={() => void updateView(view.id, { isDefault: true })}
-                    >
-                      Make default
-                    </button>{' '}
-                    <button
-                      className="h-9 px-3 rounded-lg border border-border bg-card text-foreground font-medium text-xs hover:bg-muted transition-colors shadow-2xs cursor-pointer inline-flex items-center justify-center"
-                      type="button"
-                      onClick={() => void updateView(view.id, { status: 'ARCHIVED' })}
-                    >
-                      Archive
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <p>No personal saved views.</p>
-            )}
           </div>
-        </section>
-        <section className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <div className="rounded-xl border border-border bg-card p-5 text-card-foreground shadow-2xs space-y-4">
-            <div className="flex items-center justify-between pb-2 border-b border-border/60">
-              <div>
-                <p className="eyebrow">All-or-nothing</p>
-                <h2>Catalog Product import</h2>
-              </div>
-              <Upload aria-hidden="true" />
-            </div>
-            <p>
-              Choose a Product type, then upload CSV columns:{' '}
-              <strong>title, handle, description</strong>. Validation is previewed before an
-              explicit confirmation.
-            </p>
-            <form className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-4 rounded-lg bg-muted/20 border border-border/60" onSubmit={(event) => void uploadImport(event)}>
-              <label>
-                Product type
-                <select name="productTypeId" required defaultValue="">
-                  <option value="" disabled>
-                    Choose Product type
-                  </option>
-                  {productTypes.map((type) => (
-                    <option key={type.id} value={type.id}>
-                      {type.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label>
-                CSV file
-                <input name="file" type="file" accept=".csv,text/csv" required />
-              </label>
-              <button
-                className="h-9 px-3 rounded-lg border border-border bg-card text-foreground font-medium text-xs hover:bg-muted transition-colors shadow-2xs cursor-pointer inline-flex items-center justify-center"
-                disabled={productTypes.length === 0}
-                type="submit"
-              >
-                Validate import
-              </button>
-            </form>
-            {importPreview ? (
-              <OperationalFeedback tone={importPreview.confirmable ? 'success' : 'warning'}>
-                {importPreview.valid} valid · {importPreview.invalid} invalid.{' '}
-                {importPreview.confirmable ? (
+          <form
+            className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3"
+            onSubmit={(event) => void save(event)}
+          >
+            <NativeSelect name="resourceKey" defaultValue="orders" className="sm:w-48">
+              <NativeSelectOption value="orders">Orders</NativeSelectOption>
+              <NativeSelectOption value="inventory">Inventory</NativeSelectOption>
+              <NativeSelectOption value="customers">Customers</NativeSelectOption>
+              <NativeSelectOption value="payments">Payments</NativeSelectOption>
+              <NativeSelectOption value="deliveries">Deliveries</NativeSelectOption>
+              <NativeSelectOption value="returns">Returns</NativeSelectOption>
+              <NativeSelectOption value="purchases">Purchases</NativeSelectOption>
+              <NativeSelectOption value="shipments">Shipments</NativeSelectOption>
+            </NativeSelect>
+            <Input name="name" placeholder="View name" required maxLength={100} className="sm:w-64" />
+            <button
+              className="h-9 px-3 rounded-lg border border-border bg-card text-foreground font-medium text-xs hover:bg-muted transition-colors shadow-2xs cursor-pointer inline-flex items-center justify-center"
+              type="submit"
+            >
+              Save view
+            </button>
+          </form>
+          {savedViews.length ? (
+            <ul className="divide-y divide-border border border-border rounded-lg overflow-hidden bg-muted/10">
+              {savedViews.map((view) => (
+                <li key={view.id}>
+                  {view.resource_key}: {view.name} {view.is_default ? '(default)' : ''}{' '}
                   <button
-                    className="h-9 px-4 rounded-lg bg-primary text-primary-foreground font-medium text-xs hover:bg-primary-hover transition-colors shadow-2xs cursor-pointer inline-flex items-center justify-center"
+                    className="h-9 px-3 rounded-lg border border-border bg-card text-foreground font-medium text-xs hover:bg-muted transition-colors shadow-2xs cursor-pointer inline-flex items-center justify-center"
                     type="button"
-                    onClick={() => void confirmImport()}
+                    onClick={() => void updateView(view.id, { isDefault: true })}
                   >
-                    Confirm and queue
+                    Make default
+                  </button>{' '}
+                  <button
+                    className="h-9 px-3 rounded-lg border border-border bg-card text-foreground font-medium text-xs hover:bg-muted transition-colors shadow-2xs cursor-pointer inline-flex items-center justify-center"
+                    type="button"
+                    onClick={() => void updateView(view.id, { status: 'ARCHIVED' })}
+                  >
+                    Archive
                   </button>
-                ) : (
-                  'Correct the source file and validate again.'
-                )}
-              </OperationalFeedback>
-            ) : null}
-            {imports.length ? (
-              <div className="rounded-lg border border-border overflow-hidden">
-                <table>
-                  <thead>
-                    <tr>
-                      <th>Type</th>
-                      <th>Status</th>
-                      <th>Validation</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {imports.map((job) => (
-                      <tr key={job.id}>
-                        <td>{job.import_type}</td>
-                        <td>
-                          <StatusBadge status={job.status} />
-                        </td>
-                        <td>
-                          {job.validation_result
-                            ? JSON.stringify(job.validation_result)
-                            : 'Pending'}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            ) : (
-              <p>No import jobs.</p>
-            )}
-          </div>
-          <div className="rounded-xl border border-border bg-card p-5 text-card-foreground shadow-2xs space-y-4">
-            <div className="flex items-center justify-between pb-2 border-b border-border/60">
-              <div>
-                <p className="eyebrow">Current user scope</p>
-                <h2>Permission-safe exports</h2>
-              </div>
-              <Download aria-hidden="true" />
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p>No personal saved views.</p>
+          )}
+        </div>
+      </section>
+      <section className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="rounded-xl border border-border bg-card p-5 text-card-foreground shadow-2xs space-y-4">
+          <div className="flex items-center justify-between pb-2 border-b border-border/60">
+            <div>
+              <p className="eyebrow">All-or-nothing</p>
+              <h2>Catalog Product import</h2>
             </div>
-            <p>
-              Exports are generated server-side from tenant-scoped read models and downloaded as
-              CSV.
-            </p>
-            <div className="flex flex-wrap items-center gap-2 pt-2">
-              <button
-                className="h-9 px-3 rounded-lg border border-border bg-card text-foreground font-medium text-xs hover:bg-muted transition-colors shadow-2xs cursor-pointer inline-flex items-center justify-center"
-                type="button"
-                onClick={() => void exportData('ORDERS')}
-              >
-                Export Orders
-              </button>
-              <button
-                className="h-9 px-3 rounded-lg border border-border bg-card text-foreground font-medium text-xs hover:bg-muted transition-colors shadow-2xs cursor-pointer inline-flex items-center justify-center"
-                type="button"
-                onClick={() => void exportData('CUSTOMERS')}
-              >
-                Export Customers
-              </button>
-              <button
-                className="h-9 px-3 rounded-lg border border-border bg-card text-foreground font-medium text-xs hover:bg-muted transition-colors shadow-2xs cursor-pointer inline-flex items-center justify-center"
-                type="button"
-                onClick={() => void exportData('INVENTORY')}
-              >
-                Export Inventory
-              </button>
-            </div>
-            {exports.length ? (
-              <div className="rounded-lg border border-border overflow-hidden">
-                <table>
-                  <thead>
-                    <tr>
-                      <th>Export</th>
-                      <th>Status</th>
-                      <th className="numeric">Rows</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {exports.map((job) => (
-                      <tr key={job.id}>
-                        <td>{job.export_type}</td>
-                        <td>
-                          <StatusBadge status={job.status} />
-                        </td>
-                        <td className="numeric">{job.row_count ?? 0}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            ) : (
-              <p>No export jobs.</p>
-            )}
+            <Upload aria-hidden="true" />
           </div>
-        </section>
-    </main>
+          <p>
+            Choose a Product type, then upload CSV columns:{' '}
+            <strong>title, handle, description</strong>. Validation is previewed before an explicit
+            confirmation.
+          </p>
+          <form
+            className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-4 rounded-lg bg-muted/20 border border-border/60"
+            onSubmit={(event) => void uploadImport(event)}
+          >
+            <label className="space-y-1 text-xs font-medium">
+              Product type
+              <NativeSelect name="productTypeId" required defaultValue="">
+                <NativeSelectOption value="" disabled>
+                  Choose Product type
+                </NativeSelectOption>
+                {productTypes.map((type) => (
+                  <NativeSelectOption key={type.id} value={type.id}>
+                    {type.name}
+                  </NativeSelectOption>
+                ))}
+              </NativeSelect>
+            </label>
+            <label className="space-y-1 text-xs font-medium">
+              CSV file
+              <Input name="file" type="file" accept=".csv,text/csv" required className="cursor-pointer" />
+            </label>
+            <button
+              className="h-9 px-3 rounded-lg border border-border bg-card text-foreground font-medium text-xs hover:bg-muted transition-colors shadow-2xs cursor-pointer inline-flex items-center justify-center"
+              disabled={productTypes.length === 0}
+              type="submit"
+            >
+              Validate import
+            </button>
+          </form>
+          {importPreview ? (
+            <OperationalFeedback tone={importPreview.confirmable ? 'success' : 'warning'}>
+              {importPreview.valid} valid · {importPreview.invalid} invalid.{' '}
+              {importPreview.confirmable ? (
+                <button
+                  className="h-9 px-4 rounded-lg bg-primary-hover text-white dark:bg-primary dark:text-primary-foreground font-medium text-xs hover:bg-primary dark:hover:bg-primary-hover transition-colors shadow-2xs cursor-pointer inline-flex items-center justify-center"
+                  type="button"
+                  onClick={() => void confirmImport()}
+                >
+                  Confirm and queue
+                </button>
+              ) : (
+                'Correct the source file and validate again.'
+              )}
+            </OperationalFeedback>
+          ) : null}
+          {imports.length ? (
+            <div className="rounded-lg border border-border overflow-hidden">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Type</th>
+                    <th>Status</th>
+                    <th>Validation</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {imports.map((job) => (
+                    <tr key={job.id}>
+                      <td>{job.import_type}</td>
+                      <td>
+                        <StatusBadge status={job.status} />
+                      </td>
+                      <td>
+                        {job.validation_result ? JSON.stringify(job.validation_result) : 'Pending'}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <p>No import jobs.</p>
+          )}
+        </div>
+        <div className="rounded-xl border border-border bg-card p-5 text-card-foreground shadow-2xs space-y-4">
+          <div className="flex items-center justify-between pb-2 border-b border-border/60">
+            <div>
+              <p className="eyebrow">Current user scope</p>
+              <h2>Permission-safe exports</h2>
+            </div>
+            <Download aria-hidden="true" />
+          </div>
+          <p>
+            Exports are generated server-side from tenant-scoped read models and downloaded as CSV.
+          </p>
+          <div className="flex flex-wrap items-center gap-2 pt-2">
+            <button
+              className="h-9 px-3 rounded-lg border border-border bg-card text-foreground font-medium text-xs hover:bg-muted transition-colors shadow-2xs cursor-pointer inline-flex items-center justify-center"
+              type="button"
+              onClick={() => void exportData('ORDERS')}
+            >
+              Export Orders
+            </button>
+            <button
+              className="h-9 px-3 rounded-lg border border-border bg-card text-foreground font-medium text-xs hover:bg-muted transition-colors shadow-2xs cursor-pointer inline-flex items-center justify-center"
+              type="button"
+              onClick={() => void exportData('CUSTOMERS')}
+            >
+              Export Customers
+            </button>
+            <button
+              className="h-9 px-3 rounded-lg border border-border bg-card text-foreground font-medium text-xs hover:bg-muted transition-colors shadow-2xs cursor-pointer inline-flex items-center justify-center"
+              type="button"
+              onClick={() => void exportData('INVENTORY')}
+            >
+              Export Inventory
+            </button>
+          </div>
+          {exports.length ? (
+            <div className="rounded-lg border border-border overflow-hidden">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Export</th>
+                    <th>Status</th>
+                    <th className="numeric">Rows</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {exports.map((job) => (
+                    <tr key={job.id}>
+                      <td>{job.export_type}</td>
+                      <td>
+                        <StatusBadge status={job.status} />
+                      </td>
+                      <td className="numeric">{job.row_count ?? 0}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <p>No export jobs.</p>
+          )}
+        </div>
+      </section>
+    </AdminPage>
   );
 }

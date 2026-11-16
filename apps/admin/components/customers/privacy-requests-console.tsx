@@ -14,6 +14,15 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog';
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetFooter,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+} from '@/components/ui/sheet';
 import { Label } from '@/components/ui/label';
 import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select';
 import { Textarea } from '@/components/ui/textarea';
@@ -35,7 +44,6 @@ import {
   PagePanel,
 } from '@/components/ui/page-shell';
 import { fetchApiData } from '@/lib/api';
-import { CrmNav } from './crm-nav';
 
 type PrivacyRequest = {
   id: string;
@@ -86,52 +94,54 @@ function PrivacyDecision({ item, onUpdated }: { item: PrivacyRequest; onUpdated:
     }
   }
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger render={<Button size="sm" variant="outline" />}>Process</DialogTrigger>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>Process {item.requestType.toLowerCase()} request</DialogTitle>
-          <DialogDescription>
+    <Sheet open={open} onOpenChange={setOpen}>
+      <SheetTrigger render={<Button size="sm" variant="outline" />}>Process</SheetTrigger>
+      <SheetContent side="right" className="gap-0 p-0 sm:max-w-lg">
+        <SheetHeader className="shrink-0 border-b border-border px-5 py-4 pr-11 text-left">
+          <SheetTitle>Process {item.requestType.toLowerCase()} request</SheetTitle>
+          <SheetDescription>
             Verify the requester outside this form before exporting, correcting, or anonymizing
             data. Closing this work item does not silently mutate immutable commerce records.
-          </DialogDescription>
-        </DialogHeader>
-        {error ? <p className="text-sm text-destructive">{error}</p> : null}
-        <form onSubmit={submit} className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor={`privacy-status-${item.id}`}>Status</Label>
-            <NativeSelect
-              id={`privacy-status-${item.id}`}
-              value={status}
-              onChange={(event) => setStatus(event.target.value as typeof status)}
-            >
-              {decisions.map((value) => (
-                <NativeSelectOption key={value} value={value}>
-                  {value.replaceAll('_', ' ')}
-                </NativeSelectOption>
-              ))}
-            </NativeSelect>
+          </SheetDescription>
+        </SheetHeader>
+        <form onSubmit={submit} className="flex min-h-0 flex-1 flex-col">
+          <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-5 py-4">
+            {error ? <p className="text-sm text-destructive">{error}</p> : null}
+            <div className="space-y-2">
+              <Label htmlFor={`privacy-status-${item.id}`}>Status</Label>
+              <NativeSelect
+                id={`privacy-status-${item.id}`}
+                value={status}
+                onChange={(event) => setStatus(event.target.value as typeof status)}
+              >
+                {decisions.map((value) => (
+                  <NativeSelectOption key={value} value={value}>
+                    {value.replaceAll('_', ' ')}
+                  </NativeSelectOption>
+                ))}
+              </NativeSelect>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor={`privacy-notes-${item.id}`}>Resolution notes</Label>
+              <Textarea
+                id={`privacy-notes-${item.id}`}
+                value={notes}
+                onChange={(event) => setNotes(event.target.value)}
+                required
+              />
+            </div>
           </div>
-          <div className="space-y-2">
-            <Label htmlFor={`privacy-notes-${item.id}`}>Resolution notes</Label>
-            <Textarea
-              id={`privacy-notes-${item.id}`}
-              value={notes}
-              onChange={(event) => setNotes(event.target.value)}
-              required
-            />
-          </div>
-          <DialogFooter>
+          <SheetFooter className="shrink-0 flex-row items-center justify-end gap-2 border-t border-border bg-card/50 px-5 py-3">
             <Button type="button" variant="outline" onClick={() => setOpen(false)}>
               Cancel
             </Button>
             <Button type="submit" disabled={busy || !notes.trim()}>
               {busy ? 'Saving…' : 'Save status'}
             </Button>
-          </DialogFooter>
+          </SheetFooter>
         </form>
-      </DialogContent>
-    </Dialog>
+      </SheetContent>
+    </Sheet>
   );
 }
 
@@ -224,11 +234,8 @@ export function PrivacyRequestsConsole() {
         eyebrow="Customer 360"
         title="Privacy requests"
         description="Identity-verified access, export, correction, restriction, and anonymization work with immutable audit evidence."
-        actions={
-          <RefreshButton onRefresh={() => void load()} tooltip="Refresh privacy requests" />
-        }
+        actions={<RefreshButton onRefresh={() => void load()} tooltip="Refresh privacy requests" />}
       />
-      <CrmNav />
       {error ? (
         <ErrorState message={error} onRetry={() => void load()} />
       ) : !data ? (
@@ -241,7 +248,7 @@ export function PrivacyRequestsConsole() {
         />
       ) : (
         <PagePanel className="overflow-x-auto p-0">
-          <Table density="compact">
+          <Table density="compact" stickyHeader>
             <TableHeader>
               <TableRow>
                 <TableHead>Customer</TableHead>

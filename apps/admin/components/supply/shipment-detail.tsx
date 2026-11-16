@@ -10,6 +10,7 @@ import type { ApiEnvelope, InboundReceiptDto, InboundShipmentDto } from '@maevel
 import { useAdminCapability } from '@/components/admin-capabilities';
 import { OperationalFeedback } from '@/components/operational-worklist';
 import { DetailSkeleton } from '@/components/supply/supply-entity-ui';
+import { AdminPage } from '@/components/ui/page-shell';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { supplyRequest } from '@/lib/supply/api';
@@ -315,7 +316,7 @@ export function ShipmentDetail({ shipmentId }: ShipmentDetailProps) {
 
   if (!shipment) {
     return (
-      <main className="space-y-5 px-4 py-5 sm:px-6 lg:px-8">
+      <AdminPage variant="wide">
         <OperationalFeedback tone="danger">
           {message || 'Shipment was not found.'}
         </OperationalFeedback>
@@ -323,7 +324,7 @@ export function ShipmentDetail({ shipmentId }: ShipmentDetailProps) {
           <ArrowLeft className="size-4" />
           <span>Back to shipments</span>
         </Button>
-      </main>
+      </AdminPage>
     );
   }
 
@@ -335,7 +336,7 @@ export function ShipmentDetail({ shipmentId }: ShipmentDetailProps) {
       : 'items';
 
   return (
-    <main className="min-w-0 space-y-5 px-4 py-5 sm:px-6 lg:px-8">
+    <AdminPage variant="wide">
       {/* Header, Stepper, and Actions */}
       <ShipmentDetailHeader
         shipment={shipment}
@@ -493,6 +494,6 @@ export function ShipmentDetail({ shipmentId }: ShipmentDetailProps) {
           />
         </>
       ) : null}
-    </main>
+    </AdminPage>
   );
 }

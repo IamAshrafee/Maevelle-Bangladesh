@@ -77,11 +77,14 @@ const info = new Set([
 ]);
 
 const toneStyles: Record<string, string> = {
-  success: 'bg-emerald-50 text-emerald-700 border-emerald-200/80 dark:bg-emerald-950/40 dark:text-emerald-400 dark:border-emerald-800/60',
-  warning: 'bg-amber-50 text-amber-700 border-amber-200/80 dark:bg-amber-950/40 dark:text-amber-400 dark:border-amber-800/60',
-  danger: 'bg-rose-50 text-rose-700 border-rose-200/80 dark:bg-rose-950/40 dark:text-rose-400 dark:border-rose-800/60',
+  success:
+    'bg-emerald-50 text-emerald-700 border-emerald-200/80 dark:bg-emerald-950/40 dark:text-emerald-400 dark:border-emerald-800/60',
+  warning:
+    'bg-amber-50 text-amber-700 border-amber-200/80 dark:bg-amber-950/40 dark:text-amber-400 dark:border-amber-800/60',
+  danger:
+    'bg-rose-50 text-rose-700 border-rose-200/80 dark:bg-rose-950/40 dark:text-rose-400 dark:border-rose-800/60',
   info: 'bg-sky-50 text-sky-700 border-sky-200/80 dark:bg-sky-950/40 dark:text-sky-400 dark:border-sky-800/60',
-  neutral: 'bg-slate-100/90 text-slate-700 border-slate-200/90 dark:bg-slate-800/60 dark:text-slate-300 dark:border-slate-700/60',
+  neutral: 'bg-muted/80 text-muted-foreground border-border',
 };
 
 export function StatusBadge({
@@ -94,8 +97,9 @@ export function StatusBadge({
   readonly className?: string;
 }) {
   const key = (status ?? '').toUpperCase();
-  const tone = overrideTone ?? (
-    success.has(key)
+  const tone =
+    overrideTone ??
+    (success.has(key)
       ? 'success'
       : warning.has(key)
         ? 'warning'
@@ -103,8 +107,7 @@ export function StatusBadge({
           ? 'danger'
           : info.has(key)
             ? 'info'
-            : 'neutral'
-  );
+            : 'neutral');
 
   return (
     <span
@@ -114,14 +117,17 @@ export function StatusBadge({
         className,
       )}
     >
-      <span className={cn(
-        'size-1.5 rounded-full shrink-0',
-        tone === 'success' && 'bg-emerald-500',
-        tone === 'warning' && 'bg-amber-500',
-        tone === 'danger' && 'bg-rose-500',
-        tone === 'info' && 'bg-sky-500',
-        tone === 'neutral' && 'bg-slate-400',
-      )} aria-hidden="true" />
+      <span
+        className={cn(
+          'size-1.5 rounded-full shrink-0',
+          tone === 'success' && 'bg-emerald-500',
+          tone === 'warning' && 'bg-amber-500',
+          tone === 'danger' && 'bg-rose-500',
+          tone === 'info' && 'bg-sky-500',
+          tone === 'neutral' && 'bg-muted-foreground',
+        )}
+        aria-hidden="true"
+      />
       {status ? status.replaceAll('_', ' ').toLowerCase() : 'Unknown'}
     </span>
   );

@@ -125,11 +125,7 @@ interface ReviewDetailDrawerProps {
   onModified: () => void;
 }
 
-export function ReviewDetailDrawer({
-  reviewId,
-  onClose,
-  onModified,
-}: ReviewDetailDrawerProps) {
+export function ReviewDetailDrawer({ reviewId, onClose, onModified }: ReviewDetailDrawerProps) {
   const [detail, setDetail] = useState<AdminReviewDetail | null>(null);
   const [loading, setLoading] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -283,7 +279,7 @@ export function ReviewDetailDrawer({
         side="right"
         className="w-full sm:max-w-xl md:max-w-2xl overflow-y-auto p-0 flex flex-col gap-0 border-l border-border bg-card"
       >
-        <SheetHeader className="p-6 border-b border-border bg-muted/20 sticky top-0 z-10 backdrop-blur-xs">
+        <SheetHeader className="p-6 border-b border-border bg-card/90 sticky top-0 z-10 backdrop-blur-md">
           <div className="flex items-start justify-between gap-4">
             <div className="space-y-1 min-w-0">
               <span className="text-xs font-semibold uppercase tracking-wider text-primary">
@@ -298,9 +294,7 @@ export function ReviewDetailDrawer({
                   <span>·</span>
                   <span>Revision #{detail.currentRevision.revisionNumber}</span>
                   <span>·</span>
-                  <span>
-                    {new Date(detail.currentRevision.submittedAt).toLocaleDateString()}
-                  </span>
+                  <span>{new Date(detail.currentRevision.submittedAt).toLocaleDateString()}</span>
                 </SheetDescription>
               ) : null}
             </div>
@@ -366,12 +360,19 @@ export function ReviewDetailDrawer({
 
                 <p className="text-sm text-foreground/90 leading-relaxed whitespace-pre-line bg-muted/20 p-3.5 rounded-md border border-border/40">
                   {detail.currentRevision.body || (
-                    <span className="italic text-muted-foreground">No written feedback provided.</span>
+                    <span className="italic text-muted-foreground">
+                      No written feedback provided.
+                    </span>
                   )}
                 </p>
 
                 <div className="flex items-center justify-between text-xs text-muted-foreground pt-1 border-t border-border/40">
-                  <span>Author: <strong className="text-foreground">{detail.currentRevision.publicDisplayName}</strong></span>
+                  <span>
+                    Author:{' '}
+                    <strong className="text-foreground">
+                      {detail.currentRevision.publicDisplayName}
+                    </strong>
+                  </span>
                   <span className="font-mono tabular-nums">
                     Submitted: {new Date(detail.currentRevision.submittedAt).toLocaleString()}
                   </span>
@@ -474,7 +475,8 @@ export function ReviewDetailDrawer({
                     </Link>
                     {detail.purchasedVariant.label ? (
                       <p className="text-[11px] text-muted-foreground truncate">
-                        Variant: <strong className="text-foreground">{detail.purchasedVariant.label}</strong>
+                        Variant:{' '}
+                        <strong className="text-foreground">{detail.purchasedVariant.label}</strong>
                       </p>
                     ) : null}
                   </div>
@@ -485,7 +487,9 @@ export function ReviewDetailDrawer({
                       <div className="flex items-center justify-between">
                         <span className="text-muted-foreground">Order & Verification</span>
                         <span className="font-mono text-[10px] text-muted-foreground">
-                          {detail.order.orderedAt ? new Date(detail.order.orderedAt).toLocaleDateString() : ''}
+                          {detail.order.orderedAt
+                            ? new Date(detail.order.orderedAt).toLocaleDateString()
+                            : ''}
                         </span>
                       </div>
                       <div className="flex items-center gap-2 flex-wrap">
@@ -532,11 +536,18 @@ export function ReviewDetailDrawer({
                             {new Date(rev.submittedAt).toLocaleString()}
                           </span>
                         </div>
-                        <p className="text-muted-foreground line-clamp-1">{rev.body || 'No text'}</p>
+                        <p className="text-muted-foreground line-clamp-1">
+                          {rev.body || 'No text'}
+                        </p>
                         <div className="flex items-center gap-2 text-[10px]">
-                          <ReviewModerationBadge status={rev.moderationStatus} className="text-[10px] py-0 px-2" />
+                          <ReviewModerationBadge
+                            status={rev.moderationStatus}
+                            className="text-[10px] py-0 px-2"
+                          />
                           {rev.moderationReason ? (
-                            <span className="text-muted-foreground">Reason: {rev.moderationReason}</span>
+                            <span className="text-muted-foreground">
+                              Reason: {rev.moderationReason}
+                            </span>
                           ) : null}
                         </div>
                       </div>
@@ -582,7 +593,8 @@ export function ReviewDetailDrawer({
                               <ShieldAlert className="size-4" /> Reject Revision Policy Decision
                             </h4>
                             <p className="text-[11px] text-muted-foreground leading-snug">
-                              Invariant REV-INV-025: Negative sentiment is strictly prohibited as a rejection ground. Select an authentic policy violation reason.
+                              Invariant REV-INV-025: Negative sentiment is strictly prohibited as a
+                              rejection ground. Select an authentic policy violation reason.
                             </p>
                           </div>
 
@@ -696,7 +708,8 @@ export function ReviewDetailDrawer({
                   </div>
 
                   <p className="text-xs text-muted-foreground">
-                    This response will appear publicly under the review on the Storefront labeled as <strong className="text-foreground">"Response from Maevelle"</strong>.
+                    This response will appear publicly under the review on the Storefront labeled as{' '}
+                    <strong className="text-foreground">"Response from Maevelle"</strong>.
                   </p>
 
                   <div className="space-y-1.5">
@@ -720,7 +733,9 @@ export function ReviewDetailDrawer({
                     className="w-full text-xs"
                     disabled={busy || !responseBody.trim()}
                   >
-                    {detail.merchantResponse ? 'Update Official Response' : 'Publish Official Response'}
+                    {detail.merchantResponse
+                      ? 'Update Official Response'
+                      : 'Publish Official Response'}
                   </Button>
                 </form>
               ) : null}

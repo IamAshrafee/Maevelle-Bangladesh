@@ -3,14 +3,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import {
-  ArrowLeft,
-  Check,
-  Info,
-  Loader2,
-  Save,
-  Sparkles,
-} from 'lucide-react';
+import { ArrowLeft, Check, Info, Loader2, Save, Sparkles } from 'lucide-react';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
@@ -26,8 +19,10 @@ import {
 } from '@/lib/inventory/location-config';
 import { useAdminCapability } from '@/components/admin-capabilities';
 import { OperationalFeedback } from '@/components/operational-worklist';
+import { useUnsavedChangesGuard } from '@/hooks/use-unsaved-changes-guard';
 import { Breadcrumb } from '@/components/ui/breadcrumb';
 import { Button } from '@/components/ui/button';
+import { AdminPage } from '@/components/ui/page-shell';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -180,7 +175,7 @@ export function LocationForm() {
 
   if (!canManage) {
     return (
-      <main className="mx-auto min-w-0 max-w-3xl space-y-5 px-4 py-6 sm:px-6">
+      <AdminPage variant="narrow">
         <Breadcrumb
           mobileMode="back"
           items={[
@@ -198,12 +193,18 @@ export function LocationForm() {
             <ArrowLeft className="mr-2 size-4" /> Back to locations
           </Button>
         </div>
-      </main>
+      </AdminPage>
     );
   }
 
+  const { guardDialog } = useUnsavedChangesGuard({
+    when: form.formState.isDirty && !form.formState.isSubmitting,
+    message: 'You have unsaved warehouse location details. Leave without saving?',
+  });
+
   return (
-    <main className="mx-auto min-w-0 max-w-3xl space-y-5 px-4 py-6 sm:px-6">
+    <AdminPage variant="narrow">
+      {guardDialog}
       <Breadcrumb
         mobileMode="back"
         items={[
@@ -426,7 +427,9 @@ export function LocationForm() {
                 size="xs"
                 className="h-7 text-xs"
                 onClick={() =>
-                  handleApplyPreset(LOCATION_CAPABILITY_GROUPS.flatMap((g) => g.items.map((i) => i.code)))
+                  handleApplyPreset(
+                    LOCATION_CAPABILITY_GROUPS.flatMap((g) => g.items.map((i) => i.code)),
+                  )
                 }
                 title="Enable all operational capabilities"
               >
@@ -468,7 +471,7 @@ export function LocationForm() {
                           <div
                             className={`mt-0.5 grid size-4 shrink-0 place-items-center rounded border transition-colors ${
                               isSelected
-                                ? 'border-primary bg-primary text-primary-foreground'
+                                ? 'border-primary bg-primary-subtle text-primary-hover dark:text-primary'
                                 : 'border-muted-foreground/30 bg-background'
                             }`}
                           >
@@ -493,7 +496,8 @@ export function LocationForm() {
             <div className="flex items-start gap-2 rounded-lg border bg-muted/30 p-2.5 text-xs text-muted-foreground">
               <Info className="size-3.5 shrink-0 text-primary mt-0.5" />
               <span>
-                <strong>Purchase Receiving:</strong> Required for warehouses that receive supplier purchase orders and freight shipments.
+                <strong>Purchase Receiving:</strong> Required for warehouses that receive supplier
+                purchase orders and freight shipments.
               </span>
             </div>
           </CardContent>
@@ -592,6 +596,6 @@ export function LocationForm() {
           </Button>
         </div>
       </form>
-    </main>
+    </AdminPage>
   );
 }

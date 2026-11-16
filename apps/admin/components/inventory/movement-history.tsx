@@ -9,6 +9,7 @@ import type { InventoryHistoryDto, PaginatedDto, WarehouseLocationDto } from '@m
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { AdminPage } from '@/components/ui/page-shell';
 import { RefreshButton } from '@/components/ui/refresh-button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -174,7 +175,7 @@ export function MovementHistory() {
   );
 
   return (
-    <main className="min-w-0 space-y-5 px-4 py-5 sm:px-6 lg:px-8">
+    <AdminPage variant="wide">
       <header className="flex flex-col gap-4 border-b pb-5 lg:flex-row lg:items-end lg:justify-between">
         <div className="min-w-0">
           <p className="text-sm font-medium text-primary">Inventory</p>
@@ -383,7 +384,7 @@ export function MovementHistory() {
             ))}
           </div>
           <div className="hidden rounded-lg border lg:block">
-            <Table>
+            <Table stickyHeader density="compact">
               <TableHeader>
                 <TableRow>
                   <TableHead>Time</TableHead>
@@ -463,6 +464,6 @@ export function MovementHistory() {
           onPageChange={(nextPage) => replaceQuery({ page: String(nextPage) })}
         />
       ) : null}
-    </main>
+    </AdminPage>
   );
 }

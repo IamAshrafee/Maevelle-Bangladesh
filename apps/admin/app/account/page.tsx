@@ -3,7 +3,7 @@ import type { Metadata } from 'next';
 import { Suspense } from 'react';
 
 import { MyAccountConsole } from '@/components/account/my-account-console';
-import { LoadingState } from '@/components/ui/page-shell';
+import { PageSkeleton } from '@/components/ui/page-shell';
 
 export const dynamic = 'force-dynamic';
 
@@ -14,13 +14,7 @@ export const metadata: Metadata = {
 
 export default function AccountPage() {
   return (
-    <Suspense
-      fallback={
-        <div className="flex h-96 items-center justify-center">
-          <LoadingState message="Loading account details…" />
-        </div>
-      }
-    >
+    <Suspense fallback={<PageSkeleton variant="detail" widthVariant="standard" />}>
       <MyAccountConsole />
     </Suspense>
   );

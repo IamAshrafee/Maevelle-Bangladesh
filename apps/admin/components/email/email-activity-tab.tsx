@@ -94,7 +94,7 @@ export function EmailActivityTab({
           <select
             value={statusFilter}
             onChange={(e) => onStatusFilterChange(e.target.value)}
-            className="h-9 rounded-md border bg-background px-3 text-xs text-foreground focus:outline-hidden focus:ring-2 focus:ring-ring"
+            className="h-9 pointer-coarse:min-h-11 rounded-md border bg-background px-3 text-base md:text-xs pointer-coarse:text-base text-foreground focus:outline-hidden focus:ring-2 focus:ring-ring"
             aria-label="Filter by delivery status"
           >
             <option value="">All Statuses</option>
@@ -114,7 +114,7 @@ export function EmailActivityTab({
           <select
             value={eventFilter}
             onChange={(e) => onEventFilterChange(e.target.value)}
-            className="h-9 rounded-md border bg-background px-3 text-xs text-foreground focus:outline-hidden focus:ring-2 focus:ring-ring"
+            className="h-9 pointer-coarse:min-h-11 rounded-md border bg-background px-3 text-base md:text-xs pointer-coarse:text-base text-foreground focus:outline-hidden focus:ring-2 focus:ring-ring"
             aria-label="Filter by business event"
           >
             <option value="">All Business Events</option>
@@ -131,7 +131,7 @@ export function EmailActivityTab({
           <select
             value={triggerFilter}
             onChange={(e) => onTriggerFilterChange(e.target.value)}
-            className="h-9 rounded-md border bg-background px-3 text-xs text-foreground focus:outline-hidden focus:ring-2 focus:ring-ring"
+            className="h-9 pointer-coarse:min-h-11 rounded-md border bg-background px-3 text-base md:text-xs pointer-coarse:text-base text-foreground focus:outline-hidden focus:ring-2 focus:ring-ring"
             aria-label="Filter by trigger origin"
           >
             <option value="">All Triggers</option>

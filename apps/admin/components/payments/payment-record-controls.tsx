@@ -103,11 +103,8 @@ export function PaymentRecordControls({
           );
         })}
       </div>
-      <form
-        className="grid gap-3 sm:grid-cols-2 xl:grid-cols-[minmax(15rem,1fr)_repeat(4,minmax(9rem,12rem))_auto] xl:items-end"
-        onSubmit={onApply}
-      >
-        <label className="grid gap-1 text-sm font-medium sm:col-span-2 xl:col-span-1">
+      <form className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3" onSubmit={onApply}>
+        <label className="grid min-w-0 gap-1 text-sm font-medium sm:col-span-2 lg:col-span-1">
           Search
           <span className="relative">
             <Search
@@ -131,7 +128,11 @@ export function PaymentRecordControls({
         {kind === 'payments' ? (
           <label className="grid gap-1 text-sm font-medium">
             Method
-            <NativeSelect value={method} onChange={(event) => onMethodChange(event.target.value)}>
+            <NativeSelect
+              className="w-full"
+              value={method}
+              onChange={(event) => onMethodChange(event.target.value)}
+            >
               <NativeSelectOption value="ALL">All methods</NativeSelectOption>
               {methods.map((item) => (
                 <NativeSelectOption key={item.id} value={item.code}>
@@ -144,6 +145,7 @@ export function PaymentRecordControls({
           <label className="grid gap-1 text-sm font-medium">
             Status
             <NativeSelect
+              className="w-full"
               value={refundStatus}
               onChange={(event) => onRefundStatusChange(event.target.value)}
             >
@@ -162,7 +164,11 @@ export function PaymentRecordControls({
 
         <label className="grid gap-1 text-sm font-medium">
           Account posting
-          <NativeSelect value={posting} onChange={(event) => onPostingChange(event.target.value)}>
+          <NativeSelect
+            className="w-full"
+            value={posting}
+            onChange={(event) => onPostingChange(event.target.value)}
+          >
             <NativeSelectOption value="ALL">All posting states</NativeSelectOption>
             <NativeSelectOption value="POSTED">Posted</NativeSelectOption>
             <NativeSelectOption value="UNPOSTED">Not posted</NativeSelectOption>
@@ -179,9 +185,9 @@ export function PaymentRecordControls({
           <Input type="date" value={to} onChange={(event) => onToChange(event.target.value)} />
         </label>
 
-        <div className="flex gap-2">
+        <div className="flex flex-wrap items-end gap-2">
           <Button type="submit" disabled={loading}>
-            Apply
+            Apply search
           </Button>
           {hasFilters ? (
             <Button type="button" variant="outline" disabled={loading} onClick={onReset}>

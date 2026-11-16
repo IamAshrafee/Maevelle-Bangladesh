@@ -29,12 +29,7 @@ import { TotpCodeInput } from './totp-code-input';
 import { RecoveryCodesPanel } from './recovery-codes-panel';
 
 export type SetupStep =
-  | 'intro'
-  | 'confirm_identity'
-  | 'scan_qr'
-  | 'verify_code'
-  | 'save_recovery'
-  | 'success';
+  'intro' | 'confirm_identity' | 'scan_qr' | 'verify_code' | 'save_recovery' | 'success';
 
 interface EnrollmentData {
   readonly totpUri: string;
@@ -173,9 +168,13 @@ export function AuthenticatorSetupWizard({
       setShowTimeHelp(true);
       if (err instanceof ApiRequestError) {
         if (err.status === 400 || err.code === 'INVALID_TOTP' || err.code === 'INVALID_CODE') {
-          setError('That verification code is not valid. Check the code in your authenticator app and try again.');
+          setError(
+            'That verification code is not valid. Check the code in your authenticator app and try again.',
+          );
         } else if (err.code === 'ACCOUNT_TEMPORARILY_LOCKED') {
-          setError('Too many unsuccessful attempts. Verification is temporarily locked for security. Please try again later.');
+          setError(
+            'Too many unsuccessful attempts. Verification is temporarily locked for security. Please try again later.',
+          );
         } else {
           setError(err.message);
         }
@@ -207,9 +206,7 @@ export function AuthenticatorSetupWizard({
             <ShieldCheck className="size-4" />
           </div>
           <div>
-            <h2 className="text-sm font-semibold text-foreground">
-              Authenticator App Setup
-            </h2>
+            <h2 className="text-sm font-semibold text-foreground">Authenticator App Setup</h2>
             <p className="text-xs text-muted-foreground">
               {step === 'intro' && 'Step 1 of 5: Overview'}
               {step === 'confirm_identity' && 'Step 2 of 5: Confirm identity'}
@@ -272,7 +269,8 @@ export function AuthenticatorSetupWizard({
               Protect your account with an Authenticator App
             </h3>
             <p className="text-xs text-muted-foreground leading-relaxed">
-              When you sign in to Maevelle, you will enter a temporary 6-digit verification code generated on your phone in addition to your password.
+              When you sign in to Maevelle, you will enter a temporary 6-digit verification code
+              generated on your phone in addition to your password.
             </p>
           </div>
 
@@ -283,7 +281,8 @@ export function AuthenticatorSetupWizard({
                 <span>Works on any smartphone</span>
               </div>
               <p className="text-muted-foreground text-[11px] leading-relaxed">
-                Use Google Authenticator, Microsoft Authenticator, Apple Passwords, 1Password, or any standard TOTP app.
+                Use Google Authenticator, Microsoft Authenticator, Apple Passwords, 1Password, or
+                any standard TOTP app.
               </p>
             </div>
 
@@ -293,7 +292,8 @@ export function AuthenticatorSetupWizard({
                 <span>Works without internet</span>
               </div>
               <p className="text-muted-foreground text-[11px] leading-relaxed">
-                Codes are generated directly on your device. You do not need SMS or cellular reception to log in.
+                Codes are generated directly on your device. You do not need SMS or cellular
+                reception to log in.
               </p>
             </div>
           </div>
@@ -301,7 +301,8 @@ export function AuthenticatorSetupWizard({
           <div className="rounded-lg border border-border/60 bg-muted/30 p-3.5 text-xs text-muted-foreground space-y-1">
             <span className="font-semibold text-foreground">What you will need:</span>
             <p className="text-[11px]">
-              Your phone or tablet with an authenticator app installed, and your current Maevelle account password.
+              Your phone or tablet with an authenticator app installed, and your current Maevelle
+              account password.
             </p>
           </div>
 
@@ -316,7 +317,9 @@ export function AuthenticatorSetupWizard({
               >
                 {isMandatory ? 'Return to sign in' : 'Cancel'}
               </Button>
-            ) : <div />}
+            ) : (
+              <div />
+            )}
 
             <Button
               type="button"
@@ -336,9 +339,7 @@ export function AuthenticatorSetupWizard({
       {step === 'confirm_identity' && (
         <form onSubmit={handleBeginEnrollment} className="space-y-4">
           <div className="space-y-1">
-            <h3 className="text-base font-semibold text-foreground">
-              Confirm your identity
-            </h3>
+            <h3 className="text-base font-semibold text-foreground">Confirm your identity</h3>
             <p className="text-xs text-muted-foreground">
               Enter your current account password to begin authenticator setup.
             </p>
@@ -354,11 +355,10 @@ export function AuthenticatorSetupWizard({
                 type={showPassword ? 'text' : 'password'}
                 autoComplete="current-password"
                 required
-                autoFocus
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="Enter your current password"
-                className="pr-10 text-xs h-9"
+                className="pr-10 h-9"
               />
               <button
                 type="button"
@@ -409,17 +409,16 @@ export function AuthenticatorSetupWizard({
       {step === 'scan_qr' && enrollment && (
         <div className="space-y-5">
           <div className="space-y-1">
-            <h3 className="text-base font-semibold text-foreground">
-              Scan the QR code
-            </h3>
+            <h3 className="text-base font-semibold text-foreground">Scan the QR code</h3>
             <p className="text-xs text-muted-foreground">
-              Open your authenticator app, tap the add (+) button, and scan this QR code with your camera.
+              Open your authenticator app, tap the add (+) button, and scan this QR code with your
+              camera.
             </p>
           </div>
 
           <div className="flex flex-col sm:flex-row items-center gap-6 p-4 rounded-xl border border-border/80 bg-card shadow-2xs">
             {/* High-contrast QR Container (Always white background for phone camera compatibility) */}
-            <div className="flex size-60 sm:size-64 shrink-0 items-center justify-center rounded-xl bg-white p-3 border-2 border-slate-200 shadow-xs">
+            <div className="flex size-60 sm:size-64 shrink-0 items-center justify-center rounded-xl bg-white p-3 border-2 border-border shadow-xs">
               {qrDataUrl ? (
                 <Image
                   src={qrDataUrl}
@@ -430,7 +429,7 @@ export function AuthenticatorSetupWizard({
                   unoptimized
                 />
               ) : (
-                <div className="flex flex-col items-center gap-2 text-xs text-slate-500">
+                <div className="flex flex-col items-center gap-2 text-xs text-neutral-600">
                   <RefreshCw className="size-6 animate-spin text-primary" />
                   <span>Generating secure QR…</span>
                 </div>
@@ -445,7 +444,9 @@ export function AuthenticatorSetupWizard({
                 </span>
                 <ol className="list-decimal list-inside space-y-1 text-muted-foreground text-[11px] leading-relaxed">
                   <li>Open Google Authenticator or your preferred app.</li>
-                  <li>Select <strong>Add account</strong> or tap <strong>+</strong>.</li>
+                  <li>
+                    Select <strong>Add account</strong> or tap <strong>+</strong>.
+                  </li>
                   <li>Point your phone&apos;s camera at this screen.</li>
                 </ol>
               </div>
@@ -531,9 +532,7 @@ export function AuthenticatorSetupWizard({
       {step === 'verify_code' && (
         <div className="space-y-5">
           <div className="space-y-1 text-center max-w-sm mx-auto">
-            <h3 className="text-base font-semibold text-foreground">
-              Enter the verification code
-            </h3>
+            <h3 className="text-base font-semibold text-foreground">Enter the verification code</h3>
             <p className="text-xs text-muted-foreground">
               Enter the 6-digit verification code currently displayed in your authenticator app.
             </p>
@@ -551,7 +550,6 @@ export function AuthenticatorSetupWizard({
               }}
               disabled={loading}
               hasError={Boolean(error)}
-              autoFocus
             />
           </div>
 
@@ -563,7 +561,9 @@ export function AuthenticatorSetupWizard({
                 Having trouble verifying the code?
               </span>
               <p className="text-[11px] text-muted-foreground leading-relaxed">
-                Verification codes change every 30 seconds and require accurate clock synchronization. Ensure your device&apos;s date and time are set to <strong>Automatic</strong>, then enter the newest code shown.
+                Verification codes change every 30 seconds and require accurate clock
+                synchronization. Ensure your device&apos;s date and time are set to{' '}
+                <strong>Automatic</strong>, then enter the newest code shown.
               </p>
             </div>
           )}
@@ -629,16 +629,13 @@ export function AuthenticatorSetupWizard({
               Two-factor authentication is enabled
             </h3>
             <p className="text-xs text-muted-foreground max-w-sm mx-auto leading-relaxed">
-              Your Maevelle account is now protected with an Authenticator App. You will be asked for a verification code when signing in.
+              Your Maevelle account is now protected with an Authenticator App. You will be asked
+              for a verification code when signing in.
             </p>
           </div>
 
           <div className="pt-3">
-            <Button
-              type="button"
-              onClick={onComplete}
-              className="h-9 px-6 text-xs font-semibold"
-            >
+            <Button type="button" onClick={onComplete} className="h-9 px-6 text-xs font-semibold">
               Done
             </Button>
           </div>

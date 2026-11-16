@@ -2,7 +2,14 @@
 
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { BookmarkCheck, History, RotateCcw, Search, SlidersHorizontal, TrendingDown } from 'lucide-react';
+import {
+  BookmarkCheck,
+  History,
+  RotateCcw,
+  Search,
+  SlidersHorizontal,
+  TrendingDown,
+} from 'lucide-react';
 import { useDeferredValue, useEffect, useState } from 'react';
 
 import type {
@@ -14,6 +21,7 @@ import type {
 } from '@maevelle/contracts';
 
 import { Button } from '@/components/ui/button';
+import { AdminPage } from '@/components/ui/page-shell';
 import { RefreshButton } from '@/components/ui/refresh-button';
 import { Input } from '@/components/ui/input';
 import {
@@ -43,9 +51,8 @@ export function StockOverview() {
   const [stats, setStats] = useState<InventoryStatsDto>();
   const [locations, setLocations] = useState<readonly WarehouseLocationDto[]>([]);
   const [positions, setPositions] = useState<PaginatedDto<InventoryPositionDto>>();
-  const [itemsWithoutPositions, setItemsWithoutPositions] = useState<
-    PaginatedDto<InventoryItemChoiceDto>
-  >();
+  const [itemsWithoutPositions, setItemsWithoutPositions] =
+    useState<PaginatedDto<InventoryItemChoiceDto>>();
   const [state, setState] = useState<'loading' | 'ready' | 'error'>('loading');
   const [message, setMessage] = useState('');
 
@@ -151,7 +158,7 @@ export function StockOverview() {
   const totalCount = positions?.totalCount ?? 0;
 
   return (
-    <main className="min-w-0 space-y-5 px-4 py-5 sm:px-6 lg:px-8">
+    <AdminPage variant="wide">
       <header className="flex flex-col gap-4 border-b pb-5 lg:flex-row lg:items-end lg:justify-between">
         <div className="min-w-0">
           <p className="text-sm font-medium text-primary">Inventory</p>
@@ -162,13 +169,25 @@ export function StockOverview() {
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <Button variant="outline" render={<Link href="/inventory/replenishment" />} nativeButton={false}>
+          <Button
+            variant="outline"
+            render={<Link href="/inventory/replenishment" />}
+            nativeButton={false}
+          >
             <TrendingDown aria-hidden="true" /> Replenishment
           </Button>
-          <Button variant="outline" render={<Link href="/inventory/reservations" />} nativeButton={false}>
+          <Button
+            variant="outline"
+            render={<Link href="/inventory/reservations" />}
+            nativeButton={false}
+          >
             <BookmarkCheck aria-hidden="true" /> Reservations
           </Button>
-          <Button variant="outline" render={<Link href="/inventory/history" />} nativeButton={false}>
+          <Button
+            variant="outline"
+            render={<Link href="/inventory/history" />}
+            nativeButton={false}
+          >
             <History aria-hidden="true" /> Movements
           </Button>
           <RefreshButton
@@ -287,7 +306,8 @@ export function StockOverview() {
                   value={location.id}
                   label={`${location.name} (${location.code})`}
                 >
-                  {location.name} <span className="text-muted-foreground text-xs">({location.code})</span>
+                  {location.name}{' '}
+                  <span className="text-muted-foreground text-xs">({location.code})</span>
                 </SelectItem>
               ))}
             </SelectContent>
@@ -383,6 +403,6 @@ export function StockOverview() {
           onPageChange={(nextPage) => replaceQuery({ page: String(nextPage) })}
         />
       ) : null}
-    </main>
+    </AdminPage>
   );
 }

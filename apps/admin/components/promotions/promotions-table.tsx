@@ -39,6 +39,8 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { EmptyState } from '@/components/ui/page-shell';
+import { cn } from '@/lib/utils';
+import { TableSkeletonRows } from '@/components/ui/table-skeleton';
 import type { PromotionItem, PromotionStatus, PromotionType } from './types';
 
 interface PromotionsTableProps {
@@ -223,7 +225,7 @@ export function PromotionsTable({
         />
       ) : (
         <div className="rounded-xl border border-border bg-card shadow-2xs overflow-hidden">
-          <Table density={density}>
+          <Table density={density} stickyHeader>
             <TableHeader>
               <TableRow>
                 <TableHead>Campaign</TableHead>
@@ -236,8 +238,28 @@ export function PromotionsTable({
                 <TableHead className="w-10 text-right"></TableHead>
               </TableRow>
             </TableHeader>
-            <TableBody>
-              {filteredPromotions.map((promo) => {
+            <TableBody
+              className={cn(
+                loading && promotions.length > 0 && 'opacity-60 transition-opacity',
+              )}
+            >
+              {loading && filteredPromotions.length === 0 ? (
+                <TableSkeletonRows
+                  columns={8}
+                  rows={5}
+                  columnWidths={[
+                    'w-44',
+                    'w-20',
+                    'w-24',
+                    'w-32',
+                    'w-28',
+                    'w-16 ml-auto',
+                    'w-20 ml-auto',
+                    'w-6 ml-auto',
+                  ]}
+                />
+              ) : (
+                filteredPromotions.map((promo) => {
                 const isPercentage = promo.benefitType === 'PERCENTAGE_DISCOUNT';
                 const benefitValueFormatted = isPercentage
                   ? `${parseFloat(promo.benefitValue)}% OFF`
@@ -298,7 +320,9 @@ export function PromotionsTable({
                             Min ৳ {parseFloat(promo.minimumMerchandiseSubtotal).toFixed(0)}
                           </span>
                         ) : (
-                          <span className="text-[0.65rem] text-muted-foreground/70">No min spend</span>
+                          <span className="text-[0.65rem] text-muted-foreground/70">
+                            No min spend
+                          </span>
                         )}
                       </div>
                     </TableCell>
@@ -355,7 +379,9 @@ export function PromotionsTable({
                           : 'Immediate'}
                       </div>
                       <div className="text-[0.68rem] text-muted-foreground/80">
-                        {promo.endsAt ? `until ${new Date(promo.endsAt).toLocaleDateString()}` : 'Ongoing'}
+                        {promo.endsAt
+                          ? `until ${new Date(promo.endsAt).toLocaleDateString()}`
+                          : 'Ongoing'}
                       </div>
                     </TableCell>
 
@@ -432,7 +458,7 @@ export function PromotionsTable({
                     </TableCell>
                   </TableRow>
                 );
-              })}
+              }))}
             </TableBody>
           </Table>
         </div>

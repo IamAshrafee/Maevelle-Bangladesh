@@ -28,6 +28,7 @@ import {
 } from '@/components/ui/sheet';
 import { fetchApiData, apiRequest } from '@/lib/api';
 import { cn } from '@/lib/utils';
+import { toAppRoutePath } from '@/lib/navigation/route-registry';
 import { NotificationPriorityBadge } from './notification-status-badge';
 
 function formatRelativeTime(dateString: string): string {
@@ -90,7 +91,9 @@ export function NotificationBell() {
   // Poll authoritative unread count
   const fetchUnreadCount = useCallback(async () => {
     try {
-      const res = await fetchApiData<{ unreadCount: number }>('/admin/notifications/inbox/unread-count');
+      const res = await fetchApiData<{ unreadCount: number }>(
+        '/admin/notifications/inbox/unread-count',
+      );
       if (typeof res?.unreadCount === 'number') {
         setUnreadCount(res.unreadCount);
       }
@@ -100,30 +103,33 @@ export function NotificationBell() {
   }, []);
 
   // Poll notifications preview list
-  const fetchInbox = useCallback(async (showLoading = false) => {
-    if (showLoading) setLoading(true);
-    try {
-      const query = new URLSearchParams({
-        page: '1',
-        pageSize: '15',
-        ...(filter === 'unread' ? { unreadOnly: 'true' } : {}),
-      });
-      const res = await apiRequest<{
-        data: readonly NotificationInboxItemDto[];
-        unreadCount?: number;
-      }>(`/admin/notifications/inbox?${query.toString()}`);
-      if (res?.data) {
-        setItems(res.data);
+  const fetchInbox = useCallback(
+    async (showLoading = false) => {
+      if (showLoading) setLoading(true);
+      try {
+        const query = new URLSearchParams({
+          page: '1',
+          pageSize: '15',
+          ...(filter === 'unread' ? { unreadOnly: 'true' } : {}),
+        });
+        const res = await apiRequest<{
+          data: readonly NotificationInboxItemDto[];
+          unreadCount?: number;
+        }>(`/admin/notifications/inbox?${query.toString()}`);
+        if (res?.data) {
+          setItems(res.data);
+        }
+        if (typeof res?.unreadCount === 'number') {
+          setUnreadCount(res.unreadCount);
+        }
+      } catch {
+        // Fallback
+      } finally {
+        if (showLoading) setLoading(false);
       }
-      if (typeof res?.unreadCount === 'number') {
-        setUnreadCount(res.unreadCount);
-      }
-    } catch {
-      // Fallback
-    } finally {
-      if (showLoading) setLoading(false);
-    }
-  }, [filter]);
+    },
+    [filter],
+  );
 
   // Initial fetch + Periodic timer (every 35s when tab is visible)
   useEffect(() => {
@@ -192,7 +198,7 @@ export function NotificationBell() {
     }
     setOpen(false);
     if (item.action_path) {
-      router.push(item.action_path);
+      router.push(toAppRoutePath(item.action_path));
     } else {
       router.push('/notifications?tab=inbox');
     }
@@ -207,7 +213,7 @@ export function NotificationBell() {
           {unreadCount > 0 ? (
             <Badge
               variant="default"
-              className="bg-primary text-primary-foreground font-mono tabular-nums text-[11px] h-5 px-1.5"
+              className="bg-primary-subtle text-primary-hover dark:text-primary border border-primary/25 font-semibold font-mono tabular-nums text-[11px] h-5 px-1.5"
             >
               {unreadCount}
             </Badge>
@@ -306,9 +312,7 @@ export function NotificationBell() {
                 }}
                 className={cn(
                   'group flex items-start gap-3 p-3.5 text-left cursor-pointer transition-colors',
-                  isUnread
-                    ? 'bg-primary/5 hover:bg-primary/10'
-                    : 'hover:bg-muted/50 bg-card',
+                  isUnread ? 'bg-primary/5 hover:bg-primary/10' : 'hover:bg-muted/50 bg-card',
                 )}
               >
                 {/* Category Icon */}
@@ -405,12 +409,12 @@ export function NotificationBell() {
       {isMobile ? (
         <Sheet open={open} onOpenChange={setOpen}>
           <SheetTrigger
-            className="relative p-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors cursor-pointer"
+            className="relative flex min-h-11 min-w-11 items-center justify-center rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors cursor-pointer"
             aria-label={`Open notifications (${unreadCount} unread)`}
           >
             <Bell className="size-4" />
             {unreadCount > 0 && (
-              <span className="absolute top-1 right-1 flex items-center justify-center min-w-4 h-4 px-1 rounded-full bg-primary text-primary-foreground font-mono text-[10px] font-bold leading-none shadow-xs">
+              <span className="absolute top-1.5 right-1.5 flex items-center justify-center min-w-4 h-4 px-1 rounded-full bg-primary text-primary-foreground font-mono text-[10px] font-bold leading-none shadow-xs">
                 {unreadCount > 99 ? '99+' : unreadCount}
               </span>
             )}
@@ -426,7 +430,7 @@ export function NotificationBell() {
       ) : (
         <Popover open={open} onOpenChange={setOpen}>
           <PopoverTrigger
-            className="relative p-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors cursor-pointer"
+            className="relative flex min-h-9 min-w-9 items-center justify-center rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors cursor-pointer pointer-coarse:min-h-11 pointer-coarse:min-w-11"
             aria-label={`Open notifications (${unreadCount} unread)`}
           >
             <Bell className="size-4" />

@@ -89,7 +89,7 @@ function AttachmentPreview({
             className="max-h-64 max-w-full rounded-md object-contain transition-opacity duration-150 hover:opacity-95 sm:max-h-80"
           />
         </a>
-        <div className="flex items-center justify-between gap-2 border-t border-border/60 bg-card/90 px-2.5 py-1 text-[11px] backdrop-blur-xs">
+        <div className="flex items-center justify-between gap-2 border-t border-border/60 bg-card px-2.5 py-1 text-[11px]">
           <span className="truncate font-mono text-muted-foreground">
             {attachment.fileName ? (
               <HighlightedText text={attachment.fileName} query={searchQuery} />

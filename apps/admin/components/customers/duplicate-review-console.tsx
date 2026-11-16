@@ -23,7 +23,6 @@ import {
   PageHeader,
   PagePanel,
 } from '@/components/ui/page-shell';
-import { CrmNav } from './crm-nav';
 
 type Candidate = {
   id: string;
@@ -84,7 +83,7 @@ export function DuplicateReviewConsole() {
     }
   }
   return (
-    <AdminPage>
+    <AdminPage variant="wide">
       <PageHeader
         eyebrow="Customer 360"
         title="Duplicate review center"
@@ -93,7 +92,6 @@ export function DuplicateReviewConsole() {
           <RefreshButton onRefresh={() => void load()} tooltip="Refresh duplicate reviews" />
         }
       />
-      <CrmNav />
       {error ? (
         <ErrorState message={error} onRetry={() => void load()} />
       ) : !items || !history ? (

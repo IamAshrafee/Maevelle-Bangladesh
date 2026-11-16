@@ -8,6 +8,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
+import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
 
 interface HierarchicalCategoryPickerProps {
@@ -17,6 +18,9 @@ interface HierarchicalCategoryPickerProps {
   readonly primaryCategoryId: string;
   readonly onSelectPrimaryCategory: (id: string) => void;
   readonly recommendedCategoryId?: string | null | undefined;
+  readonly isLoading?: boolean | undefined;
+  readonly error?: string | null | undefined;
+  readonly onRetry?: (() => void) | undefined;
 }
 
 function parentPath(category: CatalogCategoryChoiceDto): string | null {
@@ -25,12 +29,15 @@ function parentPath(category: CatalogCategoryChoiceDto): string | null {
 }
 
 export function HierarchicalCategoryPicker({
-  categories,
-  selectedCategoryIds,
+  categories = [],
+  selectedCategoryIds = [],
   onToggleCategory,
   primaryCategoryId,
   onSelectPrimaryCategory,
   recommendedCategoryId,
+  isLoading = false,
+  error = null,
+  onRetry,
 }: HierarchicalCategoryPickerProps) {
   const [search, setSearch] = useState('');
   const pathToCategory = useMemo(
@@ -132,7 +139,35 @@ export function HierarchicalCategoryPicker({
       </CardHeader>
 
       <CardContent className="space-y-3">
-        {recommendedCategory && !selectedCategoryIds.includes(recommendedCategory.id) ? (
+        {isLoading ? (
+          <div className="space-y-3 py-1" aria-busy="true">
+            <div className="flex items-center gap-2">
+              <Skeleton className="h-8 flex-1" />
+              <Skeleton className="h-8 w-20" />
+            </div>
+            <div className="rounded-lg border border-border bg-card p-3 space-y-2.5">
+              <Skeleton className="h-4 w-44" />
+              <Skeleton className="h-4 w-36 ml-4" />
+              <Skeleton className="h-4 w-48 ml-8" />
+              <Skeleton className="h-4 w-32 ml-4" />
+              <Skeleton className="h-4 w-40" />
+            </div>
+            <p className="text-[11px] text-muted-foreground animate-pulse text-center">
+              Loading category hierarchy…
+            </p>
+          </div>
+        ) : error ? (
+          <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-3 space-y-2">
+            <p className="text-xs font-medium text-destructive">{error}</p>
+            {onRetry ? (
+              <Button size="sm" variant="outline" onClick={onRetry} className="h-7 text-xs">
+                Retry Categories
+              </Button>
+            ) : null}
+          </div>
+        ) : (
+          <>
+            {recommendedCategory && !selectedCategoryIds.includes(recommendedCategory.id) ? (
           <div className="flex items-start justify-between gap-3 rounded-lg border border-info/30 bg-info/5 p-3">
             <div className="min-w-0">
               <p className="text-xs font-semibold text-foreground">Suggested from classification</p>
@@ -289,7 +324,7 @@ export function HierarchicalCategoryPicker({
                       className={cn(
                         'flex size-4 shrink-0 items-center justify-center rounded border',
                         selected
-                          ? 'border-primary bg-primary text-primary-foreground'
+                          ? 'border-primary bg-primary-subtle text-primary-hover dark:text-primary'
                           : 'border-border bg-background',
                       )}
                     >
@@ -330,7 +365,9 @@ export function HierarchicalCategoryPicker({
           <Star className="mr-1 inline size-3 text-warning" />
           The primary category controls the canonical breadcrumb.
         </p>
-      </CardContent>
+      </>
+    )}
+  </CardContent>
     </Card>
   );
 }

@@ -20,6 +20,7 @@ import {
 import type { CatalogColorDto } from '@maevelle/contracts';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { AdminPage, PageHeader } from '@/components/ui/page-shell';
 import { Input } from '@/components/ui/input';
 import {
   Select,
@@ -40,10 +41,9 @@ import {
 import { SettingsNav } from '@/components/settings/settings-nav';
 import { catalogData } from '@/lib/catalog/api';
 
-import { OperationalFeedback, OperationalPageHeader } from '../operational-worklist';
+import { OperationalFeedback } from '../operational-worklist';
 import { ColorDeleteDialog } from './color-delete-dialog';
 import { ColorDialog } from './color-dialog';
-
 
 type ViewMode = 'grid' | 'table';
 type StatusFilter = 'ALL' | 'ACTIVE' | 'ARCHIVED';
@@ -198,268 +198,380 @@ export function ColorManager() {
   }
 
   return (
-    <main className="min-w-0">
-      <section className="shell admin-page">
-        <OperationalPageHeader
-          eyebrow="Settings / Color Library"
-          title="Color Library"
-          description="Standardize colors across product variants and storefront swatch selectors with exact HEX codes, status lifecycle, and real-time usage tracking."
-          actions={
-            <div className="flex flex-wrap items-center gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => void loadColors()}
-                disabled={loading}
-                className="gap-1.5"
-              >
-                <RefreshCw className={`size-3.5 ${loading ? 'animate-spin' : ''}`} />
-                Refresh
-              </Button>
-              <Button
-                size="sm"
-                onClick={() => {
-                  setColorToEdit(undefined);
-                  setDialogOpen(true);
-                }}
-                className="gap-1.5"
-              >
-                <Plus className="size-4" />
-                Add Color
-              </Button>
-            </div>
-          }
-        />
-
-        {/* Settings Module Tab Navigation */}
-        <SettingsNav />
-
-        {/* Feedback Alert */}
-        {message ? (
-          <div className="mb-4">
-            <OperationalFeedback tone={tone}>{message}</OperationalFeedback>
-          </div>
-        ) : null}
-
-        {/* Stats Row */}
-        <Stats className="mb-6">
-          <StatsCard>
-            <StatsTitle>Total Colors</StatsTitle>
-            <StatsValue>{stats.total}</StatsValue>
-            <StatsDescription>in catalog database</StatsDescription>
-          </StatsCard>
-          <StatsCard>
-            <StatsTitle>Active Colors</StatsTitle>
-            <StatsValue className="text-emerald-600 dark:text-emerald-400">
-              {stats.active}
-            </StatsValue>
-            <StatsDescription>available for products</StatsDescription>
-          </StatsCard>
-          <StatsCard>
-            <StatsTitle>In Use</StatsTitle>
-            <StatsValue className="text-primary">{stats.inUse}</StatsValue>
-            <StatsDescription>assigned to variants</StatsDescription>
-          </StatsCard>
-          <StatsCard>
-            <StatsTitle>Archived</StatsTitle>
-            <StatsValue className="text-muted-foreground">{stats.archived}</StatsValue>
-            <StatsDescription>hidden from selection</StatsDescription>
-          </StatsCard>
-        </Stats>
-
-        {/* Toolbar & Filters */}
-        <div className="mb-6 flex flex-col gap-3 rounded-lg border bg-card p-3 shadow-xs md:flex-row md:items-center md:justify-between">
-          <div className="flex flex-1 flex-wrap items-center gap-2">
-            {/* Search */}
-            <div className="relative min-w-[200px] flex-1 sm:max-w-xs">
-              <Search className="absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                placeholder="Search color, code, #HEX..."
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                className="h-9 pl-8 text-sm"
-              />
-            </div>
-
-            {/* Status Filter */}
-            <Select
-              value={statusFilter}
-              onValueChange={(val) => setStatusFilter(val as StatusFilter)}
+    <AdminPage variant="standard">
+      <PageHeader
+        eyebrow="Settings / Color Library"
+        title="Color Library"
+        description="Standardize colors across product variants and storefront swatch selectors with exact HEX codes, status lifecycle, and real-time usage tracking."
+        actions={
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => void loadColors()}
+              disabled={loading}
+              className="gap-1.5"
             >
-              <SelectTrigger className="h-9 w-[130px] text-xs">
-                <SelectValue placeholder="Status" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="ALL">All Statuses</SelectItem>
-                <SelectItem value="ACTIVE">Active Only</SelectItem>
-                <SelectItem value="ARCHIVED">Archived Only</SelectItem>
-              </SelectContent>
-            </Select>
-
-            {/* Usage Filter */}
-            <Select
-              value={usageFilter}
-              onValueChange={(val) => setUsageFilter(val as UsageFilter)}
+              <RefreshCw className={`size-3.5 ${loading ? 'animate-spin' : ''}`} />
+              Refresh
+            </Button>
+            <Button
+              size="sm"
+              onClick={() => {
+                setColorToEdit(undefined);
+                setDialogOpen(true);
+              }}
+              className="gap-1.5"
             >
-              <SelectTrigger className="h-9 w-[130px] text-xs">
-                <SelectValue placeholder="Usage" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="ALL">All Usages</SelectItem>
-                <SelectItem value="IN_USE">In Use ({stats.inUse})</SelectItem>
-                <SelectItem value="UNUSED">Unused ({stats.total - stats.inUse})</SelectItem>
-              </SelectContent>
-            </Select>
+              <Plus className="size-4" />
+              Add Color
+            </Button>
+          </div>
+        }
+      />
 
-            {/* Sort */}
-            <Select value={sort} onValueChange={(val) => setSort(val as SortOption)}>
-              <SelectTrigger className="h-9 w-[150px] text-xs">
-                <SelectValue placeholder="Sort" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="name_asc">Name (A → Z)</SelectItem>
-                <SelectItem value="name_desc">Name (Z → A)</SelectItem>
-                <SelectItem value="most_used">Most Used</SelectItem>
-                <SelectItem value="recently_updated">Recently Updated</SelectItem>
-              </SelectContent>
-            </Select>
+      {/* Settings Module Tab Navigation */}
+      <SettingsNav />
+
+      {/* Feedback Alert */}
+      {message ? (
+        <div className="mb-4">
+          <OperationalFeedback tone={tone}>{message}</OperationalFeedback>
+        </div>
+      ) : null}
+
+      {/* Stats Row */}
+      <Stats className="mb-6">
+        <StatsCard>
+          <StatsTitle>Total Colors</StatsTitle>
+          <StatsValue>{stats.total}</StatsValue>
+          <StatsDescription>in catalog database</StatsDescription>
+        </StatsCard>
+        <StatsCard>
+          <StatsTitle>Active Colors</StatsTitle>
+          <StatsValue className="text-emerald-600 dark:text-emerald-400">{stats.active}</StatsValue>
+          <StatsDescription>available for products</StatsDescription>
+        </StatsCard>
+        <StatsCard>
+          <StatsTitle>In Use</StatsTitle>
+          <StatsValue className="text-primary">{stats.inUse}</StatsValue>
+          <StatsDescription>assigned to variants</StatsDescription>
+        </StatsCard>
+        <StatsCard>
+          <StatsTitle>Archived</StatsTitle>
+          <StatsValue className="text-muted-foreground">{stats.archived}</StatsValue>
+          <StatsDescription>hidden from selection</StatsDescription>
+        </StatsCard>
+      </Stats>
+
+      {/* Toolbar & Filters */}
+      <div className="mb-6 flex flex-col gap-3 rounded-lg border bg-card p-3 shadow-xs md:flex-row md:items-center md:justify-between">
+        <div className="flex flex-1 flex-wrap items-center gap-2">
+          {/* Search */}
+          <div className="relative min-w-[200px] flex-1 sm:max-w-xs">
+            <Search className="absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              placeholder="Search color, code, #HEX..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="h-9 pl-8 text-sm"
+            />
           </div>
 
-          {/* View Mode Toggle */}
-          <div className="flex items-center gap-1 self-end md:self-auto">
-            <span className="text-xs text-muted-foreground mr-2 font-medium">
-              {filteredColors.length} {filteredColors.length === 1 ? 'color' : 'colors'}
-            </span>
-            <div className="flex rounded-md border p-0.5 bg-muted/30">
-              <Button
-                variant={viewMode === 'grid' ? 'secondary' : 'ghost'}
-                size="sm"
-                className="h-7 w-7 p-0"
-                onClick={() => setViewMode('grid')}
-                aria-label="Grid view"
-              >
-                <LayoutGrid className="size-3.5" />
-              </Button>
-              <Button
-                variant={viewMode === 'table' ? 'secondary' : 'ghost'}
-                size="sm"
-                className="h-7 w-7 p-0"
-                onClick={() => setViewMode('table')}
-                aria-label="Table view"
-              >
-                <List className="size-3.5" />
-              </Button>
-            </div>
-          </div>
+          {/* Status Filter */}
+          <Select
+            value={statusFilter}
+            onValueChange={(val) => setStatusFilter(val as StatusFilter)}
+          >
+            <SelectTrigger className="h-9 w-[130px] text-xs">
+              <SelectValue placeholder="Status" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="ALL">All Statuses</SelectItem>
+              <SelectItem value="ACTIVE">Active Only</SelectItem>
+              <SelectItem value="ARCHIVED">Archived Only</SelectItem>
+            </SelectContent>
+          </Select>
+
+          {/* Usage Filter */}
+          <Select value={usageFilter} onValueChange={(val) => setUsageFilter(val as UsageFilter)}>
+            <SelectTrigger className="h-9 w-[130px] text-xs">
+              <SelectValue placeholder="Usage" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="ALL">All Usages</SelectItem>
+              <SelectItem value="IN_USE">In Use ({stats.inUse})</SelectItem>
+              <SelectItem value="UNUSED">Unused ({stats.total - stats.inUse})</SelectItem>
+            </SelectContent>
+          </Select>
+
+          {/* Sort */}
+          <Select value={sort} onValueChange={(val) => setSort(val as SortOption)}>
+            <SelectTrigger className="h-9 w-[150px] text-xs">
+              <SelectValue placeholder="Sort" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="name_asc">Name (A → Z)</SelectItem>
+              <SelectItem value="name_desc">Name (Z → A)</SelectItem>
+              <SelectItem value="most_used">Most Used</SelectItem>
+              <SelectItem value="recently_updated">Recently Updated</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
 
-        {/* Content Section */}
-        {loading && colors.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-16 text-center">
-            <Loader2 className="size-8 animate-spin text-muted-foreground mb-3" />
-            <p className="text-sm font-medium text-muted-foreground">Loading color library...</p>
+        {/* View Mode Toggle */}
+        <div className="flex items-center gap-1 self-end md:self-auto">
+          <span className="text-xs text-muted-foreground mr-2 font-medium">
+            {filteredColors.length} {filteredColors.length === 1 ? 'color' : 'colors'}
+          </span>
+          <div className="flex rounded-md border p-0.5 bg-muted/30">
+            <Button
+              variant={viewMode === 'grid' ? 'secondary' : 'ghost'}
+              size="sm"
+              className="h-7 w-7 p-0"
+              onClick={() => setViewMode('grid')}
+              aria-label="Grid view"
+            >
+              <LayoutGrid className="size-3.5" />
+            </Button>
+            <Button
+              variant={viewMode === 'table' ? 'secondary' : 'ghost'}
+              size="sm"
+              className="h-7 w-7 p-0"
+              onClick={() => setViewMode('table')}
+              aria-label="Table view"
+            >
+              <List className="size-3.5" />
+            </Button>
           </div>
-        ) : filteredColors.length === 0 ? (
-          <div className="flex flex-col items-center justify-center rounded-xl border border-dashed py-16 text-center">
-            <div className="flex size-12 items-center justify-center rounded-full bg-muted mb-3">
-              <Palette className="size-6 text-muted-foreground" />
-            </div>
-            <h3 className="text-base font-semibold">No colors found</h3>
-            <p className="mt-1 text-sm text-muted-foreground max-w-sm">
-              {search || statusFilter !== 'ALL' || usageFilter !== 'ALL'
-                ? 'No colors match your selected filters. Try clearing your search query or reset filter selections.'
-                : 'Your catalog does not have any standardized colors yet. Create your first color to use across products.'}
-            </p>
-            {search || statusFilter !== 'ALL' || usageFilter !== 'ALL' ? (
-              <Button
-                variant="outline"
-                size="sm"
-                className="mt-4"
-                onClick={() => {
-                  setSearch('');
-                  setStatusFilter('ALL');
-                  setUsageFilter('ALL');
-                }}
-              >
-                Reset Filters
-              </Button>
-            ) : (
-              <Button
-                size="sm"
-                className="mt-4 gap-1.5"
-                onClick={() => {
-                  setColorToEdit(undefined);
-                  setDialogOpen(true);
-                }}
-              >
-                <Plus className="size-4" />
-                Add First Color
-              </Button>
-            )}
+        </div>
+      </div>
+
+      {/* Content Section */}
+      {loading && colors.length === 0 ? (
+        <div className="flex flex-col items-center justify-center py-16 text-center">
+          <Loader2 className="size-8 animate-spin text-muted-foreground mb-3" />
+          <p className="text-sm font-medium text-muted-foreground">Loading color library...</p>
+        </div>
+      ) : filteredColors.length === 0 ? (
+        <div className="flex flex-col items-center justify-center rounded-xl border border-dashed py-16 text-center">
+          <div className="flex size-12 items-center justify-center rounded-full bg-muted mb-3">
+            <Palette className="size-6 text-muted-foreground" />
           </div>
-        ) : viewMode === 'grid' ? (
-          /* Grid View */
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-            {filteredColors.map((color) => {
-              const inUse = (color.usageCount ?? 0) > 0;
-              const isArchived = color.status === 'ARCHIVED';
-              const isBusy = busyColorId === color.id;
+          <h3 className="text-base font-semibold">No colors found</h3>
+          <p className="mt-1 text-sm text-muted-foreground max-w-sm">
+            {search || statusFilter !== 'ALL' || usageFilter !== 'ALL'
+              ? 'No colors match your selected filters. Try clearing your search query or reset filter selections.'
+              : 'Your catalog does not have any standardized colors yet. Create your first color to use across products.'}
+          </p>
+          {search || statusFilter !== 'ALL' || usageFilter !== 'ALL' ? (
+            <Button
+              variant="outline"
+              size="sm"
+              className="mt-4"
+              onClick={() => {
+                setSearch('');
+                setStatusFilter('ALL');
+                setUsageFilter('ALL');
+              }}
+            >
+              Reset Filters
+            </Button>
+          ) : (
+            <Button
+              size="sm"
+              className="mt-4 gap-1.5"
+              onClick={() => {
+                setColorToEdit(undefined);
+                setDialogOpen(true);
+              }}
+            >
+              <Plus className="size-4" />
+              Add First Color
+            </Button>
+          )}
+        </div>
+      ) : viewMode === 'grid' ? (
+        /* Grid View */
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+          {filteredColors.map((color) => {
+            const inUse = (color.usageCount ?? 0) > 0;
+            const isArchived = color.status === 'ARCHIVED';
+            const isBusy = busyColorId === color.id;
 
-              return (
-                <div
-                  key={color.id}
-                  className={`group relative flex flex-col justify-between overflow-hidden rounded-xl border bg-card p-4 transition-all hover:border-primary/50 hover:shadow-md ${
-                    isArchived ? 'opacity-70 bg-muted/20' : ''
-                  }`}
-                >
-                  {/* Top: Swatch & Header */}
-                  <div>
-                    <div className="flex items-start justify-between gap-3 mb-3">
-                      <div className="relative">
-                        <div
-                          className="size-12 rounded-xl border-2 border-border shadow-xs transition-transform group-hover:scale-105"
-                          style={{
-                            backgroundColor: color.hexValue ?? '#ffffff',
-                            backgroundImage: !color.hexValue
-                              ? 'linear-gradient(45deg, #e2e8f0 25%, transparent 25%), linear-gradient(-45deg, #e2e8f0 25%, transparent 25%), linear-gradient(45deg, transparent 75%, #e2e8f0 75%), linear-gradient(-45deg, transparent 75%, #e2e8f0 75%)'
-                              : undefined,
-                            backgroundSize: '10px 10px',
-                            backgroundPosition: '0 0, 0 5px, 5px -5px, -5px 0px',
-                          }}
-                        />
-                      </div>
-
-                      <div className="flex flex-col items-end gap-1">
-                        <Badge
-                          variant={isArchived ? 'secondary' : 'default'}
-                          className={`text-[10px] uppercase font-semibold ${
-                            isArchived
-                              ? 'bg-muted text-muted-foreground'
-                              : 'bg-emerald-600 text-white dark:bg-emerald-700'
-                          }`}
-                        >
-                          {color.status}
-                        </Badge>
-                        {inUse ? (
-                          <Badge variant="outline" className="text-[10px] text-muted-foreground">
-                            {color.usageCount} {color.usageCount === 1 ? 'variant' : 'variants'}
-                          </Badge>
-                        ) : (
-                          <span className="text-[10px] text-muted-foreground">Unused</span>
-                        )}
-                      </div>
+            return (
+              <div
+                key={color.id}
+                className={`group relative flex flex-col justify-between overflow-hidden rounded-xl border bg-card p-4 transition-[border-color,box-shadow] duration-150 hover:border-primary/50 hover:shadow-md ${
+                  isArchived ? 'opacity-70 bg-muted/20' : ''
+                }`}
+              >
+                {/* Top: Swatch & Header */}
+                <div>
+                  <div className="flex items-start justify-between gap-3 mb-3">
+                    <div className="relative">
+                      <div
+                        className="size-12 rounded-xl border-2 border-border shadow-xs transition-transform group-hover:scale-105"
+                        style={{
+                          backgroundColor: color.hexValue ?? '#ffffff',
+                          backgroundImage: !color.hexValue
+                            ? 'linear-gradient(45deg, #e2e8f0 25%, transparent 25%), linear-gradient(-45deg, #e2e8f0 25%, transparent 25%), linear-gradient(45deg, transparent 75%, #e2e8f0 75%), linear-gradient(-45deg, transparent 75%, #e2e8f0 75%)'
+                            : undefined,
+                          backgroundSize: '10px 10px',
+                          backgroundPosition: '0 0, 0 5px, 5px -5px, -5px 0px',
+                        }}
+                      />
                     </div>
 
-                    {/* Color Info */}
-                    <h4 className="font-semibold text-foreground text-sm line-clamp-1">
-                      {color.name}
-                    </h4>
-                    <p className="font-mono text-xs text-muted-foreground line-clamp-1 mb-2">
-                      {color.code}
-                    </p>
+                    <div className="flex flex-col items-end gap-1">
+                      <Badge
+                        variant={isArchived ? 'secondary' : 'default'}
+                        className={`text-[10px] uppercase font-semibold ${
+                          isArchived
+                            ? 'bg-muted text-muted-foreground'
+                            : 'bg-emerald-600 text-white dark:bg-emerald-700'
+                        }`}
+                      >
+                        {color.status}
+                      </Badge>
+                      {inUse ? (
+                        <Badge variant="outline" className="text-[10px] text-muted-foreground">
+                          {color.usageCount} {color.usageCount === 1 ? 'variant' : 'variants'}
+                        </Badge>
+                      ) : (
+                        <span className="text-[10px] text-muted-foreground">Unused</span>
+                      )}
+                    </div>
+                  </div>
 
-                    {/* Hex Badge with quick copy */}
-                    <div className="flex items-center gap-1.5 mb-4">
+                  {/* Color Info */}
+                  <h4 className="font-semibold text-foreground text-sm line-clamp-1">
+                    {color.name}
+                  </h4>
+                  <p className="font-mono text-xs text-muted-foreground line-clamp-1 mb-2">
+                    {color.code}
+                  </p>
+
+                  {/* Hex Badge with quick copy */}
+                  <div className="flex items-center gap-1.5 mb-4">
+                    <button
+                      type="button"
+                      onClick={() => color.hexValue && void copyToClipboard(color.hexValue)}
+                      className="inline-flex items-center gap-1.5 rounded-md border bg-muted/40 px-2 py-0.5 text-xs font-mono text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+                      title="Click to copy HEX code"
+                    >
+                      {copiedHex === color.hexValue ? (
+                        <>
+                          <Check className="size-3 text-emerald-600" />
+                          <span className="text-emerald-600 font-semibold">Copied!</span>
+                        </>
+                      ) : (
+                        <>
+                          <Copy className="size-3 opacity-60" />
+                          <span>{color.hexValue ?? 'No HEX'}</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </div>
+
+                {/* Actions Footer */}
+                <div className="flex items-center justify-between border-t pt-3 gap-1">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-8 gap-1 text-xs"
+                    onClick={() => {
+                      setColorToEdit(color);
+                      setDialogOpen(true);
+                    }}
+                  >
+                    <Edit2 className="size-3.5" />
+                    Edit
+                  </Button>
+
+                  <div className="flex items-center gap-1">
+                    {/* Archive / Restore Button */}
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      disabled={isBusy}
+                      className="h-8 w-8 p-0 text-muted-foreground hover:text-foreground"
+                      title={isArchived ? 'Restore color' : 'Archive color'}
+                      onClick={() => void toggleColorStatus(color)}
+                    >
+                      {isBusy ? (
+                        <Loader2 className="size-3.5 animate-spin" />
+                      ) : isArchived ? (
+                        <ArchiveRestore className="size-3.5 text-emerald-600" />
+                      ) : (
+                        <Archive className="size-3.5" />
+                      )}
+                    </Button>
+
+                    {/* Delete Button */}
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-8 w-8 p-0 text-muted-foreground hover:text-destructive"
+                      title="Delete color"
+                      onClick={() => setColorToDelete(color)}
+                    >
+                      <Trash2 className="size-3.5" />
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      ) : (
+        /* Table View */
+        <div className="rounded-xl border bg-card shadow-xs overflow-hidden">
+          <Table density="compact" stickyHeader>
+            <TableHeader>
+              <TableRow className="bg-muted/40 hover:bg-muted/40">
+                <TableHead className="w-[80px]">Swatch</TableHead>
+                <TableHead>Name</TableHead>
+                <TableHead>Code</TableHead>
+                <TableHead>HEX Code</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead>Variant Usage</TableHead>
+                <TableHead className="text-right">Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {filteredColors.map((color) => {
+                const inUse = (color.usageCount ?? 0) > 0;
+                const isArchived = color.status === 'ARCHIVED';
+                const isBusy = busyColorId === color.id;
+
+                return (
+                  <TableRow key={color.id} className={isArchived ? 'opacity-65' : ''}>
+                    {/* Swatch */}
+                    <TableCell>
+                      <div
+                        className="size-8 rounded-lg border shadow-xs"
+                        style={{
+                          backgroundColor: color.hexValue ?? '#ffffff',
+                          backgroundImage: !color.hexValue
+                            ? 'linear-gradient(45deg, #e2e8f0 25%, transparent 25%), linear-gradient(-45deg, #e2e8f0 25%, transparent 25%), linear-gradient(45deg, transparent 75%, #e2e8f0 75%), linear-gradient(-45deg, transparent 75%, #e2e8f0 75%)'
+                            : undefined,
+                          backgroundSize: '8px 8px',
+                        }}
+                      />
+                    </TableCell>
+
+                    {/* Name */}
+                    <TableCell className="font-medium text-foreground">{color.name}</TableCell>
+
+                    {/* Code */}
+                    <TableCell className="font-mono text-xs text-muted-foreground">
+                      {color.code}
+                    </TableCell>
+
+                    {/* HEX with quick copy */}
+                    <TableCell>
                       <button
                         type="button"
                         onClick={() => color.hexValue && void copyToClipboard(color.hexValue)}
@@ -474,229 +586,108 @@ export function ColorManager() {
                         ) : (
                           <>
                             <Copy className="size-3 opacity-60" />
-                            <span>{color.hexValue ?? 'No HEX'}</span>
+                            <span>{color.hexValue ?? '—'}</span>
                           </>
                         )}
                       </button>
-                    </div>
-                  </div>
+                    </TableCell>
 
-                  {/* Actions Footer */}
-                  <div className="flex items-center justify-between border-t pt-3 gap-1">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-8 gap-1 text-xs"
-                      onClick={() => {
-                        setColorToEdit(color);
-                        setDialogOpen(true);
-                      }}
-                    >
-                      <Edit2 className="size-3.5" />
-                      Edit
-                    </Button>
-
-                    <div className="flex items-center gap-1">
-                      {/* Archive / Restore Button */}
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        disabled={isBusy}
-                        className="h-8 w-8 p-0 text-muted-foreground hover:text-foreground"
-                        title={isArchived ? 'Restore color' : 'Archive color'}
-                        onClick={() => void toggleColorStatus(color)}
+                    {/* Status */}
+                    <TableCell>
+                      <Badge
+                        variant={isArchived ? 'secondary' : 'default'}
+                        className={`text-[10px] uppercase font-semibold ${
+                          isArchived
+                            ? 'bg-muted text-muted-foreground'
+                            : 'bg-emerald-600 text-white dark:bg-emerald-700'
+                        }`}
                       >
-                        {isBusy ? (
-                          <Loader2 className="size-3.5 animate-spin" />
-                        ) : isArchived ? (
-                          <ArchiveRestore className="size-3.5 text-emerald-600" />
-                        ) : (
-                          <Archive className="size-3.5" />
-                        )}
-                      </Button>
+                        {color.status}
+                      </Badge>
+                    </TableCell>
 
-                      {/* Delete Button */}
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="h-8 w-8 p-0 text-muted-foreground hover:text-destructive"
-                        title="Delete color"
-                        onClick={() => setColorToDelete(color)}
-                      >
-                        <Trash2 className="size-3.5" />
-                      </Button>
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        ) : (
-          /* Table View */
-          <div className="rounded-xl border bg-card shadow-xs overflow-hidden">
-            <Table>
-              <TableHeader>
-                <TableRow className="bg-muted/40 hover:bg-muted/40">
-                  <TableHead className="w-[80px]">Swatch</TableHead>
-                  <TableHead>Name</TableHead>
-                  <TableHead>Code</TableHead>
-                  <TableHead>HEX Code</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Variant Usage</TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filteredColors.map((color) => {
-                  const inUse = (color.usageCount ?? 0) > 0;
-                  const isArchived = color.status === 'ARCHIVED';
-                  const isBusy = busyColorId === color.id;
-
-                  return (
-                    <TableRow key={color.id} className={isArchived ? 'opacity-65' : ''}>
-                      {/* Swatch */}
-                      <TableCell>
-                        <div
-                          className="size-8 rounded-lg border shadow-xs"
-                          style={{
-                            backgroundColor: color.hexValue ?? '#ffffff',
-                            backgroundImage: !color.hexValue
-                              ? 'linear-gradient(45deg, #e2e8f0 25%, transparent 25%), linear-gradient(-45deg, #e2e8f0 25%, transparent 25%), linear-gradient(45deg, transparent 75%, #e2e8f0 75%), linear-gradient(-45deg, transparent 75%, #e2e8f0 75%)'
-                              : undefined,
-                            backgroundSize: '8px 8px',
-                          }}
-                        />
-                      </TableCell>
-
-                      {/* Name */}
-                      <TableCell className="font-medium text-foreground">
-                        {color.name}
-                      </TableCell>
-
-                      {/* Code */}
-                      <TableCell className="font-mono text-xs text-muted-foreground">
-                        {color.code}
-                      </TableCell>
-
-                      {/* HEX with quick copy */}
-                      <TableCell>
-                        <button
-                          type="button"
-                          onClick={() => color.hexValue && void copyToClipboard(color.hexValue)}
-                          className="inline-flex items-center gap-1.5 rounded-md border bg-muted/40 px-2 py-0.5 text-xs font-mono text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
-                          title="Click to copy HEX code"
-                        >
-                          {copiedHex === color.hexValue ? (
-                            <>
-                              <Check className="size-3 text-emerald-600" />
-                              <span className="text-emerald-600 font-semibold">Copied!</span>
-                            </>
-                          ) : (
-                            <>
-                              <Copy className="size-3 opacity-60" />
-                              <span>{color.hexValue ?? '—'}</span>
-                            </>
-                          )}
-                        </button>
-                      </TableCell>
-
-                      {/* Status */}
-                      <TableCell>
-                        <Badge
-                          variant={isArchived ? 'secondary' : 'default'}
-                          className={`text-[10px] uppercase font-semibold ${
-                            isArchived
-                              ? 'bg-muted text-muted-foreground'
-                              : 'bg-emerald-600 text-white dark:bg-emerald-700'
-                          }`}
-                        >
-                          {color.status}
+                    {/* Usage */}
+                    <TableCell>
+                      {inUse ? (
+                        <Badge variant="outline" className="text-xs">
+                          {color.usageCount} {color.usageCount === 1 ? 'variant' : 'variants'}
                         </Badge>
-                      </TableCell>
+                      ) : (
+                        <span className="text-xs text-muted-foreground">Unused</span>
+                      )}
+                    </TableCell>
 
-                      {/* Usage */}
-                      <TableCell>
-                        {inUse ? (
-                          <Badge variant="outline" className="text-xs">
-                            {color.usageCount} {color.usageCount === 1 ? 'variant' : 'variants'}
-                          </Badge>
-                        ) : (
-                          <span className="text-xs text-muted-foreground">Unused</span>
-                        )}
-                      </TableCell>
+                    {/* Actions */}
+                    <TableCell className="text-right">
+                      <div className="flex items-center justify-end gap-1">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-8 gap-1 text-xs"
+                          onClick={() => {
+                            setColorToEdit(color);
+                            setDialogOpen(true);
+                          }}
+                        >
+                          <Edit2 className="size-3.5" />
+                          Edit
+                        </Button>
 
-                      {/* Actions */}
-                      <TableCell className="text-right">
-                        <div className="flex items-center justify-end gap-1">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-8 gap-1 text-xs"
-                            onClick={() => {
-                              setColorToEdit(color);
-                              setDialogOpen(true);
-                            }}
-                          >
-                            <Edit2 className="size-3.5" />
-                            Edit
-                          </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          disabled={isBusy}
+                          className="h-8 w-8 p-0 text-muted-foreground hover:text-foreground"
+                          title={isArchived ? 'Restore color' : 'Archive color'}
+                          onClick={() => void toggleColorStatus(color)}
+                        >
+                          {isBusy ? (
+                            <Loader2 className="size-3.5 animate-spin" />
+                          ) : isArchived ? (
+                            <ArchiveRestore className="size-3.5 text-emerald-600" />
+                          ) : (
+                            <Archive className="size-3.5" />
+                          )}
+                        </Button>
 
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            disabled={isBusy}
-                            className="h-8 w-8 p-0 text-muted-foreground hover:text-foreground"
-                            title={isArchived ? 'Restore color' : 'Archive color'}
-                            onClick={() => void toggleColorStatus(color)}
-                          >
-                            {isBusy ? (
-                              <Loader2 className="size-3.5 animate-spin" />
-                            ) : isArchived ? (
-                              <ArchiveRestore className="size-3.5 text-emerald-600" />
-                            ) : (
-                              <Archive className="size-3.5" />
-                            )}
-                          </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-8 w-8 p-0 text-muted-foreground hover:text-destructive"
+                          title="Delete color"
+                          onClick={() => setColorToDelete(color)}
+                        >
+                          <Trash2 className="size-3.5" />
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
+            </TableBody>
+          </Table>
+        </div>
+      )}
 
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-8 w-8 p-0 text-muted-foreground hover:text-destructive"
-                            title="Delete color"
-                            onClick={() => setColorToDelete(color)}
-                          >
-                            <Trash2 className="size-3.5" />
-                          </Button>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
-              </TableBody>
-            </Table>
-          </div>
-        )}
+      {/* Add/Edit Modal */}
+      <ColorDialog
+        open={dialogOpen}
+        color={colorToEdit}
+        onClose={() => {
+          setDialogOpen(false);
+          setColorToEdit(undefined);
+        }}
+        onSaved={handleColorSaved}
+      />
 
-        {/* Add/Edit Modal */}
-        <ColorDialog
-          open={dialogOpen}
-          color={colorToEdit}
-          onClose={() => {
-            setDialogOpen(false);
-            setColorToEdit(undefined);
-          }}
-          onSaved={handleColorSaved}
-        />
-
-        {/* Delete Confirmation Modal */}
-        <ColorDeleteDialog
-          open={Boolean(colorToDelete)}
-          color={colorToDelete}
-          onClose={() => setColorToDelete(undefined)}
-          onDeleted={handleColorDeleted}
-          onArchived={handleColorArchived}
-        />
-      </section>
-    </main>
+      {/* Delete Confirmation Modal */}
+      <ColorDeleteDialog
+        open={Boolean(colorToDelete)}
+        color={colorToDelete}
+        onClose={() => setColorToDelete(undefined)}
+        onDeleted={handleColorDeleted}
+        onArchived={handleColorArchived}
+      />
+    </AdminPage>
   );
 }

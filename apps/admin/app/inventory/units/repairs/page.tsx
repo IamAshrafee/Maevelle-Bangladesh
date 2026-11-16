@@ -1,15 +1,10 @@
 import { Suspense } from 'react';
 import { RepairsQueue } from '@/components/inventory/units/repairs-queue';
+import { PageSkeleton } from '@/components/ui/page-shell';
 
 export default function InventoryRepairsQueuePage() {
   return (
-    <Suspense
-      fallback={
-        <main className="p-8 text-center text-sm text-muted-foreground">
-          Loading garment repair and tailoring queue…
-        </main>
-      }
-    >
+    <Suspense fallback={<PageSkeleton variant="table" widthVariant="standard" />}>
       <RepairsQueue />
     </Suspense>
   );

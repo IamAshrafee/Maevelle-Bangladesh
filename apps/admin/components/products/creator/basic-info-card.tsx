@@ -24,6 +24,9 @@ interface BasicInfoCardProps {
   readonly productTypeId: string;
   readonly description: string;
   readonly types: readonly CatalogProductTypeDefinitionDto[];
+  readonly typesLoading?: boolean | undefined;
+  readonly typesError?: string | null | undefined;
+  readonly onRetryTypes?: (() => void) | undefined;
   readonly selectedProductType?: CatalogProductTypeDefinitionDto | undefined;
   readonly activeAttributes: readonly CatalogAttributeDefinitionDto[];
   readonly attributeValues: Record<string, string | boolean | null>;
@@ -43,6 +46,9 @@ export function BasicInfoCard({
   productTypeId,
   description,
   types,
+  typesLoading = false,
+  typesError = null,
+  onRetryTypes,
   selectedProductType,
   activeAttributes,
   attributeValues,
@@ -125,15 +131,32 @@ export function BasicInfoCard({
           <NativeSelect
             id="product-type-select"
             value={productTypeId}
+            disabled={typesLoading}
             onChange={(event) => onProductTypeChange(event.target.value)}
           >
-            <NativeSelectOption value="">Select a product type…</NativeSelectOption>
+            <NativeSelectOption value="">
+              {typesLoading ? 'Loading product classifications…' : 'Select a product type…'}
+            </NativeSelectOption>
             {types.map((type) => (
               <NativeSelectOption key={type.id} value={type.id}>
                 {type.name} {type.code ? `(${type.code})` : ''}
               </NativeSelectOption>
             ))}
           </NativeSelect>
+          {typesError ? (
+            <div className="flex items-center justify-between rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+              <span>{typesError}</span>
+              {onRetryTypes && (
+                <button
+                  type="button"
+                  onClick={onRetryTypes}
+                  className="font-semibold underline hover:no-underline"
+                >
+                  Retry
+                </button>
+              )}
+            </div>
+          ) : null}
           {fieldErrors.productTypeId ? (
             <p className="text-xs text-destructive">{fieldErrors.productTypeId}</p>
           ) : null}

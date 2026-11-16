@@ -1,10 +1,8 @@
 'use client';
 
-
 import { PhoneCall } from 'lucide-react';
 
 import type { OrderVerificationDto } from '@maevelle/contracts';
-
 
 import { RecordVerificationDialog } from './record-verification-dialog';
 
@@ -26,13 +24,11 @@ function formatDateTime(value: string): string {
   }).format(date);
 }
 
-const outcomeBadges: Record<
-  string,
-  { label: string; className: string }
-> = {
+const outcomeBadges: Record<string, { label: string; className: string }> = {
   CONFIRMED: {
     label: 'Confirmed',
-    className: 'border-emerald-300 bg-emerald-50 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200',
+    className:
+      'border-emerald-300 bg-emerald-50 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200',
   },
   UNREACHABLE: {
     label: 'Unreachable',
@@ -52,11 +48,13 @@ const outcomeBadges: Record<
   },
   FLAGGED_SUSPICIOUS: {
     label: 'Suspicious',
-    className: 'border-purple-300 bg-purple-50 text-purple-800 dark:bg-purple-950 dark:text-purple-200',
+    className:
+      'border-purple-300 bg-purple-50 text-purple-800 dark:bg-purple-950 dark:text-purple-200',
   },
   APPROVED_OVERRIDE: {
     label: 'Approved Override',
-    className: 'border-emerald-300 bg-emerald-50 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200',
+    className:
+      'border-emerald-300 bg-emerald-50 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200',
   },
 };
 
@@ -95,14 +93,11 @@ export function OrderVerificationsCard({
             {verifications.map((v) => {
               const outcomeConfig = outcomeBadges[v.outcome] ?? {
                 label: v.outcome.replaceAll('_', ' '),
-                className: 'border-slate-200 bg-slate-50 text-slate-800',
+                className: 'border-border bg-muted text-muted-foreground',
               };
 
               return (
-                <div
-                  key={v.id}
-                  className="rounded-lg border bg-background p-3 text-xs space-y-1.5"
-                >
+                <div key={v.id} className="rounded-lg border bg-background p-3 text-xs space-y-1.5">
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <div className="flex items-center gap-2">
                       <span className="font-semibold text-foreground">

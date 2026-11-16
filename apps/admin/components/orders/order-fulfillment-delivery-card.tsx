@@ -41,15 +41,15 @@ export function OrderFulfillmentDeliveryCard({ order }: OrderFulfillmentDelivery
             <span>Courier Delivery Issue / Return to Origin (RTO)</span>
           </div>
           <p className="mt-1">
-            One or more courier shipments failed delivery and are being returned to warehouse.
-            This is distinct from a customer-initiated return.
+            One or more courier shipments failed delivery and are being returned to warehouse. This
+            is distinct from a customer-initiated return.
           </p>
           <div className="mt-2 flex flex-wrap gap-2">
             {rtoDeliveries.map((d) => (
               <Link
                 key={d.id}
                 href={`/deliveries?q=${encodeURIComponent(d.deliveryNumber)}`}
-                className="inline-flex items-center gap-1 rounded bg-white px-2 py-1 text-xs font-medium text-rose-900 border border-rose-200 hover:underline dark:bg-rose-900/60 dark:text-rose-100 dark:border-rose-800"
+                className="inline-flex items-center gap-1 rounded bg-card px-2 py-1 text-xs font-medium text-rose-900 border border-rose-200 hover:underline dark:bg-rose-900/60 dark:text-rose-100 dark:border-rose-800"
               >
                 {d.deliveryNumber}: {d.outcomeStatus?.replaceAll('_', ' ')}
                 <ExternalLink className="size-3 opacity-70" />

@@ -1,13 +1,7 @@
 'use client';
 
 import * as React from 'react';
-import {
-  Archive,
-  Clock,
-  History,
-  Pencil,
-  Tag,
-} from 'lucide-react';
+import { Archive, Clock, History, Pencil, Tag } from 'lucide-react';
 
 import {
   Table,
@@ -72,7 +66,7 @@ export function PricingTable({
   const now = new Date();
 
   return (
-    <Table density={density}>
+    <Table density={density} stickyHeader>
       <TableHeader>
         <TableRow>
           <TableHead className="w-[30%]">Product & Variant</TableHead>
@@ -187,7 +181,8 @@ export function PricingTable({
                       }
                     />
                     <TooltipContent>
-                      Scheduled to automatically take effect at {new Date(item.effectiveFrom).toLocaleString()}.
+                      Scheduled to automatically take effect at{' '}
+                      {new Date(item.effectiveFrom).toLocaleString()}.
                     </TooltipContent>
                   </Tooltip>
                 )}
@@ -292,4 +287,3 @@ export function PricingTable({
     </Table>
   );
 }
-

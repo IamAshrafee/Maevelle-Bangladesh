@@ -7,6 +7,7 @@ import {
   PauseCircle,
   PhoneCall,
   PlayCircle,
+  Printer,
   XCircle,
 } from 'lucide-react';
 
@@ -39,11 +40,7 @@ interface OrderHeaderActionsProps {
   }) => void;
 }
 
-export function OrderHeaderActions({
-  order,
-  onRefresh,
-  onConfirmed,
-}: OrderHeaderActionsProps) {
+export function OrderHeaderActions({ order, onRefresh, onConfirmed }: OrderHeaderActionsProps) {
   const [resuming, setResuming] = useState(false);
   const [, setVerificationOpen] = useState(false);
 
@@ -69,6 +66,16 @@ export function OrderHeaderActions({
   return (
     <div className="flex flex-wrap items-center gap-2">
       <RefreshButton onRefresh={onRefresh} size="icon-sm" tooltip="Refresh order" />
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        onClick={() => window.print()}
+        className="print:hidden"
+      >
+        <Printer className="mr-1.5 size-3.5" />
+        Print Invoice
+      </Button>
 
       {/* Primary Action Button */}
       {capabilities.canConfirm && (
@@ -115,9 +122,7 @@ export function OrderHeaderActions({
       )}
 
       {/* Secondary Actions Dropdown */}
-      {(capabilities.canHold ||
-        capabilities.canCancel ||
-        capabilities.canComplete) && (
+      {(capabilities.canHold || capabilities.canCancel || capabilities.canComplete) && (
         <DropdownMenu>
           <DropdownMenuTrigger
             render={

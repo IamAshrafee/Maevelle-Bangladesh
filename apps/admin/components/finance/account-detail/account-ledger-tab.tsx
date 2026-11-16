@@ -211,166 +211,164 @@ export function AccountLedgerTab({
               ) : null}
             </div>
           ) : (
-            <div className="overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow className="hover:bg-transparent">
-                    <TableHead className="w-[40%]">Movement & description</TableHead>
-                    <TableHead className="w-[18%]">Transaction type</TableHead>
-                    <TableHead className="w-[20%]">Business source</TableHead>
-                    <TableHead className="w-[12%]">Occurred at</TableHead>
-                    <TableHead className="w-[10%] text-right">Amount</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {items.map((entry) => {
-                    const incoming = Number(entry.amount_delta) > 0;
-                    const isCopied = copiedId === entry.id;
+            <Table stickyHeader density="compact">
+              <TableHeader>
+                <TableRow className="hover:bg-transparent">
+                  <TableHead className="w-[40%]">Movement & description</TableHead>
+                  <TableHead className="w-[18%]">Transaction type</TableHead>
+                  <TableHead className="w-[20%]">Business source</TableHead>
+                  <TableHead className="w-[12%]">Occurred at</TableHead>
+                  <TableHead className="w-[10%] text-right">Amount</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {items.map((entry) => {
+                  const incoming = Number(entry.amount_delta) > 0;
+                  const isCopied = copiedId === entry.id;
 
-                    return (
-                      <TableRow key={entry.id} className="transition-colors">
-                        {/* Movement & Description */}
-                        <TableCell>
-                          <div className="flex items-start gap-2.5">
-                            <span
-                              className={`mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-full ${
-                                incoming
-                                  ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
-                                  : 'bg-rose-500/10 text-rose-600 dark:text-rose-400'
-                              }`}
-                              aria-hidden="true"
-                            >
-                              {incoming ? (
-                                <ArrowDownLeft className="size-3.5" />
-                              ) : (
-                                <ArrowUpRight className="size-3.5" />
-                              )}
-                            </span>
+                  return (
+                    <TableRow key={entry.id} className="transition-colors">
+                      {/* Movement & Description */}
+                      <TableCell>
+                        <div className="flex items-start gap-2.5">
+                          <span
+                            className={`mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-full ${
+                              incoming
+                                ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
+                                : 'bg-rose-500/10 text-rose-600 dark:text-rose-400'
+                            }`}
+                            aria-hidden="true"
+                          >
+                            {incoming ? (
+                              <ArrowDownLeft className="size-3.5" />
+                            ) : (
+                              <ArrowUpRight className="size-3.5" />
+                            )}
+                          </span>
 
-                            <div className="min-w-0 space-y-0.5">
-                              <p className="text-sm font-medium text-foreground leading-snug">
-                                {entry.description}
-                              </p>
-                              <div className="flex items-center gap-1.5 text-xs text-muted-foreground font-mono">
-                                <span>{entry.transaction_number}</span>
-                                <Tooltip>
-                                  <TooltipTrigger
-                                    onClick={() =>
-                                      copyToClipboard(entry.transaction_number, entry.id)
-                                    }
-                                    className="hover:text-foreground transition-colors p-0.5"
-                                    aria-label="Copy transaction number"
-                                  >
-                                    {isCopied ? (
-                                      <Check className="size-3 text-emerald-600" />
-                                    ) : (
-                                      <Copy className="size-3" />
-                                    )}
-                                  </TooltipTrigger>
-                                  <TooltipContent side="top">
-                                    {isCopied ? 'Copied!' : 'Copy transaction number'}
-                                  </TooltipContent>
-                                </Tooltip>
-                              </div>
+                          <div className="min-w-0 space-y-0.5">
+                            <p className="text-sm font-medium text-foreground leading-snug">
+                              {entry.description}
+                            </p>
+                            <div className="flex items-center gap-1.5 text-xs text-muted-foreground font-mono">
+                              <span>{entry.transaction_number}</span>
+                              <Tooltip>
+                                <TooltipTrigger
+                                  onClick={() =>
+                                    copyToClipboard(entry.transaction_number, entry.id)
+                                  }
+                                  className="hover:text-foreground transition-colors p-0.5"
+                                  aria-label="Copy transaction number"
+                                >
+                                  {isCopied ? (
+                                    <Check className="size-3 text-emerald-600" />
+                                  ) : (
+                                    <Copy className="size-3" />
+                                  )}
+                                </TooltipTrigger>
+                                <TooltipContent side="top">
+                                  {isCopied ? 'Copied!' : 'Copy transaction number'}
+                                </TooltipContent>
+                              </Tooltip>
                             </div>
                           </div>
-                        </TableCell>
+                        </div>
+                      </TableCell>
 
-                        {/* Transaction Type */}
-                        <TableCell>
-                          <StatusBadge status={entry.transaction_type} />
-                        </TableCell>
+                      {/* Transaction Type */}
+                      <TableCell>
+                        <StatusBadge status={entry.transaction_type} />
+                      </TableCell>
 
-                        {/* Business Source */}
-                        <TableCell>
-                          {entry.source_domain === 'payments.payment' && entry.source_id ? (
-                            <Link
-                              href={`/payments/${entry.source_id}`}
-                              className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline"
-                            >
-                              <span>Customer payment</span>
-                              <ExternalLink className="size-3" />
-                            </Link>
-                          ) : entry.source_domain === 'finance.expense' && entry.source_id ? (
-                            <Link
-                              href={`/finance/expenses/${entry.source_id}`}
-                              className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline"
-                            >
-                              <span>Expense record</span>
-                              <ExternalLink className="size-3" />
-                            </Link>
-                          ) : entry.source_domain === 'finance.cod_settlement' ? (
-                            <Link
-                              href="/finance/cod-settlements"
-                              className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline"
-                            >
-                              <span>COD settlement</span>
-                              <ExternalLink className="size-3" />
-                            </Link>
-                          ) : entry.source_domain === 'finance.account' ? (
-                            <span className="text-xs text-muted-foreground">
-                              Opening balance float
-                            </span>
-                          ) : entry.source_domain === 'finance.transfer' ? (
-                            <span className="text-xs text-muted-foreground">Account transfer</span>
-                          ) : entry.source_domain === 'finance.capital_event' ? (
-                            <Link
-                              href={
-                                entry.source_id
-                                  ? `/finance/capital?eventId=${entry.source_id}`
-                                  : '/finance/capital'
-                              }
-                              className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline"
-                            >
-                              <span>Owner capital</span>
-                              <ExternalLink className="size-3" />
-                            </Link>
-                          ) : entry.source_domain === 'assets.asset' && entry.source_id ? (
-                            <Link
-                              href={`/assets/${entry.source_id}`}
-                              className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline"
-                            >
-                              <span>Asset sale</span>
-                              <ExternalLink className="size-3" />
-                            </Link>
-                          ) : (
-                            <span className="text-xs text-muted-foreground">
-                              {entry.source_domain
-                                ? humanizeFinanceCode(entry.source_domain)
-                                : 'Manual / direct ledger'}
-                            </span>
-                          )}
-                        </TableCell>
+                      {/* Business Source */}
+                      <TableCell>
+                        {entry.source_domain === 'payments.payment' && entry.source_id ? (
+                          <Link
+                            href={`/payments/${entry.source_id}`}
+                            className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline"
+                          >
+                            <span>Customer payment</span>
+                            <ExternalLink className="size-3" />
+                          </Link>
+                        ) : entry.source_domain === 'finance.expense' && entry.source_id ? (
+                          <Link
+                            href={`/finance/expenses/${entry.source_id}`}
+                            className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline"
+                          >
+                            <span>Expense record</span>
+                            <ExternalLink className="size-3" />
+                          </Link>
+                        ) : entry.source_domain === 'finance.cod_settlement' ? (
+                          <Link
+                            href="/finance/cod-settlements"
+                            className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline"
+                          >
+                            <span>COD settlement</span>
+                            <ExternalLink className="size-3" />
+                          </Link>
+                        ) : entry.source_domain === 'finance.account' ? (
+                          <span className="text-xs text-muted-foreground">
+                            Opening balance float
+                          </span>
+                        ) : entry.source_domain === 'finance.transfer' ? (
+                          <span className="text-xs text-muted-foreground">Account transfer</span>
+                        ) : entry.source_domain === 'finance.capital_event' ? (
+                          <Link
+                            href={
+                              entry.source_id
+                                ? `/finance/capital?eventId=${entry.source_id}`
+                                : '/finance/capital'
+                            }
+                            className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline"
+                          >
+                            <span>Owner capital</span>
+                            <ExternalLink className="size-3" />
+                          </Link>
+                        ) : entry.source_domain === 'assets.asset' && entry.source_id ? (
+                          <Link
+                            href={`/assets/${entry.source_id}`}
+                            className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline"
+                          >
+                            <span>Asset sale</span>
+                            <ExternalLink className="size-3" />
+                          </Link>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">
+                            {entry.source_domain
+                              ? humanizeFinanceCode(entry.source_domain)
+                              : 'Manual / direct ledger'}
+                          </span>
+                        )}
+                      </TableCell>
 
-                        {/* Occurred At */}
-                        <TableCell className="text-xs text-muted-foreground whitespace-nowrap">
-                          <Tooltip>
-                            <TooltipTrigger>
-                              {formatFinanceDate(entry.created_at, true)}
-                            </TooltipTrigger>
-                            <TooltipContent side="top">
-                              {new Date(entry.created_at).toISOString()}
-                            </TooltipContent>
-                          </Tooltip>
-                        </TableCell>
+                      {/* Occurred At */}
+                      <TableCell className="text-xs text-muted-foreground whitespace-nowrap">
+                        <Tooltip>
+                          <TooltipTrigger>
+                            {formatFinanceDate(entry.created_at, true)}
+                          </TooltipTrigger>
+                          <TooltipContent side="top">
+                            {new Date(entry.created_at).toISOString()}
+                          </TooltipContent>
+                        </Tooltip>
+                      </TableCell>
 
-                        {/* Amount */}
-                        <TableCell
-                          className={`text-right text-sm font-semibold tabular-nums whitespace-nowrap ${
-                            incoming
-                              ? 'text-emerald-600 dark:text-emerald-400'
-                              : 'text-rose-600 dark:text-rose-400'
-                          }`}
-                        >
-                          {incoming ? '+' : ''}
-                          {formatMoney(entry.amount_delta, entry.currency_code)}
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })}
-                </TableBody>
-              </Table>
-            </div>
+                      {/* Amount */}
+                      <TableCell
+                        className={`text-right text-sm font-semibold tabular-nums whitespace-nowrap ${
+                          incoming
+                            ? 'text-emerald-600 dark:text-emerald-400'
+                            : 'text-rose-600 dark:text-rose-400'
+                        }`}
+                      >
+                        {incoming ? '+' : ''}
+                        {formatMoney(entry.amount_delta, entry.currency_code)}
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
           )}
 
           {/* Pagination Controls */}

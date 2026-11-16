@@ -30,6 +30,7 @@ import type {
   WarehouseLocationDto,
 } from '@maevelle/contracts';
 import { Button } from '@/components/ui/button';
+import { AdminPage } from '@/components/ui/page-shell';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -223,10 +224,14 @@ function VariantSearch({ onSelect, selectedVariant, onClear, error }: VariantSea
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
               <span className="font-semibold text-sm truncate">{selectedVariant.productTitle}</span>
-              <span className="font-mono text-xs text-muted-foreground">({selectedVariant.sku})</span>
+              <span className="font-mono text-xs text-muted-foreground">
+                ({selectedVariant.sku})
+              </span>
             </div>
             {selectedVariant.optionSummary ? (
-              <p className="text-xs text-muted-foreground truncate">{selectedVariant.optionSummary}</p>
+              <p className="text-xs text-muted-foreground truncate">
+                {selectedVariant.optionSummary}
+              </p>
             ) : null}
           </div>
         </div>
@@ -290,10 +295,14 @@ function VariantSearch({ onSelect, selectedVariant, onClear, error }: VariantSea
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center justify-between gap-2">
                     <span className="font-medium text-sm truncate">{r.productTitle}</span>
-                    <span className="font-mono text-xs text-muted-foreground shrink-0">{r.sku}</span>
+                    <span className="font-mono text-xs text-muted-foreground shrink-0">
+                      {r.sku}
+                    </span>
                   </div>
                   {r.optionSummary ? (
-                    <p className="text-xs text-muted-foreground truncate mt-0.5">{r.optionSummary}</p>
+                    <p className="text-xs text-muted-foreground truncate mt-0.5">
+                      {r.optionSummary}
+                    </p>
                   ) : null}
                 </div>
               </button>
@@ -390,8 +399,8 @@ function StockBalancePanel({
         </div>
       ) : totalOnHand === 0 ? (
         <p className="text-xs text-muted-foreground py-1">
-          Zero recorded units at this facility. Introduce stock using a positive adjustment or Opening
-          Balance.
+          Zero recorded units at this facility. Introduce stock using a positive adjustment or
+          Opening Balance.
         </p>
       ) : (
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 text-xs">
@@ -411,7 +420,9 @@ function StockBalancePanel({
             <div className="text-muted-foreground text-[11px] font-medium">Damaged</div>
             <div
               className={`font-mono font-bold text-base mt-0.5 ${
-                balances.DAMAGED > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-muted-foreground'
+                balances.DAMAGED > 0
+                  ? 'text-amber-600 dark:text-amber-400'
+                  : 'text-muted-foreground'
               }`}
             >
               {balances.DAMAGED}
@@ -424,7 +435,9 @@ function StockBalancePanel({
             <div className="text-muted-foreground text-[11px] font-medium">Quarantine</div>
             <div
               className={`font-mono font-bold text-base mt-0.5 ${
-                balances.QUARANTINE > 0 ? 'text-purple-600 dark:text-purple-400' : 'text-muted-foreground'
+                balances.QUARANTINE > 0
+                  ? 'text-purple-600 dark:text-purple-400'
+                  : 'text-muted-foreground'
               }`}
             >
               {balances.QUARANTINE}
@@ -437,7 +450,9 @@ function StockBalancePanel({
             <div className="text-muted-foreground text-[11px] font-medium">Inspection</div>
             <div
               className={`font-mono font-bold text-base mt-0.5 ${
-                balances.INSPECTION > 0 ? 'text-blue-600 dark:text-blue-400' : 'text-muted-foreground'
+                balances.INSPECTION > 0
+                  ? 'text-blue-600 dark:text-blue-400'
+                  : 'text-muted-foreground'
               }`}
             >
               {balances.INSPECTION}
@@ -668,21 +683,20 @@ export function AdjustmentsSection() {
     }
 
     try {
-      const res = await inventoryRequest<{ data: { transactionId: string; inventoryItemId: string } }>(
-        '/inventory/adjustments',
-        {
-          method: 'POST',
-          headers: { 'idempotency-key': adjKey.current },
-          body: JSON.stringify({
-            variantId: values.variantId,
-            locationId: values.locationId,
-            condition: values.condition,
-            quantityDelta: values.quantityDelta,
-            reasonCode: values.reasonCode,
-            ...(values.note ? { note: values.note.trim() } : {}),
-          }),
-        },
-      );
+      const res = await inventoryRequest<{
+        data: { transactionId: string; inventoryItemId: string };
+      }>('/inventory/adjustments', {
+        method: 'POST',
+        headers: { 'idempotency-key': adjKey.current },
+        body: JSON.stringify({
+          variantId: values.variantId,
+          locationId: values.locationId,
+          condition: values.condition,
+          quantityDelta: values.quantityDelta,
+          reasonCode: values.reasonCode,
+          ...(values.note ? { note: values.note.trim() } : {}),
+        }),
+      });
 
       // Refresh balances after posting
       setBalances((prev) => ({
@@ -746,7 +760,8 @@ export function AdjustmentsSection() {
   const fromStock = balances[watchFromCondition] ?? 0;
   const toStock = balances[watchToCondition] ?? 0;
   const condQtyNumber = Number(watchCondQty);
-  const condHasQty = !Number.isNaN(condQtyNumber) && watchCondQty.trim() !== '' && condQtyNumber > 0;
+  const condHasQty =
+    !Number.isNaN(condQtyNumber) && watchCondQty.trim() !== '' && condQtyNumber > 0;
   const condFromProjected = fromStock - (condHasQty ? condQtyNumber : 0);
   const condToProjected = toStock + (condHasQty ? condQtyNumber : 0);
   const condExceedsFrom = condHasQty && condQtyNumber > fromStock;
@@ -765,10 +780,7 @@ export function AdjustmentsSection() {
       return;
     }
 
-    if (
-      values.fromCondition === 'SELLABLE' &&
-      availableToMove - moveQty < balances.reserved
-    ) {
+    if (values.fromCondition === 'SELLABLE' && availableToMove - moveQty < balances.reserved) {
       condForm.setError('quantity', {
         type: 'manual',
         message: `Cannot move sellable stock below active reservations (${balances.reserved} reserved).`,
@@ -777,21 +789,20 @@ export function AdjustmentsSection() {
     }
 
     try {
-      const res = await inventoryRequest<{ data: { transactionId: string; inventoryItemId: string } }>(
-        '/inventory/condition-movements',
-        {
-          method: 'POST',
-          headers: { 'idempotency-key': condKey.current },
-          body: JSON.stringify({
-            variantId: values.variantId,
-            locationId: values.locationId,
-            fromCondition: values.fromCondition,
-            toCondition: values.toCondition,
-            quantity: values.quantity,
-            ...(values.reason ? { reason: values.reason.trim() } : {}),
-          }),
-        },
-      );
+      const res = await inventoryRequest<{
+        data: { transactionId: string; inventoryItemId: string };
+      }>('/inventory/condition-movements', {
+        method: 'POST',
+        headers: { 'idempotency-key': condKey.current },
+        body: JSON.stringify({
+          variantId: values.variantId,
+          locationId: values.locationId,
+          fromCondition: values.fromCondition,
+          toCondition: values.toCondition,
+          quantity: values.quantity,
+          ...(values.reason ? { reason: values.reason.trim() } : {}),
+        }),
+      });
 
       // Refresh balances after posting
       setBalances((prev) => ({
@@ -826,7 +837,7 @@ export function AdjustmentsSection() {
   });
 
   return (
-    <main className="mx-auto min-w-0 max-w-4xl space-y-6 px-4 py-6 sm:px-6">
+    <AdminPage variant="narrow">
       <Breadcrumb
         mobileMode="back"
         items={[
@@ -893,7 +904,9 @@ export function AdjustmentsSection() {
           {successInfo.transactionId && successInfo.sku ? (
             <div className="flex flex-wrap items-center gap-2 pt-1 border-t border-emerald-500/20 text-[11px]">
               <span className="text-muted-foreground">Transaction ID:</span>
-              <span className="font-mono font-medium">{successInfo.transactionId.slice(0, 13)}…</span>
+              <span className="font-mono font-medium">
+                {successInfo.transactionId.slice(0, 13)}…
+              </span>
               <Link
                 href={`/inventory/history?q=${encodeURIComponent(successInfo.sku)}`}
                 className="text-primary font-medium hover:underline ml-auto flex items-center gap-1"
@@ -948,8 +961,8 @@ export function AdjustmentsSection() {
               <CardHeader className="p-4 sm:p-5 pb-3 sm:pb-3">
                 <CardTitle className="text-base font-semibold">Adjust Stock Level</CardTitle>
                 <CardDescription className="text-xs">
-                  Increase or decrease physical on-hand inventory for a specific condition pool. Every
-                  adjustment creates an immutable ledger transaction.
+                  Increase or decrease physical on-hand inventory for a specific condition pool.
+                  Every adjustment creates an immutable ledger transaction.
                 </CardDescription>
               </CardHeader>
 
@@ -1054,7 +1067,9 @@ export function AdjustmentsSection() {
                       id="adj-delta"
                       placeholder="e.g. 5 or -2"
                       className={`h-9 text-xs font-mono ${
-                        adjWouldBeNegative || adjReservedViolation ? 'border-destructive focus-visible:ring-destructive' : ''
+                        adjWouldBeNegative || adjReservedViolation
+                          ? 'border-destructive focus-visible:ring-destructive'
+                          : ''
                       }`}
                       {...adjForm.register('quantityDelta')}
                     />
@@ -1110,8 +1125,9 @@ export function AdjustmentsSection() {
                       <span>
                         Projected {watchAdjCondition.toLowerCase()} balance:{' '}
                         <strong className="font-mono">
-                          {adjCurrentStock} {adjDeltaNumber > 0 ? `+ ${adjDeltaNumber}` : adjDeltaNumber}{' '}
-                          = {adjProjected} units
+                          {adjCurrentStock}{' '}
+                          {adjDeltaNumber > 0 ? `+ ${adjDeltaNumber}` : adjDeltaNumber} ={' '}
+                          {adjProjected} units
                         </strong>
                       </span>
                     </div>
@@ -1176,7 +1192,9 @@ export function AdjustmentsSection() {
           <form onSubmit={onConditionMove} className="space-y-5" noValidate>
             <Card className="shadow-xs">
               <CardHeader className="p-4 sm:p-5 pb-3 sm:pb-3">
-                <CardTitle className="text-base font-semibold">Reclassify Stock Condition</CardTitle>
+                <CardTitle className="text-base font-semibold">
+                  Reclassify Stock Condition
+                </CardTitle>
                 <CardDescription className="text-xs">
                   Move stock between conditions (e.g. Sellable → Damaged, or Inspection → Sellable)
                   without altering total physical quantity at the facility.
@@ -1427,6 +1445,6 @@ export function AdjustmentsSection() {
           </form>
         </TabsContent>
       </Tabs>
-    </main>
+    </AdminPage>
   );
 }

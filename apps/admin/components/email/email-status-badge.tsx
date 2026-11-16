@@ -84,7 +84,7 @@ const statusConfig: Record<
   SKIPPED_NO_EMAIL: {
     label: 'No Email (Skipped)',
     icon: MailX,
-    classes: 'border-slate-500/30 bg-slate-500/10 text-slate-700 dark:text-slate-400',
+    classes: 'border-border bg-muted text-muted-foreground',
   },
   PENDING_MANUAL: {
     label: 'Manual Pending',
@@ -103,7 +103,12 @@ const statusConfig: Record<
   },
 };
 
-export function EmailStatusBadge({ status, className, showTooltip = true, size = 'default' }: EmailStatusBadgeProps) {
+export function EmailStatusBadge({
+  status,
+  className,
+  showTooltip = true,
+  size = 'default',
+}: EmailStatusBadgeProps) {
   const normalized = status.toUpperCase();
   const config = statusConfig[normalized] ?? {
     label: status.replaceAll('_', ' '),
@@ -111,7 +116,8 @@ export function EmailStatusBadge({ status, className, showTooltip = true, size =
     classes: 'border-muted bg-muted/50 text-foreground',
   };
 
-  const explanation = statusExplanations[normalized as EmailNotificationStatus] ?? 'Email delivery status.';
+  const explanation =
+    statusExplanations[normalized as EmailNotificationStatus] ?? 'Email delivery status.';
   const Icon = config.icon;
 
   const isSmall = size === 'sm';
@@ -126,7 +132,10 @@ export function EmailStatusBadge({ status, className, showTooltip = true, size =
       role="status"
       aria-label={`Status: ${config.label}`}
     >
-      <Icon className={cn(isSmall ? 'size-3 shrink-0' : 'size-3.5 shrink-0', config.iconClasses)} aria-hidden="true" />
+      <Icon
+        className={cn(isSmall ? 'size-3 shrink-0' : 'size-3.5 shrink-0', config.iconClasses)}
+        aria-hidden="true"
+      />
       <span>{config.label}</span>
     </span>
   );

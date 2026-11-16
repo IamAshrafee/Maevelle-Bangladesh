@@ -25,7 +25,10 @@ export function CustomerMetricsStrip({ customer }: CustomerMetricsStripProps) {
     : 'No orders yet';
 
   return (
-    <section aria-label="Customer Commerce Summary" className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+    <section
+      aria-label="Customer Commerce Summary"
+      className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6"
+    >
       {/* 1. Lifetime Order Value */}
       <div className="rounded-xl border bg-card p-4 shadow-2xs">
         <div className="flex items-center justify-between text-muted-foreground">
@@ -35,9 +38,7 @@ export function CustomerMetricsStrip({ customer }: CustomerMetricsStripProps) {
         <p className="mt-2 text-xl font-bold tracking-tight text-foreground">
           {formatBdt(m.lifetimeOrderValue)}
         </p>
-        <p className="mt-1 text-[11px] text-muted-foreground">
-          Net merchandise + delivery
-        </p>
+        <p className="mt-1 text-[11px] text-muted-foreground">Net merchandise + delivery</p>
       </div>
 
       {/* 2. Total Orders */}
@@ -46,9 +47,7 @@ export function CustomerMetricsStrip({ customer }: CustomerMetricsStripProps) {
           <span className="text-xs font-medium">Total Orders</span>
           <ShoppingBag className="size-4 text-primary" aria-hidden="true" />
         </div>
-        <p className="mt-2 text-xl font-bold tracking-tight text-foreground">
-          {m.totalOrders}
-        </p>
+        <p className="mt-2 text-xl font-bold tracking-tight text-foreground">{m.totalOrders}</p>
         <div className="mt-1 flex items-center gap-1.5 text-[11px] text-muted-foreground">
           <span className="text-emerald-700 font-medium">{m.deliveredOrders ?? 0} delivered</span>
           <span>·</span>
@@ -65,9 +64,7 @@ export function CustomerMetricsStrip({ customer }: CustomerMetricsStripProps) {
         <p className="mt-2 text-xl font-bold tracking-tight text-emerald-700 dark:text-emerald-400">
           {formatBdt(m.collectedAmount)}
         </p>
-        <p className="mt-1 text-[11px] text-muted-foreground">
-          Settled payments & COD
-        </p>
+        <p className="mt-1 text-[11px] text-muted-foreground">Settled payments & COD</p>
       </div>
 
       {/* 4. Outstanding / Due */}
@@ -79,9 +76,7 @@ export function CustomerMetricsStrip({ customer }: CustomerMetricsStripProps) {
         <p className="mt-2 text-xl font-bold tracking-tight text-amber-700 dark:text-amber-400">
           {formatBdt(m.outstandingAmount)}
         </p>
-        <p className="mt-1 text-[11px] text-muted-foreground">
-          Pending in-transit / COD
-        </p>
+        <p className="mt-1 text-[11px] text-muted-foreground">Pending in-transit / COD</p>
       </div>
 
       {/* 5. Average Order Value */}
@@ -91,18 +86,19 @@ export function CustomerMetricsStrip({ customer }: CustomerMetricsStripProps) {
           <TrendingUp className="size-4 text-blue-600" aria-hidden="true" />
         </div>
         <p className="mt-2 text-xl font-bold tracking-tight text-foreground">
-          {formatBdt(m.averageOrderValue ?? (m.totalOrders > 0 ? Number(m.lifetimeOrderValue) / m.totalOrders : 0))}
+          {formatBdt(
+            m.averageOrderValue ??
+              (m.totalOrders > 0 ? Number(m.lifetimeOrderValue) / m.totalOrders : 0),
+          )}
         </p>
-        <p className="mt-1 text-[11px] text-muted-foreground">
-          Per placed order
-        </p>
+        <p className="mt-1 text-[11px] text-muted-foreground">Per placed order</p>
       </div>
 
       {/* 6. Last Order Date */}
       <div className="rounded-xl border bg-card p-4 shadow-2xs">
         <div className="flex items-center justify-between text-muted-foreground">
           <span className="text-xs font-medium">Latest Order</span>
-          <Clock className="size-4 text-slate-500" aria-hidden="true" />
+          <Clock className="size-4 text-muted-foreground" aria-hidden="true" />
         </div>
         <p className="mt-2 text-sm font-semibold tracking-tight text-foreground truncate">
           {lastOrderFormatted}

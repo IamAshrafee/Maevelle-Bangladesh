@@ -6,11 +6,10 @@ import { HelpCircle, Layers3, PackageCheck } from 'lucide-react';
 import type { ApiEnvelope, InboundShipmentDto } from '@maevelle/contracts';
 import { useAdminCapability } from '@/components/admin-capabilities';
 import { OperationalFeedback } from '@/components/operational-worklist';
-import { SupplyWorkspaceNav } from '@/components/supply/supply-workspace-nav';
+import { AdminPage, LoadingState } from '@/components/ui/page-shell';
 import { Breadcrumb } from '@/components/ui/breadcrumb';
 import { Button } from '@/components/ui/button';
 import { RefreshButton } from '@/components/ui/refresh-button';
-import { LoadingState } from '@/components/ui/page-shell';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { supplyRequest } from '@/lib/supply/api';
@@ -91,7 +90,7 @@ export function LandedCostConsole() {
   }, [shipments, worksheets]);
 
   return (
-    <main className="min-w-0 space-y-5 px-4 py-5 sm:px-6 lg:px-8">
+    <AdminPage variant="wide">
       <Breadcrumb
         items={[
           { label: 'Supply', href: '/supply' },
@@ -134,8 +133,6 @@ export function LandedCostConsole() {
           tooltip="Refresh landed cost"
         />
       </header>
-
-      <SupplyWorkspaceNav />
 
       {message ? (
         <OperationalFeedback tone="danger">
@@ -201,6 +198,6 @@ export function LandedCostConsole() {
       </Tabs>
 
       <LandedCostHelpDialog open={helpOpen} onOpenChange={setHelpOpen} />
-    </main>
+    </AdminPage>
   );
 }

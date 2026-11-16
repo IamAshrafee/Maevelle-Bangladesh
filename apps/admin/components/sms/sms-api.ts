@@ -25,6 +25,6 @@ export function smsStatusTone(status: string) {
   if (['ACCEPTED', 'QUEUED', 'PROCESSING', 'DELIVERY_DELAYED'].includes(status))
     return 'bg-amber-100 text-amber-800';
   if (['SUPPRESSED', 'SKIPPED_NO_PHONE', 'NOT_APPLICABLE', 'PENDING_MANUAL'].includes(status))
-    return 'bg-slate-100 text-slate-700';
+    return 'bg-muted text-muted-foreground';
   return 'bg-purple-100 text-purple-800';
 }

@@ -168,7 +168,7 @@ export function EmailTestLabTab({
                     setSelectedTemplateKey(e.target.value);
                     setPreviewData(null);
                   }}
-                  className="h-9 w-full rounded-md border bg-background px-3 text-xs text-foreground focus:outline-hidden"
+                  className="h-9 pointer-coarse:min-h-11 w-full rounded-md border bg-background px-3 text-base md:text-xs pointer-coarse:text-base text-foreground focus:outline-hidden"
                 >
                   {templates.map((tpl) => (
                     <option key={tpl.key} value={tpl.key}>
@@ -223,7 +223,7 @@ export function EmailTestLabTab({
                       setFixtureKey(e.target.value);
                       setPreviewData(null);
                     }}
-                    className="h-9 w-full rounded-md border bg-background px-3 text-xs text-foreground focus:outline-hidden"
+                    className="h-9 pointer-coarse:min-h-11 w-full rounded-md border bg-background px-3 text-base md:text-xs pointer-coarse:text-base text-foreground focus:outline-hidden"
                   >
                     <option value="multi-item">Multi-item Order (Fatema · Kurti & Dupatta)</option>
                     <option value="simple-cod">Simple COD Order (Tanvir · Minimalist Wallet)</option>

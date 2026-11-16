@@ -2,7 +2,17 @@
 
 import * as React from 'react';
 import Link from 'next/link';
-import { ChevronDown, Laptop, LogOut, ShieldCheck, User, UserRoundCog } from 'lucide-react';
+import {
+  ChevronDown,
+  Laptop,
+  LogOut,
+  Monitor,
+  Moon,
+  ShieldCheck,
+  Sun,
+  User,
+  UserRoundCog,
+} from 'lucide-react';
 import type { AdminContextDto } from '@maevelle/contracts';
 import {
   DropdownMenu,
@@ -15,6 +25,8 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { StatusBadge } from '@/components/status-badge';
+import { useTheme, type ThemeMode } from '@/components/theme-provider';
+import { cn } from '@/lib/utils';
 import { getInitials } from './account/account-utils';
 
 interface UserMenuProps {
@@ -24,6 +36,7 @@ interface UserMenuProps {
 }
 
 export function UserMenu({ context, onLogout, defaultOpen }: UserMenuProps) {
+  const { theme, setTheme } = useTheme();
   const userName = context?.user?.name || 'Maevelle Operator';
   const userEmail = context?.user?.email || '';
   const userImage = context?.user?.image;
@@ -41,7 +54,7 @@ export function UserMenu({ context, onLogout, defaultOpen }: UserMenuProps) {
   return (
     <DropdownMenu defaultOpen={defaultOpen}>
       <DropdownMenuTrigger
-        className="flex items-center gap-2 p-1 rounded-lg hover:bg-muted text-muted-foreground hover:text-foreground transition-colors duration-150 cursor-pointer group outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        className="flex items-center justify-center md:justify-start gap-2 min-h-11 min-w-11 md:min-h-0 md:min-w-0 p-1 rounded-lg hover:bg-muted text-muted-foreground hover:text-foreground transition-colors duration-150 cursor-pointer group outline-none focus-visible:ring-2 focus-visible:ring-ring pointer-coarse:min-h-11"
         aria-label={`User menu for ${userName}`}
       >
         {userImage ? (
@@ -74,7 +87,10 @@ export function UserMenu({ context, onLogout, defaultOpen }: UserMenuProps) {
         />
       </DropdownMenuTrigger>
 
-      <DropdownMenuContent align="end" className="w-64 p-1.5 shadow-lg border border-border bg-card">
+      <DropdownMenuContent
+        align="end"
+        className="w-64 p-1.5 shadow-lg border border-border bg-card"
+      >
         {/* Header summary */}
         <DropdownMenuLabel className="p-2 font-normal">
           <div className="flex items-center gap-3">
@@ -97,9 +113,7 @@ export function UserMenu({ context, onLogout, defaultOpen }: UserMenuProps) {
                 {userName}
               </strong>
               {userEmail ? (
-                <p className="text-[11px] text-muted-foreground font-mono truncate">
-                  {userEmail}
-                </p>
+                <p className="text-[11px] text-muted-foreground font-mono truncate">{userEmail}</p>
               ) : null}
               <div className="pt-0.5">
                 <span className="inline-block text-[10px] font-medium text-foreground/80 bg-muted/70 border border-border px-1.5 py-0.2 rounded">
@@ -115,7 +129,12 @@ export function UserMenu({ context, onLogout, defaultOpen }: UserMenuProps) {
         {/* Account Quick Links */}
         <DropdownMenuGroup>
           <DropdownMenuLinkItem
-            render={<Link href="/account" className="flex items-center gap-2.5 w-full cursor-pointer py-1.5 px-2 text-xs" />}
+            render={
+              <Link
+                href="/account"
+                className="flex items-center gap-2.5 w-full cursor-pointer py-1.5 px-2 text-xs"
+              />
+            }
           >
             <UserRoundCog className="size-4 text-primary shrink-0" aria-hidden="true" />
             <div className="flex flex-col">
@@ -125,7 +144,12 @@ export function UserMenu({ context, onLogout, defaultOpen }: UserMenuProps) {
           </DropdownMenuLinkItem>
 
           <DropdownMenuLinkItem
-            render={<Link href="/account?tab=security" className="flex items-center justify-between gap-2.5 w-full cursor-pointer py-1.5 px-2 text-xs" />}
+            render={
+              <Link
+                href="/account?tab=security"
+                className="flex items-center justify-between gap-2.5 w-full cursor-pointer py-1.5 px-2 text-xs"
+              />
+            }
           >
             <div className="flex items-center gap-2.5">
               <ShieldCheck className="size-4 text-primary shrink-0" aria-hidden="true" />
@@ -138,12 +162,55 @@ export function UserMenu({ context, onLogout, defaultOpen }: UserMenuProps) {
           </DropdownMenuLinkItem>
 
           <DropdownMenuLinkItem
-            render={<Link href="/account?tab=sessions" className="flex items-center gap-2.5 w-full cursor-pointer py-1.5 px-2 text-xs" />}
+            render={
+              <Link
+                href="/account?tab=sessions"
+                className="flex items-center gap-2.5 w-full cursor-pointer py-1.5 px-2 text-xs"
+              />
+            }
           >
             <Laptop className="size-4 text-muted-foreground shrink-0" aria-hidden="true" />
             <span className="font-medium text-foreground">Active Sessions</span>
           </DropdownMenuLinkItem>
         </DropdownMenuGroup>
+
+        <DropdownMenuSeparator />
+
+        {/* Appearance / Theme Switcher */}
+        <div className="px-2 py-1.5" role="group" aria-label="Appearance theme">
+          <div className="mb-1.5 flex items-center justify-between text-[11px] font-medium text-muted-foreground">
+            <span>Theme</span>
+            <span className="capitalize text-foreground/80">{theme}</span>
+          </div>
+          <div className="grid grid-cols-3 gap-1 rounded-lg border border-border bg-muted/60 p-0.5">
+            {(
+              [
+                { value: 'light', label: 'Light', Icon: Sun },
+                { value: 'dark', label: 'Dark', Icon: Moon },
+                { value: 'system', label: 'System', Icon: Monitor },
+              ] as readonly { value: ThemeMode; label: string; Icon: typeof Sun }[]
+            ).map(({ value, label, Icon }) => {
+              const active = theme === value;
+              return (
+                <button
+                  key={value}
+                  type="button"
+                  aria-pressed={active}
+                  onClick={() => setTheme(value)}
+                  className={cn(
+                    'flex min-h-7 items-center justify-center gap-1 rounded-md px-1.5 text-[11px] font-medium transition-colors duration-150 cursor-pointer',
+                    active
+                      ? 'bg-card text-foreground shadow-2xs border border-border'
+                      : 'text-muted-foreground hover:text-foreground border border-transparent',
+                  )}
+                >
+                  <Icon className="size-3 shrink-0" aria-hidden="true" />
+                  <span>{label}</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
 
         <DropdownMenuSeparator />
 

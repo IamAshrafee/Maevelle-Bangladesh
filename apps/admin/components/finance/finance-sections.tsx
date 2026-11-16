@@ -275,20 +275,29 @@ export function FinanceOverview({
             </CardDescription>
           </CardHeader>
           <CardContent className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-            {paymentWork > 0 ? (
+            {overview.attention.pendingPaymentVerifications > 0 ? (
               <Link
                 className="rounded-lg border bg-background p-3 hover:bg-muted/50"
-                href={
-                  overview.attention.pendingPaymentVerifications > 0
-                    ? '/payments?tab=verification'
-                    : '/payments?tab=cod'
-                }
+                href="/payments?tab=queue&subtab=claims"
               >
                 <strong className="block">
-                  {paymentWork} collection task{paymentWork === 1 ? '' : 's'}
+                  {overview.attention.pendingPaymentVerifications} wallet claims
                 </strong>
                 <span className="text-sm text-muted-foreground">
-                  Verify manual claims or record delivered COD collections.
+                  Verify customer transfers in Payments.
+                </span>
+              </Link>
+            ) : null}
+            {overview.attention.pendingCodCollections > 0 ? (
+              <Link
+                className="rounded-lg border bg-background p-3 hover:bg-muted/50"
+                href="/payments?tab=queue&subtab=cod"
+              >
+                <strong className="block">
+                  {overview.attention.pendingCodCollections} COD collections to record
+                </strong>
+                <span className="text-sm text-muted-foreground">
+                  Record cash collected from customers in Payments.
                 </span>
               </Link>
             ) : null}
@@ -532,8 +541,8 @@ export function ExpensesSection({
       />
     );
   return (
-    <Card>
-      <Table>
+    <Card className="overflow-hidden">
+      <Table stickyHeader density="compact">
         <TableHeader>
           <TableRow>
             <TableHead>Expense</TableHead>
@@ -945,7 +954,7 @@ export function ActivitySection({
         />
       ) : (
         <Card className="overflow-hidden">
-          <Table>
+          <Table stickyHeader density="compact">
             <TableHeader>
               <TableRow>
                 <TableHead>Movement</TableHead>

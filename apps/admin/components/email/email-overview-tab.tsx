@@ -41,7 +41,8 @@ export function EmailOverviewTab({
 }: EmailOverviewTabProps) {
   const isGlobalDisabled = diagnostic && !diagnostic.enabled;
   const isRedirectActive = Boolean(diagnostic?.testRecipientOverride);
-  const isMissingSecrets = diagnostic && (!diagnostic.providerConfigured || !diagnostic.webhookConfigured);
+  const isMissingSecrets =
+    diagnostic && (!diagnostic.providerConfigured || !diagnostic.webhookConfigured);
 
   const recentFailures = recentEmails.filter(
     (e) => e.status === 'FAILED' || e.status === 'BOUNCED',
@@ -56,7 +57,8 @@ export function EmailOverviewTab({
           <div className="flex-1">
             <h3 className="font-semibold">Email Sending is Disabled Globally</h3>
             <p className="mt-1 text-xs opacity-90">
-              No automatic or transactional emails will be queued or sent to customers by the system. You can update this in the Policies tab.
+              No automatic or transactional emails will be queued or sent to customers by the
+              system. You can update this in the Policies tab.
             </p>
           </div>
           <Button
@@ -77,7 +79,8 @@ export function EmailOverviewTab({
             <h3 className="font-semibold">Development Recipient Redirect Active</h3>
             <p className="mt-1 text-xs opacity-90">
               Transactional customer emails in this environment are automatically redirected to{' '}
-              <strong className="font-mono">{diagnostic?.testRecipientOverride}</strong> to prevent accidental customer contact.
+              <strong className="font-mono">{diagnostic?.testRecipientOverride}</strong> to prevent
+              accidental customer contact.
             </p>
           </div>
           <Button
@@ -176,7 +179,9 @@ export function EmailOverviewTab({
               <Activity className="size-3.5 text-muted-foreground" />
             </CardDescription>
             <CardTitle className="text-lg font-bold">
-              {diagnostic?.last_webhook_at ? formatDateTime(diagnostic.last_webhook_at) : 'No Webhooks'}
+              {diagnostic?.last_webhook_at
+                ? formatDateTime(diagnostic.last_webhook_at)
+                : 'No Webhooks'}
             </CardTitle>
           </CardHeader>
           <CardContent className="text-xs text-muted-foreground">
@@ -212,7 +217,12 @@ export function EmailOverviewTab({
                   Authoritative email deliveries created and processed today
                 </CardDescription>
               </div>
-              <RefreshButton size="icon-sm" variant="ghost" onRefresh={onRefresh} tooltip="Refresh snapshot" />
+              <RefreshButton
+                size="icon-sm"
+                variant="ghost"
+                onRefresh={onRefresh}
+                tooltip="Refresh snapshot"
+              />
             </div>
           </CardHeader>
           <CardContent>
@@ -261,14 +271,15 @@ export function EmailOverviewTab({
               </div>
               <div className="h-2 w-full rounded-full bg-muted overflow-hidden">
                 <div
-                  className="h-full bg-emerald-600 rounded-full transition-all"
+                  className="h-full bg-emerald-600 rounded-full transition-[width] duration-300"
                   style={{
                     width: `${diagnostic?.last_7_days?.success_rate ?? 100}%`,
                   }}
                 />
               </div>
               <p className="mt-2 text-[11px] text-muted-foreground">
-                Calculated from {diagnostic?.last_7_days?.total ?? 0} transactional messages dispatched in the last 7 days.
+                Calculated from {diagnostic?.last_7_days?.total ?? 0} transactional messages
+                dispatched in the last 7 days.
               </p>
             </div>
           </CardContent>
@@ -289,7 +300,8 @@ export function EmailOverviewTab({
                   <AlertTriangle className="size-3.5" /> Top Failure Reason
                 </span>
                 <p className="mt-1 font-mono font-medium text-foreground">
-                  {diagnostic.top_failure_reason.code} ({diagnostic.top_failure_reason.count} occurrences)
+                  {diagnostic.top_failure_reason.code} ({diagnostic.top_failure_reason.count}{' '}
+                  occurrences)
                 </p>
               </div>
             ) : (
@@ -310,7 +322,11 @@ export function EmailOverviewTab({
               </div>
               <div className="flex justify-between py-1.5 border-b">
                 <span className="text-muted-foreground">Oldest Queued Item:</span>
-                <span className="font-mono">{diagnostic?.oldest_queued_at ? formatDateTime(diagnostic.oldest_queued_at) : 'None'}</span>
+                <span className="font-mono">
+                  {diagnostic?.oldest_queued_at
+                    ? formatDateTime(diagnostic.oldest_queued_at)
+                    : 'None'}
+                </span>
               </div>
               <div className="flex justify-between py-1.5">
                 <span className="text-muted-foreground">Test Recipient Redirection:</span>
@@ -370,9 +386,12 @@ export function EmailOverviewTab({
                   onClick={() => onInspectEmail(item)}
                 >
                   <div className="space-y-0.5">
-                    <p className="font-medium text-foreground">{item.rendered_subject || item.notification_type}</p>
+                    <p className="font-medium text-foreground">
+                      {item.rendered_subject || item.notification_type}
+                    </p>
                     <p className="text-muted-foreground">
-                      Recipient: <span className="font-mono">{item.intended_recipient ?? 'No email'}</span> ·{' '}
+                      Recipient:{' '}
+                      <span className="font-mono">{item.intended_recipient ?? 'No email'}</span> ·{' '}
                       {formatDateTime(item.created_at)}
                     </p>
                     {item.failure_code ? (

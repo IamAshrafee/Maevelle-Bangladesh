@@ -41,7 +41,10 @@ export interface FindingsTabProps {
     repairableOnly: boolean;
     q: string;
   };
-  onFilterChange: <K extends keyof FindingsTabProps['filters']>(key: K, value: FindingsTabProps['filters'][K]) => void;
+  onFilterChange: <K extends keyof FindingsTabProps['filters']>(
+    key: K,
+    value: FindingsTabProps['filters'][K],
+  ) => void;
   onPageChange: (page: number) => void;
   onResetFilters: () => void;
   onOpenFinding: (finding: IntegrityFindingListItemDto) => void;
@@ -75,11 +78,17 @@ export function FindingsTab({
       case 'orders.order_line':
         return { href: `/orders`, label: `Order Line ${entityId.slice(0, 8)}…` };
       case 'customers.customer':
-        return { href: `/customers?customer=${entityId}`, label: `Customer ${entityId.slice(0, 8)}…` };
+        return {
+          href: `/customers?customer=${entityId}`,
+          label: `Customer ${entityId.slice(0, 8)}…`,
+        };
       case 'catalog.product':
         return { href: `/products?product=${entityId}`, label: `Product ${entityId.slice(0, 8)}…` };
       case 'delivery.delivery':
-        return { href: `/deliveries?delivery=${entityId}`, label: `Delivery ${entityId.slice(0, 8)}…` };
+        return {
+          href: `/deliveries?delivery=${entityId}`,
+          label: `Delivery ${entityId.slice(0, 8)}…`,
+        };
       case 'reviews.review':
         return { href: `/reviews?review=${entityId}`, label: `Review ${entityId.slice(0, 8)}…` };
       case 'assets.asset':
@@ -189,7 +198,7 @@ export function FindingsTab({
             onClick={() => onFilterChange('status', 'OPEN')}
             className={`px-2.5 py-1 rounded-md border text-xs font-medium cursor-pointer transition-colors ${
               filters.status === 'OPEN'
-                ? 'bg-primary text-primary-foreground border-primary'
+                ? 'bg-primary-subtle text-primary-hover dark:text-primary border-primary/30 font-semibold'
                 : 'bg-muted/50 border-border text-muted-foreground hover:bg-muted hover:text-foreground'
             }`}
           >
@@ -256,7 +265,9 @@ export function FindingsTab({
         ) : findings.length === 0 ? (
           <div className="p-12 text-center space-y-3">
             <CheckCircle2 className="size-10 text-emerald-500 mx-auto" />
-            <h3 className="text-base font-semibold text-foreground">No integrity findings match the filter</h3>
+            <h3 className="text-base font-semibold text-foreground">
+              No integrity findings match the filter
+            </h3>
             <p className="text-xs text-muted-foreground max-w-md mx-auto">
               {hasActiveFilters
                 ? 'Try adjusting your search criteria, severity, or module filter.'
@@ -270,14 +281,16 @@ export function FindingsTab({
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <Table>
+            <Table density="compact" stickyHeader>
               <TableHeader>
                 <TableRow className="bg-muted/40 hover:bg-muted/40">
                   <TableHead className="w-24 text-xs font-semibold">Severity</TableHead>
                   <TableHead className="text-xs font-semibold">Finding / Summary</TableHead>
                   <TableHead className="w-28 text-xs font-semibold">Module</TableHead>
                   <TableHead className="text-xs font-semibold">Affected Entity</TableHead>
-                  <TableHead className="w-24 text-xs font-semibold text-center">Occurrences</TableHead>
+                  <TableHead className="w-24 text-xs font-semibold text-center">
+                    Occurrences
+                  </TableHead>
                   <TableHead className="w-28 text-xs font-semibold">Status</TableHead>
                   <TableHead className="w-32 text-xs font-semibold">Recovery</TableHead>
                   <TableHead className="w-24 text-xs font-semibold text-right">Action</TableHead>
@@ -301,9 +314,7 @@ export function FindingsTab({
                           <p className="text-sm font-semibold text-foreground line-clamp-1">
                             {finding.summary}
                           </p>
-                          <p className="text-xs text-muted-foreground font-mono">
-                            {finding.code}
-                          </p>
+                          <p className="text-xs text-muted-foreground font-mono">{finding.code}</p>
                         </div>
                       </TableCell>
                       <TableCell>
@@ -328,7 +339,9 @@ export function FindingsTab({
                             </span>
                           )
                         ) : (
-                          <span className="text-xs text-muted-foreground italic">None specified</span>
+                          <span className="text-xs text-muted-foreground italic">
+                            None specified
+                          </span>
                         )}
                       </TableCell>
                       <TableCell className="text-center font-mono text-xs tabular-nums">
@@ -375,8 +388,10 @@ export function FindingsTab({
         {totalPages > 1 && (
           <div className="flex flex-col sm:flex-row items-center justify-between gap-3 p-4 border-t border-border bg-card">
             <p className="text-xs text-muted-foreground">
-              Showing page <span className="font-mono font-medium text-foreground">{currentPage}</span> of{' '}
-              <span className="font-mono font-medium text-foreground">{totalPages}</span> ({totalItems} total findings)
+              Showing page{' '}
+              <span className="font-mono font-medium text-foreground">{currentPage}</span> of{' '}
+              <span className="font-mono font-medium text-foreground">{totalPages}</span> (
+              {totalItems} total findings)
             </p>
             <div className="flex items-center gap-2">
               <Button

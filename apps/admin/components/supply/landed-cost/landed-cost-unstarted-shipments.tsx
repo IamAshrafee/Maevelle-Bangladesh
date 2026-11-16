@@ -93,7 +93,7 @@ export function LandedCostUnstartedShipments({
       </div>
 
       <div className="hidden overflow-x-auto rounded-xl border bg-card shadow-2xs md:block">
-        <Table>
+        <Table density="compact" stickyHeader>
           <TableHeader>
             <TableRow className="bg-muted/40 text-xs">
               <TableHead className="font-semibold">Shipment</TableHead>

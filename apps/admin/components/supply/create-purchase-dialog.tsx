@@ -1,7 +1,7 @@
 'use client';
 
-import { useMemo, useRef, useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { useMemo, useRef, useState, useEffect, useCallback } from 'react';
+import { usePathname, useRouter } from 'next/navigation';
 import {
   AlertCircle,
   Check,
@@ -26,16 +26,17 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import {
-  Dialog,
-  DialogClose,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
-import { SupplyTaskDialogContent } from '@/components/supply/supply-task-dialog-content';
+  Sheet,
+  SheetClose,
+  SheetContent,
+  SheetDescription,
+  SheetFooter,
+  SheetHeader,
+  SheetTitle,
+} from '@/components/ui/sheet';
 import { Field, FieldLabel } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
+import { useFormDialogLifecycle } from '@/hooks/use-form-dialog-lifecycle';
 import {
   Table,
   TableBody,
@@ -67,21 +68,6 @@ export interface CreatePurchaseDialogProps {
   readonly onSuccess?: ((created: PurchaseDto) => void) | undefined;
 }
 
-function removeUrlParams(...keys: string[]) {
-  if (typeof window === 'undefined') return;
-  const url = new URL(window.location.href);
-  let changed = false;
-  for (const key of keys) {
-    if (url.searchParams.has(key)) {
-      url.searchParams.delete(key);
-      changed = true;
-    }
-  }
-  if (changed) {
-    window.history.replaceState({}, '', url.toString());
-  }
-}
-
 export function CreatePurchaseDialog({
   open,
   onOpenChange,
@@ -92,7 +78,27 @@ export function CreatePurchaseDialog({
   onSuccess,
 }: CreatePurchaseDialogProps) {
   const router = useRouter();
+  const pathname = usePathname() ?? '/';
   const replenishmentPrefillApplied = useRef(false);
+
+  const removeUrlParams = useCallback(
+    (...keys: string[]) => {
+      if (typeof window === 'undefined') return;
+      const params = new URLSearchParams(window.location.search);
+      let changed = false;
+      for (const key of keys) {
+        if (params.has(key)) {
+          params.delete(key);
+          changed = true;
+        }
+      }
+      if (changed) {
+        const qs = params.toString();
+        router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
+      }
+    },
+    [pathname, router],
+  );
 
   const [loadedSuppliers, setLoadedSuppliers] = useState<readonly SupplierDto[]>(
     propSuppliers ?? [],
@@ -408,7 +414,7 @@ export function CreatePurchaseDialog({
       });
 
       removeUrlParams('create', 'supplier');
-      handleClose(false);
+      handleOpenChange(false);
 
       if (openAfterCreate && result?.data?.id) {
         router.push(`/purchases/${result.data.id}`);
@@ -422,27 +428,43 @@ export function CreatePurchaseDialog({
     }
   }
 
+  const isDirty =
+    lines.length > 0 ||
+    supplierReference.trim() !== '' ||
+    notes.trim() !== '' ||
+    expectedDate !== '' ||
+    destinationLocationId !== '';
+
+  const { handleOpenChange, discardConfirmDialog } = useFormDialogLifecycle({
+    open,
+    onOpenChange: handleClose,
+    isDirty,
+    isSubmitting: saving,
+    title: 'Discard draft purchase order?',
+  });
+
   return (
-    <Dialog open={open} onOpenChange={handleClose}>
-      <SupplyTaskDialogContent className="flex max-h-[92vh] w-full flex-col overflow-hidden p-0 sm:max-w-3xl">
-        <DialogHeader className="border-b px-6 pt-6 pb-4">
+    <>
+      <Sheet open={open} onOpenChange={handleOpenChange}>
+        <SheetContent side="right" className="gap-0 p-0 sm:max-w-3xl">
+        <SheetHeader className="shrink-0 border-b border-border px-5 py-4 pr-11 text-left">
           <div className="flex items-center gap-2">
             <span className="grid size-8 place-items-center rounded-lg bg-primary/10 text-primary">
               <Package className="size-4" />
             </span>
             <div>
-              <DialogTitle className="text-lg font-semibold">Create purchase order</DialogTitle>
-              <DialogDescription className="text-xs">
+              <SheetTitle className="text-lg font-semibold">Create purchase order</SheetTitle>
+              <SheetDescription className="text-xs">
                 Draft a supplier order, set expected dates, and optionally include initial product
                 lines.
-              </DialogDescription>
+              </SheetDescription>
             </div>
           </div>
-        </DialogHeader>
+        </SheetHeader>
 
         <form onSubmit={handleCreate} className="flex min-h-0 flex-1 flex-col">
           {/* Scrollable Form Body */}
-          <div className="flex-1 space-y-6 overflow-y-auto px-6 py-4">
+          <div className="min-h-0 flex-1 space-y-6 overflow-y-auto px-5 py-4">
             {error && (
               <div
                 role="alert"
@@ -831,7 +853,7 @@ export function CreatePurchaseDialog({
           </div>
 
           {/* Sticky Footer with Workflow Actions */}
-          <DialogFooter className="mt-0 border-t bg-muted/40 px-6 py-3 sm:items-center sm:justify-between">
+          <SheetFooter className="mt-0 shrink-0 border-t bg-muted/40 px-5 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom,0px))] sm:flex-row sm:items-center sm:justify-between">
             <label className="flex cursor-pointer items-center gap-2 text-xs font-medium text-muted-foreground hover:text-foreground">
               <Checkbox
                 checked={openAfterCreate}
@@ -842,13 +864,13 @@ export function CreatePurchaseDialog({
             </label>
 
             <div className="flex items-center gap-2">
-              <DialogClose
+              <SheetClose
                 render={
                   <Button
                     type="button"
                     variant="outline"
                     disabled={saving}
-                    onClick={() => handleClose(false)}
+                    onClick={() => handleOpenChange(false)}
                   >
                     Cancel
                   </Button>
@@ -869,9 +891,11 @@ export function CreatePurchaseDialog({
                     : 'Create draft purchase'}
               </Button>
             </div>
-          </DialogFooter>
+          </SheetFooter>
         </form>
-      </SupplyTaskDialogContent>
-    </Dialog>
+      </SheetContent>
+    </Sheet>
+    {discardConfirmDialog}
+  </>
   );
 }

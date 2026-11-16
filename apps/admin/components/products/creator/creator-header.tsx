@@ -12,6 +12,7 @@ interface CreatorHeaderProps {
   readonly productId?: string | undefined;
   readonly productTitle?: string | undefined;
   readonly status?: string | undefined;
+  readonly sticky?: boolean | undefined;
   readonly saving: boolean;
   readonly isDirty: boolean;
   readonly onSaveDraft: () => void;
@@ -23,6 +24,7 @@ export function CreatorHeader({
   productId,
   productTitle,
   status = 'DRAFT',
+  sticky = true,
   saving,
   isDirty,
   onSaveDraft,
@@ -31,14 +33,22 @@ export function CreatorHeader({
   const backHref = isEditMode && productId ? `/products/${productId}` : '/products';
 
   return (
-    <header className="sticky top-0 z-20 flex flex-col gap-3 border-b border-border bg-background/85 px-4 py-3 backdrop-blur-md sm:flex-row sm:items-center sm:justify-between sm:px-8">
+    <header
+      data-shell-chrome={sticky ? 'true' : undefined}
+      className={
+        sticky
+          ? 'sticky top-[var(--shell-topbar-h,3.5rem)] z-20 flex flex-col gap-3 border-b border-border bg-background/90 px-4 py-3 backdrop-blur-md md:px-6 lg:px-8 sm:flex-row sm:items-center sm:justify-between print:hidden'
+          : 'flex flex-col gap-3 border-b border-border px-4 py-3 md:px-6 lg:px-8 sm:flex-row sm:items-center sm:justify-between'
+      }
+    >
       {/* Left: Navigation, Title & Status */}
       <div className="flex items-center gap-3">
         <Button
           variant="ghost"
           size="sm"
-          className="size-8 p-0 text-muted-foreground hover:text-foreground"
+          className="size-9 p-0 text-muted-foreground hover:text-foreground"
           render={<Link href={backHref} aria-label="Back" />}
+          nativeButton={false}
         >
           <ArrowLeft className="size-4" />
         </Button>
@@ -49,10 +59,7 @@ export function CreatorHeader({
               { label: 'Catalog', href: '/products' },
               { label: 'Products', href: '/products' },
               ...(isEditMode && productTitle
-                ? [
-                    { label: productTitle, href: `/products/${productId}` },
-                    { label: 'Edit' },
-                  ]
+                ? [{ label: productTitle, href: `/products/${productId}` }, { label: 'Edit' }]
                 : [{ label: 'New Product' }]),
             ]}
             className="text-[11px] text-muted-foreground"
@@ -92,6 +99,7 @@ export function CreatorHeader({
           variant="outline"
           size="sm"
           render={<Link href={backHref} />}
+          nativeButton={false}
           disabled={saving}
           className="text-xs"
         >
@@ -114,12 +122,7 @@ export function CreatorHeader({
         </Button>
 
         {status !== 'PUBLISHED' && (
-          <Button
-            size="sm"
-            onClick={onPublish}
-            disabled={saving}
-            className="gap-1.5 text-xs"
-          >
+          <Button size="sm" onClick={onPublish} disabled={saving} className="gap-1.5 text-xs">
             {saving ? (
               <LoaderCircle className="size-3.5 animate-spin" />
             ) : (

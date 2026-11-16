@@ -5,13 +5,13 @@ import { Link2, Loader2, PlusCircle, ReceiptText, Truck } from 'lucide-react';
 import type { ApiEnvelope, FinanceExpenseDto, PaginatedResultDto } from '@maevelle/contracts';
 import { Button } from '@/components/ui/button';
 import {
-  Dialog,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
-import { SupplyTaskDialogContent } from '@/components/supply/supply-task-dialog-content';
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetFooter,
+  SheetHeader,
+  SheetTitle,
+} from '@/components/ui/sheet';
 import { Input } from '@/components/ui/input';
 import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select';
 import { Textarea } from '@/components/ui/textarea';
@@ -129,17 +129,20 @@ export function AddCostComponentDialog({
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <SupplyTaskDialogContent className="max-h-[92vh] max-w-xl overflow-y-auto sm:max-w-xl">
-        <DialogHeader>
-          <DialogTitle className="text-lg font-bold tracking-tight">
+    <Sheet open={open} onOpenChange={onOpenChange}>
+      <SheetContent
+        side="right"
+        className="flex w-full flex-col gap-5 overflow-y-auto p-6 sm:max-w-xl"
+      >
+        <SheetHeader className="border-b border-border/60 p-0 pb-4">
+          <SheetTitle className="text-lg font-bold tracking-tight">
             Add Landed Cost Component
-          </DialogTitle>
-          <DialogDescription className="text-xs text-muted-foreground">
+          </SheetTitle>
+          <SheetDescription className="text-xs text-muted-foreground">
             Record a freight, duty, or handling expense. The server will apportion this cost across
             the received items of {shipment.shipmentNumber}.
-          </DialogDescription>
-        </DialogHeader>
+          </SheetDescription>
+        </SheetHeader>
 
         <form onSubmit={handleSubmit} className="space-y-4">
           {shipment.reportedFreightAmount ? (
@@ -389,7 +392,7 @@ export function AddCostComponentDialog({
             />
           </SupplyField>
 
-          <DialogFooter className="gap-2 sm:justify-end">
+          <SheetFooter className="gap-2 border-t border-border/60 p-0 pt-4 sm:flex-row sm:justify-end">
             <Button
               type="button"
               variant="outline"
@@ -410,9 +413,9 @@ export function AddCostComponentDialog({
               )}
               <span>{saving ? 'Adding component...' : 'Add Cost Component'}</span>
             </Button>
-          </DialogFooter>
+          </SheetFooter>
         </form>
-      </SupplyTaskDialogContent>
-    </Dialog>
+      </SheetContent>
+    </Sheet>
   );
 }

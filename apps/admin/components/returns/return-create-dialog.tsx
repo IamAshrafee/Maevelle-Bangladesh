@@ -5,16 +5,18 @@ import React, { useCallback, useEffect, useState } from 'react';
 
 import { Button } from '@/components/ui/button';
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from '@/components/ui/dialog';
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetFooter,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+} from '@/components/ui/sheet';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select';
+import { useFormDialogLifecycle } from '@/hooks/use-form-dialog-lifecycle';
 
 import { fetchApiData } from '@/lib/api';
 import { formatMoney } from '@/lib/format/numbers';
@@ -33,10 +35,7 @@ interface ReturnCreateDialogProps {
   onSuccess: (newReturnId?: string) => Promise<void> | void;
 }
 
-export function ReturnCreateDialog({
-  initialOrderId,
-  onSuccess,
-}: ReturnCreateDialogProps) {
+export function ReturnCreateDialog({ initialOrderId, onSuccess }: ReturnCreateDialogProps) {
   const [open, setOpen] = useState(false);
   const [orders, setOrders] = useState<readonly OrderSummary[]>([]);
   const [ordersLoading, setOrdersLoading] = useState(false);
@@ -50,10 +49,26 @@ export function ReturnCreateDialog({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
 
+  const isDirty =
+    reasonText.trim().length > 0 ||
+    Boolean(selectedOrderId && selectedOrderId !== initialOrderId) ||
+    Object.values(lineQuantities).some((q) => q > 0);
+
+  const lifecycle = useFormDialogLifecycle({
+    open,
+    onOpenChange: setOpen,
+    isDirty,
+    isSubmitting: busy,
+    title: 'Discard return draft?',
+    description: 'You have entered return items and notes. Are you sure you want to dismiss?',
+  });
+
   const loadOrders = useCallback(async () => {
     setOrdersLoading(true);
     try {
-      const res = await fetchApiData<{ items: readonly OrderSummary[] }>('/admin/orders?pageSize=50');
+      const res = await fetchApiData<{ items: readonly OrderSummary[] }>(
+        '/admin/orders?pageSize=50',
+      );
       setOrders(res?.items ?? []);
     } catch {
       setOrders([]);
@@ -157,176 +172,183 @@ export function ReturnCreateDialog({
   };
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger render={<Button className="gap-1.5" />}>
+    <Sheet open={open} onOpenChange={lifecycle.handleOpenChange}>
+      <SheetTrigger render={<Button className="gap-1.5" />}>
         <RotateCcw className="size-4" /> New Customer Return
-      </DialogTrigger>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2 text-lg">
+      </SheetTrigger>
+      <SheetContent side="right" className="gap-0 p-0 sm:max-w-2xl">
+        <SheetHeader className="shrink-0 border-b border-border px-5 py-4 pr-11 text-left">
+          <SheetTitle className="flex items-center gap-2 text-lg">
             <RotateCcw className="size-5 text-primary" /> Create Customer Return Request
-          </DialogTitle>
-          <DialogDescription>
-            Register a return request from a customer. Authorization and reverse shipment are managed afterward.
-          </DialogDescription>
-        </DialogHeader>
+          </SheetTitle>
+          <SheetDescription>
+            Register a return request from a customer. Authorization and reverse shipment are
+            managed afterward.
+          </SheetDescription>
+        </SheetHeader>
 
-        {error ? (
-          <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-xs text-destructive flex items-start gap-2">
-            <AlertCircle className="size-4 shrink-0 mt-0.5" />
-            <p>{error}</p>
-          </div>
-        ) : null}
+        <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col text-xs">
+          <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-5 py-4">
+            {error ? (
+              <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-xs text-destructive flex items-start gap-2">
+                <AlertCircle className="size-4 shrink-0 mt-0.5" />
+                <p>{error}</p>
+              </div>
+            ) : null}
+            {/* Step 1: Select Order */}
+            {!initialOrderId ? (
+              <div className="space-y-2">
+                <Label className="text-xs font-medium">Select Order</Label>
+                <div className="relative">
+                  <Search className="absolute left-2.5 top-2.5 size-3.5 text-muted-foreground" />
+                  <Input
+                    placeholder="Search order # or customer name…"
+                    value={orderSearch}
+                    onChange={(e) => setOrderSearch(e.target.value)}
+                    className="pl-8 text-xs h-8"
+                  />
+                </div>
 
-        <form onSubmit={handleSubmit} className="space-y-4 text-xs">
-          {/* Step 1: Select Order */}
-          {!initialOrderId ? (
-            <div className="space-y-2">
-              <Label className="text-xs font-medium">Select Order</Label>
-              <div className="relative">
-                <Search className="absolute left-2.5 top-2.5 size-3.5 text-muted-foreground" />
+                {ordersLoading ? (
+                  <div className="flex items-center justify-center p-4 text-muted-foreground">
+                    <Loader2 className="size-4 animate-spin mr-2" /> Loading orders…
+                  </div>
+                ) : filteredOrders.length > 0 ? (
+                  <div className="max-h-36 overflow-y-auto rounded-lg border divide-y">
+                    {filteredOrders.map((ord) => (
+                      <button
+                        key={ord.id}
+                        type="button"
+                        onClick={() => handleOrderSelect(ord.id)}
+                        className={`w-full text-left p-2.5 flex items-center justify-between text-xs transition-colors hover:bg-muted ${
+                          selectedOrderId === ord.id
+                            ? 'bg-primary/10 font-semibold text-primary'
+                            : ''
+                        }`}
+                      >
+                        <div>
+                          <span>{ord.orderNumber}</span> ·{' '}
+                          <span className="text-muted-foreground">{ord.customerName}</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="font-mono text-[11px] tabular-nums text-muted-foreground">
+                            {formatMoney(ord.totalAmount)}
+                          </span>
+                          <ChevronRight className="size-3 text-muted-foreground" />
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-xs text-muted-foreground italic py-1">
+                    No orders found matching your search.
+                  </p>
+                )}
+              </div>
+            ) : null}
+
+            {/* Reason Configuration */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label htmlFor="reasonSelect" className="text-xs font-medium">
+                  Return Reason
+                </Label>
+                <NativeSelect
+                  id="reasonSelect"
+                  value={reasonCode}
+                  onChange={(e) => setReasonCode(e.target.value)}
+                >
+                  <NativeSelectOption value="CUSTOMER_CHANGED_MIND">Customer Changed Mind</NativeSelectOption>
+                  <NativeSelectOption value="DAMAGED_ON_ARRIVAL">Damaged on Arrival</NativeSelectOption>
+                  <NativeSelectOption value="WRONG_ITEM_SENT">Wrong Item Sent</NativeSelectOption>
+                  <NativeSelectOption value="WRONG_SIZE">Wrong Size / Fit Issue</NativeSelectOption>
+                  <NativeSelectOption value="DEFECTIVE_PRODUCT">Defective / Quality Problem</NativeSelectOption>
+                  <NativeSelectOption value="OTHER">Other Reason</NativeSelectOption>
+                </NativeSelect>
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="reasonNotes" className="text-xs font-medium">
+                  Customer Context / Notes
+                </Label>
                 <Input
-                  placeholder="Search order # or customer name…"
-                  value={orderSearch}
-                  onChange={(e) => setOrderSearch(e.target.value)}
-                  className="pl-8 text-xs h-8"
+                  id="reasonNotes"
+                  placeholder="e.g. Buyer requested size exchange for XL"
+                  value={reasonText}
+                  onChange={(e) => setReasonText(e.target.value)}
                 />
               </div>
+            </div>
 
-              {ordersLoading ? (
-                <div className="flex items-center justify-center p-4 text-muted-foreground">
-                  <Loader2 className="size-4 animate-spin mr-2" /> Loading orders…
-                </div>
-              ) : filteredOrders.length > 0 ? (
-                <div className="max-h-36 overflow-y-auto rounded-lg border divide-y">
-                  {filteredOrders.map((ord) => (
-                    <button
-                      key={ord.id}
-                      type="button"
-                      onClick={() => handleOrderSelect(ord.id)}
-                      className={`w-full text-left p-2.5 flex items-center justify-between text-xs transition-colors hover:bg-muted ${
-                        selectedOrderId === ord.id ? 'bg-primary/10 font-semibold text-primary' : ''
-                      }`}
-                    >
-                      <div>
-                        <span>{ord.orderNumber}</span> · <span className="text-muted-foreground">{ord.customerName}</span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <span className="font-mono text-[11px] tabular-nums text-muted-foreground">
-                          {formatMoney(ord.totalAmount)}
-                        </span>
-                        <ChevronRight className="size-3 text-muted-foreground" />
-                      </div>
-                    </button>
-                  ))}
-                </div>
-              ) : (
-                <p className="text-xs text-muted-foreground italic py-1">No orders found matching your search.</p>
-              )}
-            </div>
-          ) : null}
+            {/* Order Lines Selection */}
+            {detailLoading ? (
+              <div className="flex items-center justify-center p-8 text-muted-foreground">
+                <Loader2 className="size-4 animate-spin mr-2" /> Loading order items…
+              </div>
+            ) : orderDetail ? (
+              <div className="space-y-2 pt-2 border-t">
+                <h4 className="font-semibold text-foreground text-xs">
+                  Select Items to Return for {orderDetail.orderNumber}
+                </h4>
 
-          {/* Reason Configuration */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div className="space-y-1.5">
-              <Label htmlFor="reasonSelect" className="text-xs font-medium">Return Reason</Label>
-              <select
-                id="reasonSelect"
-                className="w-full rounded-md border bg-background px-3 py-2 text-xs focus:ring-2 focus:ring-primary"
-                value={reasonCode}
-                onChange={(e) => setReasonCode(e.target.value)}
-              >
-                <option value="CUSTOMER_CHANGED_MIND">Customer Changed Mind</option>
-                <option value="DAMAGED_ON_ARRIVAL">Damaged on Arrival</option>
-                <option value="WRONG_ITEM_SENT">Wrong Item Sent</option>
-                <option value="WRONG_SIZE">Wrong Size / Fit Issue</option>
-                <option value="DEFECTIVE_PRODUCT">Defective / Quality Problem</option>
-                <option value="OTHER">Other Reason</option>
-              </select>
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="reasonNotes" className="text-xs font-medium">Customer Context / Notes</Label>
-              <Input
-                id="reasonNotes"
-                placeholder="e.g. Buyer requested size exchange for XL"
-                value={reasonText}
-                onChange={(e) => setReasonText(e.target.value)}
-                className="text-xs h-8"
-              />
-            </div>
+                <div className="rounded-lg border overflow-hidden">
+                  <table className="w-full text-xs">
+                    <thead className="bg-muted/50 border-b">
+                      <tr>
+                        <th className="text-left font-medium p-2.5">Item / SKU</th>
+                        <th className="text-center font-medium p-2.5">Purchased</th>
+                        <th className="text-right font-medium p-2.5 w-28">Return Qty</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y">
+                      {orderDetail.lines.map((line) => {
+                        const maxQty = Number(line.quantity);
+                        const currentVal = lineQuantities[line.id] ?? 0;
+
+                        return (
+                          <tr key={line.id} className="hover:bg-muted/20">
+                            <td className="p-2.5">
+                              <p className="font-medium text-foreground">{line.productTitle}</p>
+                              <p className="text-[10px] font-mono text-muted-foreground">
+                                {line.sku}
+                              </p>
+                            </td>
+                            <td className="p-2.5 text-center font-semibold text-muted-foreground">
+                              {maxQty}
+                            </td>
+                            <td className="p-2.5 text-right">
+                              <Input
+                                type="number"
+                                min="0"
+                                max={maxQty}
+                                step="1"
+                                value={currentVal}
+                                onChange={(e) => {
+                                  const val = Math.max(0, Math.min(maxQty, Number(e.target.value)));
+                                  setLineQuantities((prev) => ({ ...prev, [line.id]: val }));
+                                }}
+                                className="w-20 text-right text-xs h-7 ml-auto"
+                              />
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            ) : null}
           </div>
 
-          {/* Order Lines Selection */}
-          {detailLoading ? (
-            <div className="flex items-center justify-center p-8 text-muted-foreground">
-              <Loader2 className="size-4 animate-spin mr-2" /> Loading order items…
-            </div>
-          ) : orderDetail ? (
-            <div className="space-y-2 pt-2 border-t">
-              <h4 className="font-semibold text-foreground text-xs">
-                Select Items to Return for {orderDetail.orderNumber}
-              </h4>
-
-              <div className="rounded-lg border overflow-hidden">
-                <table className="w-full text-xs">
-                  <thead className="bg-muted/50 border-b">
-                    <tr>
-                      <th className="text-left font-medium p-2.5">Item / SKU</th>
-                      <th className="text-center font-medium p-2.5">Purchased</th>
-                      <th className="text-right font-medium p-2.5 w-28">Return Qty</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y">
-                    {orderDetail.lines.map((line) => {
-                      const maxQty = Number(line.quantity);
-                      const currentVal = lineQuantities[line.id] ?? 0;
-
-                      return (
-                        <tr key={line.id} className="hover:bg-muted/20">
-                          <td className="p-2.5">
-                            <p className="font-medium text-foreground">{line.productTitle}</p>
-                            <p className="text-[10px] font-mono text-muted-foreground">{line.sku}</p>
-                          </td>
-                          <td className="p-2.5 text-center font-semibold text-muted-foreground">
-                            {maxQty}
-                          </td>
-                          <td className="p-2.5 text-right">
-                            <Input
-                              type="number"
-                              min="0"
-                              max={maxQty}
-                              step="1"
-                              value={currentVal}
-                              onChange={(e) => {
-                                const val = Math.max(0, Math.min(maxQty, Number(e.target.value)));
-                                setLineQuantities((prev) => ({ ...prev, [line.id]: val }));
-                              }}
-                              className="w-20 text-right text-xs h-7 ml-auto"
-                            />
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          ) : null}
-
-          <DialogFooter className="pt-2 gap-2 sm:gap-0">
+          <SheetFooter className="shrink-0 flex-row items-center justify-end gap-2 border-t border-border bg-card/50 px-5 py-3">
             <Button
               type="button"
               variant="outline"
-              onClick={() => setOpen(false)}
+              onClick={() => lifecycle.handleOpenChange(false)}
               disabled={busy}
             >
               Cancel
             </Button>
-            <Button
-              type="submit"
-              disabled={busy || !orderDetail}
-              className="gap-1.5"
-            >
+            <Button type="submit" disabled={busy || !orderDetail} className="gap-1.5">
               {busy ? (
                 <>
                   <Loader2 className="size-3.5 animate-spin mr-1" /> Submitting…
@@ -335,9 +357,10 @@ export function ReturnCreateDialog({
                 'Create Return Request'
               )}
             </Button>
-          </DialogFooter>
+          </SheetFooter>
         </form>
-      </DialogContent>
-    </Dialog>
+      </SheetContent>
+      {lifecycle.discardConfirmDialog}
+    </Sheet>
   );
 }

@@ -31,7 +31,12 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
-import { formatSupplyDate, formatSupplyMoney, formatSupplyNumber } from '@/lib/supply/api';
+import {
+  formatSupplyDate,
+  formatSupplyMoney,
+  formatSupplyNumber,
+  formatSupplyUnitCost,
+} from '@/lib/supply/api';
 import { percentage, shipmentQuantities } from '@/lib/supply/status';
 import { CreateRevisionDialog } from './dialogs/create-revision-dialog';
 import { DiscardRevisionDialog } from './dialogs/discard-revision-dialog';
@@ -691,15 +696,15 @@ export function ShipmentDetailCostingSection({
                     </TableCell>
 
                     <TableCell className="text-right tabular-nums text-muted-foreground">
-                      {formatSupplyMoney(String(basePrice), result.currency_code)}
+                      {formatSupplyUnitCost(String(basePrice), result.currency_code)}
                     </TableCell>
 
                     <TableCell className="text-right font-medium text-warning tabular-nums">
-                      +{formatSupplyMoney(String(unitAdded), result.currency_code)}
+                      +{formatSupplyUnitCost(String(unitAdded), result.currency_code)}
                     </TableCell>
 
                     <TableCell className="text-right tabular-nums font-bold text-foreground">
-                      {formatSupplyMoney(result.unit_acquisition_cost, result.currency_code)}
+                      {formatSupplyUnitCost(result.unit_acquisition_cost, result.currency_code)}
                     </TableCell>
 
                     <TableCell className="text-right tabular-nums font-semibold text-foreground">

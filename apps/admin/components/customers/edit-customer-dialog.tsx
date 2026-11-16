@@ -1,22 +1,24 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { CircleAlert, Loader2 } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select';
 import { fetchApiData } from '@/lib/api';
+import { useFormDialogLifecycle } from '@/hooks/use-form-dialog-lifecycle';
 import type { CustomerDetailDto } from '@maevelle/contracts';
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from '@/components/ui/dialog';
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetFooter,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+} from '@/components/ui/sheet';
 
 export function EditCustomerDialog({
   customer,
@@ -28,6 +30,32 @@ export function EditCustomerDialog({
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
+  const [displayName, setDisplayName] = useState(customer.displayName);
+  const [status, setStatus] = useState<'ACTIVE' | 'INACTIVE' | 'BLOCKED'>(
+    customer.status === 'INACTIVE' || customer.status === 'BLOCKED' ? customer.status : 'ACTIVE',
+  );
+
+  useEffect(() => {
+    if (open) {
+      setDisplayName(customer.displayName);
+      setStatus(
+        customer.status === 'INACTIVE' || customer.status === 'BLOCKED'
+          ? customer.status
+          : 'ACTIVE',
+      );
+      setMessage('');
+    }
+  }, [open, customer]);
+
+  const isDirty = displayName !== customer.displayName || status !== customer.status;
+
+  const { handleOpenChange, discardConfirmDialog } = useFormDialogLifecycle({
+    open,
+    onOpenChange: setOpen,
+    isDirty,
+    isSubmitting: busy,
+    title: 'Discard customer changes?',
+  });
 
   async function submit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -35,11 +63,10 @@ export function EditCustomerDialog({
     setBusy(true);
     setMessage('');
 
-    const formData = new FormData(e.currentTarget);
     const payload = {
       expectedVersion: customer.version,
-      displayName: (formData.get('displayName') as string).trim(),
-      status: formData.get('status') as 'ACTIVE' | 'INACTIVE' | 'BLOCKED',
+      displayName: displayName.trim(),
+      status,
     };
 
     try {
@@ -47,7 +74,7 @@ export function EditCustomerDialog({
         method: 'PUT',
         body: JSON.stringify(payload),
       });
-      setOpen(false);
+      handleOpenChange(false);
       onUpdated?.();
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Customer could not be updated.');
@@ -57,61 +84,71 @@ export function EditCustomerDialog({
   }
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger render={<Button variant="secondary" />}>Edit Details</DialogTrigger>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>Edit Customer</DialogTitle>
-          <DialogDescription>Update the customer's display name or status.</DialogDescription>
-        </DialogHeader>
+    <>
+      <Sheet open={open} onOpenChange={handleOpenChange}>
+        <SheetTrigger render={<Button variant="secondary" />}>Edit Details</SheetTrigger>
+        <SheetContent side="right" className="gap-0 p-0 sm:max-w-lg">
+          <SheetHeader className="shrink-0 border-b border-border px-5 py-4 pr-11 text-left">
+            <SheetTitle>Edit Customer</SheetTitle>
+            <SheetDescription>Update the customer's display name or status.</SheetDescription>
+          </SheetHeader>
 
-        {message && (
-          <div className="flex items-start gap-2 rounded-lg border border-red-300/70 bg-red-50 px-3 py-2 text-sm text-red-950">
-            <CircleAlert className="mt-0.5 size-4 shrink-0" />
-            <p className="leading-tight">{message}</p>
-          </div>
-        )}
+          <form onSubmit={submit} className="flex min-h-0 flex-1 flex-col">
+            <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-5 py-4">
+              {message && (
+                <div className="flex items-start gap-2 rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+                  <CircleAlert className="mt-0.5 size-4 shrink-0" />
+                  <p className="leading-tight">{message}</p>
+                </div>
+              )}
+              <div className="space-y-2">
+                <Label htmlFor="displayName">Display Name</Label>
+                <Input
+                  id="displayName"
+                  name="displayName"
+                  value={displayName}
+                  onChange={(e) => setDisplayName(e.target.value)}
+                  required
+                />
+              </div>
 
-        <form onSubmit={submit} className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="displayName">Display Name</Label>
-            <Input
-              id="displayName"
-              name="displayName"
-              defaultValue={customer.displayName}
-              required
-            />
-          </div>
+              <div className="space-y-2">
+                <Label htmlFor="status">Account Status</Label>
+                <NativeSelect
+                  id="status"
+                  name="status"
+                  value={status}
+                  onChange={(e) => setStatus(e.target.value as 'ACTIVE' | 'INACTIVE' | 'BLOCKED')}
+                  required
+                >
+                  <NativeSelectOption value="ACTIVE">Active</NativeSelectOption>
+                  <NativeSelectOption value="INACTIVE">Inactive</NativeSelectOption>
+                  <NativeSelectOption value="BLOCKED">Blocked</NativeSelectOption>
+                </NativeSelect>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Blocked customers cannot place new orders or have manual orders created for them.
+                </p>
+              </div>
+            </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="status">Account Status</Label>
-            <select
-              id="status"
-              name="status"
-              defaultValue={customer.status}
-              className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-              required
-            >
-              <option value="ACTIVE">Active</option>
-              <option value="INACTIVE">Inactive</option>
-              <option value="BLOCKED">Blocked</option>
-            </select>
-            <p className="text-xs text-muted-foreground mt-1">
-              Blocked customers cannot place new orders or have manual orders created for them.
-            </p>
-          </div>
-
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => setOpen(false)} disabled={busy}>
-              Cancel
-            </Button>
-            <Button type="submit" disabled={busy}>
-              {busy && <Loader2 className="mr-2 size-4 animate-spin" />}
-              Save Changes
-            </Button>
-          </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
+            <SheetFooter className="shrink-0 flex-row items-center justify-end gap-2 border-t border-border bg-card/50 px-5 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom,0px))]">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => handleOpenChange(false)}
+                disabled={busy}
+              >
+                Cancel
+              </Button>
+              <Button type="submit" disabled={busy}>
+                {busy && <Loader2 className="mr-2 size-4 animate-spin" />}
+                Save Changes
+              </Button>
+            </SheetFooter>
+          </form>
+        </SheetContent>
+      </Sheet>
+      {discardConfirmDialog}
+    </>
   );
 }

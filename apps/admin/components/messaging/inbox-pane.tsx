@@ -156,7 +156,7 @@ export function InboxPane() {
           >
             <Filter className="size-4" />
             {activeFilterCount ? (
-              <span className="absolute -right-1 -top-1 flex size-4 items-center justify-center rounded-full bg-primary text-[10px] text-primary-foreground">
+              <span className="absolute -right-1 -top-1 flex size-4 items-center justify-center rounded-full border border-primary/40 bg-primary-subtle text-[10px] font-bold text-primary-hover dark:text-primary font-mono">
                 {activeFilterCount}
               </span>
             ) : null}

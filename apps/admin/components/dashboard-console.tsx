@@ -19,6 +19,7 @@ import { useEffect, useState } from 'react';
 import type { ApiEnvelope, PaginatedEnvelope } from '@maevelle/contracts';
 
 import { StatusBadge } from '@/components/status-badge';
+import { AdminPage, PageHeader } from '@/components/ui/page-shell';
 import { Stats, StatsCard, StatsTitle, StatsValue, StatsDescription } from '@/components/ui/stats';
 import { Button } from '@/components/ui/button';
 import {
@@ -110,29 +111,31 @@ export function DashboardConsole() {
   const orderCount = orders.length;
 
   return (
-    <main className="flex flex-col gap-6 p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto w-full min-w-0">
-      {/* Page Header */}
-      <header className="flex flex-col gap-4 border-b border-border/70 pb-5 lg:flex-row lg:items-end lg:justify-between">
-        <div className="min-w-0 space-y-1">
-          <p className="text-xs font-semibold uppercase tracking-wider text-primary">Overview</p>
-          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-foreground">
-            Good morning. Here’s what needs attention.
-          </h1>
-          <p className="text-sm text-muted-foreground max-w-3xl">
-            Live operating signals across commerce, stock, delivery, money, and system health.
-          </p>
-        </div>
-        <div className="flex flex-wrap items-center gap-2.5 shrink-0">
-          <Button variant="outline" size="sm" onClick={() => void load()} disabled={state === 'loading'}>
-            <RefreshCw className={`size-3.5 mr-1.5 ${state === 'loading' ? 'animate-spin' : ''}`} />
-            Refresh
-          </Button>
-          <Button render={<Link href="/products/new" />} nativeButton={false} size="sm">
-            <Sparkles className="size-3.5 mr-1.5" />
-            Create product
-          </Button>
-        </div>
-      </header>
+    <AdminPage variant="standard">
+      <PageHeader
+        eyebrow="Overview"
+        title="Good morning. Here’s what needs attention."
+        description="Live operating signals across commerce, stock, delivery, money, and system health."
+        actions={
+          <>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => void load()}
+              disabled={state === 'loading'}
+            >
+              <RefreshCw
+                className={`size-3.5 mr-1.5 ${state === 'loading' ? 'animate-spin' : ''}`}
+              />
+              Refresh
+            </Button>
+            <Button render={<Link href="/products/new" />} nativeButton={false} size="sm">
+              <Sparkles className="size-3.5 mr-1.5" />
+              Create product
+            </Button>
+          </>
+        }
+      />
 
       {/* Operational Feedback / Message */}
       {message ? (
@@ -153,17 +156,23 @@ export function DashboardConsole() {
       <Stats aria-label="Business snapshot">
         <StatsCard>
           <StatsTitle>Net sales</StatsTitle>
-          <StatsValue className="tabular-nums">{money(primaryMetric?.netSales, primaryMetric?.currencyCode)}</StatsValue>
+          <StatsValue className="tabular-nums">
+            {money(primaryMetric?.netSales, primaryMetric?.currencyCode)}
+          </StatsValue>
           <StatsDescription>Projected authoritative Order facts</StatsDescription>
         </StatsCard>
         <StatsCard>
           <StatsTitle>Gross margin</StatsTitle>
-          <StatsValue className="tabular-nums">{money(primaryMetric?.grossMargin, primaryMetric?.currencyCode)}</StatsValue>
+          <StatsValue className="tabular-nums">
+            {money(primaryMetric?.grossMargin, primaryMetric?.currencyCode)}
+          </StatsValue>
           <StatsDescription>Where recognized cost is available</StatsDescription>
         </StatsCard>
         <StatsCard>
           <StatsTitle>Discounts</StatsTitle>
-          <StatsValue className="tabular-nums">{money(primaryMetric?.discounts, primaryMetric?.currencyCode)}</StatsValue>
+          <StatsValue className="tabular-nums">
+            {money(primaryMetric?.discounts, primaryMetric?.currencyCode)}
+          </StatsValue>
           <StatsDescription>Applied promotion value</StatsDescription>
         </StatsCard>
         <StatsCard>
@@ -179,14 +188,19 @@ export function DashboardConsole() {
         <section className="lg:col-span-2 rounded-xl border border-border bg-card p-5 text-card-foreground shadow-2xs space-y-4">
           <header className="flex items-center justify-between gap-3 border-b border-border/60 pb-3">
             <div>
-              <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Attention center</p>
-              <h2 className="text-base font-semibold tracking-tight text-foreground">Act before work becomes blocked</h2>
+              <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                Attention center
+              </p>
+              <h2 className="text-base font-semibold tracking-tight text-foreground">
+                Act before work becomes blocked
+              </h2>
             </div>
             <Link
               href="/operations"
               className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline group"
             >
-              Open operations <ArrowRight className="size-3 group-hover:translate-x-0.5 transition-transform" />
+              Open operations{' '}
+              <ArrowRight className="size-3 group-hover:translate-x-0.5 transition-transform" />
             </Link>
           </header>
 
@@ -201,7 +215,9 @@ export function DashboardConsole() {
           {state !== 'loading' && activeAttention.length === 0 ? (
             <div className="flex flex-col items-center justify-center p-8 text-center rounded-lg border border-dashed border-border bg-muted/20">
               <PackageCheck className="size-8 text-emerald-600 mb-2" />
-              <strong className="text-sm font-semibold text-foreground">No active exceptions</strong>
+              <strong className="text-sm font-semibold text-foreground">
+                No active exceptions
+              </strong>
               <p className="mt-1 text-xs text-muted-foreground max-w-sm">
                 Nothing in your accessible queues currently requires intervention.
               </p>
@@ -215,13 +231,16 @@ export function DashboardConsole() {
                 href={item.href}
                 className="flex items-center gap-3 p-3 rounded-lg border border-border/60 bg-muted/20 hover:bg-muted/50 hover:border-border transition-colors group cursor-pointer"
               >
-                <span className={`p-2 rounded-lg shrink-0 ${
-                  item.severity.toLowerCase() === 'critical' || item.severity.toLowerCase() === 'danger'
-                    ? 'bg-rose-100 text-rose-700 dark:bg-rose-950/50 dark:text-rose-400'
-                    : item.severity.toLowerCase() === 'warning'
-                      ? 'bg-amber-100 text-amber-700 dark:bg-amber-950/50 dark:text-amber-400'
-                      : 'bg-sky-100 text-sky-700 dark:bg-sky-950/50 dark:text-sky-400'
-                }`}>
+                <span
+                  className={`p-2 rounded-lg shrink-0 ${
+                    item.severity.toLowerCase() === 'critical' ||
+                    item.severity.toLowerCase() === 'danger'
+                      ? 'bg-rose-100 text-rose-700 dark:bg-rose-950/50 dark:text-rose-400'
+                      : item.severity.toLowerCase() === 'warning'
+                        ? 'bg-amber-100 text-amber-700 dark:bg-amber-950/50 dark:text-amber-400'
+                        : 'bg-sky-100 text-sky-700 dark:bg-sky-950/50 dark:text-sky-400'
+                  }`}
+                >
                   {item.domain === 'Payments' ? (
                     <Banknote className="size-4" />
                   ) : item.domain === 'Inventory' ? (
@@ -233,13 +252,17 @@ export function DashboardConsole() {
                   )}
                 </span>
                 <span className="flex-1 min-w-0">
-                  <strong className="block text-sm font-medium text-foreground truncate">{item.domain}</strong>
-                  <small className="block text-xs text-muted-foreground truncate">{item.reason}</small>
+                  <strong className="block text-sm font-medium text-foreground truncate">
+                    {item.domain}
+                  </strong>
+                  <small className="block text-xs text-muted-foreground truncate">
+                    {item.reason}
+                  </small>
                 </span>
                 <span className="px-2.5 py-0.5 rounded-full bg-card border border-border text-xs font-bold tabular-nums text-foreground shadow-2xs">
                   {item.count}
                 </span>
-                <ArrowRight className="size-4 text-muted-foreground/60 group-hover:text-foreground group-hover:translate-x-0.5 transition-all shrink-0" />
+                <ArrowRight className="size-4 text-muted-foreground/60 group-hover:text-foreground group-hover:translate-x-0.5 transition-[color,transform] duration-150 shrink-0" />
               </Link>
             ))}
           </div>
@@ -248,8 +271,12 @@ export function DashboardConsole() {
         {/* Quick Work Aside (1 col) */}
         <aside className="rounded-xl border border-border bg-card p-5 text-card-foreground shadow-2xs space-y-4">
           <header className="border-b border-border/60 pb-3">
-            <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Quick work</p>
-            <h2 className="text-base font-semibold tracking-tight text-foreground">Common operator actions</h2>
+            <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+              Quick work
+            </p>
+            <h2 className="text-base font-semibold tracking-tight text-foreground">
+              Common operator actions
+            </h2>
           </header>
           <div className="space-y-1.5">
             <Link
@@ -260,10 +287,14 @@ export function DashboardConsole() {
                 <CircleDollarSign className="size-4" />
               </div>
               <span className="flex-1 min-w-0">
-                <strong className="block text-sm font-medium text-foreground truncate">Review payments</strong>
-                <small className="block text-xs text-muted-foreground truncate">Verify or reject submitted evidence</small>
+                <strong className="block text-sm font-medium text-foreground truncate">
+                  Review payments
+                </strong>
+                <small className="block text-xs text-muted-foreground truncate">
+                  Verify or reject submitted evidence
+                </small>
               </span>
-              <ArrowRight className="size-4 text-muted-foreground/60 group-hover:text-foreground group-hover:translate-x-0.5 transition-all shrink-0" />
+              <ArrowRight className="size-4 text-muted-foreground/60 group-hover:text-foreground group-hover:translate-x-0.5 transition-[color,transform] duration-150 shrink-0" />
             </Link>
 
             <Link
@@ -274,10 +305,14 @@ export function DashboardConsole() {
                 <Boxes className="size-4" />
               </div>
               <span className="flex-1 min-w-0">
-                <strong className="block text-sm font-medium text-foreground truncate">Fulfill orders</strong>
-                <small className="block text-xs text-muted-foreground truncate">Pick, pack, and dispatch reserved stock</small>
+                <strong className="block text-sm font-medium text-foreground truncate">
+                  Fulfill orders
+                </strong>
+                <small className="block text-xs text-muted-foreground truncate">
+                  Pick, pack, and dispatch reserved stock
+                </small>
               </span>
-              <ArrowRight className="size-4 text-muted-foreground/60 group-hover:text-foreground group-hover:translate-x-0.5 transition-all shrink-0" />
+              <ArrowRight className="size-4 text-muted-foreground/60 group-hover:text-foreground group-hover:translate-x-0.5 transition-[color,transform] duration-150 shrink-0" />
             </Link>
 
             <Link
@@ -288,10 +323,14 @@ export function DashboardConsole() {
                 <PackageCheck className="size-4" />
               </div>
               <span className="flex-1 min-w-0">
-                <strong className="block text-sm font-medium text-foreground truncate">Receive inventory</strong>
-                <small className="block text-xs text-muted-foreground truncate">Post a controlled warehouse receipt</small>
+                <strong className="block text-sm font-medium text-foreground truncate">
+                  Receive inventory
+                </strong>
+                <small className="block text-xs text-muted-foreground truncate">
+                  Post a controlled warehouse receipt
+                </small>
               </span>
-              <ArrowRight className="size-4 text-muted-foreground/60 group-hover:text-foreground group-hover:translate-x-0.5 transition-all shrink-0" />
+              <ArrowRight className="size-4 text-muted-foreground/60 group-hover:text-foreground group-hover:translate-x-0.5 transition-[color,transform] duration-150 shrink-0" />
             </Link>
 
             <Link
@@ -302,10 +341,14 @@ export function DashboardConsole() {
                 <BarChart3 className="size-4" />
               </div>
               <span className="flex-1 min-w-0">
-                <strong className="block text-sm font-medium text-foreground truncate">Review performance</strong>
-                <small className="block text-xs text-muted-foreground truncate">Trace metrics to source facts</small>
+                <strong className="block text-sm font-medium text-foreground truncate">
+                  Review performance
+                </strong>
+                <small className="block text-xs text-muted-foreground truncate">
+                  Trace metrics to source facts
+                </small>
               </span>
-              <ArrowRight className="size-4 text-muted-foreground/60 group-hover:text-foreground group-hover:translate-x-0.5 transition-all shrink-0" />
+              <ArrowRight className="size-4 text-muted-foreground/60 group-hover:text-foreground group-hover:translate-x-0.5 transition-[color,transform] duration-150 shrink-0" />
             </Link>
           </div>
         </aside>
@@ -315,14 +358,19 @@ export function DashboardConsole() {
       <section className="rounded-xl border border-border bg-card p-5 text-card-foreground shadow-2xs space-y-4">
         <header className="flex items-center justify-between gap-3 border-b border-border/60 pb-3">
           <div>
-            <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Recent activity</p>
-            <h2 className="text-base font-semibold tracking-tight text-foreground">Latest orders</h2>
+            <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+              Recent activity
+            </p>
+            <h2 className="text-base font-semibold tracking-tight text-foreground">
+              Latest orders
+            </h2>
           </div>
           <Link
             href="/orders"
             className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline group"
           >
-            View all Orders <ArrowRight className="size-3 group-hover:translate-x-0.5 transition-transform" />
+            View all Orders{' '}
+            <ArrowRight className="size-3 group-hover:translate-x-0.5 transition-transform" />
           </Link>
         </header>
 
@@ -343,10 +391,14 @@ export function DashboardConsole() {
             {orders.map((order) => (
               <TableRow key={order.id}>
                 <TableCell>
-                  <strong className="font-mono font-semibold text-foreground text-xs">{order.orderNumber}</strong>
+                  <strong className="font-mono font-semibold text-foreground text-xs">
+                    {order.orderNumber}
+                  </strong>
                 </TableCell>
                 <TableCell>
-                  <span className="font-medium text-foreground">{order.customerName || 'Guest customer'}</span>
+                  <span className="font-medium text-foreground">
+                    {order.customerName || 'Guest customer'}
+                  </span>
                 </TableCell>
                 <TableCell>
                   <StatusBadge status={order.status} />
@@ -362,7 +414,8 @@ export function DashboardConsole() {
                     href={`/orders/${order.id}`}
                     className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline group"
                   >
-                    Open <ArrowRight className="size-3 group-hover:translate-x-0.5 transition-transform" />
+                    Open{' '}
+                    <ArrowRight className="size-3 group-hover:translate-x-0.5 transition-transform" />
                   </Link>
                 </TableCell>
               </TableRow>
@@ -380,6 +433,6 @@ export function DashboardConsole() {
           </div>
         ) : null}
       </section>
-    </main>
+    </AdminPage>
   );
 }

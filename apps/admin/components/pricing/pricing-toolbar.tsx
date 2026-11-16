@@ -66,17 +66,17 @@ export function PricingToolbar({
                 key={tab.key}
                 type="button"
                 onClick={() => onTabChange(tab.key)}
-                className={`inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium transition-colors cursor-pointer select-none ${
+                className={`inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-medium transition-colors cursor-pointer select-none ${
                   isSelected
-                    ? 'bg-primary text-primary-foreground shadow-2xs'
-                    : 'bg-muted/50 text-muted-foreground hover:bg-muted hover:text-foreground'
+                    ? 'border-primary/25 bg-primary-subtle text-primary-hover dark:text-primary font-semibold shadow-2xs'
+                    : 'border-transparent bg-muted/50 text-muted-foreground hover:bg-muted hover:text-foreground'
                 }`}
               >
                 <span>{tab.label}</span>
                 <span
                   className={`inline-flex items-center justify-center rounded-full px-1.5 py-0.2 text-[10px] font-mono tabular-nums ${
                     isSelected
-                      ? 'bg-primary-foreground/20 text-primary-foreground'
+                      ? 'bg-primary/15 text-primary-hover dark:text-primary'
                       : 'bg-background/80 text-muted-foreground'
                   }`}
                 >
@@ -173,9 +173,7 @@ export function PricingToolbar({
             <span className="font-mono tabular-nums font-semibold text-foreground">
               {filteredCount}
             </span>
-            {filteredCount !== totalCount ? (
-              <span> of {totalCount}</span>
-            ) : null}{' '}
+            {filteredCount !== totalCount ? <span> of {totalCount}</span> : null}{' '}
             <span>{filteredCount === 1 ? 'price' : 'prices'}</span>
           </div>
         </div>
@@ -183,4 +181,3 @@ export function PricingToolbar({
     </div>
   );
 }
-

@@ -27,8 +27,9 @@ export function UnitReconciliationDialog({
 }: UnitReconciliationDialogProps) {
   const [locations, setLocations] = useState<readonly WarehouseLocationDto[]>([]);
   const [selectedLocationId, setSelectedLocationId] = useState<string>('');
-  const [reconciliation, setReconciliation] =
-    useState<SerializedStockReconciliationDto | null>(null);
+  const [reconciliation, setReconciliation] = useState<SerializedStockReconciliationDto | null>(
+    null,
+  );
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -80,7 +81,10 @@ export function UnitReconciliationDialog({
         <div className="space-y-4 pt-2">
           {/* Location Picker */}
           <div className="flex items-center gap-3 bg-muted/30 p-3 rounded-lg border">
-            <label htmlFor="recon-loc" className="text-xs font-medium text-foreground whitespace-nowrap">
+            <label
+              htmlFor="recon-loc"
+              className="text-xs font-medium text-foreground whitespace-nowrap"
+            >
               Warehouse Location:
             </label>
             <NativeSelect
@@ -113,7 +117,9 @@ export function UnitReconciliationDialog({
                 <div className="p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-lg text-xs text-emerald-800 dark:text-emerald-300 flex items-center gap-2">
                   <CheckCircle2 className="size-4 text-emerald-600 shrink-0" />
                   <span>
-                    <strong>100% Balanced & Reconciled:</strong> Physical serialized piece counts match stock ledger quantities exactly across available, reserved, and held buckets.
+                    <strong>100% Balanced & Reconciled:</strong> Physical serialized piece counts
+                    match stock ledger quantities exactly across available, reserved, and held
+                    buckets.
                   </span>
                 </div>
               ) : (
@@ -141,7 +147,9 @@ export function UnitReconciliationDialog({
                   <div className="space-y-1.5">
                     <div className="flex justify-between">
                       <span className="text-muted-foreground">Total On Hand Units:</span>
-                      <strong className="font-mono tabular-nums">{reconciliation.onHandUnitsCount}</strong>
+                      <strong className="font-mono tabular-nums">
+                        {reconciliation.onHandUnitsCount}
+                      </strong>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-muted-foreground">Available (Grade A/B):</span>
@@ -167,7 +175,7 @@ export function UnitReconciliationDialog({
                 {/* Stock Ledger Breakdown */}
                 <div className="rounded-lg border bg-card p-3.5 space-y-2.5">
                   <h4 className="font-semibold text-foreground flex items-center gap-1.5 border-b pb-2">
-                    <Scale className="size-3.5 text-slate-500" />
+                    <Scale className="size-3.5 text-muted-foreground" />
                     <span>Inventory Stock Ledger</span>
                   </h4>
                   <div className="space-y-1.5">
@@ -191,7 +199,9 @@ export function UnitReconciliationDialog({
                     </div>
                     <div className="flex justify-between">
                       <span className="text-muted-foreground">Tracking Mode:</span>
-                      <strong className="font-mono text-[11px]">{reconciliation.trackingMode}</strong>
+                      <strong className="font-mono text-[11px]">
+                        {reconciliation.trackingMode}
+                      </strong>
                     </div>
                   </div>
                 </div>

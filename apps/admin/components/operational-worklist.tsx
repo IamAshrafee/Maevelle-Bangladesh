@@ -10,6 +10,7 @@ import {
   X,
 } from 'lucide-react';
 import React, { type ReactNode, useCallback, useEffect, useMemo, useState } from 'react';
+import { usePathname, useRouter } from 'next/navigation';
 
 import { cn } from '../lib/utils';
 
@@ -70,6 +71,8 @@ export function useOperationalWorklist<T>({
   getReference,
   getTimestamp,
 }: WorklistOptions<T>) {
+  const router = useRouter();
+  const pathname = usePathname() ?? '/';
   const [query, setQuery] = useState('');
   const [status, setStatus] = useState('ALL');
   const [sort, setSort] = useState<WorklistSort>('newest');
@@ -106,9 +109,13 @@ export function useOperationalWorklist<T>({
     write('q', query, '');
     write('status', status, 'ALL');
     write('sort', sort, 'newest');
-    window.history.replaceState(window.history.state, '', url);
+    const nextQs = url.searchParams.toString();
+    const currentQs = window.location.search.replace(/^\?/, '');
+    if (nextQs !== currentQs) {
+      router.replace(nextQs ? `${pathname}?${nextQs}` : pathname, { scroll: false });
+    }
     window.localStorage.setItem(`${storageKey}:density`, density);
-  }, [density, query, ready, sort, status, storageKey]);
+  }, [density, pathname, query, ready, router, sort, status, storageKey]);
 
   const visibleItems = useMemo(
     () =>
@@ -165,33 +172,6 @@ export function useOperationalWorklist<T>({
     applyView,
     visibleItems,
   } as const;
-}
-
-export function OperationalPageHeader({
-  eyebrow,
-  title,
-  description,
-  actions,
-}: {
-  readonly eyebrow: string;
-  readonly title: string;
-  readonly description: string;
-  readonly actions?: ReactNode;
-}) {
-  return (
-    <header className="flex flex-col gap-4 border-b border-border/70 pb-5 lg:flex-row lg:items-end lg:justify-between">
-      <div className="min-w-0 space-y-1">
-        {eyebrow ? (
-          <p className="text-xs font-semibold uppercase tracking-wider text-primary">{eyebrow}</p>
-        ) : null}
-        <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-foreground">{title}</h1>
-        <p className="text-sm text-muted-foreground max-w-3xl">{description}</p>
-      </div>
-      {actions ? (
-        <div className="flex flex-wrap items-center gap-2.5 shrink-0">{actions}</div>
-      ) : null}
-    </header>
-  );
 }
 
 export function OperationalFeedback({
@@ -310,7 +290,7 @@ export function OperationalWorklistToolbar({
           <select
             value={status}
             onChange={(event) => onStatusChange(event.target.value)}
-            className="bg-transparent text-xs text-foreground outline-none cursor-pointer"
+            className="bg-transparent text-base md:text-xs pointer-coarse:text-base text-foreground outline-none cursor-pointer"
           >
             <option value="ALL">All statuses</option>
             {statuses.map((value) => (
@@ -333,7 +313,7 @@ export function OperationalWorklistToolbar({
           <select
             value={sort}
             onChange={(event) => onSortChange(event.target.value as WorklistSort)}
-            className="bg-transparent text-xs text-foreground outline-none cursor-pointer"
+            className="bg-transparent text-base md:text-xs pointer-coarse:text-base text-foreground outline-none cursor-pointer"
           >
             <option value="newest">Newest first</option>
             <option value="oldest">Oldest first</option>
@@ -388,7 +368,7 @@ export function OperationalWorklistToolbar({
               <select
                 defaultValue=""
                 onChange={(event) => onApplyView(event.target.value)}
-                className="h-8 w-full rounded-md border border-input bg-background px-2 text-xs text-foreground outline-none"
+                className="h-8 pointer-coarse:min-h-11 w-full rounded-md border border-input bg-background px-2 text-base md:text-xs pointer-coarse:text-base text-foreground outline-none"
               >
                 <option value="" disabled>
                   Choose a view…
@@ -421,7 +401,7 @@ export function OperationalWorklistToolbar({
             />
             <button
               type="submit"
-              className="w-full h-8 rounded-md bg-primary text-primary-foreground text-xs font-medium hover:bg-primary-hover transition-colors cursor-pointer shadow-2xs"
+              className="w-full h-8 rounded-md bg-primary-hover text-white dark:bg-primary dark:text-primary-foreground text-xs font-medium hover:bg-primary dark:hover:bg-primary-hover transition-colors cursor-pointer shadow-2xs"
             >
               Save current view
             </button>

@@ -33,6 +33,7 @@ import { useAdminCapability } from '@/components/admin-capabilities';
 import { StatusBadge } from '@/components/status-badge';
 import { InventoryEmptyState, InventoryFeedback, InventoryPager } from './inventory-page-ui';
 import { StockTable } from './stock-table';
+import { AdminPage, PageHeader } from '@/components/ui/page-shell';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
@@ -48,13 +49,13 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetFooter,
+  SheetHeader,
+  SheetTitle,
+} from '@/components/ui/sheet';
 
 const ALL_CAPABILITIES = LOCATION_CAPABILITY_GROUPS.flatMap((group) => group.items);
 
@@ -183,7 +184,8 @@ export function LocationDetail({ locationId }: { locationId: string }) {
       editCapabilities.length !== location!.capabilities.length ||
       !editCapabilities.every((c) => location!.capabilities.includes(c)));
 
-  const lifecycleBlockers = location?.operationalCommitments.filter((item) => item.blocksStatusChange) ?? [];
+  const lifecycleBlockers =
+    location?.operationalCommitments.filter((item) => item.blocksStatusChange) ?? [];
   const blockedCapabilities = new Map(
     (location?.operationalCommitments ?? [])
       .filter((item) => item.requiredCapability)
@@ -196,7 +198,9 @@ export function LocationDetail({ locationId }: { locationId: string }) {
     if (editCapabilities.includes(capCode)) {
       const blocker = blockedCapabilities.get(capCode);
       if (blocker) {
-        setEditError(`Cannot remove this capability while the location has ${blocker.count} ${blocker.label}.`);
+        setEditError(
+          `Cannot remove this capability while the location has ${blocker.count} ${blocker.label}.`,
+        );
         return;
       }
       if (editCapabilities.length === 1) {
@@ -222,7 +226,9 @@ export function LocationDetail({ locationId }: { locationId: string }) {
   };
 
   const handleSelectAllCapabilities = () => {
-    const allCodes = LOCATION_CAPABILITY_GROUPS.flatMap((group) => group.items.map((item) => item.code));
+    const allCodes = LOCATION_CAPABILITY_GROUPS.flatMap((group) =>
+      group.items.map((item) => item.code),
+    );
     setEditCapabilities(allCodes);
     setEditError('');
   };
@@ -286,42 +292,74 @@ export function LocationDetail({ locationId }: { locationId: string }) {
 
   if (isLoading) {
     return (
-      <div className="space-y-6">
+      <AdminPage variant="wide">
         <div className="h-12 w-1/3 animate-pulse bg-muted rounded-md" />
         <div className="grid gap-4 md:grid-cols-4">
           {[1, 2, 3, 4].map((i) => (
             <div key={i} className="h-28 w-full animate-pulse bg-muted rounded-md" />
           ))}
         </div>
-      </div>
+      </AdminPage>
     );
   }
 
   if (error || !location) {
     return (
-      <InventoryEmptyState
-        title="Location not found"
-        description="The requested location could not be found or you don't have permission to view it."
-      />
+      <AdminPage variant="wide">
+        <InventoryEmptyState
+          title="Location not found"
+          description="The requested location could not be found or you don't have permission to view it."
+        />
+      </AdminPage>
     );
   }
 
   return (
-    <div className="space-y-6">
+    <AdminPage variant="wide">
       {/* Top Header */}
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+      <PageHeader
+        breadcrumbs={[
+          { label: 'Inventory', href: '/inventory' },
+          { label: 'Warehouses', href: '/inventory/warehouses' },
+          { label: location.name, current: true },
+        ]}
+        actions={
+          <>
+            {canManage ? (
+              <Button variant="outline" size="sm" onClick={handleOpenEdit}>
+                <Settings className="mr-1.5 h-4 w-4" />
+                Edit Location
+              </Button>
+            ) : null}
+            {canTransfer &&
+            location.status === 'ACTIVE' &&
+            location.capabilities.includes('TRANSFER_SEND') ? (
+              <Button
+                size="sm"
+                onClick={() =>
+                  router.push(`/inventory/transfers/new?sourceLocationId=${locationId}`)
+                }
+              >
+                <Truck className="mr-1.5 h-4 w-4" />
+                Transfer Stock
+              </Button>
+            ) : null}
+          </>
+        }
+      >
         <div className="flex items-center gap-3">
           <Button
             variant="outline"
             size="icon"
             onClick={() => router.push('/inventory/warehouses')}
+            aria-label="Back to warehouses"
           >
             <ArrowLeft className="h-4 w-4" />
           </Button>
           <div>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <MapPin className="h-5 w-5 text-muted-foreground" />
-              <h1 className="text-2xl font-bold tracking-tight">{location.name}</h1>
+              <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">{location.name}</h1>
               <StatusBadge status={location.status} />
               <Badge variant="outline" className="font-mono text-xs">
                 {location.code}
@@ -332,16 +370,7 @@ export function LocationDetail({ locationId }: { locationId: string }) {
             </p>
           </div>
         </div>
-
-        <div className="flex flex-wrap items-center gap-2">
-          {canManage ? <Button variant="outline" size="sm" onClick={handleOpenEdit}>
-            <Settings className="mr-1.5 h-4 w-4" />Edit Location
-          </Button> : null}
-          {canTransfer && location.status === 'ACTIVE' && location.capabilities.includes('TRANSFER_SEND') ? <Button size="sm" onClick={() => router.push(`/inventory/transfers/new?sourceLocationId=${locationId}`)}>
-            <Truck className="mr-1.5 h-4 w-4" />Transfer Stock
-          </Button> : null}
-        </div>
-      </div>
+      </PageHeader>
 
       {feedback && <InventoryFeedback message={feedback} />}
 
@@ -499,20 +528,32 @@ export function LocationDetail({ locationId }: { locationId: string }) {
         <TabsContent value="capabilities" className="mt-4 space-y-4">
           <Card>
             <CardHeader>
-              <CardTitle className="text-base font-semibold">Active operational commitments</CardTitle>
-              <CardDescription>These records must be completed or reassigned before related capabilities or the location can be retired.</CardDescription>
+              <CardTitle className="text-base font-semibold">
+                Active operational commitments
+              </CardTitle>
+              <CardDescription>
+                These records must be completed or reassigned before related capabilities or the
+                location can be retired.
+              </CardDescription>
             </CardHeader>
             <CardContent>
               {location.operationalCommitments.length ? (
                 <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
                   {location.operationalCommitments.map((item) => (
-                    <div key={item.code} className="rounded-lg border border-warning/30 bg-warning/10 p-3">
+                    <div
+                      key={item.code}
+                      className="rounded-lg border border-warning/30 bg-warning/10 p-3"
+                    >
                       <p className="font-mono text-lg font-semibold tabular-nums">{item.count}</p>
                       <p className="text-xs capitalize text-muted-foreground">{item.label}</p>
                     </div>
                   ))}
                 </div>
-              ) : <p className="text-sm text-muted-foreground">No active operational work currently blocks lifecycle or capability changes.</p>}
+              ) : (
+                <p className="text-sm text-muted-foreground">
+                  No active operational work currently blocks lifecycle or capability changes.
+                </p>
+              )}
             </CardContent>
           </Card>
           <div className="grid gap-4 md:grid-cols-2">
@@ -596,7 +637,8 @@ export function LocationDetail({ locationId }: { locationId: string }) {
                 <div>
                   <span className="text-muted-foreground text-xs block mb-1">Physical Address</span>
                   <p className="text-xs bg-muted/40 p-2.5 rounded-md border font-mono">
-                    {addressValue(location.address, 'fullAddress') || 'No physical address recorded.'}
+                    {addressValue(location.address, 'fullAddress') ||
+                      'No physical address recorded.'}
                   </p>
                 </div>
               </CardContent>
@@ -605,19 +647,19 @@ export function LocationDetail({ locationId }: { locationId: string }) {
         </TabsContent>
       </Tabs>
 
-      {/* Edit Location Dialog (Popup) */}
-      <Dialog
+      {/* Edit Location Settings Sheet */}
+      <Sheet
         open={isEditOpen}
         onOpenChange={(open) => {
           if (!open && location) resetEditForm(location);
           setIsEditOpen(open);
         }}
       >
-        <DialogContent className="sm:max-w-2xl max-h-[88vh] flex flex-col p-0 gap-0 overflow-hidden">
-          <DialogHeader className="p-5 border-b bg-muted/20">
+        <SheetContent side="right" className="gap-0 p-0 sm:max-w-2xl">
+          <SheetHeader className="shrink-0 border-b border-border px-5 py-4 pr-11 text-left">
             <div className="flex flex-wrap items-center gap-2 pr-6">
               <Building2 className="h-5 w-5 text-primary shrink-0" />
-              <DialogTitle className="text-lg font-semibold">Edit Location Settings</DialogTitle>
+              <SheetTitle className="text-lg font-semibold">Edit Location Settings</SheetTitle>
               <Badge variant="outline" className="font-mono text-xs">
                 {location.code}
               </Badge>
@@ -631,13 +673,13 @@ export function LocationDetail({ locationId }: { locationId: string }) {
                 v{location.version}
               </Badge>
             </div>
-            <DialogDescription className="text-xs text-muted-foreground">
+            <SheetDescription className="text-xs text-muted-foreground">
               Configure operational status, workflow capabilities, and facility address for{' '}
               {location.name}.
-            </DialogDescription>
-          </DialogHeader>
+            </SheetDescription>
+          </SheetHeader>
 
-          <div className="flex-1 overflow-y-auto p-5 space-y-5">
+          <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4 space-y-5">
             {editError && (
               <div className="p-3 bg-destructive/10 border border-destructive/20 text-destructive rounded-lg text-xs flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
                 <div className="flex items-center gap-2">
@@ -669,7 +711,9 @@ export function LocationDetail({ locationId }: { locationId: string }) {
                 <div className="space-y-0.5">
                   <span className="font-semibold">Operational change guard</span>
                   <p className="text-[11px] text-muted-foreground">
-                    Inactive and archived states are unavailable until this work is completed or reassigned: {lifecycleBlockers.map((item) => `${item.count} ${item.label}`).join(', ')}.
+                    Inactive and archived states are unavailable until this work is completed or
+                    reassigned:{' '}
+                    {lifecycleBlockers.map((item) => `${item.count} ${item.label}`).join(', ')}.
                   </p>
                 </div>
               </div>
@@ -724,7 +768,9 @@ export function LocationDetail({ locationId }: { locationId: string }) {
                       <SelectValue placeholder="Select status" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="DRAFT" label="Draft (Setup Mode)">Draft (Setup Mode)</SelectItem>
+                      <SelectItem value="DRAFT" label="Draft (Setup Mode)">
+                        Draft (Setup Mode)
+                      </SelectItem>
                       <SelectItem value="ACTIVE" label="Active (Operational)">
                         Active (Operational)
                       </SelectItem>
@@ -732,7 +778,9 @@ export function LocationDetail({ locationId }: { locationId: string }) {
                         value="INACTIVE"
                         disabled={hasLifecycleBlockers}
                         label="Inactive (Temporarily Closed)"
-                        description={hasLifecycleBlockers ? 'Blocked by active operational work' : undefined}
+                        description={
+                          hasLifecycleBlockers ? 'Blocked by active operational work' : undefined
+                        }
                       >
                         Inactive (Temporarily Closed)
                       </SelectItem>
@@ -740,7 +788,9 @@ export function LocationDetail({ locationId }: { locationId: string }) {
                         value="ARCHIVED"
                         disabled={hasLifecycleBlockers}
                         label="Archived (Decommissioned)"
-                        description={hasLifecycleBlockers ? 'Blocked by active operational work' : undefined}
+                        description={
+                          hasLifecycleBlockers ? 'Blocked by active operational work' : undefined
+                        }
                       >
                         Archived (Decommissioned)
                       </SelectItem>
@@ -884,7 +934,7 @@ export function LocationDetail({ locationId }: { locationId: string }) {
                               <div
                                 className={`h-4 w-4 rounded-sm border flex items-center justify-center shrink-0 mt-0.5 ${
                                   isChecked
-                                    ? 'bg-primary text-primary-foreground border-primary'
+                                    ? 'border-primary bg-primary-subtle text-primary-hover dark:text-primary'
                                     : 'border-muted-foreground/40'
                                 }`}
                               >
@@ -901,7 +951,7 @@ export function LocationDetail({ locationId }: { locationId: string }) {
             </div>
           </div>
 
-          <DialogFooter className="border-t bg-muted/40 p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+          <SheetFooter className="shrink-0 flex-col sm:flex-row sm:items-center sm:justify-between gap-2 border-t border-border bg-card/50 px-5 py-3">
             <div className="flex items-center gap-2">
               {isDirty ? (
                 <Button
@@ -957,9 +1007,9 @@ export function LocationDetail({ locationId }: { locationId: string }) {
                 )}
               </Button>
             </div>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-    </div>
+          </SheetFooter>
+        </SheetContent>
+      </Sheet>
+    </AdminPage>
   );
 }

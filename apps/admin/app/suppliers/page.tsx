@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { Suspense } from 'react';
 import { SuppliersList } from '@/components/supply/suppliers-list';
+import { PageSkeleton } from '@/components/ui/page-shell';
 
 export const metadata: Metadata = {
   title: 'Suppliers',
@@ -9,13 +10,7 @@ export const metadata: Metadata = {
 
 export default function SuppliersPage() {
   return (
-    <Suspense
-      fallback={
-        <main className="min-w-0 space-y-5 px-4 py-5 text-sm text-muted-foreground sm:px-6 lg:px-8">
-          Loading suppliers…
-        </main>
-      }
-    >
+    <Suspense fallback={<PageSkeleton variant="table" widthVariant="wide" />}>
       <SuppliersList />
     </Suspense>
   );

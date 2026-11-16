@@ -131,7 +131,7 @@ export function CompatibilityRulesTab({
         />
       ) : (
         <div className="relative">
-          <Table density="comfortable">
+          <Table density="comfortable" stickyHeader>
             <TableHeader>
               <TableRow>
                 <TableHead>Source Product Type</TableHead>
@@ -171,7 +171,7 @@ export function CompatibilityRulesTab({
                       <div className="flex items-center gap-3 max-w-[200px]">
                         <div className="flex-1 h-2 rounded-full bg-muted overflow-hidden">
                           <div
-                            className="h-full bg-primary rounded-full transition-all"
+                            className="h-full bg-primary rounded-full transition-[width] duration-300"
                             style={{ width: `${rule.strength}%` }}
                           />
                         </div>

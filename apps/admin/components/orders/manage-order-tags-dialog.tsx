@@ -7,16 +7,16 @@ import type { OrderDetailDto, OrderTagDto } from '@maevelle/contracts';
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+} from '@/components/ui/sheet';
 import { fetchApiData } from '@/lib/api';
 
 const PRESET_COLORS = [
@@ -120,17 +120,18 @@ export function ManageOrderTagsDialog({
   }
 
   return (
-    <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogTrigger render={<Button size="sm" variant="outline" className="h-8 gap-1.5" />}>
+    <Sheet open={open} onOpenChange={handleOpenChange}>
+      <SheetTrigger render={<Button size="sm" variant="outline" className="gap-1.5" />}>
         <Tag className="size-3.5" aria-hidden="true" /> Manage tags
-      </DialogTrigger>
-      <DialogContent className="sm:max-w-md">
-        <DialogHeader>
-          <DialogTitle>Manage Order Tags</DialogTitle>
-          <DialogDescription>
-            Categorize order {order.orderNumber} for operations (e.g. VIP, Priority, Review, Social).
-          </DialogDescription>
-        </DialogHeader>
+      </SheetTrigger>
+      <SheetContent side="right" className="w-full sm:max-w-lg overflow-y-auto p-6">
+        <SheetHeader className="p-0 pb-4 border-b border-border/60">
+          <SheetTitle>Manage Order Tags</SheetTitle>
+          <SheetDescription>
+            Categorize order {order.orderNumber} for operations (e.g. VIP, Priority, Review,
+            Social).
+          </SheetDescription>
+        </SheetHeader>
 
         {message ? (
           <div
@@ -236,8 +237,17 @@ export function ManageOrderTagsDialog({
                 onChange={(e) => setNewTagName(e.target.value)}
                 className="h-8 text-xs"
               />
-              <Button type="submit" size="sm" className="h-8 shrink-0 text-xs" disabled={creatingTag || !newTagName.trim()}>
-                {creatingTag ? <Loader2 className="mr-1 size-3 animate-spin" /> : <Plus className="mr-1 size-3" />}
+              <Button
+                type="submit"
+                size="sm"
+                className="h-8 shrink-0 text-xs"
+                disabled={creatingTag || !newTagName.trim()}
+              >
+                {creatingTag ? (
+                  <Loader2 className="mr-1 size-3 animate-spin" />
+                ) : (
+                  <Plus className="mr-1 size-3" />
+                )}
                 Add Tag
               </Button>
             </div>
@@ -260,7 +270,7 @@ export function ManageOrderTagsDialog({
             </div>
           </form>
         </div>
-      </DialogContent>
-    </Dialog>
+      </SheetContent>
+    </Sheet>
   );
 }

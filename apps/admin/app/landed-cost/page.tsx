@@ -2,6 +2,7 @@ import { Suspense } from 'react';
 import { redirect } from 'next/navigation';
 
 import { LandedCostConsole } from '@/components/supply/landed-cost/landed-cost-console';
+import { PageSkeleton } from '@/components/ui/page-shell';
 
 interface LandedCostPageProps {
   readonly searchParams: Promise<{ shipment?: string | string[] | undefined }>;
@@ -17,9 +18,7 @@ export default async function LandedCostPage({ searchParams }: LandedCostPagePro
   }
 
   return (
-    <Suspense
-      fallback={<main className="p-6 text-sm text-muted-foreground">Loading landed cost…</main>}
-    >
+    <Suspense fallback={<PageSkeleton variant="table" widthVariant="wide" />}>
       <LandedCostConsole />
     </Suspense>
   );

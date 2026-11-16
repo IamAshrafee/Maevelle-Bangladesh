@@ -77,7 +77,9 @@ export function FacebookConnectionWizard({
         setAvailability(data);
       })
       .catch((err) => {
-        setErrorMsg(err instanceof Error ? err.message : 'Failed to check Facebook integration readiness.');
+        setErrorMsg(
+          err instanceof Error ? err.message : 'Failed to check Facebook integration readiness.',
+        );
       })
       .finally(() => {
         setLoadingAvailability(false);
@@ -164,7 +166,9 @@ export function FacebookConnectionWizard({
         });
       }
     } catch (err) {
-      setErrorMsg(err instanceof Error ? err.message : 'Could not initiate Facebook authorization.');
+      setErrorMsg(
+        err instanceof Error ? err.message : 'Could not initiate Facebook authorization.',
+      );
     }
   }
 
@@ -186,7 +190,9 @@ export function FacebookConnectionWizard({
         type: 'success',
       });
     } catch (err) {
-      setErrorMsg(err instanceof Error ? err.message : 'Failed to finalize Facebook Page connection.');
+      setErrorMsg(
+        err instanceof Error ? err.message : 'Failed to finalize Facebook Page connection.',
+      );
     } finally {
       setConnecting(false);
     }
@@ -243,17 +249,25 @@ export function FacebookConnectionWizard({
                 Business Asset & Privacy Protection
               </h4>
               <p className="text-xs text-muted-foreground leading-relaxed">
-                Maevelle integrates directly with Meta&apos;s official Graph API for business Pages. Connecting will grant permission to manage customer Messenger conversations sent to your Page.
+                Maevelle integrates directly with Meta&apos;s official Graph API for business Pages.
+                Connecting will grant permission to manage customer Messenger conversations sent to
+                your Page.
               </p>
               <ul className="text-xs text-muted-foreground space-y-1.5 pl-4 list-disc">
                 <li>
-                  <strong className="text-foreground">Business Page Only:</strong> Your personal Facebook profile, private messages, and personal feed will <span className="font-semibold text-foreground">never</span> be accessed or imported.
+                  <strong className="text-foreground">Business Page Only:</strong> Your personal
+                  Facebook profile, private messages, and personal feed will{' '}
+                  <span className="font-semibold text-foreground">never</span> be accessed or
+                  imported.
                 </li>
                 <li>
-                  <strong className="text-foreground">Portfolio Safety:</strong> Existing Instagram accounts, WhatsApp Business numbers, and Meta Ad accounts are strictly protected and remain unaffected.
+                  <strong className="text-foreground">Portfolio Safety:</strong> Existing Instagram
+                  accounts, WhatsApp Business numbers, and Meta Ad accounts are strictly protected
+                  and remain unaffected.
                 </li>
                 <li>
-                  <strong className="text-foreground">Official Security:</strong> OAuth credentials and Page access tokens are encrypted securely on the server with AES-256-GCM.
+                  <strong className="text-foreground">Official Security:</strong> OAuth credentials
+                  and Page access tokens are encrypted securely on the server with AES-256-GCM.
                 </li>
               </ul>
             </div>
@@ -269,10 +283,12 @@ export function FacebookConnectionWizard({
                 <AlertTitle>Meta Configuration Incomplete</AlertTitle>
                 <AlertDescription className="text-xs space-y-1">
                   <p>
-                    The backend Meta App credentials or webhook verify token are not configured yet on this server.
+                    The backend Meta App credentials or webhook verify token are not configured yet
+                    on this server.
                   </p>
                   <p className="font-mono text-[11px] text-muted-foreground">
-                    Required environment variables: META_APP_ID, META_APP_SECRET, META_GRAPH_API_VERSION, META_WEBHOOK_VERIFY_TOKEN, META_OAUTH_CALLBACK_URL.
+                    Required environment variables: META_APP_ID, META_APP_SECRET,
+                    META_GRAPH_API_VERSION, META_WEBHOOK_VERIFY_TOKEN, META_OAUTH_CALLBACK_URL.
                   </p>
                 </AlertDescription>
               </Alert>
@@ -300,7 +316,9 @@ export function FacebookConnectionWizard({
                 Cancel
               </Button>
               <Button
-                disabled={loadingAvailability || (availability !== null && !availability.configured)}
+                disabled={
+                  loadingAvailability || (availability !== null && !availability.configured)
+                }
                 onClick={() => void handleStartOAuth()}
                 className="gap-2"
               >
@@ -321,7 +339,8 @@ export function FacebookConnectionWizard({
             <div>
               <h4 className="text-base font-semibold">Authorizing with Facebook</h4>
               <p className="mt-1 text-xs text-muted-foreground max-w-sm mx-auto">
-                Please complete the login and Page selection in the Meta popup window. This dialog will update automatically once authorized.
+                Please complete the login and Page selection in the Meta popup window. This dialog
+                will update automatically once authorized.
               </p>
             </div>
 
@@ -344,7 +363,10 @@ export function FacebookConnectionWizard({
               <ol className="list-decimal pl-4 space-y-1">
                 <li>Log in to the Facebook account managing your business Page.</li>
                 <li>Select the business Facebook Page you wish to connect.</li>
-                <li>Ensure all requested permissions (Show list of Pages, Manage metadata, Send messages) are granted.</li>
+                <li>
+                  Ensure all requested permissions (Show list of Pages, Manage metadata, Send
+                  messages) are granted.
+                </li>
               </ol>
             </div>
 
@@ -419,7 +441,7 @@ export function FacebookConnectionWizard({
                             className={cn(
                               'flex size-5 items-center justify-center rounded-full border',
                               isSelected
-                                ? 'border-primary bg-primary text-primary-foreground'
+                                ? 'border-primary-hover bg-primary-hover text-white dark:border-primary dark:bg-primary dark:text-primary-foreground'
                                 : 'border-border bg-card',
                             )}
                           >
@@ -450,7 +472,11 @@ export function FacebookConnectionWizard({
                       <div className="flex flex-wrap gap-1 items-center text-[10px] text-muted-foreground">
                         <span>Tasks:</span>
                         {page.tasks.map((task) => (
-                          <Badge key={task} variant="secondary" className="px-1 py-0 text-[9px] font-mono">
+                          <Badge
+                            key={task}
+                            variant="secondary"
+                            className="px-1 py-0 text-[9px] font-mono"
+                          >
                             {task}
                           </Badge>
                         ))}
@@ -476,7 +502,11 @@ export function FacebookConnectionWizard({
                 onClick={() => void handleFinalizeConnection()}
                 className="gap-2"
               >
-                {connecting ? <Loader2 className="size-4 animate-spin" /> : <Check className="size-4" />}
+                {connecting ? (
+                  <Loader2 className="size-4 animate-spin" />
+                ) : (
+                  <Check className="size-4" />
+                )}
                 Confirm and Connect Page
               </Button>
             </DialogFooter>
@@ -492,7 +522,8 @@ export function FacebookConnectionWizard({
             <div>
               <h4 className="text-base font-semibold">Facebook Page Connected</h4>
               <p className="mt-1 text-xs text-muted-foreground max-w-sm mx-auto">
-                <strong className="text-foreground">{connectedView.pageName}</strong> (ID: {connectedView.pageId}) is now connected.
+                <strong className="text-foreground">{connectedView.pageName}</strong> (ID:{' '}
+                {connectedView.pageId}) is now connected.
               </p>
             </div>
 
@@ -500,13 +531,17 @@ export function FacebookConnectionWizard({
               <p className="font-medium text-foreground">Recommended Next Steps:</p>
               <ul className="list-disc pl-4 space-y-1.5 text-muted-foreground">
                 <li>
-                  <strong className="text-foreground">Review Conversation Routing:</strong> Inspect Meta Business Suite coexistence to ensure webhooks route to Maevelle without conflicting with third-party bots.
+                  <strong className="text-foreground">Review Conversation Routing:</strong> Inspect
+                  Meta Business Suite coexistence to ensure webhooks route to Maevelle without
+                  conflicting with third-party bots.
                 </li>
                 <li>
-                  <strong className="text-foreground">Verify Inbound Messages:</strong> Send a test message from a personal Facebook account to verify live receipt in Maevelle inbox.
+                  <strong className="text-foreground">Verify Inbound Messages:</strong> Send a test
+                  message from a personal Facebook account to verify live receipt in Maevelle inbox.
                 </li>
                 <li>
-                  <strong className="text-foreground">Historical Sync:</strong> Optionally import recent historical Messenger conversations into the unified inbox.
+                  <strong className="text-foreground">Historical Sync:</strong> Optionally import
+                  recent historical Messenger conversations into the unified inbox.
                 </li>
               </ul>
             </div>

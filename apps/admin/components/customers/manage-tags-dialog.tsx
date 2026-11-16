@@ -8,14 +8,14 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { fetchApiData } from '@/lib/api';
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from '@/components/ui/dialog';
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetFooter,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+} from '@/components/ui/sheet';
 
 interface OrgTag {
   id: string;
@@ -115,19 +115,20 @@ export function ManageTagsDialog({
   }
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger render={<Button variant="ghost" size="sm" />}>
-        Manage
-      </DialogTrigger>
-      <DialogContent className="sm:max-w-md">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
+    <Sheet open={open} onOpenChange={setOpen}>
+      <SheetTrigger render={<Button variant="ghost" size="sm" />}>Manage</SheetTrigger>
+      <SheetContent
+        side="right"
+        className="flex w-full flex-col gap-5 overflow-y-auto p-6 sm:max-w-md"
+      >
+        <SheetHeader className="border-b border-border/60 p-0 pb-4">
+          <SheetTitle className="flex items-center gap-2">
             <TagIcon className="size-4" /> Manage Tags
-          </DialogTitle>
-          <DialogDescription>
+          </SheetTitle>
+          <SheetDescription>
             Assign tags to categorize this customer for segmentation and reporting.
-          </DialogDescription>
-        </DialogHeader>
+          </SheetDescription>
+        </SheetHeader>
 
         {message && (
           <div className="flex items-start gap-2 rounded-lg border border-red-300/70 bg-red-50 px-3 py-2 text-sm text-red-950">
@@ -146,7 +147,9 @@ export function ManageTagsDialog({
               <Loader2 className="mr-1 inline size-3.5 animate-spin" /> Loading tags...
             </div>
           ) : allTags.length === 0 ? (
-            <p className="text-sm text-muted-foreground italic">No tags created yet. Create one below.</p>
+            <p className="text-sm text-muted-foreground italic">
+              No tags created yet. Create one below.
+            </p>
           ) : (
             <div className="flex flex-wrap gap-2 max-h-48 overflow-y-auto p-1">
               {allTags.map((tag) => {
@@ -160,7 +163,7 @@ export function ManageTagsDialog({
                     onClick={() => void toggleTag(tag)}
                     className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium transition-colors duration-150 ${
                       isAssigned
-                        ? 'bg-primary text-primary-foreground shadow-xs'
+                        ? 'bg-primary-subtle text-primary-hover dark:text-primary border border-primary/25 font-semibold shadow-2xs'
                         : 'bg-muted text-muted-foreground hover:bg-muted/80'
                     }`}
                     style={
@@ -210,12 +213,12 @@ export function ManageTagsDialog({
           </div>
         </form>
 
-        <DialogFooter className="mt-2">
+        <SheetFooter className="mt-2 border-t border-border/60 p-0 pt-4 sm:flex-row sm:justify-end">
           <Button variant="outline" onClick={() => setOpen(false)}>
             Done
           </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+        </SheetFooter>
+      </SheetContent>
+    </Sheet>
   );
 }

@@ -297,7 +297,7 @@ export function VariantMatrixTable({
                           onUpdateRow(row.id, { primaryColorId: e.target.value || null })
                         }
                         disabled={!row.enabled}
-                        className="h-7 w-full rounded-md border border-input bg-background px-2 text-xs focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed"
+                        className="h-7 pointer-coarse:min-h-11 w-full rounded-md border border-input bg-background px-2 text-base md:text-xs pointer-coarse:text-base focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed"
                       >
                         <option value="">No Color Swatch</option>
                         {colors.map((c) => (
@@ -608,7 +608,7 @@ export function VariantMatrixTable({
                       onUpdateRow(row.id, { primaryColorId: e.target.value || null })
                     }
                     disabled={!row.enabled}
-                    className="h-10 w-full rounded-md border border-input bg-background px-3 text-xs focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                    className="h-10 pointer-coarse:min-h-11 w-full rounded-md border border-input bg-background px-3 text-base md:text-xs pointer-coarse:text-base focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
                   >
                     <option value="">No Color Swatch</option>
                     {colors.map((c) => (

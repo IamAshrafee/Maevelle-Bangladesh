@@ -202,16 +202,22 @@ export function DistributionList({
               <span className="font-medium text-foreground truncate">{item.label}</span>
               <div className="flex items-center gap-2 font-mono tabular-nums shrink-0">
                 {item.amount !== undefined && item.amount !== null ? (
-                  <span className="text-muted-foreground">{formatAnalyticsMoney(item.amount, currency)}</span>
+                  <span className="text-muted-foreground">
+                    {formatAnalyticsMoney(item.amount, currency)}
+                  </span>
                 ) : null}
-                <span className="font-semibold text-foreground">{formatAnalyticsCount(item.count)}</span>
-                <span className="text-muted-foreground/70 w-12 text-right">({pct.toFixed(1)}%)</span>
+                <span className="font-semibold text-foreground">
+                  {formatAnalyticsCount(item.count)}
+                </span>
+                <span className="text-muted-foreground/70 w-12 text-right">
+                  ({pct.toFixed(1)}%)
+                </span>
               </div>
             </div>
             {/* Visual Bar */}
             <div className="h-2 w-full rounded-full bg-muted overflow-hidden">
               <div
-                className="h-full rounded-full bg-primary transition-all duration-300"
+                className="h-full rounded-full bg-primary transition-[width] duration-300"
                 style={{ width: `${Math.min(100, Math.max(0, pct))}%` }}
               />
             </div>
@@ -288,7 +294,9 @@ export function StorefrontFunnelChart({
               </div>
               <div className="flex items-center justify-between text-[11px] border-t border-border/50 pt-1">
                 <span className="text-muted-foreground">Of traffic:</span>
-                <span className="font-mono font-medium text-foreground">{overallPct.toFixed(1)}%</span>
+                <span className="font-mono font-medium text-foreground">
+                  {overallPct.toFixed(1)}%
+                </span>
               </div>
               {stage.stageConversionRate ? (
                 <div className="text-[10px] text-emerald-600 dark:text-emerald-400 font-medium">
@@ -358,7 +366,12 @@ export function ReviewDistribution({
   });
 
   return (
-    <div className={cn('flex flex-col sm:flex-row items-center gap-6 p-4 rounded-xl border border-border/80 bg-card', className)}>
+    <div
+      className={cn(
+        'flex flex-col sm:flex-row items-center gap-6 p-4 rounded-xl border border-border/80 bg-card',
+        className,
+      )}
+    >
       {/* Big Average Score */}
       <div className="flex flex-col items-center justify-center sm:border-r sm:border-border/70 sm:pr-6 min-w-32">
         <span className="text-4xl font-extrabold text-foreground font-mono tabular-nums">
@@ -376,10 +389,7 @@ export function ReviewDistribution({
           <div key={stars} className="flex items-center gap-2 text-xs">
             <span className="w-12 text-muted-foreground font-medium">{stars} stars</span>
             <div className="flex-1 h-2 rounded-full bg-muted overflow-hidden">
-              <div
-                className="h-full rounded-full bg-amber-500"
-                style={{ width: `${pct}%` }}
-              />
+              <div className="h-full rounded-full bg-amber-500" style={{ width: `${pct}%` }} />
             </div>
             <span className="w-14 text-right font-mono tabular-nums text-muted-foreground text-[11px]">
               {formatAnalyticsCount(count)} ({pct.toFixed(0)}%)
@@ -395,7 +405,13 @@ export function ReviewDistribution({
 // 5. Chart Skeleton
 // ============================================================================
 
-export function ChartSkeleton({ height = 280, className }: { height?: number; className?: string }) {
+export function ChartSkeleton({
+  height = 280,
+  className,
+}: {
+  height?: number;
+  className?: string;
+}) {
   return (
     <div
       className={cn(

@@ -22,6 +22,8 @@ import type {
 } from '@maevelle/contracts';
 
 import { ProductTypeManager } from '@/components/product-types';
+import { PageActions, PageHeader } from '@/components/ui/page-shell';
+import { ListWorkspace } from '@/components/workspaces/list-workspace';
 import { RefreshButton } from '@/components/ui/refresh-button';
 import { productReadinessResolutionHref } from '@/components/products/product-workspace-links';
 import { StatusBadge } from '@/components/status-badge';
@@ -29,6 +31,8 @@ import { Button } from '@/components/ui/button';
 import { Select, SelectTrigger, SelectContent, SelectItem } from '@/components/ui/select';
 import { SearchInput } from '@/components/ui/search-input';
 import { Stats, StatsCard, StatsTitle, StatsValue, StatsDescription } from '@/components/ui/stats';
+import { Skeleton } from '@/components/ui/skeleton';
+import { TableSkeletonRows, CardSkeletonStack } from '@/components/ui/table-skeleton';
 import { cn } from '@/lib/utils';
 import { catalogData, formatCatalogMoney } from '@/lib/catalog/api';
 import { getAdminMediaUrl } from '@/lib/media/api';
@@ -217,207 +221,212 @@ export function ProductList() {
   const summary = worklist?.summary;
 
   return (
-    <main className="min-w-0 space-y-5 px-4 py-5 sm:px-6 lg:px-8">
-      <header className="flex flex-col gap-4 border-b pb-5 lg:flex-row lg:items-end lg:justify-between">
-        <div className="min-w-0">
-          <p className="text-sm font-medium text-primary">Catalog</p>
-          <h1 className="text-2xl font-semibold tracking-tight">Products</h1>
-          <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
-            Create, prepare, publish, and maintain every sellable item from one catalog.
-          </p>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <ProductTypeManager compact onChanged={() => load(undefined, true)} />
-          <RefreshButton
-            loading={state === 'loading'}
-            onRefresh={() => void load()}
-            tooltip="Refresh products"
-          />
-          <Button render={<Link href="/products/new" />}>
-            <PackagePlus aria-hidden="true" /> Create Product
-          </Button>
-          <Button variant="outline" render={<Link href="/products/price-review" />}>
-            Review fractional prices
-          </Button>
-        </div>
-      </header>
-
-      {message ? (
-        <div
-          className="flex items-start gap-2 rounded-lg border border-warning/30 bg-warning/10 px-3 py-2 text-sm text-warning"
-          role="status"
-          aria-live="polite"
-        >
-          <CircleAlert className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
-          <span>{message}</span>
-        </div>
-      ) : null}
-
-      <Stats aria-label="Catalog summary">
-        {[
-          {
-            label: 'All Products',
-            value: summary?.total ?? '—',
-            description: 'Total catalog records',
-            icon: Package,
-            iconClass: 'text-muted-foreground',
-            valueClass: undefined,
-          },
-          {
-            label: 'Published',
-            value: summary?.published ?? '—',
-            description: 'Live on storefront',
-            icon: CheckCircle2,
-            iconClass: 'text-success',
-            valueClass: 'text-success',
-          },
-          {
-            label: 'Drafts',
-            value: summary?.drafts ?? '—',
-            description: 'Unpublished in progress',
-            icon: FileText,
-            iconClass: 'text-warning',
-            valueClass: 'text-warning',
-          },
-          {
-            label: 'Archived',
-            value: summary?.archived ?? '—',
-            description: 'Historical records',
-            icon: Archive,
-            iconClass: 'text-muted-foreground',
-            valueClass: undefined,
-          },
-        ].map((card) => {
-          const Icon = card.icon;
-          return (
-            <StatsCard key={card.label} className="flex items-start justify-between gap-2">
-              <div className="min-w-0 flex-1">
-                <StatsTitle>{card.label}</StatsTitle>
-                <StatsValue className={card.valueClass}>{card.value}</StatsValue>
-                <StatsDescription>{card.description}</StatsDescription>
-              </div>
-              <Icon className={cn('h-4 w-4 shrink-0 mt-0.5', card.iconClass)} />
-            </StatsCard>
-          );
-        })}
-      </Stats>
-
-      <section className="space-y-3" aria-label="Product filters">
-        <div className="flex flex-col gap-2 xl:flex-row xl:items-center">
-          {/* ── Search input ── */}
-          <div className="flex-1 min-w-0">
-            <SearchInput
-              name="productSearch"
-              autoComplete="off"
-              placeholder="Search name, handle, SKU, or Product Type…"
-              value={query}
-              onChange={(val) => setQuery(val.slice(0, 120))}
-              onClear={() => setQuery('')}
-              shortcut="/"
-              isLoading={deferredQuery !== query}
-              aria-label="Search Products"
-            />
-          </div>
-
-          <div className="flex flex-wrap gap-2">
-            {/* ── Product Type — Select ── */}
-            <Select
-              value={productTypeId}
-              onValueChange={(val: string | null) =>
-                replaceQuery({ type: val ?? 'ALL', page: '1' })
-              }
-              items={productTypeItems}
-            >
-              <SelectTrigger
-                aria-label="Filter by Product Type"
-                className="h-9 min-w-44 rounded-lg border bg-card"
+    <ListWorkspace
+      widthVariant="wide"
+      header={
+        <PageHeader
+          eyebrow="Catalog"
+          title="Products"
+          description="Create, prepare, publish, and maintain every sellable item from one catalog."
+          actions={
+            <PageActions>
+              <ProductTypeManager compact onChanged={() => load(undefined, true)} />
+              <RefreshButton
+                loading={state === 'loading'}
+                onRefresh={() => void load()}
+                tooltip="Refresh products"
               />
-              <SelectContent>
-                <SelectItem value="ALL">All Product Types</SelectItem>
-                {types.map((type) => (
-                  <SelectItem key={type.id} value={type.id} label={type.name}>
-                    {type.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-
-            <Select
-              value={sort}
-              onValueChange={(value: string | null) =>
-                replaceQuery({ sort: value ?? 'UPDATED_DESC', page: '1' })
-              }
-              items={worklistSortLabels}
-            >
-              <SelectTrigger
-                aria-label="Sort Products"
-                className="h-9 min-w-44 rounded-lg border bg-card"
-              />
-              <SelectContent>
-                {worklistSorts.map((value) => (
-                  <SelectItem key={value} value={value}>
-                    {worklistSortLabels[value]}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-
-            {/* ── Catalog Status — Select ── */}
-            <Select
-              value={status}
-              onValueChange={(val: string | null) =>
-                replaceQuery({ status: val ?? 'ALL', page: '1' })
-              }
-              items={statusItems}
-            >
-              <SelectTrigger
-                aria-label="Filter by Catalog State"
-                className="h-9 w-44 rounded-lg border bg-card"
-              />
-              <SelectContent>
-                {statuses.map((s) => (
-                  <SelectItem key={s} value={s}>
-                    {s === 'ALL' ? 'Any Catalog State' : s.replaceAll('_', ' ')}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-
-            {/* ── Readiness — Select ── */}
-            <Select
-              value={readiness}
-              onValueChange={(val: string | null) =>
-                replaceQuery({ readiness: val ?? 'ALL', page: '1' })
-              }
-              items={readinessItems}
-            >
-              <SelectTrigger
-                aria-label="Filter by Readiness"
-                className="h-9 w-36 rounded-lg border bg-card"
-              />
-              <SelectContent>
-                {readinessStates.map((r) => (
-                  <SelectItem key={r} value={r}>
-                    {r === 'ALL' ? 'Any Readiness' : r}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-
-            {hasFilters ? (
-              <Button
-                variant="ghost"
-                onClick={() => {
-                  setQuery('');
-                  router.replace('/products');
-                }}
-              >
-                Clear Filters
+              <Button render={<Link href="/products/new" />} nativeButton={false}>
+                <PackagePlus aria-hidden="true" /> Create Product
               </Button>
-            ) : null}
+            </PageActions>
+          }
+        />
+      }
+      banner={
+        message ? (
+          <div
+            className="flex items-start gap-2 rounded-lg border border-warning/30 bg-warning/10 px-3 py-2 text-sm text-warning"
+            role="status"
+            aria-live="polite"
+          >
+            <CircleAlert className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+            <span>{message}</span>
           </div>
-        </div>
-        {selected.size > 0 ? (
+        ) : null
+      }
+      kpiStrip={
+        <Stats aria-label="Catalog summary">
+          {[
+            {
+              label: 'All Products',
+              value: summary?.total ?? '—',
+              description: 'Total catalog records',
+              icon: Package,
+              iconClass: 'text-muted-foreground',
+              valueClass: undefined,
+            },
+            {
+              label: 'Published',
+              value: summary?.published ?? '—',
+              description: 'Live on storefront',
+              icon: CheckCircle2,
+              iconClass: 'text-success',
+              valueClass: 'text-success',
+            },
+            {
+              label: 'Drafts',
+              value: summary?.drafts ?? '—',
+              description: 'Unpublished in progress',
+              icon: FileText,
+              iconClass: 'text-warning',
+              valueClass: 'text-warning',
+            },
+            {
+              label: 'Archived',
+              value: summary?.archived ?? '—',
+              description: 'Historical records',
+              icon: Archive,
+              iconClass: 'text-muted-foreground',
+              valueClass: undefined,
+            },
+          ].map((card) => {
+            const Icon = card.icon;
+            return (
+              <StatsCard key={card.label} className="flex items-start justify-between gap-2">
+                <div className="min-w-0 flex-1">
+                  <StatsTitle>{card.label}</StatsTitle>
+                  <StatsValue className={cn(card.valueClass, state === 'loading' && worklist && 'opacity-60 transition-opacity')}>
+                    {state === 'loading' && !worklist ? <Skeleton className="h-7 w-12" /> : card.value}
+                  </StatsValue>
+                  <StatsDescription>{card.description}</StatsDescription>
+                </div>
+                <Icon className={cn('h-4 w-4 shrink-0 mt-0.5', card.iconClass)} />
+              </StatsCard>
+            );
+          })}
+        </Stats>
+      }
+      filters={
+        <section className="space-y-3" aria-label="Product filters">
+          <div className="flex flex-col gap-2 xl:flex-row xl:items-center">
+            {/* ── Search input ── */}
+            <div className="flex-1 min-w-0">
+              <SearchInput
+                name="productSearch"
+                autoComplete="off"
+                placeholder="Search name, handle, SKU, or Product Type…"
+                value={query}
+                onChange={(val) => setQuery(val.slice(0, 120))}
+                onClear={() => setQuery('')}
+                shortcut="/"
+                isLoading={deferredQuery !== query}
+                aria-label="Search Products"
+              />
+            </div>
+
+            <div className="flex flex-wrap gap-2">
+              {/* ── Product Type — Select ── */}
+              <Select
+                value={productTypeId}
+                onValueChange={(val: string | null) =>
+                  replaceQuery({ type: val ?? 'ALL', page: '1' })
+                }
+                items={productTypeItems}
+              >
+                <SelectTrigger
+                  aria-label="Filter by Product Type"
+                  className="h-9 min-w-44 rounded-lg border bg-card"
+                />
+                <SelectContent>
+                  <SelectItem value="ALL">All Product Types</SelectItem>
+                  {types.map((type) => (
+                    <SelectItem key={type.id} value={type.id} label={type.name}>
+                      {type.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+
+              <Select
+                value={sort}
+                onValueChange={(value: string | null) =>
+                  replaceQuery({ sort: value ?? 'UPDATED_DESC', page: '1' })
+                }
+                items={worklistSortLabels}
+              >
+                <SelectTrigger
+                  aria-label="Sort Products"
+                  className="h-9 min-w-44 rounded-lg border bg-card"
+                />
+                <SelectContent>
+                  {worklistSorts.map((value) => (
+                    <SelectItem key={value} value={value}>
+                      {worklistSortLabels[value]}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+
+              {/* ── Catalog Status — Select ── */}
+              <Select
+                value={status}
+                onValueChange={(val: string | null) =>
+                  replaceQuery({ status: val ?? 'ALL', page: '1' })
+                }
+                items={statusItems}
+              >
+                <SelectTrigger
+                  aria-label="Filter by Catalog State"
+                  className="h-9 w-44 rounded-lg border bg-card"
+                />
+                <SelectContent>
+                  {statuses.map((s) => (
+                    <SelectItem key={s} value={s}>
+                      {s === 'ALL' ? 'Any Catalog State' : s.replaceAll('_', ' ')}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+
+              {/* ── Readiness — Select ── */}
+              <Select
+                value={readiness}
+                onValueChange={(val: string | null) =>
+                  replaceQuery({ readiness: val ?? 'ALL', page: '1' })
+                }
+                items={readinessItems}
+              >
+                <SelectTrigger
+                  aria-label="Filter by Readiness"
+                  className="h-9 w-36 rounded-lg border bg-card"
+                />
+                <SelectContent>
+                  {readinessStates.map((r) => (
+                    <SelectItem key={r} value={r}>
+                      {r === 'ALL' ? 'Any Readiness' : r}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+
+              {hasFilters ? (
+                <Button
+                  variant="ghost"
+                  onClick={() => {
+                    setQuery('');
+                    router.replace('/products');
+                  }}
+                >
+                  Clear Filters
+                </Button>
+              ) : null}
+            </div>
+          </div>
+        </section>
+      }
+      bulkActions={
+        selected.size > 0 ? (
           <div className="flex flex-wrap items-center gap-2 rounded-lg border bg-muted/50 px-3 py-2 text-sm">
             <strong className="mr-auto tabular-nums">{selected.size} selected on this page</strong>
             <Button
@@ -437,9 +446,9 @@ export function ProductList() {
               <Archive aria-hidden="true" /> Archive Selected
             </Button>
           </div>
-        ) : null}
-      </section>
-
+        ) : null
+      }
+    >
       <section
         className="overflow-hidden rounded-xl bg-card ring-1 ring-foreground/10"
         aria-busy={state === 'loading'}
@@ -471,9 +480,31 @@ export function ProductList() {
                 </th>
               </tr>
             </thead>
-            <tbody className="divide-y">
-              {worklist?.items.map((product) => (
-                <tr className="group hover:bg-muted/35" key={product.id}>
+            <tbody
+              className={cn(
+                'divide-y',
+                state === 'loading' && worklist && 'opacity-60 transition-opacity',
+              )}
+            >
+              {state === 'loading' && !worklist ? (
+                <TableSkeletonRows
+                  columns={9}
+                  rows={6}
+                  columnWidths={[
+                    'w-4',
+                    'w-48',
+                    'w-12',
+                    'w-20',
+                    'w-14',
+                    'w-28',
+                    'w-24',
+                    'w-20',
+                    'w-6 ml-auto',
+                  ]}
+                />
+              ) : (
+                worklist?.items.map((product) => (
+                  <tr className="group hover:bg-muted/35" key={product.id}>
                   <td className="px-3 py-2.5">
                     <input
                       aria-label={`Select ${product.title}`}
@@ -556,112 +587,116 @@ export function ProductList() {
                     </Button>
                   </td>
                 </tr>
-              ))}
+              )))}
             </tbody>
           </table>
         </div>
 
         {/* Mobile Card Stack View */}
-        <div className="divide-y divide-border/60 md:hidden">
-          {worklist?.items.map((product) => {
-            const isChecked = selected.has(product.id);
-            return (
-              <div
-                key={product.id}
-                className={cn(
-                  'flex items-start gap-3 p-4 transition-colors',
-                  isChecked && 'bg-primary/5',
-                )}
-              >
-                <div className="pt-1">
-                  <input
-                    aria-label={`Select ${product.title}`}
-                    type="checkbox"
-                    checked={isChecked}
-                    onChange={() => toggleProduct(product.id)}
-                    className="size-4.5 rounded border-border"
-                  />
-                </div>
+        <div
+          className={cn(
+            'divide-y divide-border/60 md:hidden',
+            state === 'loading' && worklist && 'opacity-60 transition-opacity',
+          )}
+        >
+          {state === 'loading' && !worklist ? (
+            <CardSkeletonStack count={4} />
+          ) : (
+            worklist?.items.map((product) => {
+              const isChecked = selected.has(product.id);
+              return (
+                <div
+                  key={product.id}
+                  className={cn(
+                    'flex items-start gap-3 p-4 transition-colors',
+                    isChecked && 'bg-primary/5',
+                  )}
+                >
+                  <div className="pt-1">
+                    <input
+                      aria-label={`Select ${product.title}`}
+                      type="checkbox"
+                      checked={isChecked}
+                      onChange={() => toggleProduct(product.id)}
+                      className="size-4.5 rounded border-border"
+                    />
+                  </div>
 
-                <div className="min-w-0 flex-1 space-y-2">
-                  <div className="flex items-start gap-3">
-                    <span className="flex size-12 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-muted ring-1 ring-foreground/10">
-                      {product.primaryMediaId ? (
-                        <img
-                          alt=""
-                          className="size-full object-cover"
-                          height={48}
-                          loading="lazy"
-                          src={getAdminMediaUrl(product.primaryMediaId, { rendition: 'thumbnail' })}
-                          width={48}
-                        />
-                      ) : (
-                        <ImageIcon className="size-5 text-muted-foreground" aria-hidden="true" />
-                      )}
-                    </span>
+                  <div className="min-w-0 flex-1 space-y-2">
+                    <div className="flex items-start gap-3">
+                      <span className="flex size-12 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-muted ring-1 ring-foreground/10">
+                        {product.primaryMediaId ? (
+                          <img
+                            alt=""
+                            className="size-full object-cover"
+                            height={48}
+                            loading="lazy"
+                            src={getAdminMediaUrl(product.primaryMediaId, { rendition: 'thumbnail' })}
+                            width={48}
+                          />
+                        ) : (
+                          <ImageIcon className="size-5 text-muted-foreground" aria-hidden="true" />
+                        )}
+                      </span>
 
-                    <div className="min-w-0 flex-1">
-                      <Link
-                        href={`/products/${product.id}`}
-                        className="block truncate font-semibold text-sm text-foreground hover:text-primary hover:underline"
-                      >
-                        {product.title}
-                      </Link>
-                      <p className="truncate text-xs text-muted-foreground">
-                        {product.productTypeName ?? 'No Product Type'} · /{product.handle}
-                      </p>
+                      <div className="min-w-0 flex-1">
+                        <Link
+                          href={`/products/${product.id}`}
+                          className="block truncate font-semibold text-sm text-foreground hover:text-primary hover:underline"
+                        >
+                          {product.title}
+                        </Link>
+                        <p className="truncate text-xs text-muted-foreground">
+                          {product.productTypeName ?? 'No Product Type'} · /{product.handle}
+                        </p>
+                      </div>
                     </div>
+
+                    <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
+                      <StatusBadge status={product.readinessState} />
+                      <StatusBadge status={product.status} />
+                      <StatusBadge status={product.publicationStatus} />
+                    </div>
+
+                    <div className="flex items-center justify-between gap-2 pt-1 text-xs">
+                      <span className="font-semibold text-foreground tabular-nums">
+                        {productPrice(product)}
+                      </span>
+                      <span className="font-mono tabular-nums text-muted-foreground">
+                        <span className="text-foreground font-medium">
+                          {formatQuantity(product.availableQuantity)}
+                        </span>{' '}
+                        available · {product.variantCount ?? 0}{' '}
+                        {product.variantCount === 1 ? 'variant' : 'variants'}
+                      </span>
+                    </div>
+
+                    {product.attention ? (
+                      <Link
+                        className="block rounded-md bg-warning/10 p-2 text-xs text-warning hover:underline"
+                        href={productReadinessResolutionHref(product.id, product.attention.code)}
+                      >
+                        <span className="font-semibold">Action needed: </span>
+                        {product.attention.label} — {product.attention.message}
+                      </Link>
+                    ) : null}
                   </div>
 
-                  <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
-                    <StatusBadge status={product.readinessState} />
-                    <StatusBadge status={product.status} />
-                    <StatusBadge status={product.publicationStatus} />
-                  </div>
-
-                  <div className="flex items-center justify-between gap-2 pt-1 text-xs">
-                    <span className="font-semibold text-foreground tabular-nums">
-                      {productPrice(product)}
-                    </span>
-                    <span className="font-mono tabular-nums text-muted-foreground">
-                      <span className="text-foreground font-medium">
-                        {formatQuantity(product.availableQuantity)}
-                      </span>{' '}
-                      available · {product.variantCount ?? 0}{' '}
-                      {product.variantCount === 1 ? 'variant' : 'variants'}
-                    </span>
-                  </div>
-
-                  {product.attention ? (
-                    <Link
-                      className="block rounded-md bg-warning/10 p-2 text-xs text-warning hover:underline"
-                      href={productReadinessResolutionHref(product.id, product.attention.code)}
+                  <div className="pt-1">
+                    <Button
+                      aria-label={`Open ${product.title}`}
+                      size="icon-sm"
+                      variant="ghost"
+                      render={<Link href={`/products/${product.id}`} />}
                     >
-                      <span className="font-semibold">Action needed: </span>
-                      {product.attention.label} — {product.attention.message}
-                    </Link>
-                  ) : null}
+                      <ArrowRight className="size-4" aria-hidden="true" />
+                    </Button>
+                  </div>
                 </div>
-
-                <div className="pt-1">
-                  <Button
-                    aria-label={`Open ${product.title}`}
-                    size="icon-sm"
-                    variant="ghost"
-                    render={<Link href={`/products/${product.id}`} />}
-                  >
-                    <ArrowRight className="size-4" aria-hidden="true" />
-                  </Button>
-                </div>
-              </div>
-            );
-          })}
+              );
+            })
+          )}
         </div>
-        {state === 'loading' ? (
-          <div className="px-4 py-14 text-center text-sm text-muted-foreground" role="status">
-            Loading Products…
-          </div>
-        ) : null}
         {state === 'ready' && worklist?.items.length === 0 ? (
           <div className="mx-auto flex max-w-md flex-col items-center px-5 py-14 text-center">
             <PackagePlus className="mb-3 size-8 text-muted-foreground" aria-hidden="true" />
@@ -690,31 +725,31 @@ export function ProductList() {
             </Button>
           </div>
         ) : null}
-        {worklist && worklist.pagination.totalPages > 1 ? (
-          <footer className="flex items-center justify-between gap-3 border-t px-4 py-3 text-sm">
-            <span className="text-muted-foreground tabular-nums">
-              {worklist.pagination.totalItems} Products · Page {worklist.pagination.page} of{' '}
-              {worklist.pagination.totalPages}
-            </span>
-            <div className="flex gap-2">
-              <Button
-                variant="outline"
-                disabled={page <= 1}
-                onClick={() => replaceQuery({ page: String(page - 1) })}
-              >
-                Previous
-              </Button>
-              <Button
-                variant="outline"
-                disabled={page >= worklist.pagination.totalPages}
-                onClick={() => replaceQuery({ page: String(page + 1) })}
-              >
-                Next
-              </Button>
-            </div>
-          </footer>
-        ) : null}
       </section>
-    </main>
+      {worklist && worklist.pagination.totalPages > 1 ? (
+        <footer className="flex items-center justify-between gap-3 rounded-xl border bg-card px-4 py-3 text-sm">
+          <span className="text-muted-foreground tabular-nums">
+            {worklist.pagination.totalItems} Products · Page {worklist.pagination.page} of{' '}
+            {worklist.pagination.totalPages}
+          </span>
+          <div className="flex gap-2">
+            <Button
+              variant="outline"
+              disabled={page <= 1}
+              onClick={() => replaceQuery({ page: String(page - 1) })}
+            >
+              Previous
+            </Button>
+            <Button
+              variant="outline"
+              disabled={page >= worklist.pagination.totalPages}
+              onClick={() => replaceQuery({ page: String(page + 1) })}
+            >
+              Next
+            </Button>
+          </div>
+        </footer>
+      ) : null}
+    </ListWorkspace>
   );
 }

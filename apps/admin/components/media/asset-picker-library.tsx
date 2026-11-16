@@ -163,10 +163,10 @@ export function AssetPickerLibrary({
               <button
                 type="button"
                 aria-pressed={usageFilter === 'all'}
-                className={`min-h-9 rounded px-2 py-1 text-xs transition-colors focus-visible:ring-2 focus-visible:ring-ring ${
+                className={`min-h-9 rounded px-2 py-1 text-xs border transition-colors focus-visible:ring-2 focus-visible:ring-ring ${
                   usageFilter === 'all'
-                    ? 'bg-primary text-primary-foreground font-medium'
-                    : 'bg-muted/40 text-muted-foreground hover:text-foreground'
+                    ? 'border-primary/25 bg-primary-subtle text-primary-hover dark:text-primary font-semibold'
+                    : 'border-transparent bg-muted/40 text-muted-foreground hover:text-foreground'
                 }`}
                 onClick={() => {
                   setUsageFilter('all');
@@ -178,10 +178,10 @@ export function AssetPickerLibrary({
               <button
                 type="button"
                 aria-pressed={usageFilter === 'used'}
-                className={`min-h-9 rounded px-2 py-1 text-xs transition-colors focus-visible:ring-2 focus-visible:ring-ring ${
+                className={`min-h-9 rounded px-2 py-1 text-xs border transition-colors focus-visible:ring-2 focus-visible:ring-ring ${
                   usageFilter === 'used'
-                    ? 'bg-primary text-primary-foreground font-medium'
-                    : 'bg-muted/40 text-muted-foreground hover:text-foreground'
+                    ? 'border-primary/25 bg-primary-subtle text-primary-hover dark:text-primary font-semibold'
+                    : 'border-transparent bg-muted/40 text-muted-foreground hover:text-foreground'
                 }`}
                 onClick={() => {
                   setUsageFilter('used');
@@ -193,10 +193,10 @@ export function AssetPickerLibrary({
               <button
                 type="button"
                 aria-pressed={usageFilter === 'unused'}
-                className={`min-h-9 rounded px-2 py-1 text-xs transition-colors focus-visible:ring-2 focus-visible:ring-ring ${
+                className={`min-h-9 rounded px-2 py-1 text-xs border transition-colors focus-visible:ring-2 focus-visible:ring-ring ${
                   usageFilter === 'unused'
-                    ? 'bg-primary text-primary-foreground font-medium'
-                    : 'bg-muted/40 text-muted-foreground hover:text-foreground'
+                    ? 'border-primary/25 bg-primary-subtle text-primary-hover dark:text-primary font-semibold'
+                    : 'border-transparent bg-muted/40 text-muted-foreground hover:text-foreground'
                 }`}
                 onClick={() => {
                   setUsageFilter('unused');
@@ -356,7 +356,7 @@ export function AssetPickerLibrary({
                         <span
                           className={`absolute left-2 top-2 z-10 flex size-6 items-center justify-center rounded border transition-colors shadow-xs ${
                             selected
-                              ? 'border-primary bg-primary text-primary-foreground'
+                              ? 'border-primary-hover bg-primary-hover text-white dark:border-primary dark:bg-primary dark:text-primary-foreground'
                               : 'border-white/60 bg-black/40 text-white group-hover:bg-black/60'
                           }`}
                         >

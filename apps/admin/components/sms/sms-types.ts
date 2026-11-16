@@ -43,17 +43,17 @@ export const smsStatusContent: Readonly<
   NOT_APPLICABLE: {
     label: 'Skipped',
     explanation: 'This SMS did not apply to the current recipient or configuration.',
-    tone: 'border-slate-300 bg-slate-50 text-slate-700 dark:bg-slate-900',
+    tone: 'border-border bg-muted text-muted-foreground',
   },
   SKIPPED_NO_PHONE: {
     label: 'No Phone',
     explanation: 'The order snapshot did not contain a usable customer phone.',
-    tone: 'border-slate-300 bg-slate-50 text-slate-700 dark:bg-slate-900',
+    tone: 'border-border bg-muted text-muted-foreground',
   },
   PENDING_MANUAL: {
     label: 'Manual Only',
     explanation: 'Automatic sending is disabled; an authorized operator may send it manually.',
-    tone: 'border-slate-300 bg-slate-50 text-slate-700 dark:bg-slate-900',
+    tone: 'border-border bg-muted text-muted-foreground',
   },
   QUEUED: {
     label: 'Queued',
@@ -109,7 +109,7 @@ export const smsStatusContent: Readonly<
   SUPPRESSED: {
     label: 'Suppressed',
     explanation: 'Maevelle intentionally blocked delivery to this recipient.',
-    tone: 'border-slate-300 bg-slate-50 text-slate-700 dark:bg-slate-900',
+    tone: 'border-border bg-muted text-muted-foreground',
   },
 };
 

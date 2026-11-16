@@ -8,11 +8,11 @@ import {
   FileCheck,
   HardDrive,
   History,
-  Image as ImageIcon,
   RefreshCw,
   RotateCcw,
   Upload,
 } from 'lucide-react';
+import { AdminPage, PageHeader } from '@/components/ui/page-shell';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { SettingsCard, SettingsSection } from '@/components/settings/settings-card';
@@ -22,24 +22,34 @@ import { SettingsConfirmationDialog } from '@/components/settings/settings-confi
 import { SettingsAuditDrawer } from '@/components/settings/settings-audit-drawer';
 import { RuntimeEffectBadge } from '@/components/settings/setting-status-badge';
 import { fetchApiData } from '@/lib/api';
-import type { MediaModuleSettingsDto, MediaRuntimeDto, ModuleSettingsResponseDto } from '@maevelle/contracts';
+import type {
+  MediaModuleSettingsDto,
+  MediaRuntimeDto,
+  ModuleSettingsResponseDto,
+} from '@maevelle/contracts';
 
 const MIB = 1024 * 1024;
 const formatMiB = (bytes: number) => `${Number((bytes / MIB).toFixed(3))} MiB`;
 const formatInputMiB = (bytes: number) => Number((bytes / MIB).toFixed(6));
 const acceptedFormatLabels: Record<MediaRuntimeDto['acceptedMimeTypes'][number], string> = {
-  'image/jpeg': 'JPEG', 'image/png': 'PNG', 'image/webp': 'WebP', 'application/pdf': 'PDF',
+  'image/jpeg': 'JPEG',
+  'image/png': 'PNG',
+  'image/webp': 'WebP',
+  'application/pdf': 'PDF',
 };
 
 export function MediaSettingsConsole() {
-  const [initialData, setInitialData] = useState<ModuleSettingsResponseDto<MediaModuleSettingsDto>>();
+  const [initialData, setInitialData] =
+    useState<ModuleSettingsResponseDto<MediaModuleSettingsDto>>();
   const [runtime, setRuntime] = useState<MediaRuntimeDto>();
   const [maxUploadBytes, setMaxUploadBytes] = useState<number>(10 * MIB);
   const [expiryMinutes, setExpiryMinutes] = useState<number>(15);
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+  const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(
+    null,
+  );
 
   const [resetConfirmOpen, setResetConfirmOpen] = useState(false);
   const [auditDrawerOpen, setAuditDrawerOpen] = useState(false);
@@ -76,7 +86,9 @@ export function MediaSettingsConsole() {
 
   // Dirty state calculation
   const initialBytes = initialData?.effective['media.maxUploadBytes'] ?? 10 * MIB;
-  const initialMin = initialData ? Math.round(initialData.settings['media.uploadExpirySeconds'] / 60) : 15;
+  const initialMin = initialData
+    ? Math.round(initialData.settings['media.uploadExpirySeconds'] / 60)
+    : 15;
   const isDirty = maxUploadBytes !== initialBytes || expiryMinutes !== initialMin;
 
   const handleDiscard = () => {
@@ -90,15 +102,24 @@ export function MediaSettingsConsole() {
     setSaving(true);
     setFeedback(null);
 
-    if (!Number.isSafeInteger(maxUploadBytes) || maxUploadBytes < 1024 ||
-        maxUploadBytes > Math.min(runtime?.deploymentMaxUploadBytes ?? 0, 50 * MIB)) {
-      setFeedback({ type: 'error', message: `Maximum upload size must be between 1 KiB and ${formatMiB(runtime?.deploymentMaxUploadBytes ?? 0)}.` });
+    if (
+      !Number.isSafeInteger(maxUploadBytes) ||
+      maxUploadBytes < 1024 ||
+      maxUploadBytes > Math.min(runtime?.deploymentMaxUploadBytes ?? 0, 50 * MIB)
+    ) {
+      setFeedback({
+        type: 'error',
+        message: `Maximum upload size must be between 1 KiB and ${formatMiB(runtime?.deploymentMaxUploadBytes ?? 0)}.`,
+      });
       setSaving(false);
       return;
     }
     // Validation: 1 to 60 minutes
     if (expiryMinutes < 1 || expiryMinutes > 60) {
-      setFeedback({ type: 'error', message: 'Upload session expiry must be between 1 and 60 minutes.' });
+      setFeedback({
+        type: 'error',
+        message: 'Upload session expiry must be between 1 and 60 minutes.',
+      });
       setSaving(false);
       return;
     }
@@ -158,7 +179,11 @@ export function MediaSettingsConsole() {
         setMaxUploadBytes(bytes);
         setExpiryMinutes(Math.round(seconds / 60));
         setResetConfirmOpen(false);
-        setFeedback({ type: 'success', message: 'Media settings reset. The effective upload limit follows the deployment ceiling.' });
+        setFeedback({
+          type: 'success',
+          message:
+            'Media settings reset. The effective upload limit follows the deployment ceiling.',
+        });
       }
     } catch (err) {
       setFeedback({
@@ -172,70 +197,66 @@ export function MediaSettingsConsole() {
 
   if (loading && !initialData) {
     return (
-      <div className="flex flex-col items-center justify-center h-64 gap-2 text-muted-foreground text-xs">
-        <RefreshCw className="size-5 animate-spin text-primary" />
-        <span>Loading Media Settings...</span>
-      </div>
+      <AdminPage variant="narrow">
+        <div className="flex flex-col items-center justify-center h-64 gap-2 text-muted-foreground text-xs">
+          <RefreshCw className="size-5 animate-spin text-primary" />
+          <span>Loading Media Settings...</span>
+        </div>
+      </AdminPage>
     );
   }
 
   if (!initialData || !runtime) {
     return (
-      <div className="rounded-lg border border-destructive/20 bg-card p-5 text-sm">
-        <p className="text-destructive">{feedback?.message ?? 'Media settings could not be loaded.'}</p>
-        <Button type="button" variant="outline" className="mt-3" onClick={() => void loadData()}>
-          Retry
-        </Button>
-      </div>
+      <AdminPage variant="narrow">
+        <div className="rounded-lg border border-destructive/20 bg-card p-5 text-sm">
+          <p className="text-destructive">
+            {feedback?.message ?? 'Media settings could not be loaded.'}
+          </p>
+          <Button type="button" variant="outline" className="mt-3" onClick={() => void loadData()}>
+            Retry
+          </Button>
+        </div>
+      </AdminPage>
     );
   }
 
   return (
-    <div className="space-y-6 pb-20 max-w-4xl">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-4 border-b">
-        <div>
-          <div className="flex items-center gap-2 text-xs text-muted-foreground mb-1">
-            <Link href="/media" className="hover:text-foreground flex items-center gap-1">
-              <ImageIcon className="size-3.5" />
-              Media Library
-            </Link>
-            <span>/</span>
-            <span className="text-foreground font-medium">Settings</span>
-          </div>
-          <div className="flex flex-wrap items-center gap-2.5">
-            <h1 className="text-xl font-semibold tracking-tight text-foreground">Media Settings</h1>
-            <RuntimeEffectBadge runtimeMutable requiresRestart={false} />
-          </div>
-          <p className="text-xs text-muted-foreground mt-1">
-            Manage upload limits and session expiry, and inspect the active storage configuration.
-          </p>
-        </div>
+    <AdminPage variant="narrow" className="pb-20">
+      <PageHeader
+        breadcrumbs={[
+          { label: 'Media Library', href: '/media' },
+          { label: 'Settings', current: true },
+        ]}
+        title="Media Settings"
+        badge={<RuntimeEffectBadge runtimeMutable requiresRestart={false} />}
+        description="Manage upload limits and session expiry, and inspect the active storage configuration."
+        actions={
+          <>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setAuditDrawerOpen(true)}
+              className="text-xs h-8 gap-1.5"
+            >
+              <History className="size-3.5 text-muted-foreground" />
+              History
+            </Button>
 
-        <div className="flex items-center gap-2">
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={() => setAuditDrawerOpen(true)}
-            className="text-xs h-8 gap-1.5"
-          >
-            <History className="size-3.5 text-muted-foreground" />
-            History
-          </Button>
-
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            onClick={() => setResetConfirmOpen(true)}
-            className="text-xs h-8 text-muted-foreground hover:text-foreground"
-          >
-            <RotateCcw className="size-3.5 mr-1" />
-            Reset to default
-          </Button>
-        </div>
-      </div>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={() => setResetConfirmOpen(true)}
+              className="text-xs h-8 text-muted-foreground hover:text-foreground"
+            >
+              <RotateCcw className="size-3.5 mr-1" />
+              Reset to default
+            </Button>
+          </>
+        }
+      />
 
       {feedback && (
         <div
@@ -294,13 +315,23 @@ export function MediaSettingsConsole() {
                 <span className="text-xs font-semibold text-muted-foreground">Mebibytes (MiB)</span>
               </div>
               <p className="text-[11px] text-muted-foreground mt-1">
-                Active deployment ceiling: {runtime ? formatMiB(runtime.deploymentMaxUploadBytes) : "Loading…"}. Effective limit: {initialData ? formatMiB(initialData.effective['media.maxUploadBytes']) : "Loading…"}.
+                Active deployment ceiling:{' '}
+                {runtime ? formatMiB(runtime.deploymentMaxUploadBytes) : 'Loading…'}. Effective
+                limit:{' '}
+                {initialData
+                  ? formatMiB(initialData.effective['media.maxUploadBytes'])
+                  : 'Loading…'}
+                .
               </p>
-              {initialData && initialData.settings['media.maxUploadBytes'] !== initialData.effective['media.maxUploadBytes'] && (
-                <p className="mt-1 text-xs text-warning" role="status">
-                  A saved override of {formatMiB(initialData.settings['media.maxUploadBytes'])} exceeds the current deployment ceiling. New uploads use {formatMiB(initialData.effective['media.maxUploadBytes'])}.
-                </p>
-              )}
+              {initialData &&
+                initialData.settings['media.maxUploadBytes'] !==
+                  initialData.effective['media.maxUploadBytes'] && (
+                  <p className="mt-1 text-xs text-warning" role="status">
+                    A saved override of {formatMiB(initialData.settings['media.maxUploadBytes'])}{' '}
+                    exceeds the current deployment ceiling. New uploads use{' '}
+                    {formatMiB(initialData.effective['media.maxUploadBytes'])}.
+                  </p>
+                )}
             </SettingField>
 
             <SettingField
@@ -331,21 +362,48 @@ export function MediaSettingsConsole() {
           <div className="mt-5 pt-4 border-t flex flex-wrap items-center justify-between gap-3 text-xs text-muted-foreground">
             <div className="flex items-center gap-2">
               <FileCheck className="size-4 text-success" />
-              <span>Accepted Media Formats: {runtime?.acceptedMimeTypes.map((mime) => acceptedFormatLabels[mime]).join(', ') ?? 'Loading…'}</span>
+              <span>
+                Accepted Media Formats:{' '}
+                {runtime?.acceptedMimeTypes.map((mime) => acceptedFormatLabels[mime]).join(', ') ??
+                  'Loading…'}
+              </span>
             </div>
             <span className="text-[11px] bg-muted px-2 py-0.5 rounded font-mono">
-              Review uploads: up to {runtime ? formatMiB(Math.min(runtime.reviewMaxUploadBytes, initialData?.effective['media.maxUploadBytes'] ?? runtime.reviewMaxUploadBytes)) : "Loading…"}
+              Review uploads: up to{' '}
+              {runtime
+                ? formatMiB(
+                    Math.min(
+                      runtime.reviewMaxUploadBytes,
+                      initialData?.effective['media.maxUploadBytes'] ??
+                        runtime.reviewMaxUploadBytes,
+                    ),
+                  )
+                : 'Loading…'}
             </span>
           </div>
         </SettingsCard>
       </SettingsSection>
 
-      <SettingsSection title="Storage Infrastructure" description="Backend selected by deployment configuration; live storage health is checked separately.">
+      <SettingsSection
+        title="Storage Infrastructure"
+        description="Backend selected by deployment configuration; live storage health is checked separately."
+      >
         <SettingsCard title={runtime?.storageLabel ?? 'Storage backend'} icon={HardDrive}>
           <div className="space-y-3 text-xs text-muted-foreground">
-            <p>Active backend: <strong className="text-foreground">{runtime?.storageLabel ?? 'Loading…'}</strong></p>
-            <p>Storage credentials and paths are managed on the server. This configuration does not establish live connectivity.</p>
-            <Link href="/media" className="inline-flex min-h-10 items-center text-primary underline-offset-2 hover:underline">Open Media Library to run a health check</Link>
+            <p>
+              Active backend:{' '}
+              <strong className="text-foreground">{runtime?.storageLabel ?? 'Loading…'}</strong>
+            </p>
+            <p>
+              Storage credentials and paths are managed on the server. This configuration does not
+              establish live connectivity.
+            </p>
+            <Link
+              href="/media"
+              className="inline-flex min-h-10 items-center text-primary underline-offset-2 hover:underline"
+            >
+              Open Media Library to run a health check
+            </Link>
           </div>
         </SettingsCard>
       </SettingsSection>
@@ -377,6 +435,6 @@ export function MediaSettingsConsole() {
         module="media"
         title="Media Settings History"
       />
-    </div>
+    </AdminPage>
   );
 }

@@ -57,7 +57,7 @@ export function DeliveryPricingTable({
 
   return (
     <div className="w-full">
-      <Table density={density}>
+      <Table density={density} stickyHeader>
         <TableHeader>
           <TableRow>
             <TableHead className="w-24 sm:w-28">
@@ -79,7 +79,8 @@ export function DeliveryPricingTable({
                   </TooltipTrigger>
                   <TooltipContent className="max-w-xs text-xs">
                     Higher priority rules are evaluated first. If two rules share the same priority,
-                    the rule with the more specific geographic node takes precedence over country defaults.
+                    the rule with the more specific geographic node takes precedence over country
+                    defaults.
                   </TooltipContent>
                 </Tooltip>
               </div>
@@ -139,7 +140,10 @@ export function DeliveryPricingTable({
                           </span>
 
                           {rule.geography_node_type && (
-                            <Badge variant="outline" className="text-[10px] h-4 py-0 px-1 uppercase tracking-wide">
+                            <Badge
+                              variant="outline"
+                              className="text-[10px] h-4 py-0 px-1 uppercase tracking-wide"
+                            >
                               {rule.geography_node_type.replace(/_/g, ' ')}
                             </Badge>
                           )}
@@ -232,7 +236,11 @@ export function DeliveryPricingTable({
                             }`}
                             onClick={() => onToggleStatus(rule)}
                             disabled={busy}
-                            aria-label={rule.status === 'ACTIVE' ? `Deactivate ${rule.name}` : `Activate ${rule.name}`}
+                            aria-label={
+                              rule.status === 'ACTIVE'
+                                ? `Deactivate ${rule.name}`
+                                : `Activate ${rule.name}`
+                            }
                           />
                         }
                       >
@@ -252,4 +260,3 @@ export function DeliveryPricingTable({
     </div>
   );
 }
-

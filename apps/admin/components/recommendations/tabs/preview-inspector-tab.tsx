@@ -27,8 +27,7 @@ export function PreviewInspectorTab({
   placements,
 }: PreviewInspectorTabProps) {
   const [productId, setProductId] = React.useState(initialProductId);
-  const [placement, setPlacement] =
-    React.useState<RecommendationPlacementCodeDto>('pdp_similar');
+  const [placement, setPlacement] = React.useState<RecommendationPlacementCodeDto>('pdp_similar');
   const [searchQuery, setSearchQuery] = React.useState('');
   const [searchResults, setSearchResults] = React.useState<ProductPickerItem[]>([]);
   const [selectedProduct, setSelectedProduct] = React.useState<ProductPickerItem | null>(null);
@@ -51,7 +50,9 @@ export function PreviewInspectorTab({
     setSearching(true);
     const timer = setTimeout(() => {
       const params = new URLSearchParams({ q: searchQuery, pageSize: '20' });
-      fetchApiData<{ items: ProductPickerItem[] }>(`/admin/recommendations/product-picker?${params}`)
+      fetchApiData<{ items: ProductPickerItem[] }>(
+        `/admin/recommendations/product-picker?${params}`,
+      )
         .then((res) => {
           if (live) {
             setSearchResults(res.items);
@@ -121,16 +122,15 @@ export function PreviewInspectorTab({
               Storefront Preview & Merchandising Inspector
             </h2>
             <p className="text-xs sm:text-sm text-muted-foreground mt-0.5">
-              Simulate customer discovery on any product to verify eligible candidates and algorithmic scoring.
+              Simulate customer discovery on any product to verify eligible candidates and
+              algorithmic scoring.
             </p>
           </div>
 
           <div className="flex items-center gap-2">
             <NativeSelect
               value={placement}
-              onChange={(e) =>
-                setPlacement(e.target.value as RecommendationPlacementCodeDto)
-              }
+              onChange={(e) => setPlacement(e.target.value as RecommendationPlacementCodeDto)}
               className="h-9 text-xs"
             >
               <option value="pdp_similar">You May Also Like (Similar)</option>
@@ -228,7 +228,7 @@ export function PreviewInspectorTab({
                       {/* Image Placeholder with Position Tag */}
                       <div className="relative aspect-square w-full rounded-lg bg-muted/40 border border-border/60 flex items-center justify-center overflow-hidden">
                         <Package className="size-8 text-muted-foreground/40" />
-                        <span className="absolute top-2 left-2 rounded-md bg-foreground/80 backdrop-blur-xs text-background font-mono text-[10px] font-bold px-1.5 py-0.5 shadow-xs">
+                        <span className="absolute top-2 left-2 rounded-md bg-foreground/90 text-background font-mono text-[10px] font-bold px-1.5 py-0.5 shadow-xs">
                           #{card.position}
                         </span>
                       </div>
@@ -238,7 +238,9 @@ export function PreviewInspectorTab({
                         <h4 className="text-xs font-semibold text-foreground truncate">
                           {card.title}
                         </h4>
-                        <p className="text-[11px] text-muted-foreground font-mono">/{card.handle}</p>
+                        <p className="text-[11px] text-muted-foreground font-mono">
+                          /{card.handle}
+                        </p>
                       </div>
                     </div>
 
@@ -257,7 +259,8 @@ export function PreviewInspectorTab({
               </div>
             ) : (
               <div className="rounded-xl border border-dashed border-border bg-muted/20 p-8 text-center text-xs text-muted-foreground">
-                No eligible recommendation cards generated for this placement. Check minimum score, stock levels, or compatibility rules.
+                No eligible recommendation cards generated for this placement. Check minimum score,
+                stock levels, or compatibility rules.
               </div>
             )}
           </div>
@@ -271,7 +274,8 @@ export function PreviewInspectorTab({
                   Algorithm Explainability & Candidate Decision Log
                 </h3>
                 <p className="text-xs text-muted-foreground">
-                  Complete candidate evaluation breakdown showing final match scores and filtering outcomes.
+                  Complete candidate evaluation breakdown showing final match scores and filtering
+                  outcomes.
                 </p>
               </div>
               <span className="text-xs font-mono tabular-nums text-muted-foreground">
@@ -353,4 +357,3 @@ export function PreviewInspectorTab({
     </div>
   );
 }
-

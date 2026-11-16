@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import { Suspense } from 'react';
-import { RefreshCw } from 'lucide-react';
 import { IntegrityCenter } from '@/components/integrity/integrity-center';
+import { PageSkeleton } from '@/components/ui/page-shell';
 
 export const metadata: Metadata = {
   title: 'System Integrity Control Center · Maevelle Admin',
@@ -11,14 +11,7 @@ export const metadata: Metadata = {
 
 export default function IntegrityPage() {
   return (
-    <Suspense
-      fallback={
-        <div className="flex h-96 flex-col items-center justify-center gap-3 text-muted-foreground">
-          <RefreshCw className="size-6 animate-spin text-primary" />
-          <p className="text-sm">Loading System Integrity Control Center…</p>
-        </div>
-      }
-    >
+    <Suspense fallback={<PageSkeleton variant="dashboard" widthVariant="standard" />}>
       <IntegrityCenter />
     </Suspense>
   );

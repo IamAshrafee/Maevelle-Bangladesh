@@ -338,7 +338,7 @@ function MessageTranscriptInner({ isSearchOpen = false, onCloseSearch }: Message
                       messageId={`date-${message.id}`}
                       className="my-2 flex justify-center [contain-intrinsic-size:auto_2rem]"
                     >
-                      <span className="rounded-full border border-border bg-card/90 px-3 py-0.5 font-mono text-[11px] font-medium text-muted-foreground shadow-2xs backdrop-blur-xs select-none">
+                      <span className="rounded-full border border-border bg-card px-3 py-0.5 font-mono text-[11px] font-medium text-muted-foreground shadow-2xs select-none">
                         {formatDateSeparator(message.createdAt)}
                       </span>
                     </MessageScrollerItem>

@@ -8,14 +8,15 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { fetchApiData } from '@/lib/api';
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from '@/components/ui/dialog';
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetFooter,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+} from '@/components/ui/sheet';
+import { useFormDialogLifecycle } from '@/hooks/use-form-dialog-lifecycle';
 
 interface AddAddressDialogProps {
   readonly customerId: string;
@@ -91,164 +92,202 @@ export function AddAddressDialog({
     setIsDefault(isFirstAddress);
   }
 
+  const isDirty = Boolean(
+    label.trim() ||
+      recipientName.trim() ||
+      phone.trim() ||
+      addressLine1.trim() ||
+      addressLine2.trim() ||
+      postalCode.trim() ||
+      area.trim(),
+  );
+
+  const { handleOpenChange, discardConfirmDialog } = useFormDialogLifecycle({
+    isDirty,
+    isSubmitting: busy,
+    onClose: () => {
+      setOpen(false);
+      resetForm();
+    },
+    confirmTitle: 'Discard new address?',
+    confirmDescription: 'You have entered address details. Closing now will discard them.',
+  });
+
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger render={<Button variant="outline" size="sm" className="h-8 gap-1" />}>
+    <>
+      <Sheet open={open} onOpenChange={handleOpenChange}>
+      <SheetTrigger render={<Button variant="outline" size="sm" className="h-8 gap-1" />}>
         <Plus className="size-3.5" aria-hidden="true" /> Add Address
-      </DialogTrigger>
-      <DialogContent className="sm:max-w-lg max-h-[90dvh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle>Add Customer Address</DialogTitle>
-          <DialogDescription>
+      </SheetTrigger>
+      <SheetContent side="right" className="gap-0 p-0 sm:max-w-lg">
+        <SheetHeader className="shrink-0 border-b border-border px-5 py-4 pr-11 text-left">
+          <SheetTitle>Add Customer Address</SheetTitle>
+          <SheetDescription>
             Add a delivery address to this customer's address book for future orders.
-          </DialogDescription>
-        </DialogHeader>
+          </SheetDescription>
+        </SheetHeader>
 
-        {message && (
-          <div className="flex items-start gap-2 rounded-lg border border-red-300/70 bg-red-50 px-3 py-2 text-sm text-red-950">
-            <CircleAlert className="mt-0.5 size-4 shrink-0" />
-            <p className="leading-tight">{message}</p>
-          </div>
-        )}
+        <form onSubmit={submit} className="flex min-h-0 flex-1 flex-col">
+          <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-5 py-4">
+            {message && (
+              <div className="flex items-start gap-2 rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+                <CircleAlert className="mt-0.5 size-4 shrink-0" />
+                <p className="leading-tight">{message}</p>
+              </div>
+            )}
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label htmlFor="add-addr-label" className="text-xs">
+                  Address Label
+                </Label>
+                <Input
+                  id="add-addr-label"
+                  value={label}
+                  onChange={(e) => setLabel(e.target.value)}
+                  placeholder="Home, Office"
+                  className="h-9"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="add-addr-recipient" className="text-xs">
+                  Recipient Name *
+                </Label>
+                <Input
+                  id="add-addr-recipient"
+                  value={recipientName}
+                  onChange={(e) => setRecipientName(e.target.value)}
+                  required
+                  className="h-9"
+                />
+              </div>
+            </div>
 
-        <form onSubmit={submit} className="space-y-4">
-          <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
-              <Label htmlFor="add-addr-label" className="text-xs">Address Label</Label>
+              <Label htmlFor="add-addr-phone" className="text-xs">
+                Recipient Phone
+              </Label>
               <Input
-                id="add-addr-label"
-                value={label}
-                onChange={(e) => setLabel(e.target.value)}
-                placeholder="Home, Office"
+                id="add-addr-phone"
+                type="tel"
+                value={phone}
+                onChange={(e) => setPhone(e.target.value)}
+                placeholder="01712345678"
                 className="h-9"
               />
             </div>
+
             <div className="space-y-1.5">
-              <Label htmlFor="add-addr-recipient" className="text-xs">Recipient Name *</Label>
+              <Label htmlFor="add-addr-line1" className="text-xs">
+                Address Line 1 *
+              </Label>
               <Input
-                id="add-addr-recipient"
-                value={recipientName}
-                onChange={(e) => setRecipientName(e.target.value)}
+                id="add-addr-line1"
+                value={addressLine1}
+                onChange={(e) => setAddressLine1(e.target.value)}
+                placeholder="House 12, Road 4, Block B"
                 required
                 className="h-9"
               />
             </div>
-          </div>
 
-          <div className="space-y-1.5">
-            <Label htmlFor="add-addr-phone" className="text-xs">Recipient Phone</Label>
-            <Input
-              id="add-addr-phone"
-              type="tel"
-              value={phone}
-              onChange={(e) => setPhone(e.target.value)}
-              placeholder="01712345678"
-              className="h-9"
-            />
-          </div>
-
-          <div className="space-y-1.5">
-            <Label htmlFor="add-addr-line1" className="text-xs">Address Line 1 *</Label>
-            <Input
-              id="add-addr-line1"
-              value={addressLine1}
-              onChange={(e) => setAddressLine1(e.target.value)}
-              placeholder="House 12, Road 4, Block B"
-              required
-              className="h-9"
-            />
-          </div>
-
-          <div className="space-y-1.5">
-            <Label htmlFor="add-addr-line2" className="text-xs">Address Line 2 (Optional)</Label>
-            <Input
-              id="add-addr-line2"
-              value={addressLine2}
-              onChange={(e) => setAddressLine2(e.target.value)}
-              placeholder="Apartment 4A, Landmark"
-              className="h-9"
-            />
-          </div>
-
-          <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
-              <Label htmlFor="add-addr-city" className="text-xs">City / Division *</Label>
+              <Label htmlFor="add-addr-line2" className="text-xs">
+                Address Line 2 (Optional)
+              </Label>
               <Input
-                id="add-addr-city"
-                value={city}
-                onChange={(e) => setCity(e.target.value)}
-                required
+                id="add-addr-line2"
+                value={addressLine2}
+                onChange={(e) => setAddressLine2(e.target.value)}
+                placeholder="Apartment 4A, Landmark"
                 className="h-9"
               />
             </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="add-addr-area" className="text-xs">Area / Thana</Label>
-              <Input
-                id="add-addr-area"
-                value={area}
-                onChange={(e) => setArea(e.target.value)}
-                placeholder="Dhanmondi, Gulshan"
-                className="h-9"
-              />
+
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label htmlFor="add-addr-city" className="text-xs">
+                  City / Division *
+                </Label>
+                <Input
+                  id="add-addr-city"
+                  value={city}
+                  onChange={(e) => setCity(e.target.value)}
+                  required
+                  className="h-9"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="add-addr-area" className="text-xs">
+                  Area / Thana
+                </Label>
+                <Input
+                  id="add-addr-area"
+                  value={area}
+                  onChange={(e) => setArea(e.target.value)}
+                  placeholder="Dhanmondi, Gulshan"
+                  className="h-9"
+                />
+              </div>
             </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label htmlFor="add-addr-district" className="text-xs">
+                  District
+                </Label>
+                <Input
+                  id="add-addr-district"
+                  value={district}
+                  onChange={(e) => setDistrict(e.target.value)}
+                  className="h-9"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="add-addr-postal" className="text-xs">
+                  Postal Code
+                </Label>
+                <Input
+                  id="add-addr-postal"
+                  value={postalCode}
+                  onChange={(e) => setPostalCode(e.target.value)}
+                  placeholder="1209"
+                  className="h-9"
+                />
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 pt-1">
+              <input
+                type="checkbox"
+                id="add-addr-default"
+                checked={isDefault}
+                onChange={(e) => setIsDefault(e.target.checked)}
+                className="size-4 rounded border-input"
+              />
+              <Label htmlFor="add-addr-default" className="text-xs font-normal">
+                Set as Default Shipping Address
+              </Label>
+            </div>
+
+            <p className="text-[11px] text-muted-foreground pt-1">
+              Note: Updating saved customer addresses applies to future orders. Past order snapshots
+              remain immutable.
+            </p>
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1.5">
-              <Label htmlFor="add-addr-district" className="text-xs">District</Label>
-              <Input
-                id="add-addr-district"
-                value={district}
-                onChange={(e) => setDistrict(e.target.value)}
-                className="h-9"
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="add-addr-postal" className="text-xs">Postal Code</Label>
-              <Input
-                id="add-addr-postal"
-                value={postalCode}
-                onChange={(e) => setPostalCode(e.target.value)}
-                placeholder="1209"
-                className="h-9"
-              />
-            </div>
-          </div>
-
-          <div className="flex items-center gap-2 pt-1">
-            <input
-              type="checkbox"
-              id="add-addr-default"
-              checked={isDefault}
-              onChange={(e) => setIsDefault(e.target.checked)}
-              className="size-4 rounded border-input"
-            />
-            <Label htmlFor="add-addr-default" className="text-xs font-normal">
-              Set as Default Shipping Address
-            </Label>
-          </div>
-
-          <p className="text-[11px] text-muted-foreground pt-1">
-            Note: Updating saved customer addresses applies to future orders. Past order snapshots
-            remain immutable.
-          </p>
-
-          <DialogFooter>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => setOpen(false)}
-              disabled={busy}
-            >
+          <SheetFooter className="shrink-0 flex-row items-center justify-end gap-2 border-t border-border bg-card/50 px-5 py-3 pb-[max(1rem,env(safe-area-inset-bottom,0px))] sm:pb-3">
+            <Button type="button" variant="outline" onClick={() => handleOpenChange(false)} disabled={busy}>
               Cancel
             </Button>
             <Button type="submit" disabled={busy || !recipientName.trim() || !addressLine1.trim()}>
               {busy && <Loader2 className="mr-2 size-4 animate-spin" />}
               Save Address
             </Button>
-          </DialogFooter>
+          </SheetFooter>
         </form>
-      </DialogContent>
-    </Dialog>
-  );
+      </SheetContent>
+    </Sheet>
+    {discardConfirmDialog}
+  </>
+);
 }

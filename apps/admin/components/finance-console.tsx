@@ -41,8 +41,10 @@ import {
   FinanceOverview,
   ReconciliationSection,
 } from '@/components/finance/finance-sections';
-import { OperationalFeedback, OperationalPageHeader } from '@/components/operational-worklist';
+import { OperationalFeedback } from '@/components/operational-worklist';
 import { Button } from '@/components/ui/button';
+import { AdminPage, PageHeader } from '@/components/ui/page-shell';
+import { useQueryParamsSync } from '@/lib/navigation/use-query-params-sync';
 
 import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -162,18 +164,17 @@ export function FinanceConsole({
     }
   }, [mode, searchParams]);
 
-  const handleTabChange = useCallback((newTab: FinanceSection) => {
-    setActiveSection(newTab);
-    if (typeof window !== 'undefined') {
-      const currentUrl = new URL(window.location.href);
-      if (newTab === 'accounts' || newTab === 'overview') {
-        currentUrl.searchParams.delete('tab');
-      } else {
-        currentUrl.searchParams.set('tab', newTab);
-      }
-      window.history.replaceState(null, '', currentUrl.pathname + currentUrl.search);
-    }
-  }, []);
+  const { setParams } = useQueryParamsSync();
+
+  const handleTabChange = useCallback(
+    (newTab: FinanceSection) => {
+      setActiveSection(newTab);
+      setParams({
+        tab: newTab === 'accounts' || newTab === 'overview' ? undefined : newTab,
+      });
+    },
+    [setParams],
+  );
 
   const canViewAccounts = useAdminCapability('finance.accounts.view');
   const canManageAccounts = useAdminCapability('finance.accounts.manage');
@@ -515,9 +516,9 @@ export function FinanceConsole({
   ];
 
   return (
-    <main className="min-w-0 px-4 py-5 sm:px-6 lg:px-8">
-      <div className="mx-auto grid max-w-[1500px] gap-6">
-        <OperationalPageHeader
+    <AdminPage variant="wide">
+      <div className="grid gap-6">
+        <PageHeader
           eyebrow="Payments & finance"
           title={copy.title}
           description={copy.description}
@@ -771,6 +772,6 @@ export function FinanceConsole({
           />
         ) : null}
       </div>
-    </main>
+    </AdminPage>
   );
 }

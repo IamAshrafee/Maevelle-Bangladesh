@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import { usePathname, useRouter } from 'next/navigation';
 import {
   AlertCircle,
   Box,
@@ -25,14 +26,14 @@ import type {
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
-  Dialog,
-  DialogClose,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
-import { SupplyTaskDialogContent } from '@/components/supply/supply-task-dialog-content';
+  Sheet,
+  SheetClose,
+  SheetContent,
+  SheetDescription,
+  SheetFooter,
+  SheetHeader,
+  SheetTitle,
+} from '@/components/ui/sheet';
 import { Field, FieldDescription, FieldLabel } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
 import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select';
@@ -45,6 +46,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+import { useFormDialogLifecycle } from '@/hooks/use-form-dialog-lifecycle';
 import { formatSupplyNumber, remainingSupplyQuantity, supplyRequest } from '@/lib/supply/api';
 import { isShipmentReceivingLocation } from '@/lib/supply/location-options';
 
@@ -66,21 +68,6 @@ export interface PlanShipmentDialogProps {
   readonly onSuccess?: ((shipment?: InboundShipmentDto) => void) | undefined;
 }
 
-function cleanUrlParams(...keys: string[]) {
-  if (typeof window === 'undefined') return;
-  const url = new URL(window.location.href);
-  let changed = false;
-  for (const key of keys) {
-    if (url.searchParams.has(key)) {
-      url.searchParams.delete(key);
-      changed = true;
-    }
-  }
-  if (changed) {
-    window.history.replaceState({}, '', url.toString());
-  }
-}
-
 export function PlanShipmentDialog({
   open,
   onOpenChange,
@@ -89,6 +76,24 @@ export function PlanShipmentDialog({
   defaultPurchaseId,
   onSuccess,
 }: PlanShipmentDialogProps) {
+  const router = useRouter();
+  const pathname = usePathname() ?? '/';
+
+  function cleanUrlParams(...keys: string[]) {
+    if (typeof window === 'undefined') return;
+    const params = new URLSearchParams(window.location.search);
+    let changed = false;
+    for (const key of keys) {
+      if (params.has(key)) {
+        params.delete(key);
+        changed = true;
+      }
+    }
+    if (changed) {
+      const qs = params.toString();
+      router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
+    }
+  }
   const [loadedLocations, setLoadedLocations] = useState<readonly WarehouseLocationDto[]>(
     propLocations ?? [],
   );
@@ -418,24 +423,46 @@ export function PlanShipmentDialog({
     onOpenChange(false);
   }
 
+  const isDirty =
+    lines.length > 0 ||
+    originText.trim() !== '' ||
+    trackingReference.trim() !== '' ||
+    expectedArrivalDate.trim() !== '';
+
+  const { handleOpenChange, discardConfirmDialog } = useFormDialogLifecycle({
+    onOpenChange: (val: boolean) => {
+      if (!val) {
+        cleanUrlParams('create', 'purchase');
+      }
+      onOpenChange(val);
+    },
+    isDirty,
+    isSubmitting: saving,
+    title: 'Discard inbound freight draft?',
+  });
+
   return (
-    <Dialog open={open} onOpenChange={(val) => (!val ? handleDialogClose() : onOpenChange(val))}>
-      <SupplyTaskDialogContent className="max-h-[92vh] overflow-y-auto sm:max-w-3xl">
-        <DialogHeader>
-          <div className="flex items-center gap-2">
-            <div className="flex size-9 items-center justify-center rounded-xl bg-primary/10 text-primary">
-              <Ship className="size-5" />
+    <>
+      <Sheet open={open} onOpenChange={handleOpenChange}>
+        <SheetContent
+          side="right"
+          className="flex w-full flex-col p-0 sm:max-w-3xl"
+        >
+          <SheetHeader className="shrink-0 border-b border-border/60 px-6 py-4 pr-12 text-left">
+            <div className="flex items-center gap-2">
+              <div className="flex size-9 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                <Ship className="size-5" />
+              </div>
+              <div>
+                <SheetTitle className="text-base font-semibold">
+                  Plan Inbound Freight Shipment
+                </SheetTitle>
+                <SheetDescription className="text-xs">
+                  Consolidate placed purchase order items into an inbound freight consignment.
+                </SheetDescription>
+              </div>
             </div>
-            <div>
-              <DialogTitle className="text-base font-semibold">
-                Plan Inbound Freight Shipment
-              </DialogTitle>
-              <DialogDescription className="text-xs">
-                Consolidate placed purchase order items into an inbound freight consignment.
-              </DialogDescription>
-            </div>
-          </div>
-        </DialogHeader>
+          </SheetHeader>
 
         {referenceLoading ? (
           <div
@@ -471,8 +498,9 @@ export function PlanShipmentDialog({
             </Button>
           </div>
         ) : (
-          <form onSubmit={handleSubmit} className="space-y-5">
-            {referenceError ? (
+          <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col">
+            <div className="min-h-0 flex-1 space-y-5 overflow-y-auto px-6 py-4">
+              {referenceError ? (
               <div
                 role="alert"
                 aria-live="polite"
@@ -989,11 +1017,12 @@ export function PlanShipmentDialog({
                 </div>
               ) : null}
             </div>
+            </div>
 
-            <DialogFooter className="pt-2">
-              <DialogClose render={<Button variant="outline" type="button" disabled={saving} />}>
+            <SheetFooter className="shrink-0 border-t border-border/60 px-6 py-4 pb-[max(1rem,env(safe-area-inset-bottom,0px))] sm:flex-row sm:justify-end">
+              <SheetClose render={<Button variant="outline" type="button" disabled={saving} />}>
                 Cancel
-              </DialogClose>
+              </SheetClose>
               <Button
                 type="submit"
                 disabled={saving || lines.length === 0 || hasLineErrors || !receivingLocationId}
@@ -1007,10 +1036,12 @@ export function PlanShipmentDialog({
                     : ''}
                 </span>
               </Button>
-            </DialogFooter>
+            </SheetFooter>
           </form>
         )}
-      </SupplyTaskDialogContent>
-    </Dialog>
+      </SheetContent>
+    </Sheet>
+    {discardConfirmDialog}
+  </>
   );
 }

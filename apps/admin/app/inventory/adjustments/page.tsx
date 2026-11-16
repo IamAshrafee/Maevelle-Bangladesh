@@ -1,14 +1,10 @@
 import { Suspense } from 'react';
-
 import { AdjustmentsSection } from '@/components/inventory/adjustments-section';
+import { PageSkeleton } from '@/components/ui/page-shell';
 
 export default function AdjustmentsPage() {
   return (
-    <Suspense
-      fallback={
-        <main className="px-8 py-12 text-sm text-muted-foreground">Loading adjustments…</main>
-      }
-    >
+    <Suspense fallback={<PageSkeleton variant="form" widthVariant="narrow" />}>
       <AdjustmentsSection />
     </Suspense>
   );

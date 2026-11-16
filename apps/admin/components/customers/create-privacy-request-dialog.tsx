@@ -3,14 +3,14 @@ import { useState } from 'react';
 import { ShieldCheck } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from '@/components/ui/dialog';
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetFooter,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+} from '@/components/ui/sheet';
 import { Label } from '@/components/ui/label';
 import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select';
 import { Textarea } from '@/components/ui/textarea';
@@ -40,19 +40,22 @@ export function CreatePrivacyRequestDialog({ customerId }: { readonly customerId
     }
   }
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger render={<Button size="sm" variant="outline" />}>
+    <Sheet open={open} onOpenChange={setOpen}>
+      <SheetTrigger render={<Button size="sm" variant="outline" />}>
         <ShieldCheck className="size-4" />
         Privacy request
-      </DialogTrigger>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>Create privacy work item</DialogTitle>
-          <DialogDescription>
+      </SheetTrigger>
+      <SheetContent
+        side="right"
+        className="flex w-full flex-col gap-5 overflow-y-auto p-6 sm:max-w-lg"
+      >
+        <SheetHeader className="border-b border-border/60 p-0 pb-4">
+          <SheetTitle>Create privacy work item</SheetTitle>
+          <SheetDescription>
             Record the request first. Authorized staff must verify identity and document the legal
             or operational resolution separately.
-          </DialogDescription>
-        </DialogHeader>
+          </SheetDescription>
+        </SheetHeader>
         {error ? <p className="text-sm text-destructive">{error}</p> : null}
         <form onSubmit={submit} className="space-y-4">
           <div className="space-y-2">
@@ -78,16 +81,16 @@ export function CreatePrivacyRequestDialog({ customerId }: { readonly customerId
               onChange={(event) => setReason(event.target.value)}
             />
           </div>
-          <DialogFooter>
+          <SheetFooter className="border-t border-border/60 p-0 pt-4 sm:flex-row sm:justify-end">
             <Button type="button" variant="outline" onClick={() => setOpen(false)}>
               Cancel
             </Button>
             <Button type="submit" disabled={busy || !reason.trim()}>
               {busy ? 'Creating…' : 'Create work item'}
             </Button>
-          </DialogFooter>
+          </SheetFooter>
         </form>
-      </DialogContent>
-    </Dialog>
+      </SheetContent>
+    </Sheet>
   );
 }

@@ -19,6 +19,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select';
 import {
   Dialog,
   DialogContent,
@@ -27,6 +28,14 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetFooter,
+  SheetHeader,
+  SheetTitle,
+} from '@/components/ui/sheet';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -263,7 +272,11 @@ export function CustomerContactSection({
                       {isVerified ? (
                         <span
                           className="inline-flex items-center gap-0.5 text-[11px] font-medium text-emerald-700 dark:text-emerald-400"
-                          title={p.verificationSource ? `Verified via ${p.verificationSource}` : 'Verified contact'}
+                          title={
+                            p.verificationSource
+                              ? `Verified via ${p.verificationSource}`
+                              : 'Verified contact'
+                          }
                         >
                           <CheckCircle2 className="size-3" aria-hidden="true" />
                           Verified
@@ -397,7 +410,11 @@ export function CustomerContactSection({
                       {isVerified ? (
                         <span
                           className="inline-flex items-center gap-0.5 text-[11px] font-medium text-emerald-700 dark:text-emerald-400"
-                          title={e.verificationSource ? `Verified via ${e.verificationSource}` : 'Verified contact'}
+                          title={
+                            e.verificationSource
+                              ? `Verified via ${e.verificationSource}`
+                              : 'Verified contact'
+                          }
                         >
                           <CheckCircle2 className="size-3" aria-hidden="true" />
                           Verified
@@ -484,22 +501,22 @@ export function CustomerContactSection({
         </div>
       </div>
 
-      {/* Add Phone Dialog */}
-      <Dialog open={addPhoneOpen} onOpenChange={setAddPhoneOpen}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Add Customer Phone</DialogTitle>
-            <DialogDescription>
-              Record an additional phone number for this customer. Bangladeshi numbers (01...) will be
-              automatically normalized.
-            </DialogDescription>
-          </DialogHeader>
+      {/* Add Phone Sheet */}
+      <Sheet open={addPhoneOpen} onOpenChange={setAddPhoneOpen}>
+        <SheetContent side="right" className="w-full sm:max-w-md">
+          <SheetHeader>
+            <SheetTitle>Add Customer Phone</SheetTitle>
+            <SheetDescription>
+              Record an additional phone number for this customer. Bangladeshi numbers (01...) will
+              be automatically normalized.
+            </SheetDescription>
+          </SheetHeader>
           {phoneError && (
-            <div className="rounded-md border border-rose-200 bg-rose-50 p-2 text-xs text-rose-800">
+            <div className="mx-4 rounded-md border border-rose-200 bg-rose-50 p-2 text-xs text-rose-800 dark:border-rose-800 dark:bg-rose-950/50 dark:text-rose-200">
               {phoneError}
             </div>
           )}
-          <form onSubmit={handleAddPhone} className="space-y-4">
+          <form onSubmit={handleAddPhone} className="flex flex-1 flex-col gap-4 px-4 pb-4">
             <div className="space-y-2">
               <Label htmlFor="new-phone">Phone Number</Label>
               <Input
@@ -509,7 +526,6 @@ export function CustomerContactSection({
                 value={phoneInput}
                 onChange={(e) => setPhoneInput(e.target.value)}
                 required
-                autoFocus
               />
             </div>
             <div className="flex items-center gap-2">
@@ -524,7 +540,7 @@ export function CustomerContactSection({
                 Set as Primary Phone for this customer
               </Label>
             </div>
-            <DialogFooter>
+            <SheetFooter className="mt-auto px-0">
               <Button
                 type="button"
                 variant="outline"
@@ -536,26 +552,26 @@ export function CustomerContactSection({
               <Button type="submit" disabled={phoneBusy || !phoneInput.trim()}>
                 {phoneBusy ? 'Adding...' : 'Add Phone'}
               </Button>
-            </DialogFooter>
+            </SheetFooter>
           </form>
-        </DialogContent>
-      </Dialog>
+        </SheetContent>
+      </Sheet>
 
-      {/* Add Email Dialog */}
-      <Dialog open={addEmailOpen} onOpenChange={setAddEmailOpen}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Add Customer Email</DialogTitle>
-            <DialogDescription>
+      {/* Add Email Sheet */}
+      <Sheet open={addEmailOpen} onOpenChange={setAddEmailOpen}>
+        <SheetContent side="right" className="w-full sm:max-w-md">
+          <SheetHeader>
+            <SheetTitle>Add Customer Email</SheetTitle>
+            <SheetDescription>
               Record an additional email address for order notifications and identity resolution.
-            </DialogDescription>
-          </DialogHeader>
+            </SheetDescription>
+          </SheetHeader>
           {emailError && (
-            <div className="rounded-md border border-rose-200 bg-rose-50 p-2 text-xs text-rose-800">
+            <div className="mx-4 rounded-md border border-rose-200 bg-rose-50 p-2 text-xs text-rose-800 dark:border-rose-800 dark:bg-rose-950/50 dark:text-rose-200">
               {emailError}
             </div>
           )}
-          <form onSubmit={handleAddEmail} className="space-y-4">
+          <form onSubmit={handleAddEmail} className="flex flex-1 flex-col gap-4 px-4 pb-4">
             <div className="space-y-2">
               <Label htmlFor="new-email">Email Address</Label>
               <Input
@@ -565,7 +581,6 @@ export function CustomerContactSection({
                 value={emailInput}
                 onChange={(e) => setEmailInput(e.target.value)}
                 required
-                autoFocus
               />
             </div>
             <div className="flex items-center gap-2">
@@ -580,7 +595,7 @@ export function CustomerContactSection({
                 Set as Primary Email for this customer
               </Label>
             </div>
-            <DialogFooter>
+            <SheetFooter className="mt-auto px-0">
               <Button
                 type="button"
                 variant="outline"
@@ -592,10 +607,10 @@ export function CustomerContactSection({
               <Button type="submit" disabled={emailBusy || !emailInput.trim()}>
                 {emailBusy ? 'Adding...' : 'Add Email'}
               </Button>
-            </DialogFooter>
+            </SheetFooter>
           </form>
-        </DialogContent>
-      </Dialog>
+        </SheetContent>
+      </Sheet>
 
       {/* Verify Dialog */}
       <Dialog open={Boolean(verifyTarget)} onOpenChange={(open) => !open && setVerifyTarget(null)}>
@@ -617,17 +632,16 @@ export function CustomerContactSection({
           <form onSubmit={handleVerifySubmit} className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="verify-source">Verification Source / Method</Label>
-              <select
+              <NativeSelect
                 id="verify-source"
                 value={verifySource}
                 onChange={(e) => setVerifySource(e.target.value)}
-                className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-xs"
               >
-                <option value="OPERATOR_CONFIRMED">Operator Phone Call Confirmed</option>
-                <option value="WHATSAPP_CONFIRMED">WhatsApp Confirmed</option>
-                <option value="ORDER_DELIVERED">Confirmed via Completed Order Delivery</option>
-                <option value="MANUAL_AUDIT">Manual Merchant Audit</option>
-              </select>
+                <NativeSelectOption value="OPERATOR_CONFIRMED">Operator Phone Call Confirmed</NativeSelectOption>
+                <NativeSelectOption value="WHATSAPP_CONFIRMED">WhatsApp Confirmed</NativeSelectOption>
+                <NativeSelectOption value="ORDER_DELIVERED">Confirmed via Completed Order Delivery</NativeSelectOption>
+                <NativeSelectOption value="MANUAL_AUDIT">Manual Merchant Audit</NativeSelectOption>
+              </NativeSelect>
             </div>
             <DialogFooter>
               <Button

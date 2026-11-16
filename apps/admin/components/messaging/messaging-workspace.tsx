@@ -1,10 +1,10 @@
 'use client';
 
 import dynamic from 'next/dynamic';
-import { BarChart3, CalendarClock, Inbox, Settings2 } from 'lucide-react';
 import { useSearchParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
-import { Button } from '@/components/ui/button';
+import { WorkspaceTabs, type WorkspaceTabItem } from '@/components/ui/workspace-tabs';
+import { ImmersiveWorkspace } from '@/components/workspaces/immersive-workspace';
 import {
   Sheet,
   SheetContent,
@@ -12,7 +12,6 @@ import {
   SheetHeader,
   SheetTitle,
 } from '@/components/ui/sheet';
-import { Toaster } from '@/components/ui/toast';
 import { cn } from '@/lib/utils';
 import { AvailabilityControl } from './availability-control';
 import { CollaborationPanel } from './collaboration-panel';
@@ -32,11 +31,9 @@ const SettingsView = dynamic(
 
 export function MessagingWorkspace() {
   return (
-    <Toaster>
-      <MessagingProvider>
-        <MessagingWorkspaceContent />
-      </MessagingProvider>
-    </Toaster>
+    <MessagingProvider>
+      <MessagingWorkspaceContent />
+    </MessagingProvider>
   );
 }
 
@@ -50,32 +47,30 @@ function MessagingWorkspaceContent() {
   useEffect(() => {
     if (searchParams.has('facebook') || searchParams.has('instagram')) setView('settings');
   }, [searchParams]);
-  const items = [
-    { value: 'inbox' as const, label: 'Inbox', icon: Inbox, visible: true },
-    {
-      value: 'follow-ups' as const,
-      label: 'Follow-ups',
-      icon: CalendarClock,
-      visible: messaging.capabilities.includes('messaging.follow_ups.manage'),
-    },
-    {
-      value: 'reports' as const,
-      label: 'Reports',
-      icon: BarChart3,
-      visible: messaging.capabilities.includes('messaging.reports.view'),
-    },
-    {
-      value: 'settings' as const,
-      label: 'Settings',
-      icon: Settings2,
-      visible: messaging.capabilities.includes('messaging.settings.manage'),
-    },
+  const visibleTabs: WorkspaceTabItem<WorkspaceView>[] = [
+    { value: 'inbox', label: 'Inbox', icon: 'inbox' },
+    ...(messaging.capabilities.includes('messaging.follow_ups.manage')
+      ? [
+          {
+            value: 'follow-ups' as const,
+            label: 'Follow-ups',
+            icon: 'activity' as const,
+            ...(messaging.counts?.overdueFollowUps
+              ? { count: messaging.counts.overdueFollowUps }
+              : {}),
+          },
+        ]
+      : []),
+    ...(messaging.capabilities.includes('messaging.reports.view')
+      ? [{ value: 'reports' as const, label: 'Reports', icon: 'bar-chart' as const }]
+      : []),
+    ...(messaging.capabilities.includes('messaging.settings.manage')
+      ? [{ value: 'settings' as const, label: 'Settings', icon: 'settings' as const }]
+      : []),
   ];
+
   return (
-    <main
-      className="flex h-[calc(100dvh-7.5rem)] min-h-[36rem] w-full min-w-0 flex-col overflow-x-hidden bg-background md:h-[calc(100dvh-3.5rem)]"
-      aria-label="Messaging workspace"
-    >
+    <ImmersiveWorkspace>
       <header className="flex min-h-16 shrink-0 flex-col justify-center gap-2 border-b border-border bg-card px-3 py-2 sm:px-4 xl:flex-row xl:items-center xl:justify-between">
         <div className="min-w-0">
           <h1 className="text-lg font-bold tracking-tight sm:text-xl">Messaging</h1>
@@ -84,31 +79,15 @@ function MessagingWorkspaceContent() {
           </p>
         </div>
         <div className="flex min-w-0 items-center gap-2">
-          <nav
-            className="no-scrollbar flex min-w-0 flex-1 gap-1 overflow-x-auto"
-            aria-label="Messaging sections"
-          >
-            {items
-              .filter((item) => item.visible)
-              .map((item) => (
-                <Button
-                  key={item.value}
-                  variant={view === item.value ? 'secondary' : 'ghost'}
-                  size="sm"
-                  className="shrink-0"
-                  aria-label={item.label}
-                  onClick={() => setView(item.value)}
-                >
-                  <item.icon className="size-4" />
-                  <span>{item.label}</span>
-                  {item.value === 'follow-ups' && messaging.counts?.overdueFollowUps ? (
-                    <span className="rounded-full bg-destructive px-1.5 text-[10px] text-destructive-foreground tabular-nums">
-                      {messaging.counts.overdueFollowUps}
-                    </span>
-                  ) : null}
-                </Button>
-              ))}
-          </nav>
+          <WorkspaceTabs
+            items={visibleTabs}
+            value={view}
+            onValueChange={setView}
+            maxVisible={5}
+            variant="pill"
+            ariaLabel="Messaging sections"
+            className="min-w-0 flex-1"
+          />
           <AvailabilityControl />
         </div>
       </header>
@@ -143,7 +122,7 @@ function MessagingWorkspaceContent() {
           <CollaborationPanel />
         </SheetContent>
       </Sheet>
-    </main>
+    </ImmersiveWorkspace>
   );
 }
 

@@ -1,6 +1,7 @@
 import { Suspense } from 'react';
-import { CreateManualOrderDialog } from '@/components/orders/create-manual-order-dialog';
-import { Breadcrumb } from '@/components/ui/breadcrumb';
+import { ManualOrderForm } from '@/components/orders/manual-order-form';
+import { PageHeader, PagePanel, PageSkeleton } from '@/components/ui/page-shell';
+import { FormWorkspace } from '@/components/workspaces/form-workspace';
 
 export const metadata = {
   title: 'Create Manual Order | Maevelle',
@@ -8,19 +9,25 @@ export const metadata = {
 
 export default function CreateManualOrderPage() {
   return (
-    <main className="mx-auto max-w-4xl px-4 py-6 sm:px-6 lg:px-8 space-y-4">
-      <Breadcrumb
-        items={[
-          { label: 'Orders', href: '/orders' },
-          { label: 'New Manual Order', current: true },
-        ]}
-        className="text-xs"
-      />
-      <div className="rounded-xl border bg-card p-6 shadow-sm">
-        <Suspense fallback={<div className="p-8 text-center text-sm text-muted-foreground">Loading order workspace...</div>}>
-          <CreateManualOrderDialog />
+    <FormWorkspace
+      widthVariant="narrow"
+      header={
+        <PageHeader
+          breadcrumbs={[
+            { label: 'Orders', href: '/orders' },
+            { label: 'New Manual Order', current: true },
+          ]}
+          eyebrow="Orders Workspace"
+          title="Create Manual Order"
+          description="Capture a phone or social order using the same inventory, payment, and order rules as checkout."
+        />
+      }
+    >
+      <PagePanel className="p-6">
+        <Suspense fallback={<PageSkeleton variant="form" widthVariant="narrow" />}>
+          <ManualOrderForm />
         </Suspense>
-      </div>
-    </main>
+      </PagePanel>
+    </FormWorkspace>
   );
 }

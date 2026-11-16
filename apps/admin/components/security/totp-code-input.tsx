@@ -29,7 +29,7 @@ export function TotpCodeInput({
   onChange,
   onComplete,
   disabled = false,
-  autoFocus = true,
+  autoFocus = false,
   hasError = false,
   className,
   'aria-label': ariaLabel = 'Six-digit verification code',

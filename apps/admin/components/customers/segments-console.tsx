@@ -20,7 +20,6 @@ import {
   PagePanel,
   PageSection,
 } from '@/components/ui/page-shell';
-import { CrmNav } from './crm-nav';
 
 export function SegmentsConsole() {
   const [segments, setSegments] = useState<readonly CustomerSegmentDto[]>();
@@ -68,16 +67,13 @@ export function SegmentsConsole() {
     }
   }
   return (
-    <AdminPage>
+    <AdminPage variant="wide">
       <PageHeader
         eyebrow="Customer 360"
         title="Customer segments"
         description="Build reusable static groups and validated rule-based audiences. Segment membership never grants messaging consent."
-        actions={
-          <RefreshButton onRefresh={() => void load()} tooltip="Refresh segments" />
-        }
+        actions={<RefreshButton onRefresh={() => void load()} tooltip="Refresh segments" />}
       />
-      <CrmNav />
       {error ? <ErrorState message={error} onRetry={() => void load()} /> : null}
       <PageSection
         title="Create segment"

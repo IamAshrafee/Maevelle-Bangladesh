@@ -17,6 +17,7 @@ import type {
 import { useAdminCapability } from '@/components/admin-capabilities';
 import { OperationalFeedback } from '@/components/operational-worklist';
 import { DetailSkeleton } from '@/components/supply/supply-entity-ui';
+import { AdminPage } from '@/components/ui/page-shell';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -449,20 +450,20 @@ export function PurchaseDetail({ purchaseId }: { purchaseId: string }) {
 
   if (!purchase) {
     return (
-      <main className="space-y-5 px-4 py-5 sm:px-6 lg:px-8">
+      <AdminPage variant="wide">
         <OperationalFeedback tone="danger">
           {message || 'Purchase order was not found.'}
         </OperationalFeedback>
         <Button variant="outline" render={<Link href="/purchases" />}>
           <ArrowLeft className="size-4" /> Back to purchases
         </Button>
-      </main>
+      </AdminPage>
     );
   }
 
   return (
     <TooltipProvider delay={150}>
-      <main className="min-w-0 space-y-6 px-4 py-5 sm:px-6 lg:px-8">
+      <AdminPage variant="wide">
         {/* Header with Title, Status Badge with Tooltip, and Action Toolbar */}
         <PurchaseDetailHeader
           purchase={purchase}
@@ -705,7 +706,7 @@ export function PurchaseDetail({ purchaseId }: { purchaseId: string }) {
             setSuccess('Inbound freight shipment planned successfully.');
           }}
         />
-      </main>
+      </AdminPage>
     </TooltipProvider>
   );
 }

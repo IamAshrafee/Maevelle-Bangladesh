@@ -44,6 +44,7 @@ import { ReturnUnitIntakeDialog } from '@/components/returns/return-unit-intake-
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { AdminPage, PageHeader } from '@/components/ui/page-shell';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import {
@@ -132,10 +133,7 @@ export function ReturnsConsole({ initialTab }: ReturnsConsoleProps) {
   const searchParams = useSearchParams();
 
   // Active Tab: Customer Returns vs RTO
-  const activeTab =
-    (searchParams.get('tab') as 'customer' | 'rto') ||
-    initialTab ||
-    'customer';
+  const activeTab = (searchParams.get('tab') as 'customer' | 'rto') || initialTab || 'customer';
 
   // Selection from URL
   const selectedIdFromUrl = searchParams.get('selected');
@@ -272,71 +270,74 @@ export function ReturnsConsole({ initialTab }: ReturnsConsoleProps) {
     ).length;
     const resolved = tabFiltered.filter((c) => c.case_status === 'RESOLVED').length;
 
-    return { total: tabFiltered.length, openCases, pendingAuth, inTransit, awaitingReceipt, resolved };
+    return {
+      total: tabFiltered.length,
+      openCases,
+      pendingAuth,
+      inTransit,
+      awaitingReceipt,
+      resolved,
+    };
   }, [cases, activeTab]);
 
   return (
-    <div className="space-y-6">
-      {/* Page Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-2">
-            <h1 className="text-2xl font-bold tracking-tight text-foreground">
-              Returns &amp; Reverse Logistics
-            </h1>
-            <Badge variant="outline" className="text-xs font-mono uppercase">
-              {activeTab === 'rto' ? 'Return to Origin (RTO)' : 'Customer Returns'}
-            </Badge>
-          </div>
-          <p className="text-sm text-muted-foreground mt-1">
-            {activeTab === 'rto'
-              ? 'Track failed-delivery packages returning from carriers, physical receiving, condition inspection, and stock disposition.'
-              : 'Manage buyer return requests, commercial authorizations, reverse shipments, warehouse receipts, and refund linkage.'}
-          </p>
-        </div>
+    <AdminPage variant="wide">
+      <PageHeader
+        eyebrow="Operations / Delivery"
+        title="Returns & Reverse Logistics"
+        badge={
+          <Badge variant="outline" className="text-xs font-mono uppercase">
+            {activeTab === 'rto' ? 'Return to Origin (RTO)' : 'Customer Returns'}
+          </Badge>
+        }
+        description={
+          activeTab === 'rto'
+            ? 'Track failed-delivery packages returning from carriers, physical receiving, condition inspection, and stock disposition.'
+            : 'Manage buyer return requests, commercial authorizations, reverse shipments, warehouse receipts, and refund linkage.'
+        }
+        actions={
+          <>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => void loadCases()}
+              disabled={loading}
+              className="h-9"
+            >
+              <RefreshCw className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
+              Refresh
+            </Button>
 
-        {/* Action Buttons */}
-        <div className="flex items-center gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => void loadCases()}
-            disabled={loading}
-            className="h-9"
-          >
-            <RefreshCw className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
-            Refresh
-          </Button>
+            {activeTab === 'customer' ? (
+              <ReturnCreateDialog
+                onSuccess={async (newId) => {
+                  setSuccessMessage('Customer Return request created successfully.');
+                  await loadCases();
+                  if (newId) await fetchCaseDetail(newId);
+                }}
+              />
+            ) : (
+              <RtoCreateDialog
+                onSuccess={async (newId) => {
+                  setSuccessMessage('RTO case initiated from failed delivery.');
+                  await loadCases();
+                  if (newId) await fetchCaseDetail(newId);
+                }}
+              />
+            )}
 
-          {activeTab === 'customer' ? (
-            <ReturnCreateDialog
-              onSuccess={async (newId) => {
-                setSuccessMessage('Customer Return request created successfully.');
-                await loadCases();
-                if (newId) await fetchCaseDetail(newId);
-              }}
-            />
-          ) : (
-            <RtoCreateDialog
-              onSuccess={async (newId) => {
-                setSuccessMessage('RTO case initiated from failed delivery.');
-                await loadCases();
-                if (newId) await fetchCaseDetail(newId);
-              }}
-            />
-          )}
-
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setReturnUnitScanOpen(true)}
-            className="gap-1.5"
-          >
-            <ScanBarcode className="size-4 text-primary" />
-            <span>Receive Serialized Unit</span>
-          </Button>
-        </div>
-      </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setReturnUnitScanOpen(true)}
+              className="gap-1.5"
+            >
+              <ScanBarcode className="size-4 text-primary" />
+              <span>Receive Serialized Unit</span>
+            </Button>
+          </>
+        }
+      />
 
       {/* Tabs for Customer Returns vs RTO */}
       <Tabs value={activeTab} onValueChange={handleTabChange} className="space-y-6">
@@ -380,9 +381,7 @@ export function ReturnsConsole({ initialTab }: ReturnsConsoleProps) {
             <StatsTitle>
               {activeTab === 'customer' ? 'Awaiting Authorization' : 'In Reverse Transit'}
             </StatsTitle>
-            <StatsValue>
-              {activeTab === 'customer' ? kpis.pendingAuth : kpis.inTransit}
-            </StatsValue>
+            <StatsValue>{activeTab === 'customer' ? kpis.pendingAuth : kpis.inTransit}</StatsValue>
           </StatsCard>
           <StatsCard>
             <StatsTitle>Awaiting Physical Receipt</StatsTitle>
@@ -697,7 +696,9 @@ export function ReturnsConsole({ initialTab }: ReturnsConsoleProps) {
                     {selectedCase.lines.map((line) => (
                       <div key={line.id} className="p-3 text-xs flex justify-between items-center">
                         <div className="min-w-0 pr-2">
-                          <p className="font-medium text-foreground truncate">{line.product_title}</p>
+                          <p className="font-medium text-foreground truncate">
+                            {line.product_title}
+                          </p>
                           <p className="text-muted-foreground font-mono text-[11px]">{line.sku}</p>
                         </div>
                         <div className="text-right shrink-0 space-y-0.5">
@@ -748,9 +749,7 @@ export function ReturnsConsole({ initialTab }: ReturnsConsoleProps) {
                                 <div className="flex items-center gap-2">
                                   <span className="font-mono font-medium">{rLine.sku}</span>
                                   {rLine.condition_code && (
-                                    <InventoryDispositionBadge
-                                      outcome={rLine.condition_code}
-                                    />
+                                    <InventoryDispositionBadge outcome={rLine.condition_code} />
                                   )}
                                 </div>
                                 <p className="text-muted-foreground text-[11px] mt-0.5">
@@ -792,7 +791,9 @@ export function ReturnsConsole({ initialTab }: ReturnsConsoleProps) {
                 {selectedCase.reverseShipments.length > 0 && (
                   <Card>
                     <CardHeader className="py-3 px-4 border-b">
-                      <CardTitle className="text-sm font-semibold">Reverse Courier Tracking</CardTitle>
+                      <CardTitle className="text-sm font-semibold">
+                        Reverse Courier Tracking
+                      </CardTitle>
                     </CardHeader>
                     <CardContent className="p-3 space-y-2">
                       {selectedCase.reverseShipments.map((shipment) => (
@@ -973,6 +974,6 @@ export function ReturnsConsole({ initialTab }: ReturnsConsoleProps) {
           />
         </>
       )}
-    </div>
+    </AdminPage>
   );
 }

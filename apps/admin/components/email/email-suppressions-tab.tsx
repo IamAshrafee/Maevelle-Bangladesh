@@ -18,19 +18,33 @@ import { RefreshButton } from '@/components/ui/refresh-button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import {
-  type EmailSuppressionDto,
-  formatDateTime,
-  fetchEmailApi,
-} from './email-types';
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetFooter,
+  SheetHeader,
+  SheetTitle,
+} from '@/components/ui/sheet';
+import { type EmailSuppressionDto, formatDateTime, fetchEmailApi } from './email-types';
 
 interface EmailSuppressionsTabProps {
   readonly suppressions: readonly EmailSuppressionDto[];
   readonly onRefresh: () => void;
 }
 
-const reasonExplanations: Record<string, { label: string; desc: string; severity: 'high' | 'medium' | 'info' }> = {
+const reasonExplanations: Record<
+  string,
+  { label: string; desc: string; severity: 'high' | 'medium' | 'info' }
+> = {
   HARD_BOUNCE: {
     label: 'Hard Bounce',
     desc: "The recipient's mail server permanently rejected the address as non-existent or invalid.",
@@ -58,10 +72,14 @@ export function EmailSuppressionsTab({ suppressions, onRefresh }: EmailSuppressi
   const [filterReason, setFilterReason] = useState('');
   const [filterActive, setFilterActive] = useState('active');
   const [selectedToClear, setSelectedToClear] = useState<EmailSuppressionDto | null>(null);
-  const [clearReason, setClearReason] = useState('Customer confirmed email address is valid and requested delivery resumption');
+  const [clearReason, setClearReason] = useState(
+    'Customer confirmed email address is valid and requested delivery resumption',
+  );
   const [addDialogOpen, setAddDialogOpen] = useState(false);
   const [newEmail, setNewEmail] = useState('');
-  const [newReason, setNewReason] = useState('Customer requested to be unsubscribed from all transactional emails');
+  const [newReason, setNewReason] = useState(
+    'Customer requested to be unsubscribed from all transactional emails',
+  );
   const [submitting, setSubmitting] = useState(false);
   const [copiedEmail, setCopiedEmail] = useState<string | null>(null);
   const [message, setMessage] = useState('');
@@ -91,7 +109,9 @@ export function EmailSuppressionsTab({ suppressions, onRefresh }: EmailSuppressi
           reason: clearReason.trim(),
         }),
       });
-      setMessage(`Suppression cleared for ${selectedToClear.normalized_email}. Outbound delivery may now resume.`);
+      setMessage(
+        `Suppression cleared for ${selectedToClear.normalized_email}. Outbound delivery may now resume.`,
+      );
       setSelectedToClear(null);
       onRefresh();
     } catch (err) {
@@ -146,7 +166,8 @@ export function EmailSuppressionsTab({ suppressions, onRefresh }: EmailSuppressi
             </CardTitle>
           </CardHeader>
           <CardContent className="text-xs text-muted-foreground">
-            {reasonExplanations['HARD_BOUNCE']?.desc ?? 'The recipient mail server permanently rejected the message.'}
+            {reasonExplanations['HARD_BOUNCE']?.desc ??
+              'The recipient mail server permanently rejected the message.'}
           </CardContent>
         </Card>
 
@@ -168,7 +189,8 @@ export function EmailSuppressionsTab({ suppressions, onRefresh }: EmailSuppressi
             </CardTitle>
           </CardHeader>
           <CardContent className="text-xs text-muted-foreground">
-            Suppressed addresses protect Maevelle from mailbox provider blacklisting and maintain 99%+ deliverability.
+            Suppressed addresses protect Maevelle from mailbox provider blacklisting and maintain
+            99%+ deliverability.
           </CardContent>
         </Card>
       </div>
@@ -180,7 +202,10 @@ export function EmailSuppressionsTab({ suppressions, onRefresh }: EmailSuppressi
       ) : null}
 
       {error ? (
-        <div role="alert" className="rounded-lg border border-destructive/40 bg-destructive/10 p-3 text-xs text-destructive">
+        <div
+          role="alert"
+          className="rounded-lg border border-destructive/40 bg-destructive/10 p-3 text-xs text-destructive"
+        >
           {error}
         </div>
       ) : null}
@@ -196,10 +221,20 @@ export function EmailSuppressionsTab({ suppressions, onRefresh }: EmailSuppressi
               </CardDescription>
             </div>
             <div className="flex items-center gap-2">
-              <Button size="sm" variant="outline" onClick={() => setAddDialogOpen(true)} className="h-8 text-xs">
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => setAddDialogOpen(true)}
+                className="h-8 text-xs"
+              >
                 <Plus className="mr-1.5 size-3.5" /> Suppress Address
               </Button>
-              <RefreshButton size="icon-sm" variant="ghost" onRefresh={onRefresh} tooltip="Refresh suppressions" />
+              <RefreshButton
+                size="icon-sm"
+                variant="ghost"
+                onRefresh={onRefresh}
+                tooltip="Refresh suppressions"
+              />
             </div>
           </div>
 
@@ -218,7 +253,7 @@ export function EmailSuppressionsTab({ suppressions, onRefresh }: EmailSuppressi
             <select
               value={filterActive}
               onChange={(e) => setFilterActive(e.target.value)}
-              className="h-9 rounded-md border bg-background px-3 text-xs text-foreground focus:outline-hidden"
+              className="h-9 pointer-coarse:min-h-11 rounded-md border bg-background px-3 text-base md:text-xs pointer-coarse:text-base text-foreground focus:outline-hidden"
               aria-label="Filter active suppressions"
             >
               <option value="active">Active Blocks Only</option>
@@ -229,7 +264,7 @@ export function EmailSuppressionsTab({ suppressions, onRefresh }: EmailSuppressi
             <select
               value={filterReason}
               onChange={(e) => setFilterReason(e.target.value)}
-              className="h-9 rounded-md border bg-background px-3 text-xs text-foreground focus:outline-hidden"
+              className="h-9 pointer-coarse:min-h-11 rounded-md border bg-background px-3 text-base md:text-xs pointer-coarse:text-base text-foreground focus:outline-hidden"
               aria-label="Filter by suppression reason"
             >
               <option value="">All Reasons</option>
@@ -280,8 +315,8 @@ export function EmailSuppressionsTab({ suppressions, onRefresh }: EmailSuppressi
                           item.reason === 'COMPLAINT'
                             ? 'destructive'
                             : item.reason === 'HARD_BOUNCE'
-                            ? 'outline'
-                            : 'secondary'
+                              ? 'outline'
+                              : 'secondary'
                         }
                         className="text-[10px]"
                       >
@@ -335,7 +370,9 @@ export function EmailSuppressionsTab({ suppressions, onRefresh }: EmailSuppressi
           {filtered.length === 0 ? (
             <div className="flex flex-col items-center justify-center p-12 text-center text-muted-foreground">
               <CheckCircle2 className="mb-2 size-8 text-emerald-600 opacity-60" />
-              <p className="font-semibold text-sm text-foreground">No matching email suppressions</p>
+              <p className="font-semibold text-sm text-foreground">
+                No matching email suppressions
+              </p>
               <p className="mt-1 text-xs max-w-sm">
                 {search || filterReason
                   ? 'No suppressed email matches your current search filters.'
@@ -347,12 +384,16 @@ export function EmailSuppressionsTab({ suppressions, onRefresh }: EmailSuppressi
       </Card>
 
       {/* Clear Suppression Dialog */}
-      <Dialog open={Boolean(selectedToClear)} onOpenChange={(open) => !open && setSelectedToClear(null)}>
+      <Dialog
+        open={Boolean(selectedToClear)}
+        onOpenChange={(open) => !open && setSelectedToClear(null)}
+      >
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>Clear Recipient Suppression</DialogTitle>
             <DialogDescription>
-              Clearing a suppression will re-allow automated transactional emails to be dispatched to this address.
+              Clearing a suppression will re-allow automated transactional emails to be dispatched
+              to this address.
             </DialogDescription>
           </DialogHeader>
           {selectedToClear ? (
@@ -363,19 +404,30 @@ export function EmailSuppressionsTab({ suppressions, onRefresh }: EmailSuppressi
                     <AlertTriangle className="size-4" /> Warning: Spam Complaint
                   </div>
                   <p>
-                    This recipient actively flagged Maevelle as spam. Resending without explicit, written customer confirmation may cause Resend or Gmail/Yahoo to degrade domain deliverability.
+                    This recipient actively flagged Maevelle as spam. Resending without explicit,
+                    written customer confirmation may cause Resend or Gmail/Yahoo to degrade domain
+                    deliverability.
                   </p>
                 </div>
               ) : null}
 
               <div className="rounded-md bg-muted p-3 text-xs space-y-1">
-                <p><strong>Target Email:</strong> <code className="font-mono">{selectedToClear.normalized_email}</code></p>
-                <p><strong>Original Reason:</strong> {selectedToClear.reason}</p>
-                <p><strong>First Blocked:</strong> {formatDateTime(selectedToClear.created_at)}</p>
+                <p>
+                  <strong>Target Email:</strong>{' '}
+                  <code className="font-mono">{selectedToClear.normalized_email}</code>
+                </p>
+                <p>
+                  <strong>Original Reason:</strong> {selectedToClear.reason}
+                </p>
+                <p>
+                  <strong>First Blocked:</strong> {formatDateTime(selectedToClear.created_at)}
+                </p>
               </div>
 
               <div className="space-y-1.5">
-                <Label htmlFor="clear-suppression-reason">Operational Justification (Audited)</Label>
+                <Label htmlFor="clear-suppression-reason">
+                  Operational Justification (Audited)
+                </Label>
                 <Input
                   id="clear-suppression-reason"
                   value={clearReason}
@@ -387,7 +439,11 @@ export function EmailSuppressionsTab({ suppressions, onRefresh }: EmailSuppressi
             </div>
           ) : null}
           <DialogFooter>
-            <Button variant="outline" onClick={() => setSelectedToClear(null)} disabled={submitting}>
+            <Button
+              variant="outline"
+              onClick={() => setSelectedToClear(null)}
+              disabled={submitting}
+            >
               Cancel
             </Button>
             <Button onClick={handleClear} disabled={submitting || !clearReason.trim()}>
@@ -397,16 +453,17 @@ export function EmailSuppressionsTab({ suppressions, onRefresh }: EmailSuppressi
         </DialogContent>
       </Dialog>
 
-      {/* Add Manual Suppression Dialog */}
-      <Dialog open={addDialogOpen} onOpenChange={setAddDialogOpen}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Manually Suppress Email Address</DialogTitle>
-            <DialogDescription>
-              Proactively prevent future automated transactional emails from reaching this customer address.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4 py-2 text-sm">
+      {/* Add Manual Suppression Sheet */}
+      <Sheet open={addDialogOpen} onOpenChange={setAddDialogOpen}>
+        <SheetContent side="right" className="flex w-full flex-col gap-0 p-0 sm:max-w-md">
+          <SheetHeader className="border-b border-border px-6 py-4">
+            <SheetTitle>Manually Suppress Email Address</SheetTitle>
+            <SheetDescription>
+              Proactively prevent future automated transactional emails from reaching this customer
+              address.
+            </SheetDescription>
+          </SheetHeader>
+          <div className="flex-1 space-y-4 overflow-y-auto px-6 py-4 text-sm">
             <div className="space-y-1.5">
               <Label htmlFor="manual-suppress-email">Email Address</Label>
               <Input
@@ -429,16 +486,19 @@ export function EmailSuppressionsTab({ suppressions, onRefresh }: EmailSuppressi
               />
             </div>
           </div>
-          <DialogFooter>
+          <SheetFooter className="border-t border-border px-6 py-4 sm:flex-row sm:justify-end">
             <Button variant="outline" onClick={() => setAddDialogOpen(false)} disabled={submitting}>
               Cancel
             </Button>
-            <Button onClick={handleAddSuppression} disabled={submitting || !newEmail.trim() || !newReason.trim()}>
+            <Button
+              onClick={handleAddSuppression}
+              disabled={submitting || !newEmail.trim() || !newReason.trim()}
+            >
               {submitting ? 'Suppressing…' : 'Add to Suppression List'}
             </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+          </SheetFooter>
+        </SheetContent>
+      </Sheet>
     </div>
   );
 }

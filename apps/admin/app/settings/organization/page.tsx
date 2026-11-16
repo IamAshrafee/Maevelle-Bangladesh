@@ -1,5 +1,5 @@
 import type { Metadata } from 'next';
-import { SettingsConsole } from '@/components/settings-console';
+import { OrganizationSettingsConsole } from '@/components/settings/organization-settings-console';
 
 export const metadata: Metadata = {
   title: 'Organization Settings · Maevelle Admin',
@@ -7,5 +7,5 @@ export const metadata: Metadata = {
 };
 
 export default function OrganizationSettingsPage() {
-  return <SettingsConsole />;
+  return <OrganizationSettingsConsole />;
 }

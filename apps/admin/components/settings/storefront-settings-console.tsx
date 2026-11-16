@@ -11,6 +11,7 @@ import {
   RotateCcw,
   Store,
 } from 'lucide-react';
+import { AdminPage, PageHeader } from '@/components/ui/page-shell';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { SettingsCard, SettingsSection } from '@/components/settings/settings-card';
@@ -31,7 +32,8 @@ interface StorefrontFormState {
 }
 
 export function StorefrontSettingsConsole() {
-  const [initialData, setInitialData] = useState<ModuleSettingsResponseDto<StorefrontSettingsDto>>();
+  const [initialData, setInitialData] =
+    useState<ModuleSettingsResponseDto<StorefrontSettingsDto>>();
   const [form, setForm] = useState<StorefrontFormState>({
     publicBaseUrl: 'http://localhost:8080',
     storeName: 'Maevelle Bangladesh',
@@ -41,7 +43,9 @@ export function StorefrontSettingsConsole() {
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+  const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(
+    null,
+  );
 
   const [resetConfirmOpen, setResetConfirmOpen] = useState(false);
   const [auditDrawerOpen, setAuditDrawerOpen] = useState(false);
@@ -78,10 +82,10 @@ export function StorefrontSettingsConsole() {
 
   const isDirty = Boolean(
     initialData &&
-      (form.publicBaseUrl !== initialData.settings.publicBaseUrl ||
-        form.storeName !== initialData.settings.storeName ||
-        form.supportEmail !== initialData.settings.supportEmail ||
-        form.supportPhone !== initialData.settings.supportPhone),
+    (form.publicBaseUrl !== initialData.settings.publicBaseUrl ||
+      form.storeName !== initialData.settings.storeName ||
+      form.supportEmail !== initialData.settings.supportEmail ||
+      form.supportPhone !== initialData.settings.supportPhone),
   );
 
   const handleDiscard = () => {
@@ -107,7 +111,10 @@ export function StorefrontSettingsConsole() {
         throw new Error();
       }
     } catch {
-      setFeedback({ type: 'error', message: 'Public storefront URL must be a valid HTTP or HTTPS address.' });
+      setFeedback({
+        type: 'error',
+        message: 'Public storefront URL must be a valid HTTP or HTTPS address.',
+      });
       setSaving(false);
       return;
     }
@@ -166,7 +173,10 @@ export function StorefrontSettingsConsole() {
           supportPhone: resetRes.settings.supportPhone,
         });
         setResetConfirmOpen(false);
-        setFeedback({ type: 'success', message: 'Storefront settings restored to system defaults.' });
+        setFeedback({
+          type: 'success',
+          message: 'Storefront settings restored to system defaults.',
+        });
       }
     } catch (err) {
       setFeedback({
@@ -180,54 +190,55 @@ export function StorefrontSettingsConsole() {
 
   if (loading && !initialData) {
     return (
-      <div className="flex flex-col items-center justify-center h-64 gap-2 text-muted-foreground text-xs">
-        <RefreshCw className="size-5 animate-spin text-primary" />
-        <span>Loading Storefront Settings...</span>
-      </div>
+      <AdminPage variant="narrow">
+        <div className="flex flex-col items-center justify-center h-64 gap-2 text-muted-foreground text-xs">
+          <RefreshCw className="size-5 animate-spin text-primary" />
+          <span>Loading Storefront Settings...</span>
+        </div>
+      </AdminPage>
     );
   }
 
   return (
-    <div className="space-y-6 pb-20 max-w-4xl">
+    <AdminPage variant="narrow" className="pb-20">
       <SettingsNav />
 
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-4 border-b">
-        <div>
-          <div className="flex flex-wrap items-center gap-2.5">
-            <h1 className="text-xl font-semibold tracking-tight text-foreground">Storefront Settings</h1>
+      <PageHeader
+        eyebrow="Platform Settings"
+        title="Storefront Settings"
+        badge={
+          <>
             <SettingStatusBadge status="ready" label="Configured" />
             <RuntimeEffectBadge runtimeMutable requiresRestart={false} />
-          </div>
-          <p className="text-xs text-muted-foreground mt-1">
-            Customer-facing URLs, public brand identifiers, and customer helpline contact numbers.
-          </p>
-        </div>
+          </>
+        }
+        description="Customer-facing URLs, public brand identifiers, and customer helpline contact numbers."
+        actions={
+          <>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setAuditDrawerOpen(true)}
+              className="text-xs h-8 gap-1.5"
+            >
+              <History className="size-3.5 text-muted-foreground" />
+              History
+            </Button>
 
-        <div className="flex items-center gap-2">
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={() => setAuditDrawerOpen(true)}
-            className="text-xs h-8 gap-1.5"
-          >
-            <History className="size-3.5 text-muted-foreground" />
-            History
-          </Button>
-
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            onClick={() => setResetConfirmOpen(true)}
-            className="text-xs h-8 text-muted-foreground hover:text-foreground"
-          >
-            <RotateCcw className="size-3.5 mr-1" />
-            Reset to default
-          </Button>
-        </div>
-      </div>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={() => setResetConfirmOpen(true)}
+              className="text-xs h-8 text-muted-foreground hover:text-foreground"
+            >
+              <RotateCcw className="size-3.5 mr-1" />
+              Reset to default
+            </Button>
+          </>
+        }
+      />
 
       {feedback && (
         <div
@@ -287,13 +298,17 @@ export function StorefrontSettingsConsole() {
               </span>
               <ul className="list-disc pl-4 space-y-1 text-muted-foreground text-[11px]">
                 <li>
-                  <strong className="text-foreground">Transactional Email:</strong> Renders order tracking buttons, invoice links, and password resets pointing to this domain.
+                  <strong className="text-foreground">Transactional Email:</strong> Renders order
+                  tracking buttons, invoice links, and password resets pointing to this domain.
                 </li>
                 <li>
-                  <strong className="text-foreground">Payment Gateways:</strong> Used as the base return and cancellation redirect URL for online bKash / Nagad sessions.
+                  <strong className="text-foreground">Payment Gateways:</strong> Used as the base
+                  return and cancellation redirect URL for online bKash / Nagad sessions.
                 </li>
                 <li>
-                  <strong className="text-foreground">Internal Services:</strong> Internal backend APIs remain hidden behind deployment networking and are never derived from this URL.
+                  <strong className="text-foreground">Internal Services:</strong> Internal backend
+                  APIs remain hidden behind deployment networking and are never derived from this
+                  URL.
                 </li>
               </ul>
             </div>
@@ -385,6 +400,6 @@ export function StorefrontSettingsConsole() {
         module="storefront"
         title="Storefront Settings History"
       />
-    </div>
+    </AdminPage>
   );
 }

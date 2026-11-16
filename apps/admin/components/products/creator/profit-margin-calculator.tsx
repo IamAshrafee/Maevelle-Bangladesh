@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+import { formatSupplyUnitCost } from '@/lib/supply/api';
 import {
   merchandisingCost,
   suggestedSellingPrice,
@@ -86,11 +87,7 @@ export function ProfitMarginCalculator({
               <div className="min-w-0">
                 <p className="text-xs font-semibold text-foreground">{acquisitionLabel}</p>
                 <p className="mt-0.5 font-mono text-lg font-bold tabular-nums text-foreground">
-                  {new Intl.NumberFormat('en-BD', {
-                    style: 'currency',
-                    currency: acquisitionCost.currency,
-                    maximumFractionDigits: 2,
-                  }).format(Number(acquisitionCost.amount))}
+                  {formatSupplyUnitCost(acquisitionCost.amount, acquisitionCost.currency)}
                 </p>
                 <p className="mt-1 text-[11px] text-muted-foreground">
                   Receipt <span className="font-mono">{acquisitionCost.receiptNumber}</span>

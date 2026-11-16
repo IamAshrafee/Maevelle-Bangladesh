@@ -5,13 +5,13 @@ import { Check, Package, Plus, RefreshCw, Search } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetFooter,
+  SheetHeader,
+  SheetTitle,
+} from '@/components/ui/sheet';
 import { Input } from '@/components/ui/input';
 import { cn } from '@/lib/utils';
 
@@ -41,18 +41,18 @@ export function StocktakeFoundItemDialog({
   onSubmit,
 }: StocktakeFoundItemDialogProps) {
   return (
-    <Dialog open={open} onOpenChange={(next) => !submitting && onOpenChange(next)}>
-      <DialogContent className="inset-0 flex h-[100dvh] w-full max-w-none translate-x-0 translate-y-0 flex-col rounded-none sm:inset-auto sm:left-1/2 sm:top-1/2 sm:h-auto sm:max-h-[85vh] sm:max-w-lg sm:-translate-x-1/2 sm:-translate-y-1/2 sm:rounded-lg">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
+    <Sheet open={open} onOpenChange={(next) => !submitting && onOpenChange(next)}>
+      <SheetContent side="right" className="w-full sm:max-w-lg flex flex-col p-6">
+        <SheetHeader className="p-0 pb-4 border-b border-border/60">
+          <SheetTitle className="flex items-center gap-2">
             <Plus className="size-5 text-primary" />
             Add found SKU
-          </DialogTitle>
-          <DialogDescription>
-            Add stock physically present at this Location but absent from the snapshot. Its
-            expected quantity starts at zero.
-          </DialogDescription>
-        </DialogHeader>
+          </SheetTitle>
+          <SheetDescription>
+            Add stock physically present at this Location but absent from the snapshot. Its expected
+            quantity starts at zero.
+          </SheetDescription>
+        </SheetHeader>
 
         <div className="flex min-h-0 flex-1 flex-col gap-3 py-2">
           <div className="relative">
@@ -68,7 +68,7 @@ export function StocktakeFoundItemDialog({
             />
           </div>
 
-          <div className="min-h-48 flex-1 divide-y divide-border/60 overflow-y-auto rounded-lg border sm:max-h-60">
+          <div className="min-h-48 flex-1 divide-y divide-border/60 overflow-y-auto rounded-lg border">
             {loading ? (
               <div className="flex items-center justify-center gap-2 p-6 text-xs text-muted-foreground">
                 <RefreshCw className="size-4 animate-spin" /> Loading catalog variants…
@@ -111,19 +111,23 @@ export function StocktakeFoundItemDialog({
           </div>
         </div>
 
-        <DialogFooter className="gap-2">
+        <SheetFooter className="p-0 pt-2 sm:flex-row sm:justify-end gap-2">
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={submitting}>
             Cancel
           </Button>
           <Button onClick={onSubmit} disabled={!selectedVariantId || submitting}>
             {submitting ? (
-              <><RefreshCw className="size-3.5 animate-spin" /> Adding…</>
+              <>
+                <RefreshCw className="size-3.5 animate-spin" /> Adding…
+              </>
             ) : (
-              <><Plus className="size-3.5" /> Add to count sheet</>
+              <>
+                <Plus className="size-3.5" /> Add to count sheet
+              </>
             )}
           </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+        </SheetFooter>
+      </SheetContent>
+    </Sheet>
   );
 }

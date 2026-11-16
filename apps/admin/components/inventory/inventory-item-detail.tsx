@@ -11,6 +11,7 @@ import { productMediaUrl } from '@/lib/catalog/api';
 import { InventoryConditionBadge, InventoryEmptyState } from './inventory-page-ui';
 import { InventorySourceLink } from './inventory-source-link';
 import { StockTable } from './stock-table';
+import { AdminPage, PageHeader } from '@/components/ui/page-shell';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -51,42 +52,104 @@ export function InventoryItemDetail({ inventoryItemId }: { inventoryItemId: stri
 
   if (isLoading) {
     return (
-      <div className="space-y-6">
-        <div className="h-12 w-1/3 animate-pulse bg-muted rounded-md" />
-        <div className="h-[200px] w-full animate-pulse bg-muted rounded-md" />
-        <div className="h-[400px] w-full animate-pulse bg-muted rounded-md" />
-      </div>
+      <AdminPage variant="wide">
+        <div className="space-y-6">
+          <div className="h-12 w-1/3 animate-pulse bg-muted rounded-md" />
+          <div className="h-[200px] w-full animate-pulse bg-muted rounded-md" />
+          <div className="h-[400px] w-full animate-pulse bg-muted rounded-md" />
+        </div>
+      </AdminPage>
     );
   }
 
   if (error) {
     return (
-      <div className="space-y-4">
-        <InventoryEmptyState title="Inventory item unavailable" description={error.message} />
-        <div className="flex justify-center">
-          <Button onClick={() => setReloadKey((key) => key + 1)}>Try again</Button>
+      <AdminPage variant="wide">
+        <div className="space-y-4">
+          <InventoryEmptyState title="Inventory item unavailable" description={error.message} />
+          <div className="flex justify-center">
+            <Button onClick={() => setReloadKey((key) => key + 1)}>Try again</Button>
+          </div>
         </div>
-      </div>
+      </AdminPage>
     );
   }
 
   if (!item) return null;
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-start">
-        <Button
-          variant="outline"
-          size="icon"
-          render={<Link href="/inventory/stock" />}
-          nativeButton={false}
-          aria-label="Back to stock positions"
-        >
-          <ArrowLeft className="h-4 w-4" aria-hidden="true" />
-        </Button>
-        <div className="min-w-0 flex-1">
+    <AdminPage variant="wide">
+      <PageHeader
+        breadcrumbs={[
+          { label: 'Inventory', href: '/inventory' },
+          { label: 'Stock Levels', href: '/inventory/stock' },
+          { label: item.sku, current: true },
+        ]}
+        actions={
+          <>
+            {item.trackingMode === 'SERIAL' ? (
+              <Button
+                variant="default"
+                render={
+                  <Link href={`/inventory/units?variantId=${encodeURIComponent(item.variantId)}`} />
+                }
+                nativeButton={false}
+                className="gap-1.5"
+              >
+                <Boxes className="size-3.5" />
+                <span>View Tracked Units</span>
+              </Button>
+            ) : null}
+
+            <Button
+              variant="outline"
+              onClick={() => setTrackingDialogOpen(true)}
+              className="gap-1.5"
+            >
+              <Settings2 className="size-3.5" />
+              <span>Tracking Mode</span>
+            </Button>
+
+            {canAdjust ? (
+              <Button
+                variant="outline"
+                render={
+                  <Link
+                    href={`/inventory/adjustments?variantId=${encodeURIComponent(item.variantId)}`}
+                  />
+                }
+                nativeButton={false}
+              >
+                Adjust Stock
+              </Button>
+            ) : null}
+            {canTransfer ? (
+              <Button
+                render={
+                  <Link
+                    href={`/inventory/transfers/new?variantId=${encodeURIComponent(item.variantId)}`}
+                  />
+                }
+                nativeButton={false}
+              >
+                Create Transfer
+              </Button>
+            ) : null}
+          </>
+        }
+      >
+        <div className="flex items-start gap-3">
+          <Button
+            variant="outline"
+            size="icon"
+            render={<Link href="/inventory/stock" />}
+            nativeButton={false}
+            aria-label="Back to stock positions"
+          >
+            <ArrowLeft className="h-4 w-4" aria-hidden="true" />
+          </Button>
           <div className="flex min-w-0 items-center gap-4">
-            <span className="flex size-24 shrink-0 items-center justify-center overflow-hidden rounded-xl border bg-muted">
+            <span className="flex size-20 sm:size-24 shrink-0 items-center justify-center overflow-hidden rounded-xl border bg-muted">
               {item.imageAssetId && item.imageVisibility ? (
                 <img
                   alt={item.imageAltText ?? item.optionSummary ?? item.productTitle}
@@ -101,7 +164,7 @@ export function InventoryItemDetail({ inventoryItemId }: { inventoryItemId: stri
             </span>
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2">
-                <h1 className="text-pretty text-2xl font-bold tracking-tight">
+                <h1 className="text-pretty text-2xl sm:text-3xl font-bold tracking-tight">
                   <Link className="hover:underline" href={`/products/${item.productId}`}>
                     {item.productTitle}
                   </Link>
@@ -118,59 +181,7 @@ export function InventoryItemDetail({ inventoryItemId }: { inventoryItemId: stri
             </div>
           </div>
         </div>
-        <div className="flex flex-wrap gap-2 sm:justify-end">
-          {item.trackingMode === 'SERIAL' ? (
-            <Button
-              variant="default"
-              render={
-                <Link
-                  href={`/inventory/units?variantId=${encodeURIComponent(item.variantId)}`}
-                />
-              }
-              nativeButton={false}
-              className="gap-1.5"
-            >
-              <Boxes className="size-3.5" />
-              <span>View Tracked Units</span>
-            </Button>
-          ) : null}
-
-          <Button
-            variant="outline"
-            onClick={() => setTrackingDialogOpen(true)}
-            className="gap-1.5"
-          >
-            <Settings2 className="size-3.5" />
-            <span>Tracking Mode</span>
-          </Button>
-
-          {canAdjust ? (
-            <Button
-              variant="outline"
-              render={
-                <Link
-                  href={`/inventory/adjustments?variantId=${encodeURIComponent(item.variantId)}`}
-                />
-              }
-              nativeButton={false}
-            >
-              Adjust Stock
-            </Button>
-          ) : null}
-          {canTransfer ? (
-            <Button
-              render={
-                <Link
-                  href={`/inventory/transfers/new?variantId=${encodeURIComponent(item.variantId)}`}
-                />
-              }
-              nativeButton={false}
-            >
-              Create Transfer
-            </Button>
-          ) : null}
-        </div>
-      </div>
+      </PageHeader>
 
       <div className="grid gap-4 md:grid-cols-4">
         <Card>
@@ -422,6 +433,6 @@ export function InventoryItemDetail({ inventoryItemId }: { inventoryItemId: stri
         currentOnHand={Number(item.summary.onHand) || 0}
         onSuccess={() => setReloadKey((k) => k + 1)}
       />
-    </div>
+    </AdminPage>
   );
 }

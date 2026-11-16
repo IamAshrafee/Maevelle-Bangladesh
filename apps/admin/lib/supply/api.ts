@@ -1,4 +1,9 @@
-import { formatMoney, formatQuantity, subtractDecimals } from '@/lib/format/numbers';
+import {
+  formatInternalMoney,
+  formatMoney,
+  formatQuantity,
+  subtractDecimals,
+} from '@/lib/format/numbers';
 
 export async function supplyRequest<T>(path: string, init?: RequestInit): Promise<T> {
   const headers: Record<string, string> = {
@@ -24,11 +29,14 @@ export async function supplyRequest<T>(path: string, init?: RequestInit): Promis
   return body;
 }
 
-export const formatSupplyNumber = (value: string) =>
-  formatQuantity(value);
+export const formatSupplyNumber = (value: string) => formatQuantity(value);
 
-export const formatSupplyMoney = (value: string, currency: string) =>
-  formatMoney(value, currency);
+export const formatSupplyMoney = (value: string, currency: string) => formatMoney(value, currency);
+
+export const formatSupplyUnitCost = (value: string, currency: string, fractionDigits = 4) =>
+  currency === 'BDT'
+    ? formatInternalMoney(value, { fractionDigits })
+    : formatMoney(value, currency);
 
 export const formatSupplyDate = (value?: string) =>
   value

@@ -16,6 +16,8 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select';
+import { useFormDialogLifecycle } from '@/hooks/use-form-dialog-lifecycle';
 import { fetchApiData } from '@/lib/api';
 
 interface CancelOrderDialogProps {
@@ -42,9 +44,6 @@ const initiatedByOptions = [
   { value: 'SYSTEM', label: 'Automated / System' },
 ] as const;
 
-const selectClassName =
-  'flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50';
-
 export function CancelOrderDialog({
   orderId,
   orderNumber,
@@ -60,6 +59,20 @@ export function CancelOrderDialog({
   const [reasonCode, setReasonCode] = useState<string>('CUSTOMER_REQUEST');
   const [initiatedBy, setInitiatedBy] = useState<'CUSTOMER' | 'MERCHANT' | 'SYSTEM'>('CUSTOMER');
   const [reasonText, setReasonText] = useState('');
+
+  const isDirty =
+    reasonText.trim().length > 0 ||
+    reasonCode !== 'CUSTOMER_REQUEST' ||
+    initiatedBy !== 'CUSTOMER';
+
+  const lifecycle = useFormDialogLifecycle({
+    open,
+    onOpenChange: setOpen,
+    isDirty,
+    isSubmitting: busy,
+    title: 'Discard cancellation details?',
+    description: 'You have entered cancellation notes. Are you sure you want to dismiss?',
+  });
 
   async function submit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -97,7 +110,7 @@ export function CancelOrderDialog({
   }
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog open={open} onOpenChange={lifecycle.handleOpenChange}>
       <DialogTrigger render={trigger}>
         {!trigger && (
           <Button variant="destructive" size="sm">
@@ -136,37 +149,35 @@ export function CancelOrderDialog({
         <form onSubmit={submit} className="space-y-4">
           <div className="space-y-1.5">
             <Label htmlFor="initiatedBy">Initiated By</Label>
-            <select
+            <NativeSelect
               id="initiatedBy"
               value={initiatedBy}
               onChange={(e) => setInitiatedBy(e.target.value as typeof initiatedBy)}
-              className={selectClassName}
               disabled={busy}
             >
               {initiatedByOptions.map((opt) => (
-                <option key={opt.value} value={opt.value}>
+                <NativeSelectOption key={opt.value} value={opt.value}>
                   {opt.label}
-                </option>
+                </NativeSelectOption>
               ))}
-            </select>
+            </NativeSelect>
           </div>
 
           <div className="space-y-1.5">
             <Label htmlFor="reasonCode">Cancellation Reason</Label>
-            <select
+            <NativeSelect
               id="reasonCode"
               value={reasonCode}
               onChange={(e) => setReasonCode(e.target.value)}
-              className={selectClassName}
               disabled={busy}
               required
             >
               {reasonCodes.map((rc) => (
-                <option key={rc.value} value={rc.value}>
+                <NativeSelectOption key={rc.value} value={rc.value}>
                   {rc.label}
-                </option>
+                </NativeSelectOption>
               ))}
-            </select>
+            </NativeSelect>
           </div>
 
           <div className="space-y-1.5">
@@ -184,7 +195,7 @@ export function CancelOrderDialog({
             <Button
               type="button"
               variant="outline"
-              onClick={() => setOpen(false)}
+              onClick={() => lifecycle.handleOpenChange(false)}
               disabled={busy}
             >
               Go Back
@@ -202,6 +213,7 @@ export function CancelOrderDialog({
           </DialogFooter>
         </form>
       </DialogContent>
+      {lifecycle.discardConfirmDialog}
     </Dialog>
   );
 }

@@ -14,12 +14,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from '@/components/ui/tooltip';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { StatusBadge } from '@/components/status-badge';
 import { getAdminMediaUrl } from '@/lib/media/api';
 
@@ -131,17 +126,17 @@ export function MediaAssetResults({
                     {/* Bottom overlay: Dimensions and Status */}
                     <div className="absolute bottom-2 left-2 right-2 flex items-center justify-between pointer-events-none gap-1">
                       {hasDimensions ? (
-                        <span className="rounded bg-background/90 px-1.5 py-0.5 font-mono text-[10px] tabular-nums text-foreground backdrop-blur-xs shadow-2xs">
+                        <span className="rounded bg-background/95 px-1.5 py-0.5 font-mono text-[10px] tabular-nums text-foreground shadow-2xs">
                           {asset.widthPx}×{asset.heightPx}
                         </span>
                       ) : (
-                        <span className="rounded bg-background/90 px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground backdrop-blur-xs">
+                        <span className="rounded bg-background/95 px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground">
                           {asset.mimeType?.split('/')[1]?.toUpperCase() ?? asset.assetType}
                         </span>
                       )}
 
                       {asset.status !== 'READY' && (
-                        <span className="rounded bg-background/90 px-1.5 py-0.5 text-[10px] font-medium text-foreground backdrop-blur-xs">
+                        <span className="rounded bg-background/95 px-1.5 py-0.5 text-[10px] font-medium text-foreground">
                           {asset.status}
                         </span>
                       )}
@@ -152,13 +147,13 @@ export function MediaAssetResults({
                   <div className="min-w-0 space-y-1 p-2.5">
                     <Tooltip>
                       <TooltipTrigger>
-                        <p className="truncate text-xs font-semibold text-foreground">
-                          {title}
-                        </p>
+                        <p className="truncate text-xs font-semibold text-foreground">{title}</p>
                       </TooltipTrigger>
                       <TooltipContent side="top" className="text-xs max-w-xs">
                         <p className="font-semibold">{title}</p>
-                        <p className="text-[10px] text-muted-foreground font-mono">{asset.originalFilename}</p>
+                        <p className="text-[10px] text-muted-foreground font-mono">
+                          {asset.originalFilename}
+                        </p>
                       </TooltipContent>
                     </Tooltip>
 
@@ -182,7 +177,7 @@ export function MediaAssetResults({
                 </button>
 
                 {/* Bulk Checkbox in top-left */}
-                <div className="absolute left-2 top-2 z-10 flex size-7 items-center justify-center rounded-md bg-background/90 backdrop-blur-xs shadow-2xs">
+                <div className="absolute left-2 top-2 z-10 flex size-7 items-center justify-center rounded-md bg-background/95 shadow-2xs">
                   <Tooltip>
                     <TooltipTrigger>
                       <Checkbox
@@ -200,7 +195,7 @@ export function MediaAssetResults({
                 {/* Visibility Badge in top-right */}
                 <Badge
                   variant="outline"
-                  className={`absolute right-2 top-2 bg-background/90 backdrop-blur-xs text-[10px] shadow-2xs ${
+                  className={`absolute right-2 top-2 bg-background/95 text-[10px] shadow-2xs ${
                     asset.visibility === 'PUBLIC'
                       ? 'text-success border-success/30'
                       : 'text-muted-foreground'
@@ -218,8 +213,13 @@ export function MediaAssetResults({
 
   // List View
   return (
-    <div className="overflow-x-auto rounded-lg border border-border" role="region" aria-label="Media asset list" tabIndex={0}>
-      <Table>
+    <div
+      className="overflow-x-auto rounded-lg border border-border"
+      role="region"
+      aria-label="Media asset list"
+      tabIndex={0}
+    >
+      <Table density="compact" stickyHeader>
         <TableHeader>
           <TableRow>
             <TableHead className="w-10">
@@ -240,10 +240,7 @@ export function MediaAssetResults({
             const title = asset.title || asset.originalFilename;
 
             return (
-              <TableRow
-                key={asset.id}
-                className={isSelected ? 'bg-primary-subtle' : undefined}
-              >
+              <TableRow key={asset.id} className={isSelected ? 'bg-primary-subtle' : undefined}>
                 <TableCell>
                   <Checkbox
                     checked={isChecked}
@@ -281,7 +278,9 @@ export function MediaAssetResults({
                 <TableCell>
                   <Badge
                     variant="outline"
-                    className={asset.visibility === 'PUBLIC' ? 'text-success border-success/30' : undefined}
+                    className={
+                      asset.visibility === 'PUBLIC' ? 'text-success border-success/30' : undefined
+                    }
                   >
                     {asset.visibility}
                   </Badge>

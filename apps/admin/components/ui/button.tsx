@@ -17,21 +17,21 @@ const buttonVariants = cva(
           'border border-border bg-card text-foreground shadow-2xs hover:bg-muted hover:text-foreground',
         glass:
           'bg-card/75 backdrop-blur-md border border-border/70 text-foreground shadow-2xs hover:bg-card hover:border-border',
-        ghost:
-          'text-muted-foreground hover:bg-muted hover:text-foreground',
+        ghost: 'text-muted-foreground hover:bg-muted hover:text-foreground',
         destructive:
           'bg-destructive text-destructive-foreground shadow-xs hover:bg-destructive/90 border border-destructive/20',
         link: 'text-primary underline-offset-4 hover:underline p-0 h-auto shadow-none',
       },
       size: {
-        default: 'h-9 gap-2 px-3.5 text-sm',
-        xs: "h-7 gap-1 rounded-md px-2 text-xs [&_svg:not([class*='size-'])]:size-3",
-        sm: "h-8 gap-1.5 rounded-lg px-2.5 text-xs [&_svg:not([class*='size-'])]:size-3.5",
-        lg: 'h-10 gap-2.5 rounded-lg px-4 text-sm font-semibold',
-        icon: 'size-9 min-h-9 rounded-lg',
-        'icon-xs': "size-7 min-h-7 rounded-md [&_svg:not([class*='size-'])]:size-3",
-        'icon-sm': 'size-8 min-h-8 rounded-lg',
-        'icon-lg': 'size-10 min-h-10 rounded-lg',
+        default: 'h-11 md:h-9 pointer-coarse:min-h-11 gap-2 px-3.5 text-sm',
+        xs: "h-9 md:h-7 pointer-coarse:min-h-10 gap-1 rounded-md px-2 text-xs [&_svg:not([class*='size-'])]:size-3",
+        sm: "h-10 md:h-8 pointer-coarse:min-h-11 gap-1.5 rounded-lg px-2.5 text-xs [&_svg:not([class*='size-'])]:size-3.5",
+        lg: 'h-12 md:h-10 pointer-coarse:min-h-12 gap-2.5 rounded-lg px-4 text-sm font-semibold',
+        icon: 'size-11 md:size-9 pointer-coarse:size-11 rounded-lg',
+        'icon-xs':
+          "size-9 md:size-7 pointer-coarse:size-10 rounded-md [&_svg:not([class*='size-'])]:size-3",
+        'icon-sm': 'size-10 md:size-8 pointer-coarse:size-11 rounded-lg',
+        'icon-lg': 'size-12 md:size-10 pointer-coarse:size-12 rounded-lg',
       },
     },
     defaultVariants: {

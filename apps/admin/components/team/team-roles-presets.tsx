@@ -13,19 +13,22 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetFooter,
+  SheetHeader,
+  SheetTitle,
+} from '@/components/ui/sheet';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-
 
 import { useTeam } from './team-context';
 import { TeamPermissionsEditor, type PermissionsEditorValue } from './team-permissions-editor';
 import { formatIamErrorMessage, getSensitivityBadge, type PermissionPresetDto } from './team-types';
 
-export function TeamRolesPresets({
-  onRefresh,
-}: {
-  readonly onRefresh: () => Promise<void>;
-}) {
+export function TeamRolesPresets({ onRefresh }: { readonly onRefresh: () => Promise<void> }) {
   const { presets, capabilities, groupedDomains, canManagePermissions, request } = useTeam();
   const [catalogSearch, setCatalogSearch] = useState('');
   const [busy, setBusy] = useState(false);
@@ -144,7 +147,10 @@ export function TeamRolesPresets({
   return (
     <div className="space-y-8">
       {error ? (
-        <div className="rounded-md bg-destructive/15 border border-destructive/30 p-3 text-sm text-destructive" role="alert">
+        <div
+          className="rounded-md bg-destructive/15 border border-destructive/30 p-3 text-sm text-destructive"
+          role="alert"
+        >
           {error}
         </div>
       ) : null}
@@ -158,13 +164,13 @@ export function TeamRolesPresets({
               Organizational Role Presets
             </h3>
             <p className="text-xs text-muted-foreground">
-              Pre-configured capability profiles for quick assignment during invitation or member onboarding.
+              Pre-configured capability profiles for quick assignment during invitation or member
+              onboarding.
             </p>
           </div>
           {canManagePermissions ? (
             <Button
               type="button"
-              className="button primary"
               onClick={() => {
                 setCreateName('');
                 setCreateDescription('');
@@ -213,7 +219,8 @@ export function TeamRolesPresets({
                     {typeof preset.member_count === 'number' ? (
                       <span className="flex items-center gap-1">
                         <Users className="size-3 text-primary" />
-                        <strong>{preset.member_count}</strong> active member{preset.member_count === 1 ? '' : 's'}
+                        <strong>{preset.member_count}</strong> active member
+                        {preset.member_count === 1 ? '' : 's'}
                       </span>
                     ) : null}
                   </div>
@@ -295,11 +302,15 @@ export function TeamRolesPresets({
               Complete Capability Catalog ({capabilities.length} capabilities)
             </h3>
             <p className="text-xs text-muted-foreground">
-              Reference guide for all fine-grained server capabilities across Maevelle business domains.
+              Reference guide for all fine-grained server capabilities across Maevelle business
+              domains.
             </p>
           </div>
           <div className="relative max-w-xs w-full">
-            <Search className="absolute left-3 top-2.5 size-4 text-muted-foreground" aria-hidden="true" />
+            <Search
+              className="absolute left-3 top-2.5 size-4 text-muted-foreground"
+              aria-hidden="true"
+            />
             <Input
               placeholder="Search catalog…"
               value={catalogSearch}
@@ -313,11 +324,16 @@ export function TeamRolesPresets({
           {filteredCatalog.map(({ domain, capabilities: domainCaps }) => {
             const DomainIcon = domain.icon;
             return (
-              <div key={domain.id} className="rounded-lg border border-border bg-card p-4 space-y-3">
+              <div
+                key={domain.id}
+                className="rounded-lg border border-border bg-card p-4 space-y-3"
+              >
                 <div className="flex items-center gap-2">
                   <DomainIcon className="size-4 text-primary" />
                   <h4 className="font-semibold text-sm text-foreground">{domain.label}</h4>
-                  <span className="text-xs text-muted-foreground">({domainCaps.length} capabilities)</span>
+                  <span className="text-xs text-muted-foreground">
+                    ({domainCaps.length} capabilities)
+                  </span>
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
                   {domainCaps.map((cap) => {
@@ -381,10 +397,7 @@ export function TeamRolesPresets({
                 {inspectPreset.capability_codes.map((code) => {
                   const def = capabilities.find((c) => c.capability_code === code);
                   return (
-                    <div
-                      key={code}
-                      className="p-2 rounded hover:bg-background text-xs space-y-0.5"
-                    >
+                    <div key={code} className="p-2 rounded hover:bg-background text-xs space-y-0.5">
                       <div className="font-mono font-semibold text-foreground">{code}</div>
                       <div className="text-[11px] text-muted-foreground">
                         {def?.description ?? 'Organization capability'}
@@ -404,131 +417,145 @@ export function TeamRolesPresets({
         </Dialog>
       ) : null}
 
-      {/* Create Custom Role Dialog */}
-      {createOpen ? (
-        <Dialog open={true} onOpenChange={(open) => !open && setCreateOpen(false)}>
-          <DialogContent className="sm:max-w-3xl max-h-[90vh] overflow-y-auto">
-            <DialogHeader>
-              <DialogTitle className="flex items-center gap-2">
-                <Plus className="size-5 text-primary" />
-                Create Custom Role Preset
-              </DialogTitle>
-              <DialogDescription>
-                Define a reusable bundle of capabilities for your organization.
-              </DialogDescription>
-            </DialogHeader>
+      {/* Create Custom Role Sheet */}
+      <Sheet open={createOpen} onOpenChange={(open) => !open && setCreateOpen(false)}>
+        <SheetContent side="right" className="flex w-full flex-col gap-0 p-0 sm:max-w-3xl">
+          {createOpen ? (
+            <>
+              <SheetHeader className="border-b border-border px-6 py-4">
+                <SheetTitle className="flex items-center gap-2">
+                  <Plus className="size-5 text-primary" />
+                  Create Custom Role Preset
+                </SheetTitle>
+                <SheetDescription>
+                  Define a reusable bundle of capabilities for your organization.
+                </SheetDescription>
+              </SheetHeader>
 
-            <form onSubmit={handleCreatePreset} className="space-y-4 py-2">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div className="space-y-1">
-                  <Label htmlFor="create-role-name">Role Name</Label>
-                  <Input
-                    id="create-role-name"
-                    required
-                    maxLength={120}
-                    placeholder="e.g. Regional Merchandiser"
-                    value={createName}
-                    onChange={(e) => setCreateName(e.target.value)}
-                  />
+              <form onSubmit={handleCreatePreset} className="flex min-h-0 flex-1 flex-col">
+                <div className="flex-1 space-y-4 overflow-y-auto px-6 py-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div className="space-y-1">
+                      <Label htmlFor="create-role-name">Role Name</Label>
+                      <Input
+                        id="create-role-name"
+                        required
+                        maxLength={120}
+                        placeholder="e.g. Regional Merchandiser"
+                        value={createName}
+                        onChange={(e) => setCreateName(e.target.value)}
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label htmlFor="create-role-desc">Description</Label>
+                      <Input
+                        id="create-role-desc"
+                        maxLength={500}
+                        placeholder="e.g. Manages catalog, categories, and promotions"
+                        value={createDescription}
+                        onChange={(e) => setCreateDescription(e.target.value)}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="space-y-1">
+                    <Label>
+                      Included Capabilities ({createPermissions.capabilityCodes.length})
+                    </Label>
+                    <TeamPermissionsEditor
+                      value={createPermissions}
+                      onChange={setCreatePermissions}
+                      showPresetSelector={false}
+                    />
+                  </div>
                 </div>
-                <div className="space-y-1">
-                  <Label htmlFor="create-role-desc">Description</Label>
-                  <Input
-                    id="create-role-desc"
-                    maxLength={500}
-                    placeholder="e.g. Manages catalog, categories, and promotions"
-                    value={createDescription}
-                    onChange={(e) => setCreateDescription(e.target.value)}
-                  />
+
+                <SheetFooter className="border-t border-border px-6 py-4 sm:flex-row sm:justify-end">
+                  <Button type="button" variant="outline" onClick={() => setCreateOpen(false)}>
+                    Cancel
+                  </Button>
+                  <Button
+                    type="submit"
+                    disabled={
+                      busy || !createName.trim() || createPermissions.capabilityCodes.length === 0
+                    }
+                  >
+                    {busy ? 'Creating…' : 'Create Role Preset'}
+                  </Button>
+                </SheetFooter>
+              </form>
+            </>
+          ) : null}
+        </SheetContent>
+      </Sheet>
+
+      {/* Edit Custom Role Sheet */}
+      <Sheet open={Boolean(editPreset)} onOpenChange={(open) => !open && setEditPreset(null)}>
+        <SheetContent side="right" className="flex w-full flex-col gap-0 p-0 sm:max-w-3xl">
+          {editPreset ? (
+            <>
+              <SheetHeader className="border-b border-border px-6 py-4">
+                <SheetTitle className="flex items-center gap-2">
+                  <Edit2 className="size-5 text-primary" />
+                  Edit Role Preset: {editPreset.name}
+                </SheetTitle>
+                <SheetDescription>
+                  Update role name, description, and assigned capabilities.
+                </SheetDescription>
+              </SheetHeader>
+
+              <form onSubmit={handleUpdatePreset} className="flex min-h-0 flex-1 flex-col">
+                <div className="flex-1 space-y-4 overflow-y-auto px-6 py-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div className="space-y-1">
+                      <Label htmlFor="edit-role-name">Role Name</Label>
+                      <Input
+                        id="edit-role-name"
+                        required
+                        maxLength={120}
+                        value={editName}
+                        onChange={(e) => setEditName(e.target.value)}
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label htmlFor="edit-role-desc">Description</Label>
+                      <Input
+                        id="edit-role-desc"
+                        maxLength={500}
+                        value={editDescription}
+                        onChange={(e) => setEditDescription(e.target.value)}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="space-y-1">
+                    <Label>Included Capabilities ({editPermissions.capabilityCodes.length})</Label>
+                    <TeamPermissionsEditor
+                      value={editPermissions}
+                      onChange={setEditPermissions}
+                      showPresetSelector={false}
+                    />
+                  </div>
                 </div>
-              </div>
 
-              <div className="space-y-1">
-                <Label>Included Capabilities ({createPermissions.capabilityCodes.length})</Label>
-                <TeamPermissionsEditor
-                  value={createPermissions}
-                  onChange={setCreatePermissions}
-                  showPresetSelector={false}
-                />
-              </div>
-
-              <DialogFooter className="gap-2 sm:gap-0">
-                <Button type="button" variant="outline" onClick={() => setCreateOpen(false)}>
-                  Cancel
-                </Button>
-                <Button
-                  type="submit"
-                  disabled={busy || !createName.trim() || createPermissions.capabilityCodes.length === 0}
-                >
-                  {busy ? 'Creating…' : 'Create Role Preset'}
-                </Button>
-              </DialogFooter>
-            </form>
-          </DialogContent>
-        </Dialog>
-      ) : null}
-
-      {/* Edit Custom Role Dialog */}
-      {editPreset ? (
-        <Dialog open={true} onOpenChange={(open) => !open && setEditPreset(null)}>
-          <DialogContent className="sm:max-w-3xl max-h-[90vh] overflow-y-auto">
-            <DialogHeader>
-              <DialogTitle className="flex items-center gap-2">
-                <Edit2 className="size-5 text-primary" />
-                Edit Role Preset: {editPreset.name}
-              </DialogTitle>
-              <DialogDescription>
-                Update role name, description, and assigned capabilities.
-              </DialogDescription>
-            </DialogHeader>
-
-            <form onSubmit={handleUpdatePreset} className="space-y-4 py-2">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div className="space-y-1">
-                  <Label htmlFor="edit-role-name">Role Name</Label>
-                  <Input
-                    id="edit-role-name"
-                    required
-                    maxLength={120}
-                    value={editName}
-                    onChange={(e) => setEditName(e.target.value)}
-                  />
-                </div>
-                <div className="space-y-1">
-                  <Label htmlFor="edit-role-desc">Description</Label>
-                  <Input
-                    id="edit-role-desc"
-                    maxLength={500}
-                    value={editDescription}
-                    onChange={(e) => setEditDescription(e.target.value)}
-                  />
-                </div>
-              </div>
-
-              <div className="space-y-1">
-                <Label>Included Capabilities ({editPermissions.capabilityCodes.length})</Label>
-                <TeamPermissionsEditor
-                  value={editPermissions}
-                  onChange={setEditPermissions}
-                  showPresetSelector={false}
-                />
-              </div>
-
-              <DialogFooter className="gap-2 sm:gap-0">
-                <Button type="button" variant="outline" onClick={() => setEditPreset(null)}>
-                  Cancel
-                </Button>
-                <Button
-                  type="submit"
-                  disabled={busy || !editName.trim() || editPermissions.capabilityCodes.length === 0}
-                >
-                  {busy ? 'Saving…' : 'Save Changes'}
-                </Button>
-              </DialogFooter>
-            </form>
-          </DialogContent>
-        </Dialog>
-      ) : null}
+                <SheetFooter className="border-t border-border px-6 py-4 sm:flex-row sm:justify-end">
+                  <Button type="button" variant="outline" onClick={() => setEditPreset(null)}>
+                    Cancel
+                  </Button>
+                  <Button
+                    type="submit"
+                    disabled={
+                      busy || !editName.trim() || editPermissions.capabilityCodes.length === 0
+                    }
+                  >
+                    {busy ? 'Saving…' : 'Save Changes'}
+                  </Button>
+                </SheetFooter>
+              </form>
+            </>
+          ) : null}
+        </SheetContent>
+      </Sheet>
 
       {/* Delete Custom Role Confirmation */}
       {deletePreset ? (
@@ -540,9 +567,9 @@ export function TeamRolesPresets({
                 Delete Role Preset
               </DialogTitle>
               <DialogDescription>
-                Are you sure you want to delete the role preset <strong>{deletePreset.name}</strong>?
-                Existing members who have these capabilities will keep their access, but this preset
-                will no longer be available for selection.
+                Are you sure you want to delete the role preset <strong>{deletePreset.name}</strong>
+                ? Existing members who have these capabilities will keep their access, but this
+                preset will no longer be available for selection.
               </DialogDescription>
             </DialogHeader>
             <DialogFooter className="gap-2 sm:gap-0">

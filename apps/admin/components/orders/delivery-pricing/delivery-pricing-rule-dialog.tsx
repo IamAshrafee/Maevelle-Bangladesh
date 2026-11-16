@@ -1,23 +1,24 @@
 'use client';
 
 import * as React from 'react';
+import { checkoutDeliveryAreas } from '@maevelle/contracts';
 import { AlertCircle, Globe, HelpCircle, Loader2, MapPin, Sparkles } from 'lucide-react';
 
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetFooter,
+  SheetHeader,
+  SheetTitle,
+} from '@/components/ui/sheet';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { NativeSelect } from '@/components/ui/native-select';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { GeographyNodeSelector } from './geography-node-selector';
-import type { DeliveryPricingRule, GeographyNodeOption } from './types';
+import type { CheckoutServiceability, DeliveryPricingRule, GeographyNodeOption } from './types';
 
 interface DeliveryPricingRuleDialogProps {
   readonly open: boolean;
@@ -32,6 +33,7 @@ interface DeliveryPricingRuleDialogProps {
     currency: string;
     priority: number;
     status: 'ACTIVE' | 'INACTIVE';
+    checkoutServiceability: CheckoutServiceability;
     version?: number | undefined;
   }) => Promise<void>;
 }
@@ -47,11 +49,13 @@ export function DeliveryPricingRuleDialog({
 
   // Form states
   const [name, setName] = React.useState('');
-  const [flatAmount, setFlatAmount] = React.useState('120.00');
+  const [flatAmount, setFlatAmount] = React.useState('100.00');
   const [priority, setPriority] = React.useState(0);
   const [countryCode, setCountryCode] = React.useState('BD');
   const [currency, setCurrency] = React.useState('BDT');
   const [status, setStatus] = React.useState<'ACTIVE' | 'INACTIVE'>('ACTIVE');
+  const [checkoutServiceability, setCheckoutServiceability] =
+    React.useState<CheckoutServiceability>('UNVERIFIED');
   const [scopeType, setScopeType] = React.useState<'NATIONWIDE' | 'GEOGRAPHIC'>('NATIONWIDE');
   const [selectedNode, setSelectedNode] = React.useState<GeographyNodeOption | null>(null);
   const [error, setError] = React.useState<string | null>(null);
@@ -67,6 +71,7 @@ export function DeliveryPricingRuleDialog({
         setCountryCode(rule.country_code);
         setCurrency(rule.currency_code);
         setStatus(rule.status);
+        setCheckoutServiceability(rule.checkout_serviceability ?? 'UNVERIFIED');
         if (rule.geography_node_id) {
           setScopeType('GEOGRAPHIC');
           setSelectedNode({
@@ -83,11 +88,12 @@ export function DeliveryPricingRuleDialog({
       } else {
         // Defaults for Create mode
         setName('');
-        setFlatAmount('120.00');
+        setFlatAmount('100.00');
         setPriority(0);
         setCountryCode('BD');
         setCurrency('BDT');
         setStatus('ACTIVE');
+        setCheckoutServiceability('UNVERIFIED');
         setScopeType('NATIONWIDE');
         setSelectedNode(null);
       }
@@ -97,22 +103,32 @@ export function DeliveryPricingRuleDialog({
   // Preset helpers for common Bangladesh configurations
   function applyPreset(presetType: 'INSIDE_DHAKA' | 'OUTSIDE_DHAKA' | 'FREE_DELIVERY') {
     if (presetType === 'INSIDE_DHAKA') {
-      setName('Inside Dhaka Standard');
+      setName('Dhaka city delivery');
       setFlatAmount('60.00');
       setPriority(10);
       setScopeType('GEOGRAPHIC');
+      setSelectedNode({
+        id: checkoutDeliveryAreas.dhaka.id,
+        name: checkoutDeliveryAreas.dhaka.label,
+        localName: null,
+        nodeType: 'OTHER',
+        parentName: null,
+      });
+      setCheckoutServiceability('SUPPORTED');
     } else if (presetType === 'OUTSIDE_DHAKA') {
       setName('Outside Dhaka / Nationwide Delivery');
-      setFlatAmount('120.00');
+      setFlatAmount('100.00');
       setPriority(0);
       setScopeType('NATIONWIDE');
       setSelectedNode(null);
+      setCheckoutServiceability('SUPPORTED');
     } else if (presetType === 'FREE_DELIVERY') {
       setName('Nationwide Free Delivery Campaign');
       setFlatAmount('0.00');
       setPriority(20);
       setScopeType('NATIONWIDE');
       setSelectedNode(null);
+      setCheckoutServiceability('UNVERIFIED');
     }
   }
 
@@ -129,7 +145,7 @@ export function DeliveryPricingRuleDialog({
 
     const cleanAmount = flatAmount.trim();
     if (!/^(?:0|[1-9]\d*)(?:\.\d{1,4})?$/.test(cleanAmount)) {
-      setError('Delivery charge must be a valid non-negative decimal amount (e.g. 120 or 60.00).');
+      setError('Enter a valid delivery charge, such as 100 or 60.00.');
       return;
     }
 
@@ -146,6 +162,7 @@ export function DeliveryPricingRuleDialog({
         flatAmount: cleanAmount,
         priority: Number(priority),
         status,
+        checkoutServiceability,
         geographyNodeId: scopeType === 'GEOGRAPHIC' && selectedNode ? selectedNode.id : null,
         version: rule?.version,
       });
@@ -156,17 +173,19 @@ export function DeliveryPricingRuleDialog({
   }
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-xl max-h-[92vh] overflow-y-auto">
+    <Sheet open={open} onOpenChange={onOpenChange}>
+      <SheetContent side="right" className="w-full sm:max-w-xl overflow-y-auto p-6">
         <form onSubmit={handleSubmit} className="space-y-4">
-          <DialogHeader>
-            <DialogTitle>{isEditing ? 'Edit delivery pricing rule' : 'New delivery pricing rule'}</DialogTitle>
-            <DialogDescription>
+          <SheetHeader className="p-0 pb-4 border-b border-border/60">
+            <SheetTitle>
+              {isEditing ? 'Edit delivery pricing rule' : 'New delivery pricing rule'}
+            </SheetTitle>
+            <SheetDescription>
               {isEditing
                 ? 'Update delivery charge rate, priority precedence, or geographic coverage.'
                 : 'Define server-owned delivery pricing. Rates automatically take effect on the next checkout calculation.'}
-            </DialogDescription>
-          </DialogHeader>
+            </SheetDescription>
+          </SheetHeader>
 
           {/* Quick presets (only in create mode) */}
           {!isEditing && (
@@ -180,14 +199,14 @@ export function DeliveryPricingRuleDialog({
                 onClick={() => applyPreset('OUTSIDE_DHAKA')}
                 className="px-2 py-0.5 rounded text-[11px] font-medium bg-card border border-border text-foreground hover:bg-muted transition-colors cursor-pointer"
               >
-                Nationwide ৳120 (P0)
+                Nationwide ৳100
               </button>
               <button
                 type="button"
                 onClick={() => applyPreset('INSIDE_DHAKA')}
                 className="px-2 py-0.5 rounded text-[11px] font-medium bg-card border border-border text-foreground hover:bg-muted transition-colors cursor-pointer"
               >
-                Inside Dhaka ৳60 (P10)
+                Dhaka city ৳60
               </button>
               <button
                 type="button"
@@ -258,7 +277,9 @@ export function DeliveryPricingRuleDialog({
                   <MapPin className="size-4 shrink-0" />
                   <div>
                     <strong className="block text-xs">Specific zone / city</strong>
-                    <span className="text-[10px] text-muted-foreground">Division, District, Thana</span>
+                    <span className="text-[10px] text-muted-foreground">
+                      Division, District, Thana
+                    </span>
                   </div>
                 </button>
               </div>
@@ -276,9 +297,31 @@ export function DeliveryPricingRuleDialog({
                     placeholder="Search by Division, District, City, or Thana…"
                   />
                   <p className="text-[10px] text-muted-foreground">
-                    Orders with addresses inside this node or its child territories will match this rule.
+                    Orders with addresses inside this node or its child territories will match this
+                    rule.
                   </p>
                 </div>
+              )}
+            </div>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="rule-checkout-coverage">Storefront delivery coverage</Label>
+              <NativeSelect
+                id="rule-checkout-coverage"
+                value={checkoutServiceability}
+                onChange={(event) =>
+                  setCheckoutServiceability(event.target.value as CheckoutServiceability)
+                }
+              >
+                <option value="UNVERIFIED">Use rate only</option>
+                <option value="SUPPORTED">Accept orders in this area</option>
+                <option value="UNSUPPORTED">Do not accept orders in this area</option>
+              </NativeSelect>
+              {scopeType === 'NATIONWIDE' && checkoutServiceability === 'SUPPORTED' && (
+                <p className="text-xs text-muted-foreground">
+                  Accepts valid Bangladesh addresses, with any narrower delivery restrictions
+                  applied.
+                </p>
               )}
             </div>
 
@@ -311,7 +354,10 @@ export function DeliveryPricingRuleDialog({
               {/* Priority */}
               <div className="space-y-1.5">
                 <div className="flex items-center justify-between">
-                  <Label htmlFor="rule-priority" className="text-xs font-medium flex items-center gap-1">
+                  <Label
+                    htmlFor="rule-priority"
+                    className="text-xs font-medium flex items-center gap-1"
+                  >
                     <span>Priority rank</span>
                     <Tooltip>
                       <TooltipTrigger
@@ -324,8 +370,9 @@ export function DeliveryPricingRuleDialog({
                         <span className="sr-only">Priority details</span>
                       </TooltipTrigger>
                       <TooltipContent className="max-w-xs text-xs">
-                        Higher priority rules take precedence over lower priority rules. Standard fallback rules
-                        usually have priority 0, while regional zone overrides use 10 or 20.
+                        Higher priority rules take precedence over lower priority rules. Standard
+                        fallback rules usually have priority 0, while regional zone overrides use 10
+                        or 20.
                       </TooltipContent>
                     </Tooltip>
                   </Label>
@@ -391,7 +438,7 @@ export function DeliveryPricingRuleDialog({
             </div>
           </div>
 
-          <DialogFooter className="pt-2">
+          <SheetFooter className="p-0 pt-2 sm:flex-row sm:justify-end">
             <Button
               type="button"
               variant="outline"
@@ -405,9 +452,9 @@ export function DeliveryPricingRuleDialog({
               {busy && <Loader2 className="size-3.5 animate-spin" />}
               <span>{isEditing ? 'Save changes' : 'Create rule'}</span>
             </Button>
-          </DialogFooter>
+          </SheetFooter>
         </form>
-      </DialogContent>
-    </Dialog>
+      </SheetContent>
+    </Sheet>
   );
 }

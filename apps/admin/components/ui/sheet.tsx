@@ -64,7 +64,7 @@ function SheetOverlay({ className, ...props }: SheetPrimitive.Backdrop.Props) {
       hidden={false}
       render={<MotionBackdrop transition={ADMIN_MOTION.fast} />}
       className={cn(
-        'fixed inset-0 z-50 bg-black/20 dark:bg-black/50 supports-backdrop-filter:backdrop-blur-xs',
+        'fixed inset-0 z-50 bg-black/20 dark:bg-black/50 supports-backdrop-filter:backdrop-blur-xs touch-none',
         className,
       )}
       {...props}
@@ -138,7 +138,7 @@ function SheetContent({
               />
             }
             className={cn(
-              'fixed z-50 flex flex-col gap-4 bg-popover bg-clip-padding text-sm text-popover-foreground shadow-lg data-[side=bottom]:inset-x-0 data-[side=bottom]:bottom-0 data-[side=bottom]:h-auto data-[side=bottom]:max-h-[90dvh] data-[side=bottom]:rounded-t-2xl data-[side=bottom]:border-t data-[side=left]:inset-y-0 data-[side=left]:left-0 data-[side=left]:h-full data-[side=left]:w-3/4 data-[side=left]:border-r data-[side=left]:sm:max-w-sm data-[side=top]:inset-x-0 data-[side=top]:top-0 data-[side=top]:h-auto data-[side=top]:border-b',
+              'fixed z-50 flex flex-col gap-4 bg-popover bg-clip-padding text-sm text-popover-foreground shadow-lg overflow-x-hidden overscroll-contain touch-pan-y data-[side=bottom]:inset-x-0 data-[side=bottom]:bottom-0 data-[side=bottom]:h-auto data-[side=bottom]:max-h-[90dvh] data-[side=bottom]:rounded-t-2xl data-[side=bottom]:border-t data-[side=left]:inset-y-0 data-[side=left]:left-0 data-[side=left]:h-full data-[side=left]:w-3/4 data-[side=left]:border-r data-[side=left]:sm:max-w-sm data-[side=top]:inset-x-0 data-[side=top]:top-0 data-[side=top]:h-auto data-[side=top]:border-b',
               side === 'right' &&
                 !responsive &&
                 'inset-y-0 right-0 h-full w-3/4 border-l sm:max-w-sm',
@@ -210,12 +210,26 @@ function SheetDescription({ className, ...props }: SheetPrimitive.Description.Pr
   );
 }
 
+function SheetBody({ className, ...props }: React.ComponentProps<'div'>) {
+  return (
+    <div
+      data-slot="sheet-body"
+      className={cn(
+        'min-h-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-contain touch-pan-y',
+        className,
+      )}
+      {...props}
+    />
+  );
+}
+
 export {
   Sheet,
   SheetTrigger,
   SheetClose,
   SheetContent,
   SheetHeader,
+  SheetBody,
   SheetFooter,
   SheetTitle,
   SheetDescription,

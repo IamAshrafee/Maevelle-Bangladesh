@@ -22,11 +22,14 @@ import { useDeferredValue, useEffect, useState } from 'react';
 import type { OrderSummaryDto, OrderTagDto, PaginatedEnvelope } from '@maevelle/contracts';
 
 import { StatusBadge } from '@/components/status-badge';
+import { useAdminCapability, useAdminContext } from '@/components/admin-capabilities';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select';
+import { PageActions, PageHeader } from '@/components/ui/page-shell';
+import { ListWorkspace } from '@/components/workspaces/list-workspace';
 import {
   Table,
   TableBody,
@@ -35,7 +38,11 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
+import { WorkspaceTabs, type WorkspaceTabItem } from '@/components/ui/workspace-tabs';
 import { fetchApiData } from '@/lib/api';
+import { formatWholeTaka } from '@/lib/format/numbers';
+import { cn } from '@/lib/utils';
+import { TableSkeletonRows, CardSkeletonStack } from '@/components/ui/table-skeleton';
 
 const statuses = ['ALL', 'PENDING', 'CONFIRMED', 'ON_HOLD', 'COMPLETED', 'CANCELLED'] as const;
 const paymentStatuses = [
@@ -82,12 +89,7 @@ const paymentMethods = ['ALL', 'COD', 'BKASH_MANUAL', 'NAGAD_MANUAL'] as const;
 const riskLevels = ['ALL', 'ELEVATED', 'MODERATE', 'LOW', 'INSUFFICIENT_HISTORY'] as const;
 
 type OperationalQueue =
-  | 'ALL'
-  | 'NEEDS_REVIEW'
-  | 'READY_TO_FULFILL'
-  | 'IN_DELIVERY'
-  | 'DELIVERY_ISSUES'
-  | 'COMPLETED';
+  'ALL' | 'NEEDS_REVIEW' | 'READY_TO_FULFILL' | 'IN_DELIVERY' | 'DELIVERY_ISSUES' | 'COMPLETED';
 
 function allowedValue<const T extends readonly string[]>(
   values: T,
@@ -108,10 +110,13 @@ function formatDateTime(value?: string | null): string {
 }
 
 function formatMoney(amount: number | string | undefined | null, currency = 'BDT'): string {
+  if (!currency || currency === 'BDT') {
+    return formatWholeTaka(amount);
+  }
   const num = Number(amount ?? 0);
   return new Intl.NumberFormat('en-BD', {
     style: 'currency',
-    currency: currency || 'BDT',
+    currency,
     maximumFractionDigits: 2,
   }).format(Number.isNaN(num) ? 0 : num);
 }
@@ -119,6 +124,9 @@ function formatMoney(amount: number | string | undefined | null, currency = 'BDT
 export function OrdersList() {
   const router = useRouter();
   const searchParameters = useSearchParams();
+  const adminContext = useAdminContext();
+  const hasCreateCapability = useAdminCapability('orders.create');
+  const canCreateOrder = adminContext.isOwner || hasCreateCapability;
   const [query, setQuery] = useState(
     searchParameters.get('q') ?? searchParameters.get('search') ?? '',
   );
@@ -150,7 +158,8 @@ export function OrdersList() {
   // Determine active operational queue
   let activeQueue: OperationalQueue = 'ALL';
   if (status === 'PENDING') activeQueue = 'NEEDS_REVIEW';
-  else if (status === 'CONFIRMED' && fulfillmentStatus === 'UNFULFILLED') activeQueue = 'READY_TO_FULFILL';
+  else if (status === 'CONFIRMED' && fulfillmentStatus === 'UNFULFILLED')
+    activeQueue = 'READY_TO_FULFILL';
   else if (deliveryStatus === 'IN_TRANSIT') activeQueue = 'IN_DELIVERY';
   else if (deliveryStatus === 'FAILED') activeQueue = 'DELIVERY_ISSUES';
   else if (status === 'COMPLETED') activeQueue = 'COMPLETED';
@@ -381,276 +390,335 @@ export function OrdersList() {
     }
   }
 
-  const queueTabs: { key: OperationalQueue; label: string; badge?: string }[] = [
-    { key: 'ALL', label: 'All Orders' },
-    { key: 'NEEDS_REVIEW', label: 'Needs Review' },
-    { key: 'READY_TO_FULFILL', label: 'To Fulfill' },
-    { key: 'IN_DELIVERY', label: 'In Delivery' },
-    { key: 'DELIVERY_ISSUES', label: 'Delivery Issues' },
-    { key: 'COMPLETED', label: 'Completed' },
+  const queueTabs: readonly WorkspaceTabItem<OperationalQueue>[] = [
+    { value: 'ALL', label: 'All Orders' },
+    {
+      value: 'NEEDS_REVIEW',
+      label: 'Needs Review',
+      ...(status === 'PENDING' && orders?.totalCount ? { count: orders.totalCount } : {}),
+    },
+    { value: 'READY_TO_FULFILL', label: 'To Fulfill' },
+    { value: 'IN_DELIVERY', label: 'In Delivery' },
+    { value: 'DELIVERY_ISSUES', label: 'Delivery Issues' },
+    { value: 'COMPLETED', label: 'Completed', overflow: true },
   ];
 
-  return (
-    <main className="min-w-0 space-y-5 px-4 py-5 sm:px-6 lg:px-8">
-      {/* Header */}
-      <header className="flex flex-col gap-4 border-b pb-5 lg:flex-row lg:items-end lg:justify-between">
-        <div className="min-w-0">
-          <p className="text-sm font-medium text-primary">Operations Workspace</p>
-          <h1 className="text-2xl font-bold tracking-tight text-foreground">Orders</h1>
-          <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
-            Manage customer orders, review delivery history & courier risk, track payments, and initiate fulfillment.
-          </p>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <Button render={<Link href="/orders/delivery-pricing" />} nativeButton={false} variant="outline" size="sm">
-            Delivery Pricing
-          </Button>
-          <Button variant="outline" size="sm" disabled={state === 'loading'} onClick={() => void load()}>
-            <RefreshCw className={`mr-1.5 size-3.5 ${state === 'loading' ? 'animate-spin' : ''}`} aria-hidden="true" />
+  const headerNode = (
+    <PageHeader
+      eyebrow="Orders Workspace"
+      title="Orders"
+      description="Manage customer orders, review delivery history & courier risk, track payments, and initiate fulfillment."
+      actions={
+        <PageActions>
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={state === 'loading'}
+            onClick={() => void load()}
+          >
+            <RefreshCw
+              className={`mr-1.5 size-3.5 ${state === 'loading' ? 'animate-spin' : ''}`}
+              aria-hidden="true"
+            />
             Refresh
           </Button>
           <Button variant="outline" size="sm" disabled={exporting} onClick={() => void exportCsv()}>
             <Download className="mr-1.5 size-3.5" aria-hidden="true" />
             {exporting ? 'Exporting…' : 'Export CSV'}
           </Button>
-          <Button render={<Link href="/orders/new" />} nativeButton={false} size="sm">
-            <FilePlus2 className="mr-1.5 size-4" aria-hidden="true" />
-            Create Manual Order
-          </Button>
-        </div>
-      </header>
+          {canCreateOrder ? (
+            <Button render={<Link href="/orders/new" />} nativeButton={false} size="sm">
+              <FilePlus2 className="mr-1.5 size-4" aria-hidden="true" />
+              Create Manual Order
+            </Button>
+          ) : null}
+        </PageActions>
+      }
+    />
+  );
 
-      {/* Operational Attention Queues / Tabs */}
-      <div className="flex overflow-x-auto border-b pb-2 -mb-2 gap-1.5 scrollbar-none">
-        {queueTabs.map((tab) => {
-          const isActive = activeQueue === tab.key;
-          return (
-            <button
-              key={tab.key}
-              type="button"
-              onClick={() => selectQueue(tab.key)}
-              className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${
-                isActive
-                  ? 'bg-primary text-primary-foreground shadow-sm'
-                  : 'text-muted-foreground hover:bg-muted hover:text-foreground'
-              }`}
+  const tabsNode = (
+    <WorkspaceTabs
+      items={queueTabs}
+      value={activeQueue}
+      onValueChange={selectQueue}
+      maxVisible={5}
+      variant="underline"
+      ariaLabel="Order operational queues"
+    />
+  );
+
+  const bannerNode = message ? (
+    <div
+      className="flex items-start gap-2 rounded-lg border border-amber-300/70 bg-amber-50 px-3 py-2 text-sm text-amber-950 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-200"
+      role="status"
+      aria-live="polite"
+    >
+      <CircleAlert className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+      <p className="leading-tight">{message}</p>
+    </div>
+  ) : null;
+
+  const filtersNode = (
+    <section
+      className="space-y-3 rounded-xl border bg-card p-4 shadow-sm"
+      aria-label="Order filters"
+    >
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center justify-between">
+        <div className="relative flex-1 max-w-md">
+          <Search
+            className="absolute left-2.5 top-2.5 size-4 text-muted-foreground"
+            aria-hidden="true"
+          />
+          <Input
+            type="search"
+            placeholder="Search by order #, customer, phone, email…"
+            className="pl-9 h-9 text-sm"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+          />
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            variant={showAdvancedFilters ? 'secondary' : 'outline'}
+            size="sm"
+            onClick={() => setShowAdvancedFilters(!showAdvancedFilters)}
+          >
+            <SlidersHorizontal className="mr-1.5 size-3.5" />
+            {showAdvancedFilters ? 'Hide Filters' : 'Advanced Filters'}
+          </Button>
+
+          {hasFilters && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                setQuery('');
+                router.replace('/orders');
+              }}
             >
-              {tab.label}
-              {tab.key === 'NEEDS_REVIEW' && status === 'PENDING' && orders?.totalCount ? (
-                <span className="rounded-full bg-primary-foreground/20 px-1.5 py-0.2 text-[10px] font-bold">
-                  {orders.totalCount}
-                </span>
-              ) : null}
-            </button>
-          );
-        })}
+              <X className="mr-1 size-3.5" /> Clear All
+            </Button>
+          )}
+        </div>
       </div>
 
-      {message ? (
-        <div
-          className="flex items-start gap-2 rounded-lg border border-amber-300/70 bg-amber-50 px-3 py-2 text-sm text-amber-950 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-200"
-          role="status"
-          aria-live="polite"
-        >
-          <CircleAlert className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
-          <p className="leading-tight">{message}</p>
-        </div>
-      ) : null}
+      {/* Advanced Filters Expandable Grid */}
+      {showAdvancedFilters && (
+        <div className="grid gap-3 pt-3 border-t sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7 text-xs">
+          <div className="space-y-1">
+            <Label htmlFor="orders-status" className="text-xs">
+              Order State
+            </Label>
+            <NativeSelect
+              id="orders-status"
+              value={status}
+              onChange={(e) => replaceQuery({ status: e.target.value, page: '1' })}
+            >
+              {statuses.map((v) => (
+                <NativeSelectOption key={v} value={v}>
+                  {label(v)}
+                </NativeSelectOption>
+              ))}
+            </NativeSelect>
+          </div>
 
-      {/* Search & Filter Bar */}
-      <section className="space-y-3 rounded-xl border bg-card p-4 shadow-sm" aria-label="Order filters">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center justify-between">
-          <div className="relative flex-1 max-w-md">
-            <Search className="absolute left-2.5 top-2.5 size-4 text-muted-foreground" aria-hidden="true" />
+          <div className="space-y-1">
+            <Label htmlFor="orders-payment" className="text-xs">
+              Payment
+            </Label>
+            <NativeSelect
+              id="orders-payment"
+              value={paymentStatus}
+              onChange={(e) => replaceQuery({ paymentStatus: e.target.value, page: '1' })}
+            >
+              {paymentStatuses.map((v) => (
+                <NativeSelectOption key={v} value={v}>
+                  {label(v)}
+                </NativeSelectOption>
+              ))}
+            </NativeSelect>
+          </div>
+
+          <div className="space-y-1">
+            <Label htmlFor="orders-fulfillment" className="text-xs">
+              Fulfillment
+            </Label>
+            <NativeSelect
+              id="orders-fulfillment"
+              value={fulfillmentStatus}
+              onChange={(e) => replaceQuery({ fulfillmentStatus: e.target.value, page: '1' })}
+            >
+              {fulfillmentStatuses.map((v) => (
+                <NativeSelectOption key={v} value={v}>
+                  {label(v)}
+                </NativeSelectOption>
+              ))}
+            </NativeSelect>
+          </div>
+
+          <div className="space-y-1">
+            <Label htmlFor="orders-delivery" className="text-xs">
+              Delivery
+            </Label>
+            <NativeSelect
+              id="orders-delivery"
+              value={deliveryStatus}
+              onChange={(e) => replaceQuery({ deliveryStatus: e.target.value, page: '1' })}
+            >
+              {deliveryStatuses.map((v) => (
+                <NativeSelectOption key={v} value={v}>
+                  {label(v)}
+                </NativeSelectOption>
+              ))}
+            </NativeSelect>
+          </div>
+
+          <div className="space-y-1">
+            <Label htmlFor="orders-risk" className="text-xs">
+              Risk Level
+            </Label>
+            <NativeSelect
+              id="orders-risk"
+              value={riskLevel}
+              onChange={(e) => replaceQuery({ riskLevel: e.target.value, page: '1' })}
+            >
+              {riskLevels.map((v) => (
+                <NativeSelectOption key={v} value={v}>
+                  {label(v)}
+                </NativeSelectOption>
+              ))}
+            </NativeSelect>
+          </div>
+
+          <div className="space-y-1">
+            <Label htmlFor="orders-channel" className="text-xs">
+              Sales Channel
+            </Label>
+            <NativeSelect
+              id="orders-channel"
+              value={salesChannel}
+              onChange={(e) => replaceQuery({ salesChannel: e.target.value, page: '1' })}
+            >
+              {salesChannels.map((v) => (
+                <NativeSelectOption key={v} value={v}>
+                  {label(v)}
+                </NativeSelectOption>
+              ))}
+            </NativeSelect>
+          </div>
+
+          <div className="space-y-1">
+            <Label htmlFor="orders-method" className="text-xs">
+              Method
+            </Label>
+            <NativeSelect
+              id="orders-method"
+              value={paymentMethod}
+              onChange={(e) => replaceQuery({ paymentMethod: e.target.value, page: '1' })}
+            >
+              {paymentMethods.map((v) => (
+                <NativeSelectOption key={v} value={v}>
+                  {label(v)}
+                </NativeSelectOption>
+              ))}
+            </NativeSelect>
+          </div>
+
+          {tags.length > 0 && (
+            <div className="space-y-1">
+              <Label htmlFor="orders-tag" className="text-xs">
+                Tag
+              </Label>
+              <NativeSelect
+                id="orders-tag"
+                value={tagId}
+                onChange={(e) => replaceQuery({ tagId: e.target.value, page: '1' })}
+              >
+                <NativeSelectOption value="">All tags</NativeSelectOption>
+                {tags.map((t) => (
+                  <NativeSelectOption key={t.id} value={t.id}>
+                    {t.label ?? t.name}
+                  </NativeSelectOption>
+                ))}
+              </NativeSelect>
+            </div>
+          )}
+
+          <div className="space-y-1">
+            <Label htmlFor="orders-from" className="text-xs">
+              From Date
+            </Label>
             <Input
-              type="search"
-              placeholder="Search by order #, customer, phone, email…"
-              className="pl-9 h-9 text-sm"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
+              id="orders-from"
+              type="date"
+              value={from}
+              onChange={(e) => replaceQuery({ from: e.target.value, page: '1' })}
+              className="h-8 text-xs"
             />
           </div>
 
-          <div className="flex flex-wrap items-center gap-2">
-            <Button
-              variant={showAdvancedFilters ? 'secondary' : 'outline'}
-              size="sm"
-              onClick={() => setShowAdvancedFilters(!showAdvancedFilters)}
-            >
-              <SlidersHorizontal className="mr-1.5 size-3.5" />
-              {showAdvancedFilters ? 'Hide Filters' : 'Advanced Filters'}
-            </Button>
-
-            {hasFilters && (
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => {
-                  setQuery('');
-                  router.replace('/orders');
-                }}
-              >
-                <X className="mr-1 size-3.5" /> Clear All
-              </Button>
-            )}
+          <div className="space-y-1">
+            <Label htmlFor="orders-to" className="text-xs">
+              To Date
+            </Label>
+            <Input
+              id="orders-to"
+              type="date"
+              value={to}
+              min={from || undefined}
+              onChange={(e) => replaceQuery({ to: e.target.value, page: '1' })}
+              className="h-8 text-xs"
+            />
           </div>
         </div>
+      )}
+    </section>
+  );
 
-        {/* Advanced Filters Expandable Grid */}
-        {showAdvancedFilters && (
-          <div className="grid gap-3 pt-3 border-t sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7 text-xs">
-            <div className="space-y-1">
-              <Label htmlFor="orders-status" className="text-xs">Order State</Label>
-              <NativeSelect
-                id="orders-status"
-                value={status}
-                onChange={(e) => replaceQuery({ status: e.target.value, page: '1' })}
-              >
-                {statuses.map((v) => (
-                  <NativeSelectOption key={v} value={v}>
-                    {label(v)}
-                  </NativeSelectOption>
-                ))}
-              </NativeSelect>
-            </div>
+  const paginationNode =
+    orders && orders.totalCount > 25 ? (
+      <div className="flex flex-col sm:flex-row items-center justify-between gap-3 py-4 border-t">
+        <p className="text-xs text-muted-foreground">
+          Showing <span className="font-semibold">{(page - 1) * 25 + 1}</span> to{' '}
+          <span className="font-semibold">{Math.min(page * 25, orders.totalCount)}</span> of{' '}
+          <span className="font-semibold">{orders.totalCount}</span> orders
+        </p>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={page === 1}
+            onClick={() => replaceQuery({ page: String(page - 1) })}
+          >
+            Previous
+          </Button>
+          <span className="text-xs text-muted-foreground px-2">Page {page}</span>
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={page * 25 >= orders.totalCount}
+            onClick={() => replaceQuery({ page: String(page + 1) })}
+          >
+            Next
+          </Button>
+        </div>
+      </div>
+    ) : null;
 
-            <div className="space-y-1">
-              <Label htmlFor="orders-payment" className="text-xs">Payment</Label>
-              <NativeSelect
-                id="orders-payment"
-                value={paymentStatus}
-                onChange={(e) => replaceQuery({ paymentStatus: e.target.value, page: '1' })}
-              >
-                {paymentStatuses.map((v) => (
-                  <NativeSelectOption key={v} value={v}>
-                    {label(v)}
-                  </NativeSelectOption>
-                ))}
-              </NativeSelect>
-            </div>
-
-            <div className="space-y-1">
-              <Label htmlFor="orders-fulfillment" className="text-xs">Fulfillment</Label>
-              <NativeSelect
-                id="orders-fulfillment"
-                value={fulfillmentStatus}
-                onChange={(e) => replaceQuery({ fulfillmentStatus: e.target.value, page: '1' })}
-              >
-                {fulfillmentStatuses.map((v) => (
-                  <NativeSelectOption key={v} value={v}>
-                    {label(v)}
-                  </NativeSelectOption>
-                ))}
-              </NativeSelect>
-            </div>
-
-            <div className="space-y-1">
-              <Label htmlFor="orders-delivery" className="text-xs">Delivery</Label>
-              <NativeSelect
-                id="orders-delivery"
-                value={deliveryStatus}
-                onChange={(e) => replaceQuery({ deliveryStatus: e.target.value, page: '1' })}
-              >
-                {deliveryStatuses.map((v) => (
-                  <NativeSelectOption key={v} value={v}>
-                    {label(v)}
-                  </NativeSelectOption>
-                ))}
-              </NativeSelect>
-            </div>
-
-            <div className="space-y-1">
-              <Label htmlFor="orders-risk" className="text-xs">Risk Level</Label>
-              <NativeSelect
-                id="orders-risk"
-                value={riskLevel}
-                onChange={(e) => replaceQuery({ riskLevel: e.target.value, page: '1' })}
-              >
-                {riskLevels.map((v) => (
-                  <NativeSelectOption key={v} value={v}>
-                    {label(v)}
-                  </NativeSelectOption>
-                ))}
-              </NativeSelect>
-            </div>
-
-            <div className="space-y-1">
-              <Label htmlFor="orders-channel" className="text-xs">Sales Channel</Label>
-              <NativeSelect
-                id="orders-channel"
-                value={salesChannel}
-                onChange={(e) => replaceQuery({ salesChannel: e.target.value, page: '1' })}
-              >
-                {salesChannels.map((v) => (
-                  <NativeSelectOption key={v} value={v}>
-                    {label(v)}
-                  </NativeSelectOption>
-                ))}
-              </NativeSelect>
-            </div>
-
-            <div className="space-y-1">
-              <Label htmlFor="orders-method" className="text-xs">Method</Label>
-              <NativeSelect
-                id="orders-method"
-                value={paymentMethod}
-                onChange={(e) => replaceQuery({ paymentMethod: e.target.value, page: '1' })}
-              >
-                {paymentMethods.map((v) => (
-                  <NativeSelectOption key={v} value={v}>
-                    {label(v)}
-                  </NativeSelectOption>
-                ))}
-              </NativeSelect>
-            </div>
-
-            {tags.length > 0 && (
-              <div className="space-y-1">
-                <Label htmlFor="orders-tag" className="text-xs">Tag</Label>
-                <NativeSelect
-                  id="orders-tag"
-                  value={tagId}
-                  onChange={(e) => replaceQuery({ tagId: e.target.value, page: '1' })}
-                >
-                  <NativeSelectOption value="">All tags</NativeSelectOption>
-                  {tags.map((t) => (
-                    <NativeSelectOption key={t.id} value={t.id}>
-                      {t.label ?? t.name}
-                    </NativeSelectOption>
-                  ))}
-                </NativeSelect>
-              </div>
-            )}
-
-            <div className="space-y-1">
-              <Label htmlFor="orders-from" className="text-xs">From Date</Label>
-              <Input
-                id="orders-from"
-                type="date"
-                value={from}
-                onChange={(e) => replaceQuery({ from: e.target.value, page: '1' })}
-                className="h-8 text-xs"
-              />
-            </div>
-
-            <div className="space-y-1">
-              <Label htmlFor="orders-to" className="text-xs">To Date</Label>
-              <Input
-                id="orders-to"
-                type="date"
-                value={to}
-                min={from || undefined}
-                onChange={(e) => replaceQuery({ to: e.target.value, page: '1' })}
-                className="h-8 text-xs"
-              />
-            </div>
-          </div>
-        )}
-      </section>
-
+  return (
+    <ListWorkspace
+      widthVariant="wide"
+      header={headerNode}
+      banner={bannerNode}
+      tabs={tabsNode}
+      filters={filtersNode}
+      pagination={paginationNode}
+    >
       {/* Desktop Table View (>= lg) */}
       <div className="hidden lg:block rounded-xl border bg-card shadow-sm overflow-hidden">
-        <Table>
+        <Table stickyHeader>
           <TableHeader>
             <TableRow>
               <TableHead className="w-[180px]">Order</TableHead>
@@ -661,8 +729,18 @@ export function OrdersList() {
               <TableHead className="text-right">Risk</TableHead>
             </TableRow>
           </TableHeader>
-          <TableBody>
-            {orders?.items.length === 0 ? (
+          <TableBody
+            className={cn(
+              state === 'loading' && orders && 'opacity-60 transition-opacity',
+            )}
+          >
+            {state === 'loading' && !orders ? (
+              <TableSkeletonRows
+                columns={6}
+                rows={6}
+                columnWidths={['w-28', 'w-36', 'w-24', 'w-28', 'w-48', 'w-16 ml-auto']}
+              />
+            ) : orders?.items.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={6} className="h-32 text-center text-muted-foreground">
                   <PackageSearch className="mx-auto mb-2 size-8 opacity-20" aria-hidden="true" />
@@ -738,7 +816,9 @@ export function OrdersList() {
                           {order.customerPhone && (
                             <button
                               type="button"
-                              onClick={(e) => copyText(e, order.customerPhone!, `phone-${order.id}`)}
+                              onClick={(e) =>
+                                copyText(e, order.customerPhone!, `phone-${order.id}`)
+                              }
                               className="opacity-0 group-hover:opacity-100 p-0.5 text-muted-foreground hover:text-foreground"
                               title="Copy phone"
                             >
@@ -751,7 +831,9 @@ export function OrdersList() {
                           )}
                         </div>
                         {order.customerId && (
-                          <span className="text-[10px] font-medium text-primary">Repeat Customer</span>
+                          <span className="text-[10px] font-medium text-primary">
+                            Repeat Customer
+                          </span>
                         )}
                       </div>
                     </TableCell>
@@ -763,11 +845,13 @@ export function OrdersList() {
 
                     {/* Total & Payment */}
                     <TableCell>
-                      <div className="font-semibold text-foreground">
+                      <div className="font-semibold text-foreground font-mono tabular-nums">
                         {formatMoney(order.total, order.currency)}
                       </div>
                       <div className="text-[11px] text-muted-foreground">
-                        {order.paymentMethod === 'COD' ? 'COD' : order.paymentMethod.replaceAll('_', ' ')}
+                        {order.paymentMethod === 'COD'
+                          ? 'COD'
+                          : order.paymentMethod.replaceAll('_', ' ')}
                       </div>
                     </TableCell>
 
@@ -806,8 +890,15 @@ export function OrdersList() {
       </div>
 
       {/* Mobile / Tablet Responsive Cards View (< lg) */}
-      <div className="lg:hidden space-y-3">
-        {orders?.items.length === 0 ? (
+      <div
+        className={cn(
+          'lg:hidden space-y-3',
+          state === 'loading' && orders && 'opacity-60 transition-opacity',
+        )}
+      >
+        {state === 'loading' && !orders ? (
+          <CardSkeletonStack count={4} />
+        ) : orders?.items.length === 0 ? (
           <div className="rounded-xl border bg-card p-8 text-center text-muted-foreground">
             <PackageSearch className="mx-auto mb-2 size-8 opacity-20" />
             <p className="text-sm">No orders found.</p>
@@ -836,18 +927,22 @@ export function OrdersList() {
                     </p>
                   </div>
                   <div className="text-right">
-                    <span className="font-bold text-base text-foreground">
+                    <span className="font-bold text-base text-foreground font-mono tabular-nums">
                       {formatMoney(order.total, order.currency)}
                     </span>
                     <p className="text-[11px] text-muted-foreground">
-                      {order.paymentMethod === 'COD' ? 'Cash on Delivery' : order.paymentMethod.replaceAll('_', ' ')}
+                      {order.paymentMethod === 'COD'
+                        ? 'Cash on Delivery'
+                        : order.paymentMethod.replaceAll('_', ' ')}
                     </p>
                   </div>
                 </div>
 
                 <div className="flex items-center justify-between border-t pt-2.5 text-xs">
                   <div>
-                    <span className="font-medium text-foreground">{order.customerName || 'Guest'}</span>
+                    <span className="font-medium text-foreground">
+                      {order.customerName || 'Guest'}
+                    </span>
                     <span className="text-muted-foreground ml-2">{order.customerPhone}</span>
                   </div>
                   {isElevated ? (
@@ -877,36 +972,6 @@ export function OrdersList() {
           })
         )}
       </div>
-
-      {/* Pagination Controls */}
-      {orders && orders.totalCount > 25 && (
-        <div className="flex flex-col sm:flex-row items-center justify-between gap-3 py-4 border-t">
-          <p className="text-xs text-muted-foreground">
-            Showing <span className="font-semibold">{(page - 1) * 25 + 1}</span> to{' '}
-            <span className="font-semibold">{Math.min(page * 25, orders.totalCount)}</span> of{' '}
-            <span className="font-semibold">{orders.totalCount}</span> orders
-          </p>
-          <div className="flex items-center gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={page === 1}
-              onClick={() => replaceQuery({ page: String(page - 1) })}
-            >
-              Previous
-            </Button>
-            <span className="text-xs text-muted-foreground px-2">Page {page}</span>
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={page * 25 >= orders.totalCount}
-              onClick={() => replaceQuery({ page: String(page + 1) })}
-            >
-              Next
-            </Button>
-          </div>
-        </div>
-      )}
-    </main>
+    </ListWorkspace>
   );
 }

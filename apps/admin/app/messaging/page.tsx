@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { Suspense } from 'react';
 import { MessagingWorkspace } from '@/components/messaging/messaging-workspace';
+import { AdminPage } from '@/components/ui/page-shell';
 
 export const metadata: Metadata = {
   title: 'Messaging · Maevelle Admin',
@@ -11,9 +12,11 @@ export default function MessagingPage() {
   return (
     <Suspense
       fallback={
-        <div className="grid h-[calc(100dvh-3.5rem)] place-items-center text-sm text-muted-foreground">
-          Loading messaging workspace…
-        </div>
+        <AdminPage variant="immersive">
+          <div className="grid flex-1 min-h-0 place-items-center text-sm text-muted-foreground">
+            Loading messaging workspace…
+          </div>
+        </AdminPage>
       }
     >
       <MessagingWorkspace />

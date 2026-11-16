@@ -7,6 +7,7 @@ import type { CustomerRestrictionTypeDto } from '@maevelle/contracts';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select';
 import { Textarea } from '@/components/ui/textarea';
 import {
   Dialog,
@@ -17,6 +18,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog';
+import { useFormDialogLifecycle } from '@/hooks/use-form-dialog-lifecycle';
 import { fetchApiData } from '@/lib/api';
 
 interface ApplyRestrictionDialogProps {
@@ -34,6 +36,21 @@ export function ApplyRestrictionDialog({ customerId, onApplied }: ApplyRestricti
   const [reason, setReason] = useState('');
   const [notes, setNotes] = useState('');
   const [expiresAt, setExpiresAt] = useState('');
+
+  const isDirty =
+    reason.trim().length > 0 ||
+    notes.trim().length > 0 ||
+    expiresAt.trim().length > 0 ||
+    restrictionType !== 'COD_RESTRICTED';
+
+  const lifecycle = useFormDialogLifecycle({
+    open,
+    onOpenChange: setOpen,
+    isDirty,
+    isSubmitting: busy,
+    title: 'Discard restriction settings?',
+    description: 'You have entered unsaved restriction fields. Are you sure you want to dismiss?',
+  });
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -75,7 +92,7 @@ export function ApplyRestrictionDialog({ customerId, onApplied }: ApplyRestricti
   }
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog open={open} onOpenChange={lifecycle.handleOpenChange}>
       <DialogTrigger render={<Button variant="outline" size="sm" className="h-9 gap-1.5 border-rose-300 text-rose-700 hover:bg-rose-50 dark:border-rose-900/60 dark:text-rose-400" />}>
         <ShieldAlert className="size-3.5" aria-hidden="true" /> Apply Restriction
       </DialogTrigger>
@@ -100,16 +117,15 @@ export function ApplyRestrictionDialog({ customerId, onApplied }: ApplyRestricti
         <form onSubmit={submit} className="space-y-4">
           <div className="space-y-1.5">
             <Label htmlFor="restriction-type">Restriction Policy</Label>
-            <select
+            <NativeSelect
               id="restriction-type"
               value={restrictionType}
               onChange={(e) => setRestrictionType(e.target.value as CustomerRestrictionTypeDto)}
-              className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >
-              <option value="COD_RESTRICTED">COD Restricted (Deny Cash on Delivery)</option>
-              <option value="ORDER_REVIEW_REQUIRED">Order Review Required (Hold for Verification)</option>
-              <option value="ORDERING_BLOCKED">Ordering Blocked (Complete Commerce Block)</option>
-            </select>
+              <NativeSelectOption value="COD_RESTRICTED">COD Restricted (Deny Cash on Delivery)</NativeSelectOption>
+              <NativeSelectOption value="ORDER_REVIEW_REQUIRED">Order Review Required (Hold for Verification)</NativeSelectOption>
+              <NativeSelectOption value="ORDERING_BLOCKED">Ordering Blocked (Complete Commerce Block)</NativeSelectOption>
+            </NativeSelect>
           </div>
 
           <div className="rounded-lg border bg-amber-500/10 p-3 text-xs text-amber-900 dark:text-amber-300">
@@ -156,7 +172,7 @@ export function ApplyRestrictionDialog({ customerId, onApplied }: ApplyRestricti
             <Button
               type="button"
               variant="outline"
-              onClick={() => setOpen(false)}
+              onClick={() => lifecycle.handleOpenChange(false)}
               disabled={busy}
             >
               Cancel
@@ -172,6 +188,7 @@ export function ApplyRestrictionDialog({ customerId, onApplied }: ApplyRestricti
           </DialogFooter>
         </form>
       </DialogContent>
+      {lifecycle.discardConfirmDialog}
     </Dialog>
   );
 }

@@ -5,13 +5,13 @@ import { CircleDollarSign, Coins, Info, Loader2 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
-  Dialog,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
-import { SupplyTaskDialogContent } from '@/components/supply/supply-task-dialog-content';
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetFooter,
+  SheetHeader,
+  SheetTitle,
+} from '@/components/ui/sheet';
 import {
   Table,
   TableBody,
@@ -54,133 +54,135 @@ export function StartLandedCostDialog({
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <SupplyTaskDialogContent className="max-h-[92vh] max-w-2xl overflow-y-auto sm:max-w-2xl">
-        <DialogHeader>
+    <Sheet open={open} onOpenChange={onOpenChange}>
+      <SheetContent side="right" className="gap-0 p-0 sm:max-w-2xl">
+        <SheetHeader className="shrink-0 border-b border-border px-5 py-4 pr-11 text-left">
           <div className="flex flex-wrap items-center gap-2">
-            <DialogTitle className="text-xl font-bold tracking-tight">
+            <SheetTitle className="text-xl font-bold tracking-tight">
               Start Landed Cost Worksheet
-            </DialogTitle>
+            </SheetTitle>
             <Badge variant="outline" className="text-xs">
               {shipment.shipmentNumber}
             </Badge>
           </div>
-          <DialogDescription className="text-sm text-muted-foreground">
+          <SheetDescription className="text-sm text-muted-foreground">
             Initialize an acquisition costing workspace for this shipment. Verified physical receipt
             quantities become the baseline targets for apportioning freight and customs duties.
-          </DialogDescription>
-        </DialogHeader>
+          </SheetDescription>
+        </SheetHeader>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
-          {/* Metadata Cards */}
-          <div className="grid grid-cols-2 gap-3 rounded-lg border bg-muted/30 p-3 text-xs">
-            <div>
-              <span className="text-muted-foreground">Destination Warehouse:</span>
-              <p className="font-semibold text-foreground">{shipment.receivingLocationName}</p>
-            </div>
-            <div>
-              <span className="text-muted-foreground">Valuation Base Currency:</span>
-              <div className="flex items-center gap-1.5">
-                <Coins className="size-3.5 text-primary" />
-                <p className="font-mono font-bold text-foreground">{shipment.currencyCode}</p>
-                <span className="text-[11px] text-muted-foreground">
-                  (Locked from purchase lines)
-                </span>
+        <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col">
+          <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-5 py-4">
+            {/* Metadata Cards */}
+            <div className="grid grid-cols-2 gap-3 rounded-lg border bg-muted/30 p-3 text-xs">
+              <div>
+                <span className="text-muted-foreground">Destination Warehouse:</span>
+                <p className="font-semibold text-foreground">{shipment.receivingLocationName}</p>
+              </div>
+              <div>
+                <span className="text-muted-foreground">Valuation Base Currency:</span>
+                <div className="flex items-center gap-1.5">
+                  <Coins className="size-3.5 text-primary" />
+                  <p className="font-mono font-bold text-foreground">{shipment.currencyCode}</p>
+                  <span className="text-[11px] text-muted-foreground">
+                    (Locked from purchase lines)
+                  </span>
+                </div>
               </div>
             </div>
-          </div>
 
-          {/* Received Cargo Targets Table */}
-          <div className="space-y-2">
-            <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-              Cost Allocation Targets ({receivedAllocations.length} items)
-            </h4>
+            {/* Received Cargo Targets Table */}
+            <div className="space-y-2">
+              <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                Cost Allocation Targets ({receivedAllocations.length} items)
+              </h4>
 
-            <div className="overflow-hidden rounded-lg border bg-card text-xs">
-              <Table>
-                <TableHeader>
-                  <TableRow className="bg-muted/40">
-                    <TableHead>Item & Variant</TableHead>
-                    <TableHead className="text-right">Received Count</TableHead>
-                    <TableHead className="text-right">Purchase Unit Price</TableHead>
-                    <TableHead className="text-right">Base Commercial Value</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {receivedAllocations.map((alloc) => {
-                    const qty = Number(alloc.receivedQuantity);
-                    const unitPrice = Number(alloc.unitPrice ?? 0);
-                    const lineValue = qty * unitPrice;
+              <div className="overflow-hidden rounded-lg border bg-card text-xs">
+                <Table>
+                  <TableHeader>
+                    <TableRow className="bg-muted/40">
+                      <TableHead>Item & Variant</TableHead>
+                      <TableHead className="text-right">Received Count</TableHead>
+                      <TableHead className="text-right">Purchase Unit Price</TableHead>
+                      <TableHead className="text-right">Base Commercial Value</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {receivedAllocations.map((alloc) => {
+                      const qty = Number(alloc.receivedQuantity);
+                      const unitPrice = Number(alloc.unitPrice ?? 0);
+                      const lineValue = qty * unitPrice;
 
-                    return (
-                      <TableRow key={alloc.id}>
-                        <TableCell>
-                          <p className="font-medium text-foreground">{alloc.productTitle}</p>
-                          <div className="flex items-center gap-1 text-[11px] text-muted-foreground">
-                            <span className="font-mono">{alloc.sku}</span>
-                            {alloc.optionSummary ? (
-                              <>
-                                <span>·</span>
-                                <span>{alloc.optionSummary}</span>
-                              </>
-                            ) : null}
-                          </div>
-                        </TableCell>
-                        <TableCell className="text-right font-medium tabular-nums text-foreground">
-                          {formatSupplyNumber(alloc.receivedQuantity)}
-                        </TableCell>
-                        <TableCell className="text-right tabular-nums text-muted-foreground">
-                          {alloc.unitPrice
-                            ? formatSupplyMoney(alloc.unitPrice, shipment.currencyCode)
-                            : '—'}
-                        </TableCell>
-                        <TableCell className="text-right font-medium tabular-nums text-foreground">
-                          {formatSupplyMoney(String(lineValue), shipment.currencyCode)}
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })}
-                </TableBody>
-                <TableFooter>
-                  <TableRow className="bg-muted/50 font-semibold text-xs">
-                    <TableCell>Total Targets</TableCell>
-                    <TableCell className="text-right tabular-nums">
-                      {formatSupplyNumber(String(totalReceivedUnits))}
-                    </TableCell>
-                    <TableCell className="text-right">—</TableCell>
-                    <TableCell className="text-right tabular-nums">
-                      {formatSupplyMoney(String(totalCommercialValue), shipment.currencyCode)}
-                    </TableCell>
-                  </TableRow>
-                </TableFooter>
-              </Table>
+                      return (
+                        <TableRow key={alloc.id}>
+                          <TableCell>
+                            <p className="font-medium text-foreground">{alloc.productTitle}</p>
+                            <div className="flex items-center gap-1 text-[11px] text-muted-foreground">
+                              <span className="font-mono">{alloc.sku}</span>
+                              {alloc.optionSummary ? (
+                                <>
+                                  <span>·</span>
+                                  <span>{alloc.optionSummary}</span>
+                                </>
+                              ) : null}
+                            </div>
+                          </TableCell>
+                          <TableCell className="text-right font-medium tabular-nums text-foreground">
+                            {formatSupplyNumber(alloc.receivedQuantity)}
+                          </TableCell>
+                          <TableCell className="text-right tabular-nums text-muted-foreground">
+                            {alloc.unitPrice
+                              ? formatSupplyMoney(alloc.unitPrice, shipment.currencyCode)
+                              : '—'}
+                          </TableCell>
+                          <TableCell className="text-right font-medium tabular-nums text-foreground">
+                            {formatSupplyMoney(String(lineValue), shipment.currencyCode)}
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                  <TableFooter>
+                    <TableRow className="bg-muted/50 font-semibold text-xs">
+                      <TableCell>Total Targets</TableCell>
+                      <TableCell className="text-right tabular-nums">
+                        {formatSupplyNumber(String(totalReceivedUnits))}
+                      </TableCell>
+                      <TableCell className="text-right">—</TableCell>
+                      <TableCell className="text-right tabular-nums">
+                        {formatSupplyMoney(String(totalCommercialValue), shipment.currencyCode)}
+                      </TableCell>
+                    </TableRow>
+                  </TableFooter>
+                </Table>
+              </div>
+            </div>
+
+            {/* Worksheet Notes Field */}
+            <SupplyField label="Worksheet Reference / Forwarder Notes (Optional)">
+              <Textarea
+                name="notes"
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+                placeholder="e.g. Inbound shipment container tracking #MSKU901284. Forwarder: DHL Global."
+                rows={2}
+                className="text-xs"
+                disabled={saving}
+              />
+            </SupplyField>
+
+            {/* Notice Alert */}
+            <div className="flex items-start gap-2.5 rounded-lg bg-muted/40 p-3 text-xs text-muted-foreground">
+              <Info className="size-4 shrink-0 mt-0.5 text-primary" />
+              <p>
+                This creates a revisioned worksheet in <strong>Draft</strong> status. You will be
+                able to record freight, customs tariffs, terminal handling, and port entry charges,
+                preview their effect, and finalize the unit acquisition costs.
+              </p>
             </div>
           </div>
 
-          {/* Worksheet Notes Field */}
-          <SupplyField label="Worksheet Reference / Forwarder Notes (Optional)">
-            <Textarea
-              name="notes"
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              placeholder="e.g. Inbound shipment container tracking #MSKU901284. Forwarder: DHL Global."
-              rows={2}
-              className="text-xs"
-              disabled={saving}
-            />
-          </SupplyField>
-
-          {/* Notice Alert */}
-          <div className="flex items-start gap-2.5 rounded-lg bg-muted/40 p-3 text-xs text-muted-foreground">
-            <Info className="size-4 shrink-0 mt-0.5 text-primary" />
-            <p>
-              This creates a revisioned worksheet in <strong>Draft</strong> status. You will be able
-              to record freight, customs tariffs, terminal handling, and port entry charges, preview
-              their effect, and finalize the unit acquisition costs.
-            </p>
-          </div>
-
-          <DialogFooter className="gap-2 sm:justify-end">
+          <SheetFooter className="shrink-0 flex-row items-center justify-end gap-2 border-t border-border bg-card/50 px-5 py-3">
             <Button
               type="button"
               variant="outline"
@@ -201,9 +203,9 @@ export function StartLandedCostDialog({
               )}
               <span>{saving ? 'Creating worksheet...' : 'Initialize Worksheet'}</span>
             </Button>
-          </DialogFooter>
+          </SheetFooter>
         </form>
-      </SupplyTaskDialogContent>
-    </Dialog>
+      </SheetContent>
+    </Sheet>
   );
 }

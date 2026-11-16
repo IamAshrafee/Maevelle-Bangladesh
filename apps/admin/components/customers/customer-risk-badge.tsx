@@ -10,11 +10,7 @@ interface CustomerRiskBadgeProps {
   readonly showIcon?: boolean;
 }
 
-export function CustomerRiskBadge({
-  level,
-  className,
-  showIcon = true,
-}: CustomerRiskBadgeProps) {
+export function CustomerRiskBadge({ level, className, showIcon = true }: CustomerRiskBadgeProps) {
   switch (level) {
     case 'LOW':
       return (
@@ -61,11 +57,11 @@ export function CustomerRiskBadge({
         <Badge
           variant="outline"
           className={cn(
-            'border-slate-200 bg-slate-50 text-slate-600 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-400 gap-1 font-medium',
+            'border-border bg-muted text-muted-foreground gap-1 font-medium',
             className,
           )}
         >
-          {showIcon && <HelpCircle className="size-3 text-slate-500" aria-hidden="true" />}
+          {showIcon && <HelpCircle className="size-3 text-muted-foreground" aria-hidden="true" />}
           Limited History
         </Badge>
       );

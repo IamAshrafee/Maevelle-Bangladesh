@@ -50,7 +50,8 @@ export function SettingStatusBadge({ status, className, label }: SettingStatusBa
           )}
         >
           <CheckCircle2 className="size-3.5 text-emerald-600 dark:text-emerald-400" />
-          {label ?? (status === 'enabled' ? 'Enabled' : status === 'CONNECTED' ? 'Connected' : 'Ready')}
+          {label ??
+            (status === 'enabled' ? 'Enabled' : status === 'CONNECTED' ? 'Connected' : 'Ready')}
         </Badge>
       );
 
@@ -122,11 +123,11 @@ export function SettingStatusBadge({ status, className, label }: SettingStatusBa
         <Badge
           variant="outline"
           className={cn(
-            'inline-flex items-center gap-1.5 border-slate-500/30 bg-slate-500/10 text-slate-700 dark:text-slate-400 font-medium px-2 py-0.5 text-xs',
+            'inline-flex items-center gap-1.5 border-border bg-muted text-muted-foreground font-medium px-2 py-0.5 text-xs',
             className,
           )}
         >
-          <Lock className="size-3.5 text-slate-600 dark:text-slate-400" />
+          <Lock className="size-3.5 text-muted-foreground" />
           {label ?? 'Deployment managed'}
         </Badge>
       );
@@ -153,7 +154,7 @@ export function RuntimeEffectBadge({
     return (
       <span
         className={cn(
-          'inline-flex items-center gap-1 text-[11px] font-medium text-slate-600 dark:text-slate-400 bg-slate-100 dark:bg-slate-800/60 px-2 py-0.5 rounded-md border border-slate-200 dark:border-slate-700',
+          'inline-flex items-center gap-1 text-[11px] font-medium text-muted-foreground bg-muted px-2 py-0.5 rounded-md border border-border',
           className,
         )}
       >

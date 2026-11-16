@@ -30,7 +30,10 @@ interface DeliveryPricingSimulatorProps {
   readonly onClearTarget?: () => void;
 }
 
-export function DeliveryPricingSimulator({ targetRule, onClearTarget }: DeliveryPricingSimulatorProps) {
+export function DeliveryPricingSimulator({
+  targetRule,
+  onClearTarget,
+}: DeliveryPricingSimulatorProps) {
   const [selectedNode, setSelectedNode] = React.useState<GeographyNodeOption | null>(null);
   const [currency] = React.useState('BDT');
   const [countryCode] = React.useState('BD');
@@ -105,7 +108,10 @@ export function DeliveryPricingSimulator({ targetRule, onClearTarget }: Delivery
         </div>
 
         {targetRule && (
-          <Badge variant="outline" className="text-xs h-6 gap-1 bg-primary/5 text-primary border-primary/20">
+          <Badge
+            variant="outline"
+            className="text-xs h-6 gap-1 bg-primary/5 text-primary border-primary/20"
+          >
             <Sparkles className="size-3" />
             <span>Targeting: {targetRule.name}</span>
           </Badge>
@@ -187,7 +193,10 @@ export function DeliveryPricingSimulator({ targetRule, onClearTarget }: Delivery
                     </span>
                   </div>
                   <div className="flex items-center gap-1.5">
-                    <Badge variant="outline" className="text-[11px] h-5 bg-background font-mono tabular-nums">
+                    <Badge
+                      variant="outline"
+                      className="text-[11px] h-5 bg-background font-mono tabular-nums"
+                    >
                       Priority P{result.quote.priority ?? 0}
                     </Badge>
                     <Badge variant="success" className="text-[11px] h-5">
@@ -209,7 +218,9 @@ export function DeliveryPricingSimulator({ targetRule, onClearTarget }: Delivery
                           <MapPin className="size-3" />
                           <span>
                             {result.quote.geographyNodeName}
-                            {result.quote.geographyNodeType ? ` (${result.quote.geographyNodeType})` : ''}
+                            {result.quote.geographyNodeType
+                              ? ` (${result.quote.geographyNodeType})`
+                              : ''}
                           </span>
                         </span>
                       ) : (
@@ -223,7 +234,8 @@ export function DeliveryPricingSimulator({ targetRule, onClearTarget }: Delivery
                 </div>
 
                 <p className="text-[11px] text-muted-foreground italic border-t border-emerald-200/40 dark:border-emerald-800/20 pt-1.5">
-                  Resolution reasoning: Highest priority active rule with the closest geographic ancestry match was snapshot.
+                  Resolution reasoning: Highest priority active rule with the closest geographic
+                  ancestry match was snapshot.
                 </p>
               </div>
             ) : (
@@ -259,4 +271,3 @@ export function DeliveryPricingSimulator({ targetRule, onClearTarget }: Delivery
     </div>
   );
 }
-

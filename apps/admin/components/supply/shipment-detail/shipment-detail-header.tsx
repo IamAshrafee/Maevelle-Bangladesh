@@ -278,7 +278,7 @@ export function ShipmentDetailHeader({
                   <div
                     className={`flex size-6 items-center justify-center rounded-full text-xs font-semibold transition-colors ${
                       isDone
-                        ? 'bg-primary text-primary-foreground'
+                        ? 'bg-primary-hover text-white dark:bg-primary dark:text-primary-foreground'
                         : isCurrent
                           ? 'border-2 border-primary bg-primary/10 text-primary font-bold ring-2 ring-primary/20'
                           : 'bg-muted text-muted-foreground'

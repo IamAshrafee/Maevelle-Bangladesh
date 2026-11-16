@@ -76,6 +76,7 @@ export function EditAccountDialog({
     <ActionDialog
       open={open}
       onOpenChange={onOpenChange}
+      presentation="sheet"
       title="Edit Account Details"
       description="Update the display name and operational banking reference notes for this account."
       icon={Pencil}
@@ -122,7 +123,8 @@ export function EditAccountDialog({
         </Field>
 
         <div className="rounded-lg bg-muted/40 p-3 text-xs text-muted-foreground">
-          <strong>Optimistic concurrency:</strong> Changes are checked against version v{account.version} to prevent conflicting overwrites.
+          <strong>Optimistic concurrency:</strong> Changes are checked against version v
+          {account.version} to prevent conflicting overwrites.
         </div>
       </div>
     </ActionDialog>

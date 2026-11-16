@@ -5,13 +5,13 @@ import { UserCheck, UserX } from 'lucide-react';
 import type { AssetDetailDto, AssetOptionsDto } from '@maevelle/contracts';
 import { Button } from '@/components/ui/button';
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetFooter,
+  SheetHeader,
+  SheetTitle,
+} from '@/components/ui/sheet';
 import { Label } from '@/components/ui/label';
 import { NativeSelect } from '@/components/ui/native-select';
 import { fetchApiData } from '@/lib/api';
@@ -64,18 +64,21 @@ export function AssetAssignDialog({
   }
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-md">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
+    <Sheet open={open} onOpenChange={onOpenChange}>
+      <SheetContent
+        side="right"
+        className="flex w-full flex-col gap-5 overflow-y-auto p-6 sm:max-w-md"
+      >
+        <SheetHeader className="border-b border-border/60 p-0 pb-4">
+          <SheetTitle className="flex items-center gap-2">
             <UserCheck className="size-5 text-primary" />
             <span>Assign Asset Custodian</span>
-          </DialogTitle>
-          <DialogDescription>
+          </SheetTitle>
+          <SheetDescription>
             The custodian is the team member responsible for day-to-day physical custody and care of
             this property. Custody does not imply ownership.
-          </DialogDescription>
-        </DialogHeader>
+          </SheetDescription>
+        </SheetHeader>
 
         {error ? (
           <div className="rounded-lg bg-destructive/10 border border-destructive/20 p-2.5 text-xs text-destructive font-medium">
@@ -107,7 +110,7 @@ export function AssetAssignDialog({
             </NativeSelect>
           </Label>
 
-          <DialogFooter className="gap-2 sm:gap-0 flex-col sm:flex-row">
+          <SheetFooter className="flex-col gap-2 border-t border-border/60 p-0 pt-4 sm:flex-row sm:items-center sm:justify-end">
             {asset.custodianMembershipId ? (
               <Button
                 type="button"
@@ -126,9 +129,9 @@ export function AssetAssignDialog({
             <Button type="submit" disabled={busy}>
               {busy ? 'Updating…' : 'Update Custodian'}
             </Button>
-          </DialogFooter>
+          </SheetFooter>
         </form>
-      </DialogContent>
-    </Dialog>
+      </SheetContent>
+    </Sheet>
   );
 }

@@ -4,14 +4,15 @@ import { useState } from 'react';
 import { Boxes, Check, AlertCircle, ArrowUpRight, ArrowDownRight } from 'lucide-react';
 import type { WarehouseLocationDto } from '@maevelle/contracts';
 import { Button } from '@/components/ui/button';
+import { NativeSelect } from '@/components/ui/native-select';
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetFooter,
+  SheetHeader,
+  SheetTitle,
+} from '@/components/ui/sheet';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { catalogData, CatalogRequestError } from '@/lib/catalog/api';
@@ -38,21 +39,25 @@ export function QuickStockAdjustDialog({
   onSuccess,
 }: QuickStockAdjustDialogProps) {
   const [locationId, setLocationId] = useState(locations[0]?.id ?? '');
-  const [condition, setCondition] = useState<'SELLABLE' | 'DAMAGED' | 'QUARANTINE' | 'INSPECTION'>('SELLABLE');
+  const [condition, setCondition] = useState<'SELLABLE' | 'DAMAGED' | 'QUARANTINE' | 'INSPECTION'>(
+    'SELLABLE',
+  );
   const [deltaValue, setDeltaValue] = useState('');
   const [deltaSign, setDeltaSign] = useState<'+' | '-'>('+');
-  const [reasonCode, setReasonCode] = useState<'CORRECTION' | 'DAMAGE' | 'FOUND_STOCK' | 'OTHER'>('CORRECTION');
+  const [reasonCode, setReasonCode] = useState<'CORRECTION' | 'DAMAGE' | 'FOUND_STOCK' | 'OTHER'>(
+    'CORRECTION',
+  );
   const [note, setNote] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const numSellable = typeof currentSellable === 'number' ? currentSellable : parseInt(currentSellable || '0', 10);
+  const numSellable =
+    typeof currentSellable === 'number' ? currentSellable : parseInt(currentSellable || '0', 10);
   const safeCurrentSellable = isNaN(numSellable) ? 0 : numSellable;
 
   const parsedQty = parseInt(deltaValue, 10);
-  const computedDelta = !isNaN(parsedQty) && parsedQty > 0
-    ? deltaSign === '+' ? parsedQty : -parsedQty
-    : 0;
+  const computedDelta =
+    !isNaN(parsedQty) && parsedQty > 0 ? (deltaSign === '+' ? parsedQty : -parsedQty) : 0;
 
   const projectedTotal = safeCurrentSellable + (condition === 'SELLABLE' ? computedDelta : 0);
 
@@ -77,9 +82,10 @@ export function QuickStockAdjustDialog({
 
     setLoading(true);
     try {
-      const idempotencyKey = typeof crypto !== 'undefined' && crypto.randomUUID
-        ? crypto.randomUUID()
-        : `adj-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+      const idempotencyKey =
+        typeof crypto !== 'undefined' && crypto.randomUUID
+          ? crypto.randomUUID()
+          : `adj-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
       await catalogData('/admin/inventory/adjustments', {
         method: 'POST',
@@ -112,17 +118,17 @@ export function QuickStockAdjustDialog({
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md p-5 space-y-4">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2 text-base font-semibold">
+    <Sheet open={open} onOpenChange={onOpenChange}>
+      <SheetContent side="right" className="w-full sm:max-w-lg overflow-y-auto p-6 space-y-4">
+        <SheetHeader className="p-0 pb-4 border-b border-border/60">
+          <SheetTitle className="flex items-center gap-2 text-base font-semibold">
             <Boxes className="size-4 text-primary" />
             <span>Adjust Stock: {variantTitle || sku}</span>
-          </DialogTitle>
-          <DialogDescription className="text-xs text-muted-foreground font-mono">
-            SKU: {sku} • Current Sellable: {currentSellable} units
-          </DialogDescription>
-        </DialogHeader>
+          </SheetTitle>
+          <SheetDescription className="text-xs text-muted-foreground font-mono">
+            SKU: {sku} · Current Sellable: {currentSellable} units
+          </SheetDescription>
+        </SheetHeader>
 
         {error && (
           <div className="flex items-center gap-2 rounded-md bg-destructive/10 p-3 text-xs text-destructive">
@@ -135,47 +141,47 @@ export function QuickStockAdjustDialog({
           {/* Warehouse Location */}
           <div className="space-y-1.5">
             <Label className="text-xs font-medium">Warehouse Location</Label>
-            <select
+            <NativeSelect
               value={locationId}
               onChange={(e) => setLocationId(e.target.value)}
-              className="h-9 w-full rounded-md border border-input bg-background px-3 text-xs focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+              className="text-xs"
             >
               {locations.map((loc) => (
                 <option key={loc.id} value={loc.id}>
                   {loc.name} {loc.code ? `(${loc.code})` : ''}
                 </option>
               ))}
-            </select>
+            </NativeSelect>
           </div>
 
           {/* Condition and Reason */}
           <div className="grid grid-cols-2 gap-2">
             <div className="space-y-1.5">
               <Label className="text-xs font-medium">Stock Condition</Label>
-              <select
+              <NativeSelect
                 value={condition}
                 onChange={(e) => setCondition(e.target.value as typeof condition)}
-                className="h-9 w-full rounded-md border border-input bg-background px-3 text-xs focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                className="text-xs"
               >
                 <option value="SELLABLE">Sellable Stock</option>
                 <option value="DAMAGED">Damaged / Defective</option>
                 <option value="QUARANTINE">Quarantine</option>
                 <option value="INSPECTION">Inspection</option>
-              </select>
+              </NativeSelect>
             </div>
 
             <div className="space-y-1.5">
               <Label className="text-xs font-medium">Reason Code</Label>
-              <select
+              <NativeSelect
                 value={reasonCode}
                 onChange={(e) => setReasonCode(e.target.value as typeof reasonCode)}
-                className="h-9 w-full rounded-md border border-input bg-background px-3 text-xs focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                className="text-xs"
               >
                 <option value="CORRECTION">Physical Count Correction</option>
                 <option value="DAMAGE">Damaged Units</option>
                 <option value="FOUND_STOCK">Found Extra Units</option>
                 <option value="OTHER">Other Operational Reason</option>
-              </select>
+              </NativeSelect>
             </div>
           </div>
 
@@ -187,7 +193,7 @@ export function QuickStockAdjustDialog({
                 <button
                   type="button"
                   onClick={() => setDeltaSign('+')}
-                  className={`flex h-8 items-center gap-1 rounded px-2.5 text-xs font-semibold transition-colors duration-150 ${
+                  className={`flex min-h-9 items-center gap-1 rounded px-2.5 text-xs font-semibold transition-colors duration-150 ${
                     deltaSign === '+'
                       ? 'bg-success text-success-foreground shadow-xs'
                       : 'text-muted-foreground hover:text-foreground'
@@ -199,7 +205,7 @@ export function QuickStockAdjustDialog({
                 <button
                   type="button"
                   onClick={() => setDeltaSign('-')}
-                  className={`flex h-8 items-center gap-1 rounded px-2.5 text-xs font-semibold transition-colors duration-150 ${
+                  className={`flex min-h-9 items-center gap-1 rounded px-2.5 text-xs font-semibold transition-colors duration-150 ${
                     deltaSign === '-'
                       ? 'bg-destructive text-destructive-foreground shadow-xs'
                       : 'text-muted-foreground hover:text-foreground'
@@ -223,7 +229,10 @@ export function QuickStockAdjustDialog({
 
             {/* Projected Stock Preview */}
             <p className="text-[11px] text-muted-foreground">
-              Resulting available stock: <span className="font-semibold text-foreground font-mono">{projectedTotal} units</span>
+              Resulting available stock:{' '}
+              <span className="font-semibold text-foreground font-mono">
+                {projectedTotal} units
+              </span>
             </p>
           </div>
 
@@ -238,13 +247,13 @@ export function QuickStockAdjustDialog({
             />
           </div>
 
-          <DialogFooter className="pt-2">
+          <SheetFooter className="p-0 pt-2 sm:flex-row sm:justify-end">
             <Button
               type="button"
               variant="outline"
               size="sm"
               onClick={() => onOpenChange(false)}
-              className="h-9 text-xs"
+              className="text-xs"
             >
               Cancel
             </Button>
@@ -252,14 +261,14 @@ export function QuickStockAdjustDialog({
               type="submit"
               size="sm"
               disabled={loading || !deltaValue || isNaN(parsedQty) || parsedQty <= 0}
-              className="h-9 px-4 text-xs"
+              className="px-4 text-xs"
             >
               <Check className="size-3.5 mr-1" />
               {loading ? 'Recording Movement…' : 'Confirm Stock Adjustment'}
             </Button>
-          </DialogFooter>
+          </SheetFooter>
         </form>
-      </DialogContent>
-    </Dialog>
+      </SheetContent>
+    </Sheet>
   );
 }

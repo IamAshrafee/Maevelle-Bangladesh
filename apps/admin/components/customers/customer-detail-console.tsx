@@ -1,10 +1,11 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { AlertTriangle, RefreshCw, XCircle } from 'lucide-react';
+import { AlertTriangle } from 'lucide-react';
 import type { CustomerDetailDto, CustomerDuplicateCandidateDto } from '@maevelle/contracts';
 
-import { Button } from '@/components/ui/button';
+import { AdminPage, ErrorState, PageSkeleton } from '@/components/ui/page-shell';
+import { DetailWorkspace } from '@/components/workspaces/detail-workspace';
 import { fetchApiData } from '@/lib/api';
 import { CustomerHeader } from './customer-header';
 import { CustomerMetricsStrip } from './customer-metrics-strip';
@@ -74,33 +75,18 @@ export function CustomerDetailConsole({ customerId }: CustomerDetailConsoleProps
   }, [load]);
 
   if (state === 'loading') {
-    return (
-      <main className="px-4 py-16 sm:px-6 lg:px-8 text-center text-sm text-muted-foreground">
-        <RefreshCw className="mr-2 inline size-5 animate-spin text-primary" /> Loading customer
-        workspace...
-      </main>
-    );
+    return <PageSkeleton variant="detail" widthVariant="wide" />;
   }
 
   if (state === 'error' || !customer) {
     return (
-      <main className="px-4 py-16 sm:px-6 lg:px-8 max-w-xl mx-auto text-center space-y-4">
-        <div className="rounded-xl border border-rose-200 bg-rose-50/60 p-6 text-rose-900">
-          <XCircle className="mx-auto size-8 text-rose-600 mb-2" />
-          <h2 className="text-base font-semibold">Failed to Load Customer</h2>
-          <p className="mt-1 text-xs text-rose-700">
-            {message || 'Customer profile was not found.'}
-          </p>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => void load()}
-            className="mt-4 border-rose-300 text-rose-900 hover:bg-rose-100"
-          >
-            Try Again
-          </Button>
-        </div>
-      </main>
+      <AdminPage variant="wide">
+        <ErrorState
+          title="Failed to Load Customer"
+          message={message || 'Customer profile was not found.'}
+          onRetry={() => void load()}
+        />
+      </AdminPage>
     );
   }
 
@@ -111,42 +97,39 @@ export function CustomerDetailConsole({ customerId }: CustomerDetailConsoleProps
     customer.displayName;
 
   return (
-    <main className="min-w-0 space-y-6 px-4 py-5 sm:px-6 lg:px-8">
-      {/* 1. Operational Header */}
-      <CustomerHeader
-        customer={customer}
-        isRefreshing={isRefreshing}
-        onRefresh={() => void load(true)}
-        duplicateCount={duplicateCandidates.length}
-      />
-
-      {/* Duplicate Candidates Alert Callout */}
-      {!isReadOnly && duplicateCandidates.length > 0 && (
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 rounded-xl border border-amber-300/80 bg-amber-500/10 p-4 text-xs text-amber-950 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-200">
-          <div className="flex items-center gap-2">
-            <AlertTriangle className="size-4 shrink-0 text-amber-600" aria-hidden="true" />
-            <p>
-              <span className="font-semibold">
-                {duplicateCandidates.length} potential duplicate customer record(s) detected
-              </span>{' '}
-              sharing verified phone numbers or email addresses.
-            </p>
-          </div>
-          <CustomerDuplicateMergeDialog
+    <DetailWorkspace
+      widthVariant="wide"
+      header={
+        <>
+          <CustomerHeader
             customer={customer}
+            isRefreshing={isRefreshing}
+            onRefresh={() => void load(true)}
             duplicateCount={duplicateCandidates.length}
-            onMerged={() => void load(true)}
           />
-        </div>
-      )}
-
-      {/* 2. Full-Width Metrics Strip */}
-      <CustomerMetricsStrip customer={customer} />
-
-      {/* 3. Operational Two-Column Grid */}
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-12 items-start">
-        {/* Main Operational Column (Orders, Timeline, Communications) */}
-        <div className="space-y-6 lg:col-span-7">
+          {!isReadOnly && duplicateCandidates.length > 0 && (
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 rounded-xl border border-amber-300/80 bg-amber-500/10 p-4 text-xs text-amber-950 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-200">
+              <div className="flex items-center gap-2">
+                <AlertTriangle className="size-4 shrink-0 text-amber-600" aria-hidden="true" />
+                <p>
+                  <span className="font-semibold">
+                    {duplicateCandidates.length} potential duplicate customer record(s) detected
+                  </span>{' '}
+                  sharing verified phone numbers or email addresses.
+                </p>
+              </div>
+              <CustomerDuplicateMergeDialog
+                customer={customer}
+                duplicateCount={duplicateCandidates.length}
+                onMerged={() => void load(true)}
+              />
+            </div>
+          )}
+        </>
+      }
+      kpiStrip={<CustomerMetricsStrip customer={customer} />}
+      primary={
+        <>
           {/* Order & Return History */}
           <CustomerOrdersSection customerId={customer.id} isReadOnly={isReadOnly} />
 
@@ -155,10 +138,10 @@ export function CustomerDetailConsole({ customerId }: CustomerDetailConsoleProps
 
           {/* Unified Communications Log */}
           <CustomerCommunicationSection customerId={customer.id} />
-        </div>
-
-        {/* Supporting Column (Delivery Risk, Restrictions, Contacts, Addresses, Account, Tags, Notes) */}
-        <div className="space-y-6 lg:col-span-5">
+        </>
+      }
+      rail={
+        <>
           <CustomerCrmCard
             customerId={customer.id}
             customerVersion={customer.version}
@@ -220,8 +203,8 @@ export function CustomerDetailConsole({ customerId }: CustomerDetailConsoleProps
             isReadOnly={isReadOnly}
             onUpdated={() => void load(true)}
           />
-        </div>
-      </div>
-    </main>
+        </>
+      }
+    />
   );
 }

@@ -16,7 +16,9 @@ import {
 } from '@/components/ui/dialog';
 
 import { Label } from '@/components/ui/label';
+import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select';
 import { Textarea } from '@/components/ui/textarea';
+import { useFormDialogLifecycle } from '@/hooks/use-form-dialog-lifecycle';
 
 import { useTeam } from './team-context';
 import { formatIamErrorMessage, type TeamMemberListItemDto } from './team-types';
@@ -35,6 +37,22 @@ export function TeamOwnerTransferDialog({
   const [confirmed, setConfirmed] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const isDirty = Boolean(targetId || reason.trim() || confirmed);
+
+  const { handleOpenChange, discardConfirmDialog } = useFormDialogLifecycle({
+    isDirty,
+    isSubmitting: busy,
+    onClose: () => {
+      setOpen(false);
+      setTargetId('');
+      setReason('');
+      setConfirmed(false);
+    },
+    confirmTitle: 'Discard ownership transfer entry?',
+    confirmDescription:
+      'You have selected a successor or entered an audit reason. Closing now will discard it.',
+  });
 
   // Eligible successors: active standard members (excluding current actor / owner)
   const eligibleMembers = useMemo(() => {
@@ -89,11 +107,12 @@ export function TeamOwnerTransferDialog({
   }
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger render={<Button variant="outline" className="border-amber-500/40 text-amber-500 hover:bg-amber-500/10" />}>
-        <ArrowRightLeft className="size-4" /> Transfer ownership
-      </DialogTrigger>
-      <DialogContent className="sm:max-w-lg max-h-[92vh] overflow-y-auto">
+    <>
+      <Dialog open={open} onOpenChange={handleOpenChange}>
+        <DialogTrigger render={<Button variant="outline" className="border-amber-500/40 text-amber-500 hover:bg-amber-500/10" />}>
+          <ArrowRightLeft className="size-4" /> Transfer ownership
+        </DialogTrigger>
+        <DialogContent className="sm:max-w-lg max-h-[92vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-amber-500">
             <ShieldAlert className="size-5" />
@@ -141,22 +160,21 @@ export function TeamOwnerTransferDialog({
                 No active standard members found in this organization. Invite and activate a team member before transferring ownership.
               </p>
             ) : (
-              <select
+              <NativeSelect
                 id="transfer-target"
-                className="w-full h-9 rounded-md border border-input bg-background px-3 py-1 text-sm shadow-xs focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
                 value={targetId}
                 onChange={(e) => setTargetId(e.target.value)}
                 required
               >
-                <option value="" disabled>
+                <NativeSelectOption value="" disabled>
                   Choose an eligible member…
-                </option>
+                </NativeSelectOption>
                 {eligibleMembers.map((m) => (
-                  <option key={m.id} value={m.id}>
+                  <NativeSelectOption key={m.id} value={m.id}>
                     {m.name} ({m.email})
-                  </option>
+                  </NativeSelectOption>
                 ))}
-              </select>
+              </NativeSelect>
             )}
           </div>
 
@@ -192,8 +210,8 @@ export function TeamOwnerTransferDialog({
             </div>
           ) : null}
 
-          <DialogFooter className="gap-2 sm:gap-0">
-            <Button type="button" variant="outline" onClick={() => setOpen(false)} disabled={busy}>
+          <DialogFooter className="gap-2 sm:gap-0 pb-[max(0.75rem,env(safe-area-inset-bottom,0px))] sm:pb-0">
+            <Button type="button" variant="outline" onClick={() => handleOpenChange(false)} disabled={busy}>
               Cancel
             </Button>
             <Button
@@ -207,5 +225,7 @@ export function TeamOwnerTransferDialog({
         </form>
       </DialogContent>
     </Dialog>
-  );
+    {discardConfirmDialog}
+  </>
+);
 }

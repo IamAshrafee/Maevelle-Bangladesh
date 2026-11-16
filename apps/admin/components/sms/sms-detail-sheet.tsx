@@ -83,7 +83,7 @@ export function SmsDetailSheet({
   return (
     <>
       <Sheet open={open} onOpenChange={onOpenChange}>
-        <SheetContent className="w-full overflow-y-auto overscroll-contain sm:max-w-2xl!">
+        <SheetContent className="w-full overflow-y-auto overscroll-contain sm:max-w-2xl">
           <SheetHeader className="border-b pr-12">
             <div className="flex flex-wrap items-center gap-2">
               <SheetTitle>

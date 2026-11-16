@@ -38,10 +38,14 @@ export function UnitScannerInput({
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
 
-  // Auto-focus support
+  // Auto-focus support (only on fine pointer devices like desktop hardware scanners)
   useEffect(() => {
     if (autoFocus && inputRef.current) {
-      inputRef.current.focus();
+      const isFinePointer =
+        typeof window !== 'undefined' && window.matchMedia('(pointer: fine)').matches;
+      if (isFinePointer) {
+        inputRef.current.focus();
+      }
     }
   }, [autoFocus]);
 

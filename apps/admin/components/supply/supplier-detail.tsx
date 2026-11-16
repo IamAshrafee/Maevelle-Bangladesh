@@ -14,6 +14,7 @@ import type {
 import { useAdminCapability } from '@/components/admin-capabilities';
 import { OperationalEmptyState, OperationalFeedback } from '@/components/operational-worklist';
 import { DetailMetric, DetailSection, DetailSkeleton } from '@/components/supply/supply-entity-ui';
+import { AdminPage } from '@/components/ui/page-shell';
 import { StatusBadge } from '@/components/status-badge';
 import { Breadcrumb } from '@/components/ui/breadcrumb';
 import { Button } from '@/components/ui/button';
@@ -102,17 +103,17 @@ export function SupplierDetail({ supplierId }: { supplierId: string }) {
     return () => controller.abort();
   }, [canViewFinance, supplierId]);
 
-  if (state === 'loading') return <DetailSkeleton />;
+  if (state === 'loading') return <DetailSkeleton widthVariant="standard" />;
   if (!supplier) {
     return (
-      <main className="space-y-5 px-4 py-5 sm:px-6 lg:px-8">
+      <AdminPage variant="standard">
         <OperationalFeedback tone="danger">
           {message || 'Supplier was not found.'}
         </OperationalFeedback>
         <Button variant="outline" render={<Link href="/suppliers" />}>
           <ArrowLeft /> Back to suppliers
         </Button>
-      </main>
+      </AdminPage>
     );
   }
 
@@ -132,7 +133,7 @@ export function SupplierDetail({ supplierId }: { supplierId: string }) {
   }, {});
 
   return (
-    <main className="min-w-0 space-y-5 px-4 py-5 sm:px-6 lg:px-8">
+    <AdminPage variant="standard">
       <Breadcrumb
         mobileMode="back"
         items={[
@@ -372,6 +373,6 @@ export function SupplierDetail({ supplierId }: { supplierId: string }) {
         supplier={supplier}
         onSuccess={(updated) => setSupplier(updated)}
       />
-    </main>
+    </AdminPage>
   );
 }

@@ -5,11 +5,12 @@ import { Activity, Layers, Mail, Shield, Users } from 'lucide-react';
 
 import { Badge } from '@/components/ui/badge';
 
+import { AdminPage, PageHeader } from '@/components/ui/page-shell';
 import { RefreshButton } from '@/components/ui/refresh-button';
 import { Stats, StatsCard, StatsDescription, StatsTitle, StatsValue } from '@/components/ui/stats';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
-import { OperationalFeedback, OperationalPageHeader } from '../operational-worklist';
+import { OperationalFeedback } from '../operational-worklist';
 import { TeamAuditTimeline } from './team-audit-timeline';
 import { TeamProvider, useTeam } from './team-context';
 import { TeamInvitationsList } from './team-invitations-list';
@@ -100,170 +101,161 @@ function TeamConsoleContent() {
     members.length > 0 ? Math.round((mfaEnabledCount / members.length) * 100) : 0;
 
   return (
-    <main>
-      <section className="shell admin-page space-y-6">
-        {/* Header */}
-        <OperationalPageHeader
-          eyebrow="Settings / Identity & Access"
-          title="Team & Access Governance"
-          description="Manage organization membership, role presets, single-use invitations, two-factor posture, and access audit history."
-          actions={
-            <div className="flex items-center gap-2">
-              <TeamInviteDialog
-                onInvited={async (msg) => {
-                  setMessage(msg);
-                  setTone('success');
-                  await reloadAll();
-                }}
-              />
-              <TeamOwnerTransferDialog
-                members={members}
-                onTransferred={async (msg) => {
-                  setMessage(msg);
-                  setTone('success');
-                  await reloadAll();
-                }}
-              />
-              <RefreshButton
-                onRefresh={() => void reloadAll()}
-                tooltip="Refresh team members"
-              />
-            </div>
-          }
-        />
-
-        {/* Read-Only Notice */}
-        {isReadOnly ? (
-          <div className="rounded-md border border-border/80 bg-muted/30 p-3 flex items-start gap-2.5 text-xs text-muted-foreground">
-            <Shield className="size-4 text-primary shrink-0 mt-0.5" />
-            <span>
-              <strong>Read-only access:</strong> You have viewing permissions for organization members
-              and security posture. Modifying capabilities, managing invitations, or changing member
-              lifecycle requires administrative capabilities.
-            </span>
-          </div>
-        ) : null}
-
-        {/* Transient Feedback Alert */}
-        {message ? (
-          <OperationalFeedback tone={tone}>
-            {message}
-          </OperationalFeedback>
-        ) : null}
-
-        {/* Summary Statistics Cards */}
-        <Stats>
-          <StatsCard>
-            <StatsTitle>Active Members</StatsTitle>
-            <StatsValue>{pagination.totalItems > 0 ? pagination.totalItems : members.length}</StatsValue>
-            <StatsDescription>
-              {activeMembersCount} active · {suspendedMembersCount} suspended
-            </StatsDescription>
-          </StatsCard>
-          <StatsCard>
-            <StatsTitle>Pending Invitations</StatsTitle>
-            <StatsValue>{pendingInvitationsCount}</StatsValue>
-            <StatsDescription>
-              {invitations.length} total invitations issued
-            </StatsDescription>
-          </StatsCard>
-          <StatsCard>
-            <StatsTitle>2FA Adoption</StatsTitle>
-            <StatsValue>{mfaPercentage}%</StatsValue>
-            <StatsDescription>
-              {mfaEnabledCount} of {members.length} members protected
-            </StatsDescription>
-          </StatsCard>
-          <StatsCard>
-            <StatsTitle>Organization Authority</StatsTitle>
-            <StatsValue>{ownersCount}</StatsValue>
-            <StatsDescription>
-              {activeActor.isOwner ? 'You are the Owner' : 'Protected Owner relationship'}
-            </StatsDescription>
-          </StatsCard>
-        </Stats>
-
-        {/* Main Tabs Workspace */}
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-          <TabsList className="inline-flex h-10 items-center justify-start rounded-lg border border-border bg-card p-1 text-muted-foreground w-full sm:w-auto">
-            <TabsTrigger value="members" className="gap-2 text-xs sm:text-sm px-4">
-              <Users className="size-4" />
-              <span>Members</span>
-              <Badge variant="secondary" className="text-[10px] py-0 px-1 ml-0.5">
-                {pagination.totalItems > 0 ? pagination.totalItems : members.length}
-              </Badge>
-            </TabsTrigger>
-
-            <TabsTrigger value="invitations" className="gap-2 text-xs sm:text-sm px-4">
-              <Mail className="size-4" />
-              <span>Invitations</span>
-              {pendingInvitationsCount > 0 ? (
-                <Badge className="text-[10px] py-0 px-1 ml-0.5 bg-primary/20 text-primary border-primary/30">
-                  {pendingInvitationsCount}
-                </Badge>
-              ) : null}
-            </TabsTrigger>
-
-            <TabsTrigger value="roles" className="gap-2 text-xs sm:text-sm px-4">
-              <Layers className="size-4" />
-              <span>Roles & Presets</span>
-            </TabsTrigger>
-
-            <TabsTrigger value="audit" className="gap-2 text-xs sm:text-sm px-4">
-              <Activity className="size-4" />
-              <span>Access Audit</span>
-            </TabsTrigger>
-          </TabsList>
-
-          {/* TAB 1: MEMBERS */}
-          <TabsContent value="members" className="outline-none space-y-4">
-            <TeamMembersList
+    <AdminPage variant="wide">
+      {/* Header */}
+      <PageHeader
+        eyebrow="Settings / Identity & Access"
+        title="Team & Access Governance"
+        description="Manage organization membership, role presets, single-use invitations, two-factor posture, and access audit history."
+        actions={
+          <div className="flex items-center gap-2">
+            <TeamInviteDialog
+              onInvited={async (msg) => {
+                setMessage(msg);
+                setTone('success');
+                await reloadAll();
+              }}
+            />
+            <TeamOwnerTransferDialog
               members={members}
-              loading={loadingMembers}
-              pagination={pagination}
-              searchQuery={memberSearch}
-              onSearchChange={(q) => {
-                setMemberSearch(q);
-                setPage(1);
-              }}
-              statusFilter={memberStatus}
-              onStatusChange={(s) => {
-                setMemberStatus(s);
-                setPage(1);
-              }}
-              onPageChange={setPage}
-              onRefresh={async () => {
-                await loadMembers();
+              onTransferred={async (msg) => {
+                setMessage(msg);
+                setTone('success');
+                await reloadAll();
               }}
             />
-          </TabsContent>
+            <RefreshButton onRefresh={() => void reloadAll()} tooltip="Refresh team members" />
+          </div>
+        }
+      />
 
-          {/* TAB 2: INVITATIONS */}
-          <TabsContent value="invitations" className="outline-none space-y-4">
-            <TeamInvitationsList
-              invitations={invitations}
-              onRefresh={async () => {
-                await loadInvitations();
-              }}
-            />
-          </TabsContent>
+      {/* Read-Only Notice */}
+      {isReadOnly ? (
+        <div className="rounded-md border border-border/80 bg-muted/30 p-3 flex items-start gap-2.5 text-xs text-muted-foreground">
+          <Shield className="size-4 text-primary shrink-0 mt-0.5" />
+          <span>
+            <strong>Read-only access:</strong> You have viewing permissions for organization members
+            and security posture. Modifying capabilities, managing invitations, or changing member
+            lifecycle requires administrative capabilities.
+          </span>
+        </div>
+      ) : null}
 
-          {/* TAB 3: ROLES & PRESETS */}
-          <TabsContent value="roles" className="outline-none space-y-4">
-            <TeamRolesPresets
-              onRefresh={async () => {
-                await reloadMetadata();
-              }}
-            />
-          </TabsContent>
+      {/* Transient Feedback Alert */}
+      {message ? <OperationalFeedback tone={tone}>{message}</OperationalFeedback> : null}
 
-          {/* TAB 4: ACCESS AUDIT */}
-          <TabsContent value="audit" className="outline-none space-y-4">
-            <TeamAuditTimeline />
-          </TabsContent>
-        </Tabs>
-      </section>
-    </main>
+      {/* Summary Statistics Cards */}
+      <Stats>
+        <StatsCard>
+          <StatsTitle>Active Members</StatsTitle>
+          <StatsValue>
+            {pagination.totalItems > 0 ? pagination.totalItems : members.length}
+          </StatsValue>
+          <StatsDescription>
+            {activeMembersCount} active · {suspendedMembersCount} suspended
+          </StatsDescription>
+        </StatsCard>
+        <StatsCard>
+          <StatsTitle>Pending Invitations</StatsTitle>
+          <StatsValue>{pendingInvitationsCount}</StatsValue>
+          <StatsDescription>{invitations.length} total invitations issued</StatsDescription>
+        </StatsCard>
+        <StatsCard>
+          <StatsTitle>2FA Adoption</StatsTitle>
+          <StatsValue>{mfaPercentage}%</StatsValue>
+          <StatsDescription>
+            {mfaEnabledCount} of {members.length} members protected
+          </StatsDescription>
+        </StatsCard>
+        <StatsCard>
+          <StatsTitle>Organization Authority</StatsTitle>
+          <StatsValue>{ownersCount}</StatsValue>
+          <StatsDescription>
+            {activeActor.isOwner ? 'You are the Owner' : 'Protected Owner relationship'}
+          </StatsDescription>
+        </StatsCard>
+      </Stats>
+
+      {/* Main Tabs Workspace */}
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
+        <TabsList className="inline-flex h-10 items-center justify-start rounded-lg border border-border bg-card p-1 text-muted-foreground w-full sm:w-auto">
+          <TabsTrigger value="members" className="gap-2 text-xs sm:text-sm px-4">
+            <Users className="size-4" />
+            <span>Members</span>
+            <Badge variant="secondary" className="text-[10px] py-0 px-1 ml-0.5">
+              {pagination.totalItems > 0 ? pagination.totalItems : members.length}
+            </Badge>
+          </TabsTrigger>
+
+          <TabsTrigger value="invitations" className="gap-2 text-xs sm:text-sm px-4">
+            <Mail className="size-4" />
+            <span>Invitations</span>
+            {pendingInvitationsCount > 0 ? (
+              <Badge className="text-[10px] py-0 px-1 ml-0.5 bg-primary/20 text-primary border-primary/30">
+                {pendingInvitationsCount}
+              </Badge>
+            ) : null}
+          </TabsTrigger>
+
+          <TabsTrigger value="roles" className="gap-2 text-xs sm:text-sm px-4">
+            <Layers className="size-4" />
+            <span>Roles & Presets</span>
+          </TabsTrigger>
+
+          <TabsTrigger value="audit" className="gap-2 text-xs sm:text-sm px-4">
+            <Activity className="size-4" />
+            <span>Access Audit</span>
+          </TabsTrigger>
+        </TabsList>
+
+        {/* TAB 1: MEMBERS */}
+        <TabsContent value="members" className="outline-none space-y-4">
+          <TeamMembersList
+            members={members}
+            loading={loadingMembers}
+            pagination={pagination}
+            searchQuery={memberSearch}
+            onSearchChange={(q) => {
+              setMemberSearch(q);
+              setPage(1);
+            }}
+            statusFilter={memberStatus}
+            onStatusChange={(s) => {
+              setMemberStatus(s);
+              setPage(1);
+            }}
+            onPageChange={setPage}
+            onRefresh={async () => {
+              await loadMembers();
+            }}
+          />
+        </TabsContent>
+
+        {/* TAB 2: INVITATIONS */}
+        <TabsContent value="invitations" className="outline-none space-y-4">
+          <TeamInvitationsList
+            invitations={invitations}
+            onRefresh={async () => {
+              await loadInvitations();
+            }}
+          />
+        </TabsContent>
+
+        {/* TAB 3: ROLES & PRESETS */}
+        <TabsContent value="roles" className="outline-none space-y-4">
+          <TeamRolesPresets
+            onRefresh={async () => {
+              await reloadMetadata();
+            }}
+          />
+        </TabsContent>
+
+        {/* TAB 4: ACCESS AUDIT */}
+        <TabsContent value="audit" className="outline-none space-y-4">
+          <TeamAuditTimeline />
+        </TabsContent>
+      </Tabs>
+    </AdminPage>
   );
 }
 

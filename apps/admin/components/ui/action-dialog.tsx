@@ -12,9 +12,18 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetFooter,
+  SheetHeader,
+  SheetTitle,
+} from '@/components/ui/sheet';
 import { Button } from '@/components/ui/button';
 import { Spinner } from '@/components/ui/spinner';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { useFormDialogLifecycle } from '@/hooks/use-form-dialog-lifecycle';
 
 export type ActionDialogSize = 'sm' | 'md' | 'lg' | 'xl';
 
@@ -23,6 +32,13 @@ const sizeClasses: Record<ActionDialogSize, string> = {
   md: 'sm:max-w-md',
   lg: 'sm:max-w-lg',
   xl: 'sm:max-w-xl',
+};
+
+const sheetSizeClasses: Record<ActionDialogSize, string> = {
+  sm: 'sm:max-w-sm',
+  md: 'sm:max-w-lg',
+  lg: 'sm:max-w-xl',
+  xl: 'sm:max-w-2xl',
 };
 
 export interface ActionDialogProps {
@@ -39,6 +55,8 @@ export interface ActionDialogProps {
   /** Optional icon displayed in header */
   readonly icon?: React.ComponentType<{ className?: string }>;
 
+  /** Presentation surface: centered modal gate vs slide-over drawer */
+  readonly presentation?: 'dialog' | 'sheet';
   /** Modal sizing: sm (384px), md (448px, default), lg (512px), xl (576px) */
   readonly size?: ActionDialogSize;
   /** Additional classes applied to DialogContent */
@@ -55,6 +73,13 @@ export interface ActionDialogProps {
 
   /** In-dialog error message (rendered as an Alert) */
   readonly error?: string | null;
+
+  /** Whether the form has uncommitted edits; intercepts backdrop/ESC/cancel when true */
+  readonly isDirty?: boolean;
+  /** Title for the unsaved changes warning dialog */
+  readonly confirmDiscardTitle?: string;
+  /** Description for the unsaved changes warning dialog */
+  readonly confirmDiscardDescription?: string;
 
   /** Submission state & button labels */
   readonly busy?: boolean;
@@ -90,6 +115,7 @@ export function ActionDialog({
   title,
   description,
   icon: Icon,
+  presentation = 'dialog',
   size = 'md',
   className,
   formClassName,
@@ -97,6 +123,9 @@ export function ActionDialog({
   footerClassName,
   onSubmit,
   error,
+  isDirty = false,
+  confirmDiscardTitle,
+  confirmDiscardDescription,
   busy = false,
   submitLabel = 'Confirm',
   busyLabel,
@@ -109,53 +138,65 @@ export function ActionDialog({
   customFooter,
   children,
 }: ActionDialogProps) {
-  const handleOpenChange = React.useCallback(
-    (nextOpen: boolean) => {
-      onOpenChange?.(nextOpen);
-      if (!nextOpen) {
-        onClose?.();
-      }
-    },
-    [onOpenChange, onClose],
-  );
+  const handleActualClose = React.useCallback(() => {
+    onOpenChange?.(false);
+    onClose?.();
+  }, [onOpenChange, onClose]);
+
+  const { handleOpenChange, discardConfirmDialog } = useFormDialogLifecycle({
+    isDirty,
+    isSubmitting: busy,
+    onClose: handleActualClose,
+    confirmTitle: confirmDiscardTitle,
+    confirmDescription: confirmDiscardDescription,
+  });
 
   const handleCancel = React.useCallback(() => {
-    if (onClose) {
-      onClose();
-    } else {
-      onOpenChange?.(false);
-    }
-  }, [onClose, onOpenChange]);
+    handleOpenChange(false);
+  }, [handleOpenChange]);
 
-  const content = (
-    <>
-      <DialogHeader className={headerClassName}>
-        {Icon ? (
-          <div className="flex items-start gap-3">
-            <div className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-lg bg-muted text-foreground">
-              <Icon className="size-4" />
-            </div>
-            <div className="grid gap-1">
-              <DialogTitle className="text-base font-medium">{title}</DialogTitle>
-              {description ? (
-                <DialogDescription className="text-xs leading-normal text-muted-foreground">
-                  {description}
-                </DialogDescription>
-              ) : null}
-            </div>
+  const isSheet = presentation === 'sheet';
+  const Header = isSheet ? SheetHeader : DialogHeader;
+  const Title = isSheet ? SheetTitle : DialogTitle;
+  const Description = isSheet ? SheetDescription : DialogDescription;
+  const Footer = isSheet ? SheetFooter : DialogFooter;
+
+  const headerNode = (
+    <Header
+      className={cn(
+        isSheet && 'shrink-0 border-b border-border px-5 py-4 pr-11 text-left',
+        headerClassName,
+      )}
+    >
+      {Icon ? (
+        <div className="flex items-start gap-3">
+          <div className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-lg bg-muted text-foreground">
+            <Icon className="size-4" />
           </div>
-        ) : (
-          <>
-            <DialogTitle className="text-base font-medium">{title}</DialogTitle>
+          <div className="grid gap-1">
+            <Title className="text-base font-medium">{title}</Title>
             {description ? (
-              <DialogDescription className="text-xs leading-normal text-muted-foreground">
+              <Description className="text-xs leading-normal text-muted-foreground">
                 {description}
-              </DialogDescription>
+              </Description>
             ) : null}
-          </>
-        )}
-      </DialogHeader>
+          </div>
+        </div>
+      ) : (
+        <>
+          <Title className="text-base font-medium">{title}</Title>
+          {description ? (
+            <Description className="text-xs leading-normal text-muted-foreground">
+              {description}
+            </Description>
+          ) : null}
+        </>
+      )}
+    </Header>
+  );
 
+  const bodyFields = (
+    <>
       {error ? (
         <Alert variant="destructive" className="py-2 text-xs">
           <AlertCircle className="size-4 shrink-0" />
@@ -165,56 +206,92 @@ export function ActionDialog({
 
       {children}
 
-      {footerNote ? (
-        <div className="text-xs text-muted-foreground">{footerNote}</div>
-      ) : null}
+      {footerNote ? <div className="text-xs text-muted-foreground">{footerNote}</div> : null}
+    </>
+  );
 
-      {customFooter !== undefined ? (
-        customFooter
-      ) : (
-        <DialogFooter className={footerClassName}>
-          {footerExtra ? (
-            <div className="flex items-center gap-2 sm:mr-auto">{footerExtra}</div>
+  const footerNode =
+    customFooter !== undefined ? (
+      customFooter
+    ) : (
+      <Footer
+        className={cn(
+          isSheet &&
+            'shrink-0 flex-row items-center justify-end gap-2 border-t border-border bg-card/50 px-5 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom,0px))] sm:pb-3',
+          footerClassName,
+        )}
+      >
+        {footerExtra ? (
+          <div className="flex items-center gap-2 sm:mr-auto">{footerExtra}</div>
+        ) : null}
+        <div className="flex w-full items-center justify-end gap-2 sm:w-auto">
+          {showCancelButton ? (
+            <Button type="button" variant="outline" onClick={handleCancel} disabled={busy}>
+              {cancelLabel}
+            </Button>
           ) : null}
-          <div className="flex w-full items-center justify-end gap-2 sm:w-auto">
-            {showCancelButton ? (
-              <Button
-                type="button"
-                variant="outline"
-                onClick={handleCancel}
-                disabled={busy}
-              >
-                {cancelLabel}
-              </Button>
-            ) : null}
+          {onSubmit ? (
+            <Button type="submit" variant={submitVariant} disabled={busy || submitDisabled}>
+              {busy ? <Spinner className="size-4 shrink-0" /> : null}
+              {busy ? (busyLabel ?? submitLabel) : submitLabel}
+            </Button>
+          ) : null}
+        </div>
+      </Footer>
+    );
+
+  if (isSheet) {
+    const sheetBody = (
+      <>
+        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto overflow-x-hidden overscroll-contain touch-pan-y px-5 py-4">
+          {bodyFields}
+        </div>
+        {footerNode}
+      </>
+    );
+
+    return (
+      <>
+        <Sheet open={open} onOpenChange={handleOpenChange}>
+          <SheetContent side="right" className={cn('gap-0 p-0', sheetSizeClasses[size], className)}>
+            {headerNode}
             {onSubmit ? (
-              <Button
-                type="submit"
-                variant={submitVariant}
-                disabled={busy || submitDisabled}
-              >
-                {busy ? <Spinner className="size-4 shrink-0" /> : null}
-                {busy ? (busyLabel ?? submitLabel) : submitLabel}
-              </Button>
-            ) : null}
-          </div>
-        </DialogFooter>
-      )}
+              <form onSubmit={onSubmit} className={cn('flex min-h-0 flex-1 flex-col', formClassName)}>
+                {sheetBody}
+              </form>
+            ) : (
+              <div className={cn('flex min-h-0 flex-1 flex-col', formClassName)}>{sheetBody}</div>
+            )}
+          </SheetContent>
+        </Sheet>
+        {discardConfirmDialog}
+      </>
+    );
+  }
+
+  const content = (
+    <>
+      {headerNode}
+      {bodyFields}
+      {footerNode}
     </>
   );
 
   return (
-    <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className={cn(sizeClasses[size], className)}>
-        {onSubmit ? (
-          <form onSubmit={onSubmit} className={cn('grid gap-4', formClassName)}>
-            {content}
-          </form>
-        ) : (
-          <div className={cn('grid gap-4', formClassName)}>{content}</div>
-        )}
-      </DialogContent>
-    </Dialog>
+    <>
+      <Dialog open={open} onOpenChange={handleOpenChange}>
+        <DialogContent className={cn(sizeClasses[size], className)}>
+          {onSubmit ? (
+            <form onSubmit={onSubmit} className={cn('grid gap-4', formClassName)}>
+              {content}
+            </form>
+          ) : (
+            <div className={cn('grid gap-4', formClassName)}>{content}</div>
+          )}
+        </DialogContent>
+      </Dialog>
+      {discardConfirmDialog}
+    </>
   );
 }
 

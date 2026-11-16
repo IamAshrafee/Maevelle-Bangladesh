@@ -1,5 +1,6 @@
 import { Suspense } from 'react';
 import { UnitDetailView } from '@/components/inventory/units/unit-detail-view';
+import { PageSkeleton } from '@/components/ui/page-shell';
 
 export default async function InventoryUnitDetailPage({
   params,
@@ -9,13 +10,7 @@ export default async function InventoryUnitDetailPage({
   const { id } = await params;
 
   return (
-    <Suspense
-      fallback={
-        <main className="p-8 text-center text-sm text-muted-foreground">
-          Loading physical unit details…
-        </main>
-      }
-    >
+    <Suspense fallback={<PageSkeleton variant="detail" widthVariant="standard" />}>
       <UnitDetailView unitId={id} />
     </Suspense>
   );

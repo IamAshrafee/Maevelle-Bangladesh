@@ -41,7 +41,12 @@ function formatRelativeTime(dateString: string): string {
   const diffHours = Math.round(diffMinutes / 60);
   if (diffHours === 1) return '1 hour ago';
   if (diffHours < 24) return `${diffHours} hours ago`;
-  return date.toLocaleDateString('en-BD', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+  return date.toLocaleDateString('en-BD', {
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
 }
 
 function formatMoney(amount: number | string | undefined | null): string {
@@ -123,21 +128,29 @@ export function OrderRiskCard({
 
   if (!assessment) return null;
 
-  const { overallRiskLevel, recommendation, signals, internalHistory, providerHistory, duplicateOrders } =
-    assessment;
+  const {
+    overallRiskLevel,
+    recommendation,
+    signals,
+    internalHistory,
+    providerHistory,
+    duplicateOrders,
+  } = assessment;
 
   // Determine badge styling based on overall risk level
   const riskBadgeConfig = {
     LOW: {
       label: 'Low Risk',
       variant: 'outline' as const,
-      className: 'border-emerald-300 bg-emerald-50 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200',
+      className:
+        'border-emerald-300 bg-emerald-50 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200',
       icon: ShieldCheck,
     },
     MODERATE: {
       label: 'Moderate Risk',
       variant: 'outline' as const,
-      className: 'border-amber-300 bg-amber-50 text-amber-900 dark:bg-amber-950 dark:text-amber-200',
+      className:
+        'border-amber-300 bg-amber-50 text-amber-900 dark:bg-amber-950 dark:text-amber-200',
       icon: AlertTriangle,
     },
     ELEVATED: {
@@ -149,7 +162,7 @@ export function OrderRiskCard({
     INSUFFICIENT_HISTORY: {
       label: 'Limited History',
       variant: 'outline' as const,
-      className: 'border-slate-300 bg-slate-50 text-slate-800 dark:bg-slate-900 dark:text-slate-200',
+      className: 'border-border bg-muted text-muted-foreground',
       icon: Info,
     },
   }[overallRiskLevel] ?? {
@@ -190,7 +203,10 @@ export function OrderRiskCard({
   };
 
   return (
-    <section className="rounded-xl border bg-card shadow-sm" aria-label="Delivery Risk and Fraud Check">
+    <section
+      className="rounded-xl border bg-card shadow-sm"
+      aria-label="Delivery Risk and Fraud Check"
+    >
       {/* Header */}
       <div className="flex flex-wrap items-center justify-between gap-3 border-b px-6 py-4">
         <div className="flex items-center gap-2">
@@ -251,7 +267,11 @@ export function OrderRiskCard({
               onVerificationRecorded?.();
             }}
             trigger={
-              <Button size="sm" variant="outline" className="h-7 text-xs shrink-0 bg-background/80 shadow-none">
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-7 text-xs shrink-0 bg-background/80 shadow-none"
+              >
                 <PhoneCall className="mr-1 size-3" /> Verify
               </Button>
             }
@@ -263,11 +283,17 @@ export function OrderRiskCard({
           <div className="rounded-lg border border-rose-300 bg-rose-50/80 p-3.5 text-xs text-rose-950 dark:border-rose-900/80 dark:bg-rose-950/40 dark:text-rose-100">
             <div className="flex items-center gap-1.5 font-semibold text-rose-900 dark:text-rose-300">
               <AlertTriangle className="size-4 shrink-0 text-rose-600 dark:text-rose-400" />
-              <span>Probable duplicate order detected ({duplicateOrders.length} candidate{duplicateOrders.length === 1 ? '' : 's'} within 48h)</span>
+              <span>
+                Probable duplicate order detected ({duplicateOrders.length} candidate
+                {duplicateOrders.length === 1 ? '' : 's'} within 48h)
+              </span>
             </div>
             <ul className="mt-2 divide-y divide-rose-200/60 dark:divide-rose-900/60">
               {duplicateOrders.map((dup) => (
-                <li key={dup.orderId} className="flex items-center justify-between py-1.5 first:pt-0 last:pb-0">
+                <li
+                  key={dup.orderId}
+                  className="flex items-center justify-between py-1.5 first:pt-0 last:pb-0"
+                >
                   <div className="min-w-0">
                     <Link
                       href={`/orders/${dup.orderId}`}
@@ -276,7 +302,9 @@ export function OrderRiskCard({
                       {dup.orderNumber}
                       <ExternalLink className="size-3 opacity-70" />
                     </Link>
-                    <span className="ml-2 text-[11px] text-muted-foreground">({dup.orderStatus})</span>
+                    <span className="ml-2 text-[11px] text-muted-foreground">
+                      ({dup.orderStatus})
+                    </span>
                     <p className="text-[11px] text-rose-800/80 dark:text-rose-300/80">
                       {dup.matchingReasons.join(' · ')}
                     </p>
@@ -313,7 +341,9 @@ export function OrderRiskCard({
               </div>
               <div>
                 <span className="text-muted-foreground text-[11px]">RTO (Returned)</span>
-                <p className={`font-semibold text-sm ${internalHistory.rtoCount > 0 ? 'text-rose-600' : 'text-foreground'}`}>
+                <p
+                  className={`font-semibold text-sm ${internalHistory.rtoCount > 0 ? 'text-rose-600' : 'text-foreground'}`}
+                >
                   {internalHistory.rtoCount}
                 </p>
               </div>
@@ -325,7 +355,9 @@ export function OrderRiskCard({
               </div>
               <div className="col-span-2 border-t pt-1.5 mt-1 flex justify-between text-[11px]">
                 <span className="text-muted-foreground">Delivered spend</span>
-                <span className="font-medium text-foreground">{formatMoney(internalHistory.totalDeliveredSpend)}</span>
+                <span className="font-medium text-foreground">
+                  {formatMoney(internalHistory.totalDeliveredSpend)}
+                </span>
               </div>
             </div>
           </div>
@@ -359,7 +391,9 @@ export function OrderRiskCard({
                 </div>
                 <div>
                   <span className="text-muted-foreground text-[11px]">Cancelled / Return</span>
-                  <p className={`font-semibold text-sm ${providerHistory.steadfast.cancelledCount > 0 ? 'text-rose-600' : 'text-foreground'}`}>
+                  <p
+                    className={`font-semibold text-sm ${providerHistory.steadfast.cancelledCount > 0 ? 'text-rose-600' : 'text-foreground'}`}
+                  >
                     {providerHistory.steadfast.cancelledCount}
                   </p>
                 </div>
@@ -373,14 +407,19 @@ export function OrderRiskCard({
                 </div>
                 <div className="col-span-2 border-t pt-1.5 mt-1 flex justify-between text-[11px]">
                   <span className="text-muted-foreground">Fraud reports filed</span>
-                  <span className={`font-semibold ${providerHistory.steadfast.fraudReportsCount > 0 ? 'text-rose-600' : 'text-foreground'}`}>
+                  <span
+                    className={`font-semibold ${providerHistory.steadfast.fraudReportsCount > 0 ? 'text-rose-600' : 'text-foreground'}`}
+                  >
                     {providerHistory.steadfast.fraudReportsCount}
                   </span>
                 </div>
               </div>
             ) : (
               <div className="mt-4 text-center text-xs text-muted-foreground py-2">
-                <p>{providerHistory.steadfast?.error ?? 'Steadfast fraud check credentials not configured.'}</p>
+                <p>
+                  {providerHistory.steadfast?.error ??
+                    'Steadfast fraud check credentials not configured.'}
+                </p>
               </div>
             )}
           </div>

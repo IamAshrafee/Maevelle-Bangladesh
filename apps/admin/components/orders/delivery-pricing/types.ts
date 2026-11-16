@@ -1,4 +1,11 @@
+import type { CreateDeliveryPricingRuleInputDto } from '@maevelle/contracts';
+
+export type CheckoutServiceability = NonNullable<
+  CreateDeliveryPricingRuleInputDto['checkoutServiceability']
+>;
+
 export interface DeliveryPricingRule {
+  readonly checkout_serviceability: CheckoutServiceability;
   readonly id: string;
   readonly name: string;
   readonly country_code: string;
@@ -42,11 +49,7 @@ export type DeliveryPricingStatusTab = 'ALL' | 'ACTIVE' | 'INACTIVE';
 
 export type DeliveryPricingScopeFilter = 'ALL' | 'NATIONWIDE' | 'GEOGRAPHIC';
 
-export type DeliveryPricingSortOption =
-  | 'PRIORITY_DESC'
-  | 'AMOUNT_ASC'
-  | 'AMOUNT_DESC'
-  | 'NAME_ASC';
+export type DeliveryPricingSortOption = 'PRIORITY_DESC' | 'AMOUNT_ASC' | 'AMOUNT_DESC' | 'NAME_ASC';
 
 export function formatMoney(amount: number | string | undefined | null, currency = 'BDT'): string {
   const num = typeof amount === 'string' ? parseFloat(amount) : (amount ?? 0);
@@ -58,4 +61,3 @@ export function formatMoney(amount: number | string | undefined | null, currency
     maximumFractionDigits: 2,
   }).format(num);
 }
-

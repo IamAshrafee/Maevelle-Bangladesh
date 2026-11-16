@@ -30,7 +30,7 @@ import type { PagedEnvelope } from '@/lib/supply/types';
 import { useAdminCapability } from '@/components/admin-capabilities';
 import { OperationalFeedback } from '@/components/operational-worklist';
 import { StatusBadge } from '@/components/status-badge';
-import { SupplyWorkspaceNav } from '@/components/supply/supply-workspace-nav';
+import { AdminPage } from '@/components/ui/page-shell';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { RefreshButton } from '@/components/ui/refresh-button';
@@ -280,7 +280,7 @@ export function ReceivingWorkspace() {
   }
 
   return (
-    <main className="min-w-0 space-y-5 px-4 py-5 sm:px-6 lg:px-8">
+    <AdminPage variant="wide">
       {/* Header */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
@@ -321,8 +321,6 @@ export function ReceivingWorkspace() {
           </Button>
         </div>
       </div>
-
-      <SupplyWorkspaceNav />
 
       {/* Operational Metrics Cards */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
@@ -407,8 +405,8 @@ export function ReceivingWorkspace() {
           onClick={() => updateFilter({ tab: 'intake' })}
           className={`flex min-h-11 touch-manipulation items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
             activeTab === 'intake'
-              ? 'bg-primary text-primary-foreground shadow-sm'
-              : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+              ? 'border border-primary/25 bg-primary-subtle text-primary-hover dark:text-primary font-semibold shadow-sm'
+              : 'border border-transparent text-muted-foreground hover:bg-muted hover:text-foreground'
           }`}
         >
           <span>Arrived Shipments Awaiting Intake</span>
@@ -426,8 +424,8 @@ export function ReceivingWorkspace() {
           onClick={() => updateFilter({ tab: 'history' })}
           className={`min-h-11 touch-manipulation rounded-lg px-3 py-1.5 text-xs font-medium transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
             activeTab === 'history'
-              ? 'bg-primary text-primary-foreground shadow-sm'
-              : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+              ? 'border border-primary/25 bg-primary-subtle text-primary-hover dark:text-primary font-semibold shadow-sm'
+              : 'border border-transparent text-muted-foreground hover:bg-muted hover:text-foreground'
           }`}
         >
           Posted Receiving Vouchers
@@ -440,8 +438,8 @@ export function ReceivingWorkspace() {
           onClick={() => updateFilter({ tab: 'resolution' })}
           className={`flex min-h-11 touch-manipulation items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
             activeTab === 'resolution'
-              ? 'bg-primary text-primary-foreground shadow-sm'
-              : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+              ? 'border border-primary/25 bg-primary-subtle text-primary-hover dark:text-primary font-semibold shadow-sm'
+              : 'border border-transparent text-muted-foreground hover:bg-muted hover:text-foreground'
           }`}
         >
           <span>Quarantine & Inspection Resolution</span>
@@ -580,7 +578,7 @@ export function ReceivingWorkspace() {
       {/* Tab Content: Intake Queue */}
       {activeTab === 'intake' ? (
         <div className="hidden overflow-hidden rounded-xl border bg-card shadow-sm md:block">
-          <Table>
+          <Table density="compact" stickyHeader>
             <TableHeader>
               <TableRow>
                 <TableHead>Shipment #</TableHead>
@@ -790,7 +788,7 @@ export function ReceivingWorkspace() {
       {/* Tab Content: History */}
       {activeTab === 'history' ? (
         <div className="hidden overflow-hidden rounded-xl border bg-card shadow-sm md:block">
-          <Table>
+          <Table density="compact" stickyHeader>
             <TableHeader>
               <TableRow>
                 <TableHead>Receipt #</TableHead>
@@ -992,7 +990,7 @@ export function ReceivingWorkspace() {
       {/* Tab Content: Inspection Resolution Queue */}
       {activeTab === 'resolution' ? (
         <div className="hidden overflow-hidden rounded-xl border bg-card shadow-sm md:block">
-          <Table>
+          <Table density="compact" stickyHeader>
             <TableHeader>
               <TableRow>
                 <TableHead>Receipt #</TableHead>
@@ -1167,6 +1165,6 @@ export function ReceivingWorkspace() {
           onResolve={handleResolveConditionSubmit}
         />
       ) : null}
-    </main>
+    </AdminPage>
   );
 }
